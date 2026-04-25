@@ -59,7 +59,7 @@ export type ArchiveActorType = "core-agent" | "addon" | "service";
 export type ArchiveAction = "archive-read" | "archive-intake-write" | "archive-knowledge-write" | "archive-ingest-request";
 export type ConversationRole = "user" | "assistant";
 export type ConversationMessageStatus = "complete" | "interrupted" | "failed";
-export type ChatRunPhase = "idle" | "thinking" | "retrieving" | "tool-running" | "interrupted" | "failed" | "completed";
+export type ChatRunPhase = "idle" | "thinking" | "retrieving" | "streaming" | "tool-running" | "interrupted" | "failed" | "completed";
 export type ConversationTranscriptEventAction =
   | "thread-created"
   | "thread-branched"
@@ -234,10 +234,22 @@ export interface ProviderProfile {
   allowedModels: string[];
   primaryModel: string;
   fallbackModel?: string;
+  modelContext?: ProviderModelContextPolicy[];
   consumerScopes: string[];
   shared: boolean;
   status: ProviderStatus;
   credentialStatus: "configured" | "missing";
+}
+
+export interface ProviderModelContextPolicy {
+  model: string;
+  maxContextTokens: number;
+  tokenEstimateMethod: "provider-metadata" | "local-tokenizer" | "heuristic";
+  reservedOutputTokens?: number;
+  reservedReasoningTokens?: number;
+  reservedSystemTokens?: number;
+  reservedRetrievalTokens?: number;
+  source: "provider-default" | "runtime-node" | "user-config";
 }
 
 export interface ProviderRuntimeDiagnostic {
@@ -322,6 +334,8 @@ export interface ProviderExecutionAdapterPolicy {
   supportedRuntimeKinds: RuntimeNodeKind[];
   supportedAuthMethods: ProviderAuthMethod[];
   supportsReasoningEffort: boolean;
+  supportsStreaming: boolean;
+  supportsAbort: boolean;
   requiresCredential: boolean;
   experimental: boolean;
   notes: string[];
@@ -916,6 +930,21 @@ export interface TaskWorkspace {
   verificationPath: string;
 }
 
+export interface TaskWorkspacePayload {
+  workspace: TaskWorkspace;
+  packet: DelegationPacket;
+  taskMarkdown: string;
+  resultMarkdown: string;
+  verification: Record<string, unknown>;
+}
+
+export interface FinishTaskWorkspaceResult {
+  workspace: TaskWorkspace;
+  resultPath: string;
+  verificationPath: string;
+  auditPath: string;
+}
+
 export interface ArtifactReturn {
   packetId: string;
   targetAgentId: string;
@@ -1018,6 +1047,16 @@ export interface ConversationMessage {
     pageType: string;
     snippet?: string;
   }>;
+  providerUsage?: ProviderUsageTelemetry;
+}
+
+export interface ProviderUsageTelemetry {
+  providerId: string;
+  model: string;
+  source: "provider" | "local-runtime";
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
 }
 
 export interface ContextDecision {

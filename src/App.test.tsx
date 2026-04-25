@@ -26,6 +26,8 @@ const {
   requestProviderServiceChatCompletionStreamMock,
   abortProviderServiceChatCompletionMock,
   requestCreateTaskWorkspaceMock,
+  requestReadTaskWorkspaceMock,
+  requestFinishTaskWorkspaceMock,
   requestArchiveIngestProbeMock,
   requestArchiveRuntimeStatusMock,
   requestArchiveSystemMemoryMock,
@@ -68,6 +70,95 @@ const {
     logsPath: "/tmp/task-workspaces/workspace-engineer-provider-diagnostic/logs",
     resultPath: "/tmp/task-workspaces/workspace-engineer-provider-diagnostic/result.md",
     verificationPath: "/tmp/task-workspaces/workspace-engineer-provider-diagnostic/verification.json",
+  })),
+  requestReadTaskWorkspaceMock: vi.fn(async () => ({
+    workspace: {
+      id: "workspace-engineer-provider-diagnostic",
+      packetId: "delegation-workspace-engineer-provider-diagnostic",
+      rootPath: "/tmp/task-workspaces/workspace-engineer-provider-diagnostic",
+      packetPath: "/tmp/task-workspaces/workspace-engineer-provider-diagnostic/delegation.packet.json",
+      taskMarkdownPath: "/tmp/task-workspaces/workspace-engineer-provider-diagnostic/TASK.md",
+      artifactsPath: "/tmp/task-workspaces/workspace-engineer-provider-diagnostic/artifacts",
+      logsPath: "/tmp/task-workspaces/workspace-engineer-provider-diagnostic/logs",
+      resultPath: "/tmp/task-workspaces/workspace-engineer-provider-diagnostic/result.md",
+      verificationPath: "/tmp/task-workspaces/workspace-engineer-provider-diagnostic/verification.json",
+    },
+    packet: {
+      id: "delegation-workspace-engineer-provider-diagnostic",
+      createdAt: "2026-04-25T12:00:00.000Z",
+      createdByAgentId: "strategist.core",
+      workspaceId: "workspace-engineer-provider-diagnostic",
+      targetAgentId: "setup.core",
+      targetRuntime: "native-agent",
+      taskType: "system-diagnosis",
+      mission: "Run provider diagnostics and report the safest next step.",
+      context: "Started from an Augmentor delegation workspace.",
+      sourceMemoryRefs: [],
+      systemMemoryRefs: ["system://resonantos-architecture-contract"],
+      filesInScope: [],
+      allowedTools: ["provider.probe", "filesystem.read"],
+      forbiddenActions: ["Do not modify files."],
+      capabilityGrants: [
+        {
+          capability: "providers",
+          granted: true,
+          scope: "shared",
+          revocationBehavior: "degrade",
+        },
+      ],
+      providerPolicy: {
+        preferredProviderProfileIds: ["shared-local", "shared-minimax"],
+        preferredRuntimeNodeIds: ["node-local-resurrect", "node-minimax-cloud"],
+        preferredModels: ["batiai/gemma4-e2b:q4", "MiniMax-M2.7"],
+        allowedRuntimeKinds: ["local", "cloud"],
+        fallbackPolicyId: "recovery-default",
+      },
+      costPolicy: {
+        sensitivity: "high",
+        preferredCostTier: "free-local",
+        allowPaidEscalation: true,
+        rationale: "Prefer local diagnostics before paid escalation.",
+      },
+      humanApprovalRequired: false,
+      approvalReasons: [],
+      verificationRequirements: [
+        {
+          id: "diagnostic-report",
+          label: "Return diagnostic report.",
+          method: "manual-review",
+          required: true,
+        },
+      ],
+      expectedArtifacts: ["summary", "diagnostic-report", "verification-report"],
+      returnProtocol: {
+        summaryRequired: true,
+        artifactTypes: ["summary", "diagnostic-report", "verification-report"],
+        mustReportFilesChanged: true,
+        mustReportCommandsRun: true,
+        mustReportResidualRisks: true,
+        mustReportVerification: true,
+      },
+      auditLogPath: "workspace-engineer-provider-diagnostic/logs/audit.jsonl",
+    },
+    taskMarkdown: "# TASK.md\n\nRun provider diagnostics.",
+    resultMarkdown: "# Delegation Result\n\nNo result has been returned yet.",
+    verification: { status: "pending" },
+  })),
+  requestFinishTaskWorkspaceMock: vi.fn(async () => ({
+    workspace: {
+      id: "workspace-engineer-provider-diagnostic",
+      packetId: "delegation-workspace-engineer-provider-diagnostic",
+      rootPath: "/tmp/task-workspaces/workspace-engineer-provider-diagnostic",
+      packetPath: "/tmp/task-workspaces/workspace-engineer-provider-diagnostic/delegation.packet.json",
+      taskMarkdownPath: "/tmp/task-workspaces/workspace-engineer-provider-diagnostic/TASK.md",
+      artifactsPath: "/tmp/task-workspaces/workspace-engineer-provider-diagnostic/artifacts",
+      logsPath: "/tmp/task-workspaces/workspace-engineer-provider-diagnostic/logs",
+      resultPath: "/tmp/task-workspaces/workspace-engineer-provider-diagnostic/result.md",
+      verificationPath: "/tmp/task-workspaces/workspace-engineer-provider-diagnostic/verification.json",
+    },
+    resultPath: "/tmp/task-workspaces/workspace-engineer-provider-diagnostic/result.md",
+    verificationPath: "/tmp/task-workspaces/workspace-engineer-provider-diagnostic/verification.json",
+    auditPath: "/tmp/task-workspaces/workspace-engineer-provider-diagnostic/logs/audit.jsonl",
   })),
   requestArchiveIngestProbeMock: vi.fn(async () => ({
     sourceLabel: "Synthetic Living Archive Intake Probe",
@@ -396,6 +487,8 @@ vi.mock("./core/runtime", () => ({
   persistState: vi.fn(async () => undefined),
   requestEngineerRecoveryTurn: requestEngineerRecoveryTurnMock,
   requestCreateTaskWorkspace: requestCreateTaskWorkspaceMock,
+  requestReadTaskWorkspace: requestReadTaskWorkspaceMock,
+  requestFinishTaskWorkspace: requestFinishTaskWorkspaceMock,
   requestArchiveIngestProbe: requestArchiveIngestProbeMock,
   requestLocalRuntimeStatus: requestLocalRuntimeStatusMock,
   requestProviderDiagnostics: requestProviderDiagnosticsMock,
@@ -473,6 +566,97 @@ describe("App boot flow", () => {
       logsPath: "/tmp/task-workspaces/workspace-engineer-provider-diagnostic/logs",
       resultPath: "/tmp/task-workspaces/workspace-engineer-provider-diagnostic/result.md",
       verificationPath: "/tmp/task-workspaces/workspace-engineer-provider-diagnostic/verification.json",
+    });
+    requestReadTaskWorkspaceMock.mockReset();
+    requestReadTaskWorkspaceMock.mockResolvedValue({
+      workspace: {
+        id: "workspace-engineer-provider-diagnostic",
+        packetId: "delegation-workspace-engineer-provider-diagnostic",
+        rootPath: "/tmp/task-workspaces/workspace-engineer-provider-diagnostic",
+        packetPath: "/tmp/task-workspaces/workspace-engineer-provider-diagnostic/delegation.packet.json",
+        taskMarkdownPath: "/tmp/task-workspaces/workspace-engineer-provider-diagnostic/TASK.md",
+        artifactsPath: "/tmp/task-workspaces/workspace-engineer-provider-diagnostic/artifacts",
+        logsPath: "/tmp/task-workspaces/workspace-engineer-provider-diagnostic/logs",
+        resultPath: "/tmp/task-workspaces/workspace-engineer-provider-diagnostic/result.md",
+        verificationPath: "/tmp/task-workspaces/workspace-engineer-provider-diagnostic/verification.json",
+      },
+      packet: {
+        id: "delegation-workspace-engineer-provider-diagnostic",
+        createdAt: "2026-04-25T12:00:00.000Z",
+        createdByAgentId: "strategist.core",
+        targetAgentId: "setup.core",
+        targetRuntime: "native-agent",
+        taskType: "system-diagnosis",
+        mission: "Run provider diagnostics and report the safest next step.",
+        context: "Started from an Augmentor delegation workspace.",
+        sourceMemoryRefs: [],
+        systemMemoryRefs: ["system://resonantos-architecture-contract"],
+        workspaceId: "workspace-engineer-provider-diagnostic",
+        filesInScope: [],
+        allowedTools: ["provider.probe", "filesystem.read"],
+        forbiddenActions: ["Do not modify files."],
+        capabilityGrants: [
+          {
+            capability: "providers",
+            granted: true,
+            scope: "shared",
+            revocationBehavior: "degrade",
+          },
+        ],
+        providerPolicy: {
+          preferredProviderProfileIds: ["shared-local", "shared-minimax"],
+          preferredRuntimeNodeIds: ["node-local-resurrect", "node-minimax-cloud"],
+          preferredModels: ["batiai/gemma4-e2b:q4", "MiniMax-M2.7"],
+          allowedRuntimeKinds: ["local", "cloud"],
+          fallbackPolicyId: "recovery-default",
+        },
+        costPolicy: {
+          sensitivity: "high",
+          preferredCostTier: "free-local",
+          allowPaidEscalation: true,
+          rationale: "Prefer local diagnostics before paid escalation.",
+        },
+        humanApprovalRequired: false,
+        approvalReasons: [],
+        verificationRequirements: [
+          {
+            id: "diagnostic-report",
+            label: "Return diagnostic report.",
+            method: "manual-review",
+            required: true,
+          },
+        ],
+        expectedArtifacts: ["summary", "diagnostic-report", "verification-report"],
+        returnProtocol: {
+          summaryRequired: true,
+          artifactTypes: ["summary", "diagnostic-report", "verification-report"],
+          mustReportFilesChanged: true,
+          mustReportCommandsRun: true,
+          mustReportResidualRisks: true,
+          mustReportVerification: true,
+        },
+        auditLogPath: "workspace-engineer-provider-diagnostic/logs/audit.jsonl",
+      },
+      taskMarkdown: "# TASK.md\n\nRun provider diagnostics.",
+      resultMarkdown: "# Delegation Result\n\nNo result has been returned yet.",
+      verification: { status: "pending" },
+    } as never);
+    requestFinishTaskWorkspaceMock.mockReset();
+    requestFinishTaskWorkspaceMock.mockResolvedValue({
+      workspace: {
+        id: "workspace-engineer-provider-diagnostic",
+        packetId: "delegation-workspace-engineer-provider-diagnostic",
+        rootPath: "/tmp/task-workspaces/workspace-engineer-provider-diagnostic",
+        packetPath: "/tmp/task-workspaces/workspace-engineer-provider-diagnostic/delegation.packet.json",
+        taskMarkdownPath: "/tmp/task-workspaces/workspace-engineer-provider-diagnostic/TASK.md",
+        artifactsPath: "/tmp/task-workspaces/workspace-engineer-provider-diagnostic/artifacts",
+        logsPath: "/tmp/task-workspaces/workspace-engineer-provider-diagnostic/logs",
+        resultPath: "/tmp/task-workspaces/workspace-engineer-provider-diagnostic/result.md",
+        verificationPath: "/tmp/task-workspaces/workspace-engineer-provider-diagnostic/verification.json",
+      },
+      resultPath: "/tmp/task-workspaces/workspace-engineer-provider-diagnostic/result.md",
+      verificationPath: "/tmp/task-workspaces/workspace-engineer-provider-diagnostic/verification.json",
+      auditPath: "/tmp/task-workspaces/workspace-engineer-provider-diagnostic/logs/audit.jsonl",
     });
     requestArchiveIngestProbeMock.mockReset();
     requestArchiveIngestProbeMock.mockResolvedValue({
@@ -840,6 +1024,32 @@ describe("App boot flow", () => {
     expect(requestProviderServiceChatCompletionMock).not.toHaveBeenCalled();
   });
 
+  it("starts an existing Engineer delegation workspace and writes return artifacts", async () => {
+    render(<App />);
+
+    expect((await screen.findAllByText("Launch your AI tools from one workbench.")).length).toBeGreaterThan(0);
+
+    fireEvent.change(screen.getAllByPlaceholderText("Message Augmentor")[0], {
+      target: { value: "start engineer task workspace-engineer-provider-diagnostic" },
+    });
+    fireEvent.click(screen.getAllByRole("button", { name: "Send message" })[0]);
+
+    expect(await screen.findByText(/The Engineer task ran and the workspace was updated/i)).toBeTruthy();
+    expect(await screen.findByText(/Review the result before promoting any changes/i)).toBeTruthy();
+    expect(requestReadTaskWorkspaceMock).toHaveBeenCalledWith("workspace-engineer-provider-diagnostic");
+    expect(requestEngineerRecoveryTurnMock).toHaveBeenCalledTimes(1);
+    expect(requestFinishTaskWorkspaceMock).toHaveBeenCalledTimes(1);
+    expect(requestFinishTaskWorkspaceMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "workspace-engineer-provider-diagnostic",
+        resultMarkdown: expect.stringContaining("Engineer recovery handled this turn"),
+        verification: expect.objectContaining({ status: "completed" }),
+        auditEvent: expect.objectContaining({ event: "engineer-task-finished" }),
+      }),
+    );
+    expect(requestProviderServiceChatCompletionMock).not.toHaveBeenCalled();
+  });
+
   it("stops an active chat run, keeps an interrupted message, and ignores the late reply", async () => {
     const pendingReply = deferred<string>();
     requestProviderServiceChatCompletionMock.mockReset();
@@ -901,6 +1111,32 @@ describe("App boot flow", () => {
     continueStream.resolve();
 
     expect(await screen.findByText("Partial streamed reply.")).toBeTruthy();
+  });
+
+  it("uses non-streaming chat when the selected adapter does not support streaming", async () => {
+    const noStreamingState = buildDefaultState(manifests);
+    hydrateStateMock.mockResolvedValue({
+      ...noStreamingState,
+      providerRouting: {
+        ...noStreamingState.providerRouting,
+        executionAdapters: noStreamingState.providerRouting.executionAdapters.map((adapter) =>
+          adapter.id === "cloud-minimax-compatible" ? { ...adapter, supportsStreaming: false, supportsAbort: false } : adapter,
+        ),
+      },
+    });
+
+    render(<App />);
+
+    expect((await screen.findAllByText("Launch your AI tools from one workbench.")).length).toBeGreaterThan(0);
+
+    fireEvent.change(screen.getAllByPlaceholderText("Message Augmentor")[0], {
+      target: { value: "Use the non-streaming route" },
+    });
+    fireEvent.click(screen.getAllByRole("button", { name: "Send message" })[0]);
+
+    expect(await screen.findByText("This is a live Strategist test reply from MiniMax-M2.7.")).toBeTruthy();
+    expect(requestProviderServiceChatCompletionStreamMock).not.toHaveBeenCalled();
+    expect(requestProviderServiceChatCompletionMock).toHaveBeenCalledTimes(1);
   });
 
   it("shows string backend errors instead of collapsing them into a generic message", async () => {

@@ -10,6 +10,8 @@ describe("strategist provider service routing", () => {
     expect(resolved.provider?.id).toBe("shared-minimax");
     expect(resolved.runtimeNode?.id).toBe("node-minimax-cloud");
     expect(resolved.decision.executionAdapterId).toBe("cloud-minimax-compatible");
+    expect(resolved.executionAdapter?.supportsStreaming).toBe(true);
+    expect(resolved.executionAdapter?.supportsAbort).toBe(true);
     expect(resolved.decision.resolutionReason).toBe("primary-healthy");
   });
 

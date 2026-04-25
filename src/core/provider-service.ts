@@ -2,6 +2,7 @@
 // Intent citation: docs/architecture/ADR-009-rust-service-ipc-boundary.md
 
 import type {
+  ProviderExecutionAdapterPolicy,
   ProviderProfile,
   ProviderRoutingDecision,
   ProviderRuntimeNode,
@@ -17,6 +18,7 @@ export type ProviderRouteResolution = {
   provider?: ProviderProfile;
   runtimeNode?: ProviderRuntimeNode;
   model?: string;
+  executionAdapter?: ProviderExecutionAdapterPolicy;
 };
 
 export const resolveAgentChatRoute = (
@@ -54,6 +56,7 @@ export const resolveAgentChatRoute = (
     provider,
     runtimeNode,
     model: decision.model ?? provider?.primaryModel,
+    executionAdapter: state.providerRouting.executionAdapters.find((adapter) => adapter.id === decision.executionAdapterId),
   };
 };
 
@@ -91,6 +94,7 @@ export const resolveWorkloadRoute = (
     provider,
     runtimeNode,
     model: decision.model ?? provider?.primaryModel,
+    executionAdapter: state.providerRouting.executionAdapters.find((adapter) => adapter.id === decision.executionAdapterId),
   };
 };
 

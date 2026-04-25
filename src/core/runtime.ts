@@ -29,12 +29,14 @@ import type {
   ConversationMessage,
   DelegationPacket,
   EngineerRecoveryTurnResult,
+  FinishTaskWorkspaceResult,
   LocalRuntimeStatus,
   ProviderDiagnosticReport,
   ProviderProfile,
   RecoveryRouteCandidate,
   ResonantShellState,
   TaskWorkspace,
+  TaskWorkspacePayload,
 } from "./contracts";
 import { buildDefaultState } from "./defaults";
 import { renderDelegationTaskMarkdown, validateDelegationPacket } from "./delegation";
@@ -116,7 +118,7 @@ export const requestStrategistReply = requestProviderServiceChatCompletion;
 
 export type ProviderChatStreamEvent = {
   runId: string;
-  type: "chunk" | "completed" | "interrupted" | "error";
+  type: "chunk" | "completed" | "interrupted" | "error" | "usage";
   content: string;
 };
 
@@ -425,6 +427,29 @@ export const requestCreateTaskWorkspace = async (packet: DelegationPacket): Prom
   throw new Error("Task workspace creation is available only in the desktop shell.");
 };
 
+export const requestReadTaskWorkspace = async (workspaceId: string): Promise<TaskWorkspacePayload> => {
+  if (hasTauri()) {
+    return (await invoke("delegation_read_task_workspace", {
+      request: {
+        workspaceId,
+      },
+    })) as TaskWorkspacePayload;
+  }
+  throw new Error("Task workspace reads are available only in the desktop shell.");
+};
+
+export const requestFinishTaskWorkspace = async (input: {
+  workspaceId: string;
+  resultMarkdown: string;
+  verification: Record<string, unknown>;
+  auditEvent: Record<string, unknown>;
+}): Promise<FinishTaskWorkspaceResult> => {
+  if (hasTauri()) {
+    return (await invoke("delegation_finish_task_workspace", { request: input })) as FinishTaskWorkspaceResult;
+  }
+  throw new Error("Task workspace finalization is available only in the desktop shell.");
+};
+
 export const hydrateState = async (bundled: AddOnManifest[], sideloaded: AddOnManifest[]): Promise<ResonantShellState> => {
   const manifests = [...bundled, ...sideloaded];
   const base = buildDefaultState(bundled);
@@ -509,6 +534,7 @@ const normalizeProviders = (
       ...profile,
       ...current,
       allowedModels: profile.allowedModels,
+      modelContext: profile.modelContext,
       consumerScopes: profile.consumerScopes,
       authMethod: profile.authMethod,
       authTier: profile.authTier,
@@ -631,7 +657,16 @@ const normalizeProviderRouting = (
 ): ResonantShellState["providerRouting"] => ({
   ...defaults,
   ...(persisted ?? {}),
-  executionAdapters: persisted?.executionAdapters?.length ? persisted.executionAdapters : defaults.executionAdapters,
+  executionAdapters: defaults.executionAdapters.map((defaultAdapter) => ({
+    ...defaultAdapter,
+    ...(persisted?.executionAdapters ?? []).find((adapter) => adapter.id === defaultAdapter.id),
+    supportsStreaming:
+      (persisted?.executionAdapters ?? []).find((adapter) => adapter.id === defaultAdapter.id)?.supportsStreaming ??
+      defaultAdapter.supportsStreaming,
+    supportsAbort:
+      (persisted?.executionAdapters ?? []).find((adapter) => adapter.id === defaultAdapter.id)?.supportsAbort ??
+      defaultAdapter.supportsAbort,
+  })),
   fallbackPolicies: persisted?.fallbackPolicies?.length ? persisted.fallbackPolicies : defaults.fallbackPolicies,
   recoveryActions: persisted?.recoveryActions?.length ? persisted.recoveryActions : defaults.recoveryActions,
   experimentalPolicy: {

@@ -42,6 +42,7 @@ type StrategistChatRailProps = {
   channels: ChannelDefinition[];
   chatBusy: boolean;
   chatCanStop: boolean;
+  chatSupportsAbort: boolean;
   chatNotice: string | null;
   composer: string;
   attachments: ComposerAttachment[];
@@ -409,7 +410,11 @@ export function StrategistChatRail(props: StrategistChatRailProps) {
               type="button"
               className="chat-stop-button"
               aria-label="Stop response"
-              title="Stop response and keep the interrupted partial message"
+              title={
+                props.chatSupportsAbort
+                  ? "Stop response, request provider cancellation, and keep the interrupted partial message"
+                  : "Stop response locally and keep the interrupted partial message"
+              }
               onClick={props.onStopGeneration}
               disabled={!props.chatCanStop}
             >

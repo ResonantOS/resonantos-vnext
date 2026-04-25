@@ -68,6 +68,11 @@ const maxContextFor = (
   runtimeNode: ProviderRuntimeNode | undefined,
   modelId: string,
 ): number => {
+  const providerPolicy = provider?.modelContext?.find((policy) => policy.model === modelId);
+  if (providerPolicy) {
+    return providerPolicy.maxContextTokens;
+  }
+
   const knownBudget = knownModelBudgets[modelId];
   if (knownBudget) {
     return knownBudget;
@@ -80,6 +85,9 @@ const maxContextFor = (
   return DEFAULT_CLOUD_CONTEXT_TOKENS;
 };
 
+const modelContextPolicyFor = (provider: ProviderProfile | undefined, modelId: string) =>
+  provider?.modelContext?.find((policy) => policy.model === modelId);
+
 export const buildContextBudget = ({
   thread,
   composer,
@@ -88,11 +96,16 @@ export const buildContextBudget = ({
   runtimeNode,
   modelId,
 }: ContextBudgetInput): ContextBudget => {
+  const modelContextPolicy = modelContextPolicyFor(provider, modelId);
   const maxContextTokens = maxContextFor(provider, runtimeNode, modelId);
-  const reservedOutputTokens = Math.max(1_024, Math.round(maxContextTokens * 0.08));
-  const reservedReasoningTokens = provider?.providerType === "openai" ? Math.round(maxContextTokens * 0.05) : 0;
-  const reservedSystemTokens = Math.max(1_024, Math.round(maxContextTokens * 0.04));
-  const reservedRetrievalTokens = Math.max(1_024, Math.round(maxContextTokens * 0.08));
+  const reservedOutputTokens =
+    modelContextPolicy?.reservedOutputTokens ?? Math.max(1_024, Math.round(maxContextTokens * 0.08));
+  const reservedReasoningTokens =
+    modelContextPolicy?.reservedReasoningTokens ?? (provider?.providerType === "openai" ? Math.round(maxContextTokens * 0.05) : 0);
+  const reservedSystemTokens =
+    modelContextPolicy?.reservedSystemTokens ?? Math.max(1_024, Math.round(maxContextTokens * 0.04));
+  const reservedRetrievalTokens =
+    modelContextPolicy?.reservedRetrievalTokens ?? Math.max(1_024, Math.round(maxContextTokens * 0.08));
   const usableInputTokens = Math.max(
     1,
     maxContextTokens -
@@ -115,7 +128,7 @@ export const buildContextBudget = ({
     reservedRetrievalTokens,
     compactionThreshold: Math.round(usableInputTokens * 0.8),
     hardStopThreshold: Math.round(usableInputTokens * 0.95),
-    estimateQuality: "heuristic",
+    estimateQuality: modelContextPolicy ? "provider" : "heuristic",
   };
 };
 
@@ -150,7 +163,9 @@ export const contextBudgetTitle = (budget: ContextBudget): string => {
     `Model ceiling: ~${formatTokenCount(budget.maxContextTokens)} tokens.`,
     `Compaction threshold: ~${formatTokenCount(budget.compactionThreshold)} tokens.`,
     `Hard-stop threshold: ~${formatTokenCount(budget.hardStopThreshold)} tokens.`,
-    "This is not provider-tokenizer exact yet.",
+    budget.estimateQuality === "provider"
+      ? "Context ceiling comes from provider/model metadata; live input usage is still estimated until provider tokenizer telemetry is available."
+      : "This is not provider-tokenizer exact yet.",
   ].join(" ");
 };
 

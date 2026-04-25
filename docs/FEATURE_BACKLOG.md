@@ -46,7 +46,11 @@ Last updated: 2026-04-25
 - Added first safe interruption behavior:
   - Stop keeps a visible interrupted assistant message
   - stale provider replies are suppressed after interruption
-  - true provider-side cancellation remains future work after streaming/abort-capable IPC exists
+  - host-side abort is requested when the selected route declares abort support
+- Added first streaming capability policy:
+  - provider execution adapters now declare streaming and abort support
+  - chat only uses streaming when the selected route supports it
+  - the activity rail distinguishes streamed replies from generic thinking
 - Desktop-safe audio dictate implementation.
 - Attachment pipeline beyond text embedding and metadata fallback.
 - Richer thread management for multiple Strategist instances.
@@ -152,8 +156,14 @@ Last updated: 2026-04-25
 - Added first Augmentor-to-Engineer delegation path on 2026-04-25:
   - explicit Strategist chat requests such as "delegate this diagnostic to the Engineer" create a validated Engineer Delegation Packet
   - the chat creates the task workspace and reports the packet/TASK paths back to the user
-  - execution remains intentionally disabled until a later "Start Engineer task" workflow is built
+  - execution remains separate from workspace creation so Augmentor cannot accidentally trigger worker action
+- Added first bounded Engineer task start path on 2026-04-25:
+  - explicit Strategist chat requests such as "start engineer task workspace-id" read an existing task workspace
+  - the task is sent to the Resonant Engineer Agent through the existing audited recovery turn loop
+  - the host writes `result.md`, `verification.json`, and `logs/audit.jsonl` back into the task workspace
+  - this is still a narrow v1 bridge; no external add-on worker dispatch has been enabled yet
 - Build add-on launcher UX from `docs/product/UX-001-resonantos-app-shell.md`.
+- Add visible Delegation Workspace Monitor UI with Start, Review Result, and Promote/Archive controls so users do not need chat commands.
 - Add center-workspace app opening state for installed add-ons.
 - Add workspace renderers for add-on runtime types:
   - embedded app

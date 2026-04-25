@@ -123,6 +123,16 @@ TaskWorkspace/
 
 The v1 host implementation creates this workspace through `delegation_create_task_workspace`. This command is execution-free: it creates the files and audit scaffolding but does not dispatch an external agent.
 
+The v1 host also exposes `delegation_read_task_workspace` and `delegation_finish_task_workspace` so the shell can start a previously created task through a trusted native agent and write the return artifacts back into the same workspace. Starting a task is intentionally separate from creating the workspace. The first implementation only supports an explicit Augmentor command to start a Resonant Engineer task; external add-on worker dispatch remains out of scope until the lifecycle manager and capability UX exist.
+
+Start semantics:
+
+- creation creates intent, scope, files, and audit scaffolding only
+- start reads the workspace, constructs the Engineer task prompt from `delegation.packet.json` and `TASK.md`, and runs through the audited Engineer recovery loop
+- finish writes `result.md`, updates `verification.json`, appends `logs/audit.jsonl`, and reports paths back to Augmentor
+- failed tool events must mark verification as `needs-review`
+- no worker result is promoted into code, config, or Living Archive memory without a later review/approval action
+
 ## Delegation Quality Rules
 
 ResonantOS must reject or require revision for delegation packets that are too vague.

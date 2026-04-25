@@ -2,12 +2,15 @@
 
 import type {
   AddOnManifest,
+  ConversationMessage,
   DelegationPacket,
   DelegationTarget,
   DelegationValidationIssue,
   DelegationValidationResult,
   ResonantShellState,
   TaskWorkspace,
+  TaskWorkspacePayload,
+  EngineerToolEvent,
 } from "./contracts";
 
 const VAGUE_MISSION_PATTERNS = [
@@ -351,4 +354,105 @@ export const formatTaskWorkspaceCreatedReply = (workspace: TaskWorkspace): strin
     `- Verification: \`${workspace.verificationPath}\``,
     "",
     "Next step, when approved: start the Engineer task from this workspace and collect its diagnostic artifacts.",
+  ].join("\n");
+
+export const parseStartEngineerTaskWorkspaceId = (message: string): string | null => {
+  const match = message.match(/\bstart\s+(?:the\s+)?engineer\s+task\s+([a-zA-Z0-9_-]+)/i);
+  return match?.[1] ?? null;
+};
+
+export const engineerTaskMessagesFromWorkspace = (payload: TaskWorkspacePayload): ConversationMessage[] => [
+  {
+    id: `${payload.workspace.id}:engineer-task`,
+    threadId: payload.workspace.id,
+    channelId: "delegation-task-workspace",
+    role: "user",
+    author: "Augmentor",
+    createdAt: new Date().toISOString(),
+    content: [
+      "Start this delegated Engineer task from the task workspace.",
+      "",
+      "Rules:",
+      "- Work only within the task scope.",
+      "- Use tools only through the recovery tool loop.",
+      "- Report facts, actions, verification, residual risks, and next steps.",
+      "- If repair action requires approval, stop and request approval.",
+      "",
+      "Delegation packet:",
+      JSON.stringify(payload.packet, null, 2),
+      "",
+      "TASK.md:",
+      payload.taskMarkdown,
+    ].join("\n"),
+  },
+];
+
+export const renderEngineerTaskResultMarkdown = (input: {
+  workspace: TaskWorkspace;
+  reply: string;
+  toolEvents: EngineerToolEvent[];
+}): string =>
+  [
+    "# Delegation Result",
+    "",
+    `Workspace: ${input.workspace.id}`,
+    `Completed at: ${new Date().toISOString()}`,
+    "",
+    "## Engineer Reply",
+    input.reply.trim() || "No reply returned.",
+    "",
+    "## Tool Events",
+    input.toolEvents.length
+      ? input.toolEvents.map((event) => `- [${event.status}] ${event.tool}: ${event.summary}`).join("\n")
+      : "- No tool events were returned.",
+    "",
+  ].join("\n");
+
+export const engineerTaskVerificationPayload = (input: {
+  packetId: string;
+  toolEvents: EngineerToolEvent[];
+}): Record<string, unknown> => ({
+  packetId: input.packetId,
+  status: input.toolEvents.some((event) => event.status === "failed") ? "needs-review" : "completed",
+  checks: [
+    {
+      id: "engineer-task-run",
+      status: input.toolEvents.some((event) => event.status === "failed") ? "failed" : "passed",
+      evidence: input.toolEvents.length
+        ? input.toolEvents.map((event) => `[${event.status}] ${event.tool}: ${event.summary}`).join("\n")
+        : "Engineer returned a reply without tool events.",
+    },
+  ],
+});
+
+export const engineerTaskAuditEvent = (input: {
+  packetId: string;
+  workspaceId: string;
+  toolEvents: EngineerToolEvent[];
+}): Record<string, unknown> => ({
+  event: "engineer-task-finished",
+  packetId: input.packetId,
+  workspaceId: input.workspaceId,
+  toolEvents: input.toolEvents.map((event) => ({
+    tool: event.tool,
+    status: event.status,
+    summary: event.summary,
+  })),
+});
+
+export const formatEngineerTaskFinishedReply = (input: {
+  workspace: TaskWorkspace;
+  resultPath: string;
+  verificationPath: string;
+  auditPath: string;
+}): string =>
+  [
+    "The Engineer task ran and the workspace was updated.",
+    "",
+    `- Workspace: \`${input.workspace.rootPath}\``,
+    `- Result: \`${input.resultPath}\``,
+    `- Verification: \`${input.verificationPath}\``,
+    `- Audit log: \`${input.auditPath}\``,
+    "",
+    "Review the result before promoting any changes or memory updates.",
   ].join("\n");

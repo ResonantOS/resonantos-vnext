@@ -24,7 +24,7 @@ const appendMessage = (
   role: ConversationMessage["role"],
   author: string,
   content: string,
-  metadata?: Pick<ConversationMessage, "archiveCitations" | "status">,
+  metadata?: Pick<ConversationMessage, "archiveCitations" | "providerUsage" | "status">,
 ): ResonantShellState => {
   let appendedMessage: ConversationMessage | null = null;
   const nextState = updateThread(state, threadId, (thread) => {
@@ -80,7 +80,7 @@ export const appendAssistantMessage = (
   state: ResonantShellState,
   threadId: string,
   content: string,
-  metadata?: Pick<ConversationMessage, "archiveCitations" | "status">,
+  metadata?: Pick<ConversationMessage, "archiveCitations" | "providerUsage" | "status">,
 ): ResonantShellState => {
   const thread = threadById(state, threadId);
   const author =

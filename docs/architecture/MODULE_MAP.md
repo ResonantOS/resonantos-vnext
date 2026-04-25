@@ -28,6 +28,8 @@ This map defines which folder owns which feature area so contributors do not kee
 
 - `src-tauri/src/delegation_service.rs`
   - execution-free task workspace creation
+  - task workspace reads for explicit worker start flows
+  - task workspace result, verification, and audit finalization
   - `delegation.packet.json` and generated `TASK.md` persistence
   - initial result, verification, artifact, and audit-log scaffolding
 
@@ -62,6 +64,7 @@ This map defines which folder owns which feature area so contributors do not kee
   - message rendering
   - dictation support
   - chat execution controller
+  - explicit Augmentor-to-Engineer delegation workspace creation and start bridge
   - planned context budget and compaction UI from `docs/architecture/ADR-016-context-memory-compaction.md`
   - scoped Living Archive context retrieval for Strategist turns
   - chat-to-archive intake capture controller

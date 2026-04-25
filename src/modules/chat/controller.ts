@@ -8,6 +8,7 @@ import type {
   ConversationThread,
   LocalRuntimeStatus,
   ProviderDiagnosticReport,
+  ProviderUsageTelemetry,
   ResonantShellState,
 } from "../../core/contracts";
 import {
@@ -23,14 +24,22 @@ import { resolveAgentChatRoute } from "../../core/provider-service";
 import {
   requestCreateTaskWorkspace,
   requestEngineerRecoveryTurn,
+  requestFinishTaskWorkspace,
   requestLocalRuntimeStatus,
   requestProviderDiagnostics,
   requestProviderServiceChatCompletion,
   requestProviderServiceChatCompletionStream,
+  requestReadTaskWorkspace,
 } from "../../core/runtime";
 import {
   createEngineerDelegationPacket,
+  engineerTaskAuditEvent,
+  engineerTaskMessagesFromWorkspace,
+  engineerTaskVerificationPayload,
+  formatEngineerTaskFinishedReply,
   formatTaskWorkspaceCreatedReply,
+  parseStartEngineerTaskWorkspaceId,
+  renderEngineerTaskResultMarkdown,
   shouldDelegateToEngineer,
 } from "../../core/delegation";
 import {
@@ -131,6 +140,90 @@ export const executeChatTurn = async ({
   commitReadyState(nextState);
 
   try {
+    const engineerWorkspaceId = activeThread.owningAgentId === "strategist.core" ? parseStartEngineerTaskWorkspaceId(trimmed) : null;
+    if (engineerWorkspaceId) {
+      setChatRunPhase("tool-running");
+      setAgentActivityLabel("Starting the delegated Engineer task workspace.");
+      const payload = await requestReadTaskWorkspace(engineerWorkspaceId);
+      if (!isRunCurrent(runToken)) {
+        return;
+      }
+      const engineerRoute = resolveAgentChatRoute(nextState, nextState.recoverySession.engineerAgentId, activeChatModel);
+      const engineerProvider = engineerRoute.provider;
+      const engineerRuntimeNode = engineerRoute.runtimeNode;
+      if (!engineerProvider || !engineerRuntimeNode || !engineerRoute.model) {
+        throw new Error("No routed provider node is currently available for the delegated Engineer task.");
+      }
+      if (engineerProvider.credentialStatus !== "configured") {
+        throw new Error(`${engineerProvider.label} credential missing. Add it in Settings > Provider Profiles.`);
+      }
+      const engineerTargetModel =
+        nextState.providers.find((profile) => profile.id === "shared-local")?.primaryModel ?? "batiai/gemma4-e2b:q4";
+      const runtimeStatusForPrompt = await requestLocalRuntimeStatus(engineerTargetModel);
+      if (!isRunCurrent(runToken)) {
+        return;
+      }
+      setRecoveryRuntimeStatus(runtimeStatusForPrompt);
+      const recoveryTurn = await requestEngineerRecoveryTurn({
+        providerId: engineerProvider.id,
+        providerType: engineerProvider.providerType,
+        apiBaseUrl: engineerRuntimeNode.endpoint ?? engineerProvider.apiBaseUrl,
+        runtimeNodeId: engineerRuntimeNode.id,
+        runtimeNodeKind: engineerRuntimeNode.kind,
+        model: engineerRoute.model,
+        systemPrompt: engineerSystemPrompt({
+          activeModel: engineerRoute.model,
+          activeRouteLabel: engineerRuntimeNode.label,
+          activeRuntimeKind: engineerRuntimeNode.kind,
+          localRuntimeStatus: runtimeStatusForPrompt,
+        }),
+        messages: engineerTaskMessagesFromWorkspace(payload),
+        runtimeNodeEndpoint: engineerRuntimeNode.endpoint,
+        authTier: engineerRoute.decision.authTier,
+      });
+      if (!isRunCurrent(runToken)) {
+        return;
+      }
+      const finished = await requestFinishTaskWorkspace({
+        workspaceId: payload.workspace.id,
+        resultMarkdown: renderEngineerTaskResultMarkdown({
+          workspace: payload.workspace,
+          reply: recoveryTurn.reply,
+          toolEvents: recoveryTurn.toolEvents,
+        }),
+        verification: engineerTaskVerificationPayload({
+          packetId: payload.workspace.packetId,
+          toolEvents: recoveryTurn.toolEvents,
+        }),
+        auditEvent: engineerTaskAuditEvent({
+          packetId: payload.workspace.packetId,
+          workspaceId: payload.workspace.id,
+          toolEvents: recoveryTurn.toolEvents,
+        }),
+      });
+      if (!isRunCurrent(runToken)) {
+        return;
+      }
+      const reply = formatEngineerTaskFinishedReply({
+        workspace: finished.workspace,
+        resultPath: finished.resultPath,
+        verificationPath: finished.verificationPath,
+        auditPath: finished.auditPath,
+      });
+      const withAssistant = appendAssistantMessage(cloneState(nextState), activeThread.id, reply);
+      withAssistant.recoverySession.changeLog = [
+        ...withAssistant.recoverySession.changeLog,
+        ...recoveryTurn.toolEvents.map(
+          (event) => `${new Date().toISOString()}: [${event.status}] delegated_engineer_task:${event.tool} — ${event.summary}`,
+        ),
+      ];
+      commitReadyState(withAssistant);
+      setChatNotice("Delegated Engineer task finished. Review the result before promoting changes.");
+      setAgentActivityLabel("Delegated Engineer task finished.");
+      setChatRunPhase("completed");
+      return;
+    }
+
     if (activeThread.owningAgentId === "strategist.core" && shouldDelegateToEngineer(trimmed)) {
       setChatRunPhase("tool-running");
       setAgentActivityLabel("Creating an Engineer delegation workspace.");
@@ -297,10 +390,14 @@ export const executeChatTurn = async ({
     let streamedAssistantMessageId: string | null = null;
     let streamedReply = "";
     let streamedState = routedState;
+    let providerUsage: ProviderUsageTelemetry | undefined;
+    const supportsStreaming = !recoveryAgentActive && route.executionAdapter?.supportsStreaming === true;
     const streamAssistantChunk = (chunk: string) => {
       if (!chunk || !isRunCurrent(runToken)) {
         return;
       }
+      setChatRunPhase("streaming");
+      setAgentActivityLabel("Streaming the reply from the active provider route.");
       streamedReply += chunk;
       if (!streamedAssistantMessageId) {
         streamedState = appendAssistantMessage(cloneState(streamedState), activeThread.id, streamedReply, {
@@ -332,32 +429,41 @@ export const executeChatTurn = async ({
       });
     const reply =
       recoveryTurn?.reply ??
-      (await requestProviderServiceChatCompletionStream(
-        {
-          runId: runToken,
-          providerId: provider.id,
-          providerType: provider.providerType,
-          apiBaseUrl: runtimeNode.endpoint ?? provider.apiBaseUrl,
-          runtimeNodeId: runtimeNode.id,
-          runtimeNodeKind: runtimeNode.kind,
-          runtimeNodeEndpoint: runtimeNode.endpoint,
-          authTier: route.decision.authTier,
-          model: routedModel,
-          reasoningEffort: thinkingDepth,
-          systemPrompt: effectiveSystemPrompt,
-          messages: providerMessages,
-        },
-        (event) => {
-          if (event.type === "chunk") {
-            streamAssistantChunk(event.content);
-          }
-        },
-      ).catch((streamError) => {
-        if (streamedReply || !isRunCurrent(runToken)) {
-          throw streamError;
-        }
-        return nonStreamingRequest();
-      }));
+      (supportsStreaming
+        ? await requestProviderServiceChatCompletionStream(
+            {
+              runId: runToken,
+              providerId: provider.id,
+              providerType: provider.providerType,
+              apiBaseUrl: runtimeNode.endpoint ?? provider.apiBaseUrl,
+              runtimeNodeId: runtimeNode.id,
+              runtimeNodeKind: runtimeNode.kind,
+              runtimeNodeEndpoint: runtimeNode.endpoint,
+              authTier: route.decision.authTier,
+              model: routedModel,
+              reasoningEffort: thinkingDepth,
+              systemPrompt: effectiveSystemPrompt,
+              messages: providerMessages,
+            },
+            (event) => {
+              if (event.type === "chunk") {
+                streamAssistantChunk(event.content);
+              } else if (event.type === "usage") {
+                try {
+                  providerUsage = JSON.parse(event.content) as ProviderUsageTelemetry;
+                } catch {
+                  providerUsage = undefined;
+                }
+              }
+            },
+          ).catch((streamError) => {
+            if (streamedReply || !isRunCurrent(runToken)) {
+              throw streamError;
+            }
+            setAgentActivityLabel("Streaming is unavailable on this route; using the non-streaming fallback.");
+            return nonStreamingRequest();
+          })
+        : await nonStreamingRequest());
     if (!isRunCurrent(runToken)) {
       return;
     }
@@ -368,9 +474,11 @@ export const executeChatTurn = async ({
           content: reply,
           status: undefined,
           archiveCitations: archiveCitationsFromBundle(archiveContext),
+          providerUsage,
         }))
       : appendAssistantMessage(cloneState(routedState), activeThread.id, reply, {
           archiveCitations: archiveCitationsFromBundle(archiveContext),
+          providerUsage,
         });
     if (recoveryTurn?.toolEvents.length) {
       withAssistant.recoverySession.changeLog = [

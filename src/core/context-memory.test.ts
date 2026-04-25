@@ -22,7 +22,7 @@ describe("context memory budget estimation", () => {
     expect(estimateTextTokens("abcde")).toBe(2);
   });
 
-  it("builds a provider-aware heuristic budget for cloud chat", () => {
+  it("builds a provider-aware budget from configured model context metadata", () => {
     const state = buildDefaultState([]);
     const thread = state.conversationThreads.find((item) => item.id === "thread-main-desktop")!;
     const provider = state.providers.find((item) => item.id === "shared-minimax")!;
@@ -40,10 +40,29 @@ describe("context memory budget estimation", () => {
     expect(budget.providerId).toBe("shared-minimax");
     expect(budget.modelId).toBe("MiniMax-M2.7");
     expect(budget.maxContextTokens).toBe(64_000);
-    expect(budget.estimateQuality).toBe("heuristic");
+    expect(budget.estimateQuality).toBe("provider");
     expect(budget.usedInputTokens).toBeGreaterThan(0);
     expect(usableContextTokens(budget)).toBeLessThan(budget.maxContextTokens);
     expect(contextUsageRatio(budget)).toBeGreaterThan(0);
+    expect(contextBudgetTitle(budget)).toContain("provider/model metadata");
+  });
+
+  it("falls back to heuristic context metadata for unknown cloud models", () => {
+    const state = buildDefaultState([]);
+    const provider = state.providers.find((item) => item.id === "shared-minimax")!;
+    const runtimeNode = state.runtimeNodes.find((item) => item.id === "node-minimax-cloud")!;
+
+    const budget = buildContextBudget({
+      thread: null,
+      composer: "unknown model budget",
+      attachments: [],
+      provider,
+      runtimeNode,
+      modelId: "unknown-cloud-model",
+    });
+
+    expect(budget.maxContextTokens).toBe(64_000);
+    expect(budget.estimateQuality).toBe("heuristic");
     expect(contextBudgetTitle(budget)).toContain("not provider-tokenizer exact yet");
   });
 
@@ -63,6 +82,7 @@ describe("context memory budget estimation", () => {
 
     expect(budget.maxContextTokens).toBe(8_192);
     expect(budget.providerId).toBe("shared-local");
+    expect(budget.estimateQuality).toBe("provider");
   });
 
   it("triggers automatic compaction at the configured threshold", () => {

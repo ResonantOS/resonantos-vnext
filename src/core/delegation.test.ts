@@ -5,8 +5,14 @@ import {
   createEngineerDelegationPacket,
   delegationTargetsForState,
   delegationTargetsFromManifests,
+  engineerTaskAuditEvent,
+  engineerTaskMessagesFromWorkspace,
+  engineerTaskVerificationPayload,
   formatTaskWorkspaceCreatedReply,
+  formatEngineerTaskFinishedReply,
   nativeDelegationTargetsFromState,
+  parseStartEngineerTaskWorkspaceId,
+  renderEngineerTaskResultMarkdown,
   renderDelegationTaskMarkdown,
   shouldDelegateToEngineer,
   validateDelegationPacket,
@@ -270,5 +276,66 @@ describe("Engineer delegation packet factory", () => {
 
     expect(reply).toContain("No agent execution has started yet");
     expect(reply).toContain("TASK.md");
+  });
+
+  it("parses explicit start Engineer task requests", () => {
+    expect(parseStartEngineerTaskWorkspaceId("start engineer task workspace-engineer-test")).toBe("workspace-engineer-test");
+    expect(parseStartEngineerTaskWorkspaceId("start the engineer task workspace_123")).toBe("workspace_123");
+    expect(parseStartEngineerTaskWorkspaceId("please run something")).toBeNull();
+  });
+
+  it("builds Engineer task messages and completion artifacts", () => {
+    const payload = {
+      workspace: {
+        id: "workspace-engineer-test",
+        packetId: "delegation-test",
+        rootPath: "/tmp/workspace-engineer-test",
+        packetPath: "/tmp/workspace-engineer-test/delegation.packet.json",
+        taskMarkdownPath: "/tmp/workspace-engineer-test/TASK.md",
+        artifactsPath: "/tmp/workspace-engineer-test/artifacts",
+        logsPath: "/tmp/workspace-engineer-test/logs",
+        resultPath: "/tmp/workspace-engineer-test/result.md",
+        verificationPath: "/tmp/workspace-engineer-test/verification.json",
+      },
+      packet: createEngineerDelegationPacket(buildDefaultState([]), {
+        mission: "Check why provider diagnostics are degraded before repair.",
+        createdAt: "2026-04-25T12:00:00.000Z",
+      }),
+      taskMarkdown: "# TASK.md\n\nCheck diagnostics.",
+      resultMarkdown: "# Delegation Result\n\nPending.",
+      verification: {},
+    };
+    const messages = engineerTaskMessagesFromWorkspace(payload);
+    expect(messages[0]?.content).toContain("TASK.md");
+    expect(messages[0]?.content).toContain("Delegation packet");
+
+    const result = renderEngineerTaskResultMarkdown({
+      workspace: payload.workspace,
+      reply: "Diagnostics complete.",
+      toolEvents: [{ tool: "provider_probe", status: "completed", summary: "Provider is healthy." }],
+    });
+    expect(result).toContain("Diagnostics complete.");
+    expect(result).toContain("provider_probe");
+
+    const verification = engineerTaskVerificationPayload({
+      packetId: "delegation-test",
+      toolEvents: [{ tool: "provider_probe", status: "completed", summary: "Provider is healthy." }],
+    });
+    expect(verification.status).toBe("completed");
+
+    const audit = engineerTaskAuditEvent({
+      packetId: "delegation-test",
+      workspaceId: "workspace-engineer-test",
+      toolEvents: [{ tool: "provider_probe", status: "completed", summary: "Provider is healthy." }],
+    });
+    expect(audit.event).toBe("engineer-task-finished");
+
+    const reply = formatEngineerTaskFinishedReply({
+      workspace: payload.workspace,
+      resultPath: payload.workspace.resultPath,
+      verificationPath: payload.workspace.verificationPath,
+      auditPath: `${payload.workspace.logsPath}/audit.jsonl`,
+    });
+    expect(reply).toContain("Engineer task ran");
   });
 });

@@ -36,6 +36,7 @@ Remote user-owned machines are modeled as **provider runtime nodes**, not as add
   - model
   - auth mode
   - fallback route
+  - execution adapter capabilities
 - Provider/auth/runtime states must be explicit:
   - `supported`
   - `experimental`
@@ -114,6 +115,20 @@ The policy engine returns:
 - chosen auth tier
 - fallback route
 - routing reason / policy note
+- execution adapter capability metadata, including whether streaming and provider/runtime abort are supported
+
+### Execution Adapter Capability
+
+Each execution adapter must declare:
+
+- supported provider types
+- supported runtime kinds
+- supported auth methods
+- whether reasoning effort is supported
+- whether streaming is supported
+- whether host-side abort is supported
+- whether credentials are required
+- whether the adapter is experimental
 
 ### Fallback Policy
 
@@ -128,4 +143,5 @@ Must express:
 
 - Provider configuration becomes a core operating-system concern, not an add-on concern.
 - Future provider UI, runtime health, and recovery UX must surface supported vs experimental distinctions clearly.
+- Chat UX must not assume streaming or abort support unless the chosen execution adapter explicitly declares it.
 - Contracts in `src/core/` should evolve toward `provider profile + runtime node + routing decision` instead of a single flattened provider concept.

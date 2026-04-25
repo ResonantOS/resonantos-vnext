@@ -1166,6 +1166,7 @@ export function App() {
         channels={state.channels}
         chatBusy={chatBusy}
         chatCanStop={chatRunPhase !== "idle"}
+        chatSupportsAbort={activeRoute.executionAdapter?.supportsAbort === true}
         chatNotice={chatNotice}
         composer={composer}
         attachments={attachments}

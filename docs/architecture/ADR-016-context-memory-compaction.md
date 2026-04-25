@@ -154,6 +154,12 @@ Each provider profile must declare or derive:
 - hard-stop threshold
 - tokenizer or estimation method
 
+ResonantOS stores this in per-model context policy metadata on the provider
+profile. The metadata is the first source of truth for the model ceiling and
+reserved-token budgets. If the model has no configured metadata, ResonantOS may
+fall back to a conservative provider/runtime heuristic, but the UI must label
+that estimate as heuristic.
+
 Default thresholds:
 
 - `70%`: soft warning in UI
@@ -288,6 +294,17 @@ type ContextBudget = {
   compactionThreshold: number;
   hardStopThreshold: number;
   estimateQuality: "provider" | "tokenizer" | "heuristic";
+};
+
+type ProviderModelContextPolicy = {
+  model: string;
+  maxContextTokens: number;
+  tokenEstimateMethod: "provider-metadata" | "local-tokenizer" | "heuristic";
+  reservedOutputTokens?: number;
+  reservedReasoningTokens?: number;
+  reservedSystemTokens?: number;
+  reservedRetrievalTokens?: number;
+  source: "provider-default" | "runtime-node" | "user-config";
 };
 
 type CompactionRequest = {

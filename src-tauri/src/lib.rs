@@ -31,7 +31,9 @@ use crate::archive_service::{
     ArchiveTolBundleBuildResult, ArchiveTolBundleCandidate,
 };
 use crate::delegation_service::{
-    create_task_workspace, CreateTaskWorkspaceRequest, TaskWorkspaceRecord,
+    create_task_workspace, finish_task_workspace, read_task_workspace, CreateTaskWorkspaceRequest,
+    FinishTaskWorkspaceRequest, FinishTaskWorkspaceResult, ReadTaskWorkspaceRequest,
+    TaskWorkspacePayload, TaskWorkspaceRecord,
 };
 use crate::host_state::{
     addons_dir, read_provider_secrets, read_runtime_state_value, state_file, validate_manifest,
@@ -69,6 +71,22 @@ fn delegation_create_task_workspace(
     request: CreateTaskWorkspaceRequest,
 ) -> Result<TaskWorkspaceRecord, String> {
     create_task_workspace(&app, request)
+}
+
+#[tauri::command]
+fn delegation_read_task_workspace(
+    app: AppHandle,
+    request: ReadTaskWorkspaceRequest,
+) -> Result<TaskWorkspacePayload, String> {
+    read_task_workspace(&app, request)
+}
+
+#[tauri::command]
+fn delegation_finish_task_workspace(
+    app: AppHandle,
+    request: FinishTaskWorkspaceRequest,
+) -> Result<FinishTaskWorkspaceResult, String> {
+    finish_task_workspace(&app, request)
 }
 
 #[tauri::command]
@@ -433,6 +451,8 @@ pub fn run() {
             load_runtime_state,
             save_runtime_state,
             delegation_create_task_workspace,
+            delegation_read_task_workspace,
+            delegation_finish_task_workspace,
             list_sideloaded_addons,
             sideload_addon_manifest,
             load_provider_secret_statuses,
