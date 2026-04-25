@@ -314,13 +314,17 @@ type ProviderUsageTelemetry = {
   promptTokens?: number;
   completionTokens?: number;
   totalTokens?: number;
+  durationMs?: number;
+  tokensPerSecond?: number;
 };
 
 When a provider/runtime returns usage metadata, ResonantOS attaches it to the
 assistant message and transcript event. This telemetry is authoritative for the
 completed turn. It does not replace pre-flight estimation yet, because
 compaction decisions must happen before the provider call; it gives the system a
-real measurement trail that can be used to calibrate future estimates.
+real measurement trail that can be used to calibrate future estimates. Local
+runtime messages may also expose completion duration and tokens-per-second when
+the runtime reports those fields.
 
 type CompactionRequest = {
   threadId: string;

@@ -66,6 +66,8 @@ const {
         promptTokens: 120,
         completionTokens: 30,
         totalTokens: 150,
+        durationMs: 2200,
+        tokensPerSecond: 13.6,
       }),
     });
     onEvent({ runId: _input.runId, type: "completed", content: "" });
@@ -572,6 +574,8 @@ describe("App boot flow", () => {
           promptTokens: 120,
           completionTokens: 30,
           totalTokens: 150,
+          durationMs: 2200,
+          tokensPerSecond: 13.6,
         }),
       });
       onEvent({ runId: input.runId, type: "completed", content: "" });
@@ -1315,6 +1319,43 @@ describe("App boot flow", () => {
     expect(screen.getAllByRole("button", { name: "Send message" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: "New chat" }).length).toBeGreaterThan(0);
     expect(screen.getAllByDisplayValue("MiniMax-M2.7").length).toBeGreaterThan(0);
+  });
+
+  it("surfaces provider usage in the context tooltip and local generation stats", async () => {
+    const state = buildDefaultState(manifests);
+    hydrateStateMock.mockResolvedValue({
+      ...state,
+      conversationThreads: state.conversationThreads.map((thread) =>
+        thread.id === "thread-main-desktop"
+          ? {
+              ...thread,
+              messages: [
+                {
+                  ...thread.messages[0],
+                  providerUsage: {
+                    providerId: "shared-local",
+                    model: "batiai/gemma4-e2b:q4",
+                    source: "local-runtime",
+                    promptTokens: 42,
+                    completionTokens: 11,
+                    totalTokens: 53,
+                    durationMs: 810,
+                    tokensPerSecond: 13.6,
+                  },
+                },
+              ],
+            }
+          : thread,
+      ),
+    });
+
+    render(<App />);
+
+    expect((await screen.findAllByText("Launch your AI tools from one workbench.")).length).toBeGreaterThan(0);
+    expect(screen.getAllByTitle(/Last measured provider usage for batiai\/gemma4-e2b:q4/i).length).toBeGreaterThan(0);
+    const statsTitle = screen.getByRole("button", { name: "Generation stats" }).getAttribute("title");
+    expect(statsTitle).toContain("Completion TPS: 13.6");
+    expect(statsTitle).toContain("Total tokens: 53");
   });
 
   it("compacts the active chat context from the context usage control", async () => {

@@ -54,6 +54,8 @@ describe("chat transcript ledger", () => {
         promptTokens: 120,
         completionTokens: 30,
         totalTokens: 150,
+        durationMs: 2200,
+        tokensPerSecond: 13.6,
       },
     });
 
@@ -69,6 +71,7 @@ describe("chat transcript ledger", () => {
       providerUsage: expect.objectContaining({
         model: "MiniMax-M2.7",
         completionTokens: 30,
+        tokensPerSecond: 13.6,
       }),
     });
   });

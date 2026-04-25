@@ -50,7 +50,6 @@ type StrategistChatRailProps = {
   dictationAvailable: boolean;
   activeChatModel: string;
   availableModels: string[];
-  showGenerationStats: boolean;
   thinkingDepth: ThinkingDepth;
   contextUsageLabel: string;
   contextUsageRatio: number;
@@ -95,6 +94,32 @@ export function StrategistChatRail(props: StrategistChatRailProps) {
   const [openThreadMenuId, setOpenThreadMenuId] = useState<string | null>(null);
   const copyMessage = (message: ConversationMessage) => {
     void navigator.clipboard?.writeText(message.content);
+  };
+  const generationStatsTitle = (message: ConversationMessage): string => {
+    const usage = message.providerUsage;
+    if (usage?.source !== "local-runtime") {
+      return "Generation stats are shown only for local-runtime messages with telemetry.";
+    }
+
+    const lines = [`Local runtime: ${usage.model}`];
+    if (typeof usage.tokensPerSecond === "number") {
+      lines.push(`Completion TPS: ${usage.tokensPerSecond.toFixed(1)}`);
+    } else {
+      lines.push("Completion TPS: unavailable");
+    }
+    if (typeof usage.completionTokens === "number") {
+      lines.push(`Completion tokens: ${usage.completionTokens.toLocaleString()}`);
+    }
+    if (typeof usage.promptTokens === "number") {
+      lines.push(`Prompt tokens: ${usage.promptTokens.toLocaleString()}`);
+    }
+    if (typeof usage.totalTokens === "number") {
+      lines.push(`Total tokens: ${usage.totalTokens.toLocaleString()}`);
+    }
+    if (typeof usage.durationMs === "number") {
+      lines.push(`Completion duration: ${(usage.durationMs / 1000).toFixed(2)}s`);
+    }
+    return lines.join("\n");
   };
   const pinnedThreadIds = new Set(props.pinnedThreadIds);
   const pinnedThreads = props.strategistThreads.filter((thread) => pinnedThreadIds.has(thread.id));
@@ -310,12 +335,12 @@ export function StrategistChatRail(props: StrategistChatRailProps) {
                   <button type="button" className="message-action-button" aria-label="Regenerate message" title="Regenerate message: pending regeneration controller wiring.">
                     <RegenerateIcon />
                   </button>
-                  {props.showGenerationStats ? (
+                  {message.providerUsage?.source === "local-runtime" ? (
                     <button
                       type="button"
                       className="message-action-button"
                       aria-label="Generation stats"
-                      title="Generation stats: local-runtime telemetry is not recorded for this message yet."
+                      title={generationStatsTitle(message)}
                     >
                       <StatsIcon />
                     </button>

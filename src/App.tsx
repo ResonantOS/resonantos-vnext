@@ -1174,7 +1174,6 @@ export function App() {
         dictationAvailable={dictationAvailable}
         activeChatModel={activeChatModel}
         availableModels={activeProvider?.allowedModels ?? []}
-        showGenerationStats={activeRuntimeNode?.kind === "local"}
         thinkingDepth={thinkingDepth}
         contextUsageLabel={contextUsageLabel}
         contextUsageRatio={contextUsageRatio}

@@ -8,6 +8,7 @@ import type {
   ConversationThread,
   ProviderProfile,
   ProviderRuntimeNode,
+  ProviderUsageTelemetry,
   ResonantShellState,
 } from "../../core/contracts";
 import {
@@ -34,6 +35,26 @@ type ViewModelInput = {
   composer: string;
   attachments: ComposerAttachment[];
   selectedChatModel: string;
+};
+
+const latestProviderUsageFor = (thread: ConversationThread | null): ProviderUsageTelemetry | undefined =>
+  [...(thread?.messages ?? [])].reverse().find((message) => message.providerUsage)?.providerUsage;
+
+const formatProviderUsageTitle = (usage: ProviderUsageTelemetry): string => {
+  const lines = [`Last measured provider usage for ${usage.model} (${usage.source}).`];
+  if (typeof usage.promptTokens === "number") {
+    lines.push(`Prompt tokens: ${usage.promptTokens.toLocaleString()}.`);
+  }
+  if (typeof usage.completionTokens === "number") {
+    lines.push(`Completion tokens: ${usage.completionTokens.toLocaleString()}.`);
+  }
+  if (typeof usage.totalTokens === "number") {
+    lines.push(`Total tokens: ${usage.totalTokens.toLocaleString()}.`);
+  }
+  if (usage.source === "local-runtime" && typeof usage.tokensPerSecond === "number") {
+    lines.push(`Completion TPS: ${usage.tokensPerSecond.toFixed(1)}.`);
+  }
+  return lines.join(" ");
 };
 
 export type ShellViewModel = {
@@ -157,7 +178,13 @@ export const buildShellViewModel = ({
   });
   const contextUsageRatio = ratioFromContextBudget(contextBudget);
   const contextUsageLabel = `${Math.round(contextUsageRatio * 100)}%`;
-  const contextUsageTitle = contextBudgetTitle(contextBudget);
+  const latestProviderUsage = latestProviderUsageFor(activeThread);
+  const contextUsageTitle = [
+    contextBudgetTitle(contextBudget),
+    latestProviderUsage ? formatProviderUsageTitle(latestProviderUsage) : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return {
     allManifests,

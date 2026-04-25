@@ -1057,6 +1057,8 @@ export interface ProviderUsageTelemetry {
   promptTokens?: number;
   completionTokens?: number;
   totalTokens?: number;
+  durationMs?: number;
+  tokensPerSecond?: number;
 }
 
 export interface ContextDecision {

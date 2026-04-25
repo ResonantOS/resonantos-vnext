@@ -174,6 +174,10 @@ fn number_field(payload: &Value, key: &str) -> Option<u32> {
         .and_then(|value| u32::try_from(value).ok())
 }
 
+fn number_field_u64(payload: &Value, key: &str) -> Option<u64> {
+    payload.get(key).and_then(Value::as_u64)
+}
+
 fn extract_cloud_usage(
     provider_id: &str,
     model: &str,
@@ -187,6 +191,8 @@ fn extract_cloud_usage(
         prompt_tokens: number_field(usage, "prompt_tokens"),
         completion_tokens: number_field(usage, "completion_tokens"),
         total_tokens: number_field(usage, "total_tokens"),
+        duration_ms: None,
+        tokens_per_second: None,
     })
 }
 
@@ -197,6 +203,20 @@ fn extract_local_usage(
 ) -> Option<ProviderUsageTelemetry> {
     let prompt_tokens = number_field(payload, "prompt_eval_count");
     let completion_tokens = number_field(payload, "eval_count");
+    let completion_duration_ns = number_field_u64(payload, "eval_duration");
+    let duration_ms = completion_duration_ns
+        .and_then(|duration| u32::try_from(duration / 1_000_000).ok())
+        .filter(|duration| *duration > 0);
+    let tokens_per_second =
+        completion_tokens
+            .zip(completion_duration_ns)
+            .and_then(|(tokens, duration)| {
+                if duration == 0 {
+                    None
+                } else {
+                    Some((tokens as f64) / ((duration as f64) / 1_000_000_000.0))
+                }
+            });
     if prompt_tokens.is_none() && completion_tokens.is_none() {
         return None;
     }
@@ -209,6 +229,8 @@ fn extract_local_usage(
         total_tokens: prompt_tokens
             .zip(completion_tokens)
             .map(|(prompt, completion)| prompt + completion),
+        duration_ms,
+        tokens_per_second,
     })
 }
 
@@ -288,6 +310,10 @@ pub(crate) struct ProviderUsageTelemetry {
     pub(crate) completion_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) total_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) duration_ms: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) tokens_per_second: Option<f64>,
 }
 
 #[derive(Deserialize)]
@@ -1524,7 +1550,8 @@ mod tests {
         let payload = json!({
             "done": true,
             "prompt_eval_count": 42,
-            "eval_count": 11
+            "eval_count": 11,
+            "eval_duration": 2_200_000_000_u64
         });
         let usage = extract_local_usage("shared-local", "batiai/gemma4-e2b:q4", &payload)
             .expect("local usage should parse");
@@ -1532,5 +1559,7 @@ mod tests {
         assert_eq!(usage.prompt_tokens, Some(42));
         assert_eq!(usage.completion_tokens, Some(11));
         assert_eq!(usage.total_tokens, Some(53));
+        assert_eq!(usage.duration_ms, Some(2200));
+        assert_eq!(usage.tokens_per_second, Some(5.0));
     }
 }
