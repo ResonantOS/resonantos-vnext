@@ -1,0 +1,71 @@
+{
+  "id": "addon.openclaw",
+  "name": "OpenClaw",
+  "version": "0.1.0",
+  "author": "Resonant Alpha",
+  "category": "agent",
+  "description": "Mount an OpenClaw runtime as a delegated agent add-on under ResonantOS supervision.",
+  "runtimeType": "agent-addon",
+  "surfaces": [
+    {
+      "id": "openclaw-panel",
+      "type": "panel",
+      "label": "OpenClaw Runtime",
+      "description": "Monitor runtime health, delegated tasks, and artifact flow."
+    }
+  ],
+  "requestedCapabilities": [
+    {
+      "capability": "archive-read",
+      "granted": false,
+      "scope": "workspace",
+      "revocationBehavior": "degrade"
+    },
+    {
+      "capability": "archive-intake-write",
+      "granted": false,
+      "scope": "intake-only",
+      "revocationBehavior": "hard-stop"
+    },
+    {
+      "capability": "agent-delegation",
+      "granted": false,
+      "scope": "shared",
+      "revocationBehavior": "hard-stop"
+    },
+    {
+      "capability": "shell",
+      "granted": false,
+      "scope": "workspace",
+      "revocationBehavior": "degrade"
+    }
+  ],
+  "providerRequirements": {
+    "sharedProfiles": ["shared-openai"],
+    "supportsPrivateCredentials": true
+  },
+  "archiveIntegration": {
+    "readScopes": ["living-archive/context"],
+    "intakeWriteScopes": ["LivingArchive/INTAKE/external-agents"],
+    "canRequestIngest": true,
+    "canWriteKnowledgePages": false
+  },
+  "health": {
+    "strategy": "runtime-gateway"
+  },
+  "installHooks": {
+    "onInstall": "register-external-agent"
+  },
+  "compatibility": {
+    "shellVersion": "^0.1.0",
+    "platforms": ["macOS", "linux"]
+  },
+  "agents": [
+    {
+      "id": "openclaw.runtime",
+      "displayName": "OpenClaw",
+      "trustTier": "addon",
+      "workspaceBehavior": "delegated"
+    }
+  ]
+}

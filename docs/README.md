@@ -1,0 +1,77 @@
+# ResonantOS vNext Docs
+
+This folder is the documentation entrypoint for the current codebase.
+
+## Read First
+
+- [architecture/MODULE_MAP.md](./architecture/MODULE_MAP.md)
+  - current ownership map for modules and shell composition
+- [architecture/ADR-001-platform-stack.md](./architecture/ADR-001-platform-stack.md)
+  - platform and language choices
+- [architecture/ADR-002-modular-codebase.md](./architecture/ADR-002-modular-codebase.md)
+  - module structure and anti-monolith rules
+- [architecture/ADR-003-engineering-standards.md](./architecture/ADR-003-engineering-standards.md)
+  - standards for code citations, testing, security, and cross-platform behavior
+- [architecture/ADR-004-chat-rail.md](./architecture/ADR-004-chat-rail.md)
+  - UX and product rules for the Strategist chat rail
+- [architecture/ADR-005-provider-fabric-routing.md](./architecture/ADR-005-provider-fabric-routing.md)
+  - provider fabric, runtime nodes, centralized routing, and fallback/recovery
+- [architecture/ADR-006-addon-runtime-sdk.md](./architecture/ADR-006-addon-runtime-sdk.md)
+  - add-on provenance, signing, capability grants, and runtime isolation
+- [architecture/ADR-007-living-archive-boundaries.md](./architecture/ADR-007-living-archive-boundaries.md)
+  - archive read/write/ingest boundaries and Strategist-owned knowledge writes
+- [architecture/ADR-008-wallet-web3-security.md](./architecture/ADR-008-wallet-web3-security.md)
+  - wallet custody tiers, signing rules, and add-on restrictions
+- [architecture/ADR-009-rust-service-ipc-boundary.md](./architecture/ADR-009-rust-service-ipc-boundary.md)
+  - privileged service ownership and host/UI boundary rules
+- [architecture/ADR-010-recovery-ladder.md](./architecture/ADR-010-recovery-ladder.md)
+  - staged recovery flow, better-brain restoration, and Engineer promotion policy
+- [architecture/ADR-011-living-archive-host-service.md](./architecture/ADR-011-living-archive-host-service.md)
+  - real Living Archive host boundary over config, wiki pages, SQLite stats, intake, review queue, and ingest-review processing
+- [architecture/ADR-012-living-archive-approval-policy.md](./architecture/ADR-012-living-archive-approval-policy.md)
+  - tiered approval policy so trusted archive promotion defaults to Strategist review, not blanket human review
+- [architecture/ADR-013-living-archive-memory-domains.md](./architecture/ADR-013-living-archive-memory-domains.md)
+  - Human Knowledge, External Knowledge, AI Memory, Mixed Library staging, and canonical import rules
+- [architecture/ADR-014-system-architecture-memory.md](./architecture/ADR-014-system-architecture-memory.md)
+  - host-owned ResonantOS architecture memory available before user knowledge intake
+- [FEATURE_BACKLOG.md](./FEATURE_BACKLOG.md)
+  - active feature backlog and recent extraction progress
+- [product/UX-001-resonantos-app-shell.md](./product/UX-001-resonantos-app-shell.md)
+  - UI/UX source of truth for the app-shell, launcher, collapsible rails, embedded add-on workspace, and full-screen mode
+
+## What These Documents Answer
+
+- `How is the system built?`
+  - `ADR-001`
+- `How should code be organized?`
+  - `ADR-002`
+- `What standards are we following?`
+  - `ADR-003`
+- `Which module owns what?`
+  - `MODULE_MAP`
+- `How do providers, add-ons, archive, wallets, and IPC work?`
+  - `ADR-005` through `ADR-009`
+- `How does recovery mode work?`
+  - `ADR-010`
+- `How does the Living Archive host service work?`
+  - `ADR-011`
+- `How does archive approval avoid becoming human bottleneck work?`
+  - `ADR-012`
+- `How are Human Knowledge, External Knowledge, and AI Memory separated?`
+  - `ADR-013`
+- `How do Augmentor and the Engineer know current ResonantOS architecture before user intake?`
+  - `ADR-014`
+- `What is still planned?`
+  - `FEATURE_BACKLOG`
+- `What UI/UX experience are we building?`
+  - `product/UX-001-resonantos-app-shell.md`
+
+## Usage Rule
+
+When a new structural decision is made, add or update an ADR before the codebase drifts.
+
+When a refactor changes ownership or service boundaries, update these in the same change:
+
+- `architecture/MODULE_MAP.md`
+- `FEATURE_BACKLOG.md`
+- the relevant ADR if the rule itself changed

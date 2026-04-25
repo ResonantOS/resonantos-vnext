@@ -1,0 +1,59 @@
+{
+  "id": "addon.r-awareness",
+  "name": "R-Awareness",
+  "version": "0.1.0",
+  "author": "Resonant Alpha",
+  "category": "memory",
+  "description": "SSoT and trigger-word awareness add-on that exposes doctrine/context snapshots to agents without granting archive write authority.",
+  "runtimeType": "agent-addon",
+  "surfaces": [
+    {
+      "id": "r-awareness-panel",
+      "type": "panel",
+      "label": "SSoT Awareness",
+      "description": "Manage context injection, doctrine packs, and SSoT mappings."
+    }
+  ],
+  "requestedCapabilities": [
+    {
+      "capability": "archive-read",
+      "granted": false,
+      "scope": "shared",
+      "revocationBehavior": "degrade"
+    },
+    {
+      "capability": "notifications",
+      "granted": false,
+      "scope": "shared",
+      "revocationBehavior": "degrade"
+    }
+  ],
+  "providerRequirements": {
+    "sharedProfiles": ["shared-openai"],
+    "supportsPrivateCredentials": false
+  },
+  "archiveIntegration": {
+    "readScopes": ["constitution", "protocols", "living-archive/context"],
+    "intakeWriteScopes": [],
+    "canRequestIngest": false,
+    "canWriteKnowledgePages": false
+  },
+  "health": {
+    "strategy": "keyword-pack"
+  },
+  "installHooks": {
+    "onInstall": "register-doctrine-pack"
+  },
+  "compatibility": {
+    "shellVersion": "^0.1.0",
+    "platforms": ["macOS", "linux", "windows"]
+  },
+  "agents": [
+    {
+      "id": "r-awareness.context",
+      "displayName": "R-Awareness",
+      "trustTier": "addon",
+      "workspaceBehavior": "background"
+    }
+  ]
+}

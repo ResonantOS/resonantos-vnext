@@ -1,0 +1,51 @@
+{
+  "id": "addon.shield",
+  "name": "Shield",
+  "version": "0.1.0",
+  "author": "Resonant Alpha",
+  "category": "security",
+  "description": "Local protection layer for capability enforcement, filesystem control, and security telemetry.",
+  "runtimeType": "local-service",
+  "surfaces": [
+    {
+      "id": "shield-page",
+      "type": "page",
+      "label": "Shield Monitor",
+      "description": "Inspect file guard, permissions, and security status."
+    }
+  ],
+  "requestedCapabilities": [
+    {
+      "capability": "filesystem",
+      "granted": false,
+      "scope": "system",
+      "revocationBehavior": "hard-stop"
+    },
+    {
+      "capability": "notifications",
+      "granted": false,
+      "scope": "shared",
+      "revocationBehavior": "degrade"
+    }
+  ],
+  "providerRequirements": {
+    "sharedProfiles": [],
+    "supportsPrivateCredentials": false
+  },
+  "archiveIntegration": {
+    "readScopes": [],
+    "intakeWriteScopes": [],
+    "canRequestIngest": false,
+    "canWriteKnowledgePages": false
+  },
+  "health": {
+    "strategy": "local-daemon"
+  },
+  "installHooks": {
+    "onEnable": "start-guardian"
+  },
+  "compatibility": {
+    "shellVersion": "^0.1.0",
+    "platforms": ["macOS", "linux"]
+  }
+}

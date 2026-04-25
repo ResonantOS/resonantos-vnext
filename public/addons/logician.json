@@ -1,0 +1,51 @@
+{
+  "id": "addon.logician",
+  "name": "Logician",
+  "version": "0.1.0",
+  "author": "Resonant Alpha",
+  "category": "knowledge",
+  "description": "Policy and reasoning rules engine redesigned as a modular add-on.",
+  "runtimeType": "local-service",
+  "surfaces": [
+    {
+      "id": "logician-panel",
+      "type": "panel",
+      "label": "Policy Engine",
+      "description": "View policies, trust gates, and reasoning rules."
+    }
+  ],
+  "requestedCapabilities": [
+    {
+      "capability": "filesystem",
+      "granted": false,
+      "scope": "workspace",
+      "revocationBehavior": "degrade"
+    },
+    {
+      "capability": "archive-read",
+      "granted": false,
+      "scope": "shared",
+      "revocationBehavior": "degrade"
+    }
+  ],
+  "providerRequirements": {
+    "sharedProfiles": [],
+    "supportsPrivateCredentials": false
+  },
+  "archiveIntegration": {
+    "readScopes": ["constitution", "protocols"],
+    "intakeWriteScopes": [],
+    "canRequestIngest": false,
+    "canWriteKnowledgePages": false
+  },
+  "health": {
+    "strategy": "policy-engine"
+  },
+  "installHooks": {
+    "onInstall": "register-policies"
+  },
+  "compatibility": {
+    "shellVersion": "^0.1.0",
+    "platforms": ["macOS", "linux", "windows"]
+  }
+}

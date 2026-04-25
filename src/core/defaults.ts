@@ -1,0 +1,736 @@
+// Intent citation: docs/architecture/ADR-005-provider-fabric-routing.md
+// Intent citation: docs/architecture/ADR-006-addon-runtime-sdk.md
+
+import type {
+  AddOnInstallation,
+  AddOnManifest,
+  AgentDefinition,
+  ArchivePolicy,
+  CapabilityGrant,
+  ChannelDefinition,
+  ConversationThread,
+  CoreService,
+  ModelStrategyState,
+  ProviderExecutionAdapterPolicy,
+  ProviderProfile,
+  ProviderRoutingState,
+  ProviderRuntimeNode,
+  ResonantShellState,
+  WorkspaceDefinition,
+} from "./contracts";
+
+const grant = (
+  capability: CapabilityGrant["capability"],
+  granted: boolean,
+  scope: CapabilityGrant["scope"],
+  revocationBehavior: CapabilityGrant["revocationBehavior"],
+): CapabilityGrant => ({
+  capability,
+  granted,
+  scope,
+  revocationBehavior,
+});
+
+export const coreServices: CoreService[] = [
+  {
+    id: "shell.core",
+    label: "ResonantOS Shell",
+    status: "ready",
+    owner: "core",
+    description: "Desktop shell, windowing, event bus, settings, add-on registry, and permissions.",
+  },
+  {
+    id: "strategist.core",
+    label: "Strategist",
+    status: "ready",
+    owner: "core",
+    description: "Primary trusted AI identity. Default name is Augmentor and it fronts the user relationship.",
+  },
+  {
+    id: "setup.core",
+    label: "Resonant Engineer Agent",
+    status: "ready",
+    owner: "core",
+    description: "ResonantOS caretaker agent for onboarding, repair, provider setup, add-on installation, and recovery flows.",
+  },
+  {
+    id: "living-archive.core",
+    label: "Living Archive",
+    status: "ready",
+    owner: "core",
+    description: "Core memory service with scoped reads, intake-only add-on writes, and Strategist-owned ingest.",
+  },
+];
+
+export const providerProfiles: ProviderProfile[] = [
+  {
+    id: "shared-minimax",
+    label: "Shared MiniMax",
+    providerType: "minimax",
+    authSource: "shared-vault",
+    authMethod: "subscription",
+    authTier: "experimental",
+    apiBaseUrl: "https://api.minimax.io/v1",
+    allowedModels: ["MiniMax-M2.7", "MiniMax-M2.7-highspeed"],
+    primaryModel: "MiniMax-M2.7",
+    fallbackModel: "MiniMax-M2.7-highspeed",
+    consumerScopes: ["strategist", "setup", "archive-ingest", "telegram-channel"],
+    shared: true,
+    status: "ready",
+    credentialStatus: "missing",
+  },
+  {
+    id: "shared-openai",
+    label: "Shared OpenAI",
+    providerType: "openai",
+    authSource: "shared-vault",
+    authMethod: "subscription",
+    authTier: "experimental",
+    allowedModels: ["gpt-5.4", "gpt-5.4-mini"],
+    primaryModel: "gpt-5.4",
+    fallbackModel: "gpt-5.4-mini",
+    consumerScopes: ["strategist", "setup", "archive-ingest", "telegram-channel"],
+    shared: true,
+    status: "fallback",
+    credentialStatus: "missing",
+  },
+  {
+    id: "shared-local",
+    label: "Shared Local Runtime",
+    providerType: "local",
+    authSource: "manual",
+    authMethod: "local-runtime",
+    authTier: "supported",
+    allowedModels: ["batiai/gemma4-e2b:q4", "qwen3:4b", "llama3.2:1b"],
+    primaryModel: "batiai/gemma4-e2b:q4",
+    fallbackModel: "qwen3:4b",
+    consumerScopes: ["audio2tol", "obsidian", "setup", "recovery"],
+    shared: true,
+    status: "fallback",
+    credentialStatus: "configured",
+  },
+];
+
+export const runtimeNodes: ProviderRuntimeNode[] = [
+  {
+    id: "node-minimax-cloud",
+    label: "MiniMax Cloud Runtime",
+    providerProfileId: "shared-minimax",
+    kind: "cloud",
+    locality: "cloud",
+    endpoint: "https://api.minimax.io/v1",
+    supportedModels: ["MiniMax-M2.7", "MiniMax-M2.7-highspeed"],
+    authTier: "experimental",
+    healthState: "ready",
+    deployableOnDemand: false,
+    notes: ["Subscription-capable route with experimental auth posture."],
+  },
+  {
+    id: "node-openai-cloud",
+    label: "OpenAI Cloud Runtime",
+    providerProfileId: "shared-openai",
+    kind: "cloud",
+    locality: "cloud",
+    supportedModels: ["gpt-5.4", "gpt-5.4-mini"],
+    authTier: "experimental",
+    healthState: "ready",
+    deployableOnDemand: false,
+    notes: ["Cloud route available when the provider profile is configured and healthy."],
+  },
+  {
+    id: "node-local-resurrect",
+    label: "Local Resurrect Runtime",
+    providerProfileId: "shared-local",
+    kind: "local",
+    locality: "desktop-local",
+    supportedModels: ["batiai/gemma4-e2b:q4", "qwen3:4b", "llama3.2:1b"],
+    authTier: "supported",
+    healthState: "deployable",
+    deployableOnDemand: true,
+    notes: ["Prepared fallback runtime for emergency recovery, currently targeting a local Gemma 4 E2B build."],
+  },
+  {
+    id: "node-gx10-qwen",
+    label: "GX10 Remote Runtime",
+    providerProfileId: "shared-local",
+    kind: "remote-user-owned",
+    locality: "lan-remote",
+    endpoint: "gx10://primary-runtime",
+    supportedModels: ["qwen-3.5", "gemma-4"],
+    authTier: "supported",
+    healthState: "degraded",
+    deployableOnDemand: false,
+    notes: ["User-owned remote runtime node managed through the provider fabric."],
+  },
+];
+
+export const providerExecutionAdapters: ProviderExecutionAdapterPolicy[] = [
+  {
+    id: "cloud-minimax-compatible",
+    label: "MiniMax Compatible Cloud Adapter",
+    supportedProviderTypes: ["minimax"],
+    supportedRuntimeKinds: ["cloud"],
+    supportedAuthMethods: ["subscription", "api-key", "custom"],
+    supportsReasoningEffort: false,
+    requiresCredential: true,
+    experimental: true,
+    notes: ["Uses the MiniMax-compatible cloud chat path through the host service."],
+  },
+  {
+    id: "cloud-openai-compatible",
+    label: "OpenAI Compatible Cloud Adapter",
+    supportedProviderTypes: ["openai", "openai-compatible"],
+    supportedRuntimeKinds: ["cloud"],
+    supportedAuthMethods: ["api-key", "subscription", "oauth", "custom"],
+    supportsReasoningEffort: true,
+    requiresCredential: true,
+    experimental: true,
+    notes: ["Uses the OpenAI-compatible cloud chat path through the host service."],
+  },
+  {
+    id: "local-ollama",
+    label: "Local Ollama Adapter",
+    supportedProviderTypes: ["local"],
+    supportedRuntimeKinds: ["local"],
+    supportedAuthMethods: ["local-runtime"],
+    supportsReasoningEffort: false,
+    requiresCredential: false,
+    experimental: false,
+    notes: ["Uses the desktop-local Ollama runtime through the host service."],
+  },
+];
+
+export const providerRouting: ProviderRoutingState = {
+  policyEngineId: "routing.core",
+  executionAdapters: providerExecutionAdapters,
+  fallbackPolicies: [
+    {
+      id: "core-default",
+      label: "Core Default Fallback",
+      orderedProviderProfileIds: ["shared-minimax", "shared-openai", "shared-local"],
+      orderedRuntimeNodeIds: ["node-minimax-cloud", "node-openai-cloud", "node-local-resurrect"],
+      allowExperimentalAuth: true,
+      allowResurrection: true,
+      onFailure: "degrade",
+    },
+    {
+      id: "strict-supported-only",
+      label: "Strict Supported Routes",
+      orderedProviderProfileIds: ["shared-local"],
+      orderedRuntimeNodeIds: ["node-local-resurrect", "node-gx10-qwen"],
+      allowExperimentalAuth: false,
+      allowResurrection: true,
+      onFailure: "hard-stop",
+    },
+  ],
+  recoveryActions: [
+    {
+      id: "resurrect-core-local",
+      label: "Resurrect Local Fallback",
+      trigger: "panic-button",
+      targetAgentIds: ["strategist.core", "setup.core"],
+      runtimeNodeId: "node-local-resurrect",
+      prepared: true,
+      note: "Deploy the prepared local runtime and rewire Strategist and Setup to it.",
+    },
+  ],
+  experimentalPolicy: {
+    allowOptIn: true,
+    note: "Experimental auth or runtime routes must be visibly marked and can be excluded by routing policy.",
+  },
+};
+
+export const modelStrategy: ModelStrategyState = {
+  profileId: "personal-studio-default",
+  label: "Personal Studio Strategy",
+  summary:
+    "Route each workload to the cheapest acceptable model first, then escalate through agreed fallbacks rather than always selecting the strongest model.",
+  fallbackChains: [
+    {
+      id: "chain-core-fast",
+      label: "Core Fast Chain",
+      rule: "Try the main fast route first, then premium cloud, then remote or local fallback.",
+      orderedRoutes: [
+        { providerProfileId: "shared-minimax", runtimeNodeId: "node-minimax-cloud", model: "MiniMax-M2.7", note: "Default fast route for Augmentor and the Engineer Agent." },
+        { providerProfileId: "shared-openai", runtimeNodeId: "node-openai-cloud", model: "gpt-5.4", note: "Premium fallback for demanding moments." },
+        { providerProfileId: "shared-local", runtimeNodeId: "node-gx10-qwen", model: "qwen-3.5", note: "Remote user-owned runtime when available." },
+      ],
+      lastResortRoute: {
+        providerProfileId: "shared-local",
+        runtimeNodeId: "node-local-resurrect",
+        model: "batiai/gemma4-e2b:q4",
+        note: "Desktop-local hard floor.",
+      },
+    },
+    {
+      id: "chain-routine-economical",
+      label: "Routine Economical Chain",
+      rule: "Prefer economical or sunk-cost routes for routine work before escalating.",
+      orderedRoutes: [
+        { providerProfileId: "shared-minimax", runtimeNodeId: "node-minimax-cloud", model: "MiniMax-M2.7-highspeed", note: "Routine and cron-style work." },
+        { providerProfileId: "shared-local", runtimeNodeId: "node-gx10-qwen", model: "qwen-3.5", note: "Remote local route for non-urgent background work." },
+      ],
+      lastResortRoute: {
+        providerProfileId: "shared-local",
+        runtimeNodeId: "node-local-resurrect",
+        model: "qwen3:4b",
+        note: "Desktop-local economical fallback.",
+      },
+    },
+    {
+      id: "chain-archive-premium",
+      label: "Archive Premium Chain",
+      rule: "Archive interpretation should stay premium-first and hard-stop before dropping below acceptable quality.",
+      orderedRoutes: [
+        { providerProfileId: "shared-openai", runtimeNodeId: "node-openai-cloud", model: "gpt-5.4", note: "Preferred ingest quality route." },
+        { providerProfileId: "shared-minimax", runtimeNodeId: "node-minimax-cloud", model: "MiniMax-M2.7", note: "Temporary fallback if premium route is unavailable." },
+      ],
+    },
+  ],
+  workloadStrategies: [
+    {
+      id: "strategy-augmentor-primary",
+      label: "Augmentor Primary Chat",
+      workloadClass: "primary-chat",
+      ownerType: "agent",
+      ownerId: "strategist.core",
+      primaryRoute: { providerProfileId: "shared-minimax", runtimeNodeId: "node-minimax-cloud", model: "MiniMax-M2.7" },
+      fallbackChainId: "chain-core-fast",
+      hardStopWhenNoFallback: false,
+      notes: ["Primary trusted conversation should stay on the fast subscription route when possible."],
+    },
+    {
+      id: "strategy-engineer-recovery",
+      label: "Resonant Engineer Recovery",
+      workloadClass: "recovery",
+      ownerType: "agent",
+      ownerId: "setup.core",
+      primaryRoute: { providerProfileId: "shared-local", runtimeNodeId: "node-local-resurrect", model: "batiai/gemma4-e2b:q4" },
+      fallbackChainId: "chain-core-fast",
+      hardStopWhenNoFallback: false,
+      notes: ["Recovery starts at the local floor, then promotes to the best validated stronger route."],
+    },
+    {
+      id: "strategy-archive-ingest",
+      label: "Archive Ingest",
+      workloadClass: "archive-ingest",
+      ownerType: "workload",
+      ownerId: "archive-ingest",
+      primaryRoute: { providerProfileId: "shared-openai", runtimeNodeId: "node-openai-cloud", model: "gpt-5.4" },
+      fallbackChainId: "chain-archive-premium",
+      hardStopWhenNoFallback: true,
+      notes: ["Archive interpretation should not silently degrade below premium quality without explicit approval."],
+    },
+    {
+      id: "strategy-routine-background",
+      label: "Routine Background Work",
+      workloadClass: "routine",
+      ownerType: "workload",
+      ownerId: "routine",
+      primaryRoute: { providerProfileId: "shared-minimax", runtimeNodeId: "node-minimax-cloud", model: "MiniMax-M2.7-highspeed" },
+      fallbackChainId: "chain-routine-economical",
+      hardStopWhenNoFallback: false,
+      notes: ["Cron, heartbeat, and routine delegated work should prefer economical routes."],
+    },
+  ],
+  emergencyPolicy: {
+    preferBestAvailable: true,
+    orderedPromotionTargets: [
+      { providerProfileId: "shared-minimax", runtimeNodeId: "node-minimax-cloud", model: "MiniMax-M2.7", note: "Promote to the fast cloud route first." },
+      { providerProfileId: "shared-openai", runtimeNodeId: "node-openai-cloud", model: "gpt-5.4", note: "Premium fallback when the fast route is unavailable." },
+      { providerProfileId: "shared-local", runtimeNodeId: "node-gx10-qwen", model: "qwen-3.5", note: "User-owned remote runtime." },
+    ],
+    hardFloorRoute: {
+      providerProfileId: "shared-local",
+      runtimeNodeId: "node-local-resurrect",
+      model: "batiai/gemma4-e2b:q4",
+      note: "Last resort local floor that should always remain available.",
+    },
+    note: "Emergency mode should auto-detect the best available model, but always preserve a guaranteed local floor.",
+  },
+};
+
+export const agents: AgentDefinition[] = [
+  {
+    id: "strategist.core",
+    displayName: "Augmentor",
+    trustTier: "core",
+    workspaceBehavior: "primary",
+    providerProfileId: "shared-minimax",
+    fallbackProviderProfileId: "shared-openai",
+    archiveReadScopes: ["constitution", "protocols", "living-archive", "session-memory"],
+    archiveIntakeWriteScopes: [],
+    canWriteKnowledgePages: false,
+    channelIds: ["desktop-main", "telegram-primary", "telegram-field"],
+  },
+  {
+    id: "setup.core",
+    displayName: "Resonant Engineer Agent",
+    trustTier: "core",
+    workspaceBehavior: "delegated",
+    providerProfileId: "shared-local",
+    fallbackProviderProfileId: "shared-minimax",
+    archiveReadScopes: ["configuration", "constitution", "protocols", "living-archive", "review"],
+    archiveIntakeWriteScopes: [],
+    canWriteKnowledgePages: false,
+    channelIds: ["desktop-setup", "desktop-engineer"],
+  },
+  {
+    id: "archive-ingest.core",
+    displayName: "Resonant Ingest Agent",
+    trustTier: "core",
+    workspaceBehavior: "background",
+    providerProfileId: "shared-minimax",
+    fallbackProviderProfileId: "shared-openai",
+    archiveReadScopes: ["intake", "constitution", "protocols", "living-archive"],
+    archiveIntakeWriteScopes: ["ingest/intake", "ingest/review"],
+    canWriteKnowledgePages: true,
+    channelIds: [],
+  },
+];
+
+export const channels: ChannelDefinition[] = [
+  {
+    id: "desktop-main",
+    type: "desktop",
+    label: "Desktop Main",
+    owningAgentId: "strategist.core",
+    strategistIdentityId: "strategist.identity",
+    enabled: true,
+    sessionMode: "shared-identity",
+    workspaceId: "workspace-main",
+    metadata: { surface: "primary-shell" },
+  },
+  {
+    id: "desktop-setup",
+    type: "desktop",
+    label: "Engineering Console",
+    owningAgentId: "setup.core",
+    strategistIdentityId: "strategist.identity",
+    enabled: true,
+    sessionMode: "isolated-session",
+    workspaceId: "workspace-setup",
+    metadata: { surface: "system-configuration" },
+  },
+  {
+    id: "desktop-engineer",
+    type: "desktop",
+    label: "Recovery Console",
+    owningAgentId: "setup.core",
+    strategistIdentityId: "strategist.identity",
+    enabled: true,
+    sessionMode: "isolated-session",
+    workspaceId: "workspace-recovery",
+    metadata: { surface: "emergency-recovery" },
+  },
+  {
+    id: "telegram-primary",
+    type: "telegram",
+    label: "Telegram Primary",
+    owningAgentId: "strategist.core",
+    strategistIdentityId: "strategist.identity",
+    enabled: false,
+    sessionMode: "shared-identity",
+    workspaceId: "workspace-main",
+    metadata: { botName: "augmentor_primary", route: "trusted-main" },
+  },
+  {
+    id: "telegram-field",
+    type: "telegram",
+    label: "Telegram Field",
+    owningAgentId: "strategist.core",
+    strategistIdentityId: "strategist.identity",
+    enabled: false,
+    sessionMode: "isolated-session",
+    workspaceId: "workspace-field",
+    metadata: { botName: "augmentor_field", route: "field-capture" },
+  },
+];
+
+export const workspaces: WorkspaceDefinition[] = [
+  {
+    id: "workspace-main",
+    kind: "main",
+    owningEntityId: "strategist.core",
+    title: "Trusted Main Workspace",
+    visibility: "user-facing",
+    sharedArtifacts: true,
+    surfaces: ["chat", "decision-log", "memory-peek"],
+    channelIds: ["desktop-main", "telegram-primary"],
+  },
+  {
+    id: "workspace-setup",
+    kind: "delegated",
+    owningEntityId: "setup.core",
+    title: "Engineering & Configuration",
+    visibility: "user-facing",
+    sharedArtifacts: false,
+    surfaces: ["setup-checklist", "provider-vault", "addon-installer"],
+    channelIds: ["desktop-setup"],
+  },
+  {
+    id: "workspace-recovery",
+    kind: "delegated",
+    owningEntityId: "setup.core",
+    title: "Emergency Recovery",
+    visibility: "user-facing",
+    sharedArtifacts: false,
+    surfaces: ["diagnosis-log", "recovery-checklist", "change-report"],
+    channelIds: ["desktop-engineer"],
+  },
+  {
+    id: "workspace-field",
+    kind: "delegated",
+    owningEntityId: "strategist.core",
+    title: "Field Capture",
+    visibility: "user-facing",
+    sharedArtifacts: true,
+    surfaces: ["telegram-capture", "archive-intake"],
+    channelIds: ["telegram-field"],
+  },
+];
+
+const strategistSeedMessage = (threadId: string, channelId: string) => ({
+  id: `${threadId}:seed-1`,
+  threadId,
+  channelId,
+  role: "assistant" as const,
+  author: "Augmentor",
+  createdAt: "2026-04-22T09:00:00.000Z",
+  content:
+    "I am Augmentor, the main Strategist for ResonantOS. This shell is now structured so you can talk to me directly, while add-ons and delegated agents stay scoped behind the system.",
+});
+
+const engineerSeedMessage = (threadId: string, channelId: string) => ({
+  id: `${threadId}:seed-1`,
+  threadId,
+  channelId,
+  role: "assistant" as const,
+  author: "Resonant Engineer Agent",
+  createdAt: "2026-04-23T08:00:00.000Z",
+  content:
+    "Recovery console online. I am the Resonant Engineer Agent. I handle diagnosis, recovery research when network access exists, documentation checks, change tracking, and the final repair report for the larger Strategist model.",
+});
+
+export const conversationThreads: ConversationThread[] = [
+  {
+    id: "thread-main-desktop",
+    title: "Desktop Main Thread",
+    owningAgentId: "strategist.core",
+    workspaceId: "workspace-main",
+    channelId: "desktop-main",
+    summary: "Primary trusted conversation with the Strategist inside the ResonantOS shell.",
+    messages: [strategistSeedMessage("thread-main-desktop", "desktop-main")],
+  },
+  {
+    id: "thread-field-capture",
+    title: "Field Capture Thread",
+    owningAgentId: "strategist.core",
+    workspaceId: "workspace-field",
+    channelId: "telegram-field",
+    summary: "Separate field-capture context for Telegram or mobile-style intake flows.",
+    messages: [strategistSeedMessage("thread-field-capture", "telegram-field")],
+  },
+  {
+    id: "thread-recovery-engineer",
+    title: "Emergency Recovery",
+    owningAgentId: "setup.core",
+    workspaceId: "workspace-recovery",
+    channelId: "desktop-engineer",
+    summary: "Resonant Engineer Agent emergency workspace for diagnosis, repair logging, and postmortem reporting.",
+    messages: [engineerSeedMessage("thread-recovery-engineer", "desktop-engineer")],
+  },
+];
+
+export const recoverySession = {
+  active: false,
+  engineerAgentId: "setup.core",
+  engineerThreadId: "thread-recovery-engineer",
+  lastNormalThreadId: "thread-main-desktop",
+  checklist: [
+    {
+      id: "facts",
+      label: "Establish facts",
+      description: "Confirm the local recovery floor, inspect runtime state, and write the first diagnosis down.",
+      status: "pending" as const,
+    },
+    {
+      id: "better-brain",
+      label: "Restore better brain",
+      description: "Probe internet, provider routes, and remote/local nodes to find a stronger model than the local recovery floor.",
+      status: "pending" as const,
+    },
+    {
+      id: "promote",
+      label: "Promote runtime",
+      description: "Validate the best stronger route and promote the Engineer Agent onto it while preserving local fallback.",
+      status: "pending" as const,
+    },
+    {
+      id: "deep-diagnosis",
+      label: "Deep diagnosis",
+      description: "With a stronger model active, inspect the primary fault, docs, logs, and code paths in detail.",
+      status: "pending" as const,
+    },
+    {
+      id: "changes",
+      label: "Track changes",
+      description: "Record each system change so the recovery path can be audited or rolled forward safely.",
+      status: "pending" as const,
+    },
+    {
+      id: "report",
+      label: "Write report",
+      description: "Produce a recovery report for the larger Strategist model after the system is stable again.",
+      status: "pending" as const,
+    },
+  ],
+  changeLog: [],
+};
+
+export const archivePolicy: ArchivePolicy = {
+  strategistIdentityId: "strategist.identity",
+  ingestServiceId: "archive-ingest.core",
+  intakeRoots: [
+    "_LivingArchive/INTAKE/transcripts",
+    "_LivingArchive/INTAKE/audio2tol",
+    "_LivingArchive/INTAKE/external-agents",
+  ],
+  knowledgeRoots: [
+    "_LivingArchive/WIKI/summaries",
+    "_LivingArchive/WIKI/entities",
+    "_LivingArchive/WIKI/concepts",
+    "_LivingArchive/WIKI/syntheses",
+  ],
+  reviewQueueRoot: "_LivingArchive/REVIEW",
+  approvalPolicy: {
+    defaultTier: "strategist-review",
+    autoApproveIntents: ["summary-refresh", "metadata-refresh"],
+    humanReviewSourceTypes: ["constitution", "protocol", "philosophy", "manifesto"],
+    humanReviewPageTypes: ["synthesis", "future-asset", "constitution-note", "protocol-note"],
+    notes: [
+      "Strategist review is the default for archive promotion.",
+      "Human review is reserved for doctrine-sensitive or high-impact cases.",
+      "Auto-approve is limited to narrow, proven-safe refresh classes.",
+    ],
+  },
+  actorPolicies: [
+    {
+      actorId: "strategist.core",
+      actorType: "core-agent",
+      readScopes: ["constitution", "protocols", "living-archive", "intake"],
+      intakeWriteScopes: [],
+      canWriteKnowledgePages: false,
+      canRequestIngest: true,
+    },
+    {
+      actorId: "archive-ingest.core",
+      actorType: "service",
+      readScopes: ["constitution", "protocols", "living-archive", "intake", "review"],
+      intakeWriteScopes: ["_LivingArchive/REVIEW"],
+      canWriteKnowledgePages: true,
+      canRequestIngest: true,
+    },
+    {
+      actorId: "addon.openclaw",
+      actorType: "addon",
+      readScopes: ["living-archive/context"],
+      intakeWriteScopes: ["_LivingArchive/INTAKE/external-agents"],
+      canWriteKnowledgePages: false,
+      canRequestIngest: true,
+    },
+    {
+      actorId: "addon.audio2tol",
+      actorType: "addon",
+      readScopes: ["constitution", "protocols", "living-archive/context"],
+      intakeWriteScopes: ["_LivingArchive/INTAKE/audio2tol"],
+      canWriteKnowledgePages: false,
+      canRequestIngest: true,
+    },
+  ],
+  notes: [
+    "Add-ons can read scoped archive views and deposit raw artifacts into intake roots.",
+    "Only the Strategist-owned Resonant Ingest Agent can create or update trusted knowledge pages.",
+  ],
+};
+
+const defaultProvenanceTier = (manifest: AddOnManifest, source: AddOnInstallation["source"]): AddOnInstallation["provenanceTier"] =>
+  manifest.provenance?.tier ?? (source === "bundled" ? "curated-signed" : "sideloaded-unverified");
+
+const defaultVerificationState = (
+  manifest: AddOnManifest,
+  source: AddOnInstallation["source"],
+): AddOnInstallation["verificationState"] =>
+  manifest.provenance?.verificationState ?? (source === "bundled" ? "verified" : "unverified");
+
+export const createDefaultInstallation = (manifest: AddOnManifest, source: AddOnInstallation["source"]): AddOnInstallation => ({
+  addonId: manifest.id,
+  source,
+  provenanceTier: defaultProvenanceTier(manifest, source),
+  verificationState: defaultVerificationState(manifest, source),
+  installed: false,
+  enabled: false,
+  status: "available",
+  grantedCapabilities: manifest.requestedCapabilities.map((item) => ({ ...item, granted: false })),
+  recommendedGrantPresetIds: (manifest.grantPresets ?? []).map((preset) => preset.id),
+  grantRecommendationSource: manifest.grantPresets?.length ? "preset-bundle" : "manifest-request",
+  privateProviderProfileIds: [],
+  notes: ["Not installed yet."],
+});
+
+export const buildDefaultState = (manifests: AddOnManifest[]): ResonantShellState => {
+  const installations = Object.fromEntries(
+    manifests.map((manifest) => [manifest.id, createDefaultInstallation(manifest, "bundled")]),
+  );
+
+  const obsidian = installations["addon.obsidian"];
+  if (obsidian) {
+    obsidian.installed = true;
+    obsidian.enabled = true;
+    obsidian.status = "enabled";
+    obsidian.grantedCapabilities = obsidian.grantedCapabilities.map((item) =>
+      item.capability === "ui-embedding" || item.capability === "filesystem"
+        ? { ...item, granted: true }
+        : item,
+    );
+    obsidian.notes = ["Embedded pane ready. Vault access still constrained by archive policy."];
+  }
+
+  const telegram = installations["addon.telegram-channel"];
+  if (telegram) {
+    telegram.installed = true;
+    telegram.enabled = false;
+    telegram.status = "installed";
+    telegram.notes = ["Installed as a Strategist channel add-on. Enable after bot credentials are configured."];
+  }
+
+  return {
+    strategistIdentity: {
+      id: "strategist.identity",
+      defaultName: "Augmentor",
+      trustNote: "Primary trusted AI identity. Add-on agents are delegated, not equivalent.",
+    },
+    coreServices,
+    providers: providerProfiles,
+    runtimeNodes,
+    providerRouting,
+    modelStrategy,
+    agents,
+    channels,
+    workspaces,
+    archivePolicy,
+    conversationThreads,
+    recoverySession,
+    installations,
+    uiPreferences: {
+      activeSection: "overview",
+      activeChatThreadId: "thread-main-desktop",
+      pinnedChatThreadIds: ["thread-main-desktop"],
+      leftSidebarOpen: true,
+      chatSidebarOpen: true,
+      chatSidebarWidth: 460,
+      theme: "resonant-dark",
+    },
+    distributionModel: "curated-plus-sideload",
+  };
+};

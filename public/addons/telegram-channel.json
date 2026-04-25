@@ -1,0 +1,66 @@
+{
+  "id": "addon.telegram-channel",
+  "name": "Telegram Channel",
+  "version": "0.1.0",
+  "author": "Resonant Alpha",
+  "category": "channel",
+  "description": "Connects one or more Telegram bots to the Strategist as trusted conversation channels.",
+  "runtimeType": "channel-addon",
+  "surfaces": [
+    {
+      "id": "telegram-panel",
+      "type": "panel",
+      "label": "Telegram Routing",
+      "description": "Manage bots, route mappings, and channel health."
+    },
+    {
+      "id": "telegram-channel",
+      "type": "channel",
+      "label": "Telegram Endpoint",
+      "description": "Expose the Strategist through Telegram."
+    }
+  ],
+  "requestedCapabilities": [
+    {
+      "capability": "network",
+      "granted": false,
+      "scope": "system",
+      "revocationBehavior": "hard-stop"
+    },
+    {
+      "capability": "notifications",
+      "granted": false,
+      "scope": "shared",
+      "revocationBehavior": "degrade"
+    },
+    {
+      "capability": "providers",
+      "granted": false,
+      "scope": "shared",
+      "revocationBehavior": "degrade"
+    }
+  ],
+  "providerRequirements": {
+    "sharedProfiles": ["shared-openai"],
+    "supportsPrivateCredentials": false,
+    "recommendedPrimaryModel": "gpt-5.4",
+    "recommendedFallbackModel": "gpt-5.4-mini"
+  },
+  "archiveIntegration": {
+    "readScopes": ["living-archive/context"],
+    "intakeWriteScopes": [],
+    "canRequestIngest": false,
+    "canWriteKnowledgePages": false
+  },
+  "health": {
+    "strategy": "bot-connectivity"
+  },
+  "installHooks": {
+    "onInstall": "register-channel",
+    "onEnable": "start-bot-listener"
+  },
+  "compatibility": {
+    "shellVersion": "^0.1.0",
+    "platforms": ["macOS", "linux", "windows"]
+  }
+}

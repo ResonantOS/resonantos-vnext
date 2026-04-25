@@ -1,0 +1,57 @@
+{
+  "id": "addon.obsidian",
+  "name": "Obsidian",
+  "version": "0.1.0",
+  "author": "Resonant Alpha",
+  "category": "knowledge",
+  "description": "Embeds an Obsidian-oriented pane so the user can work with their vault inside ResonantOS.",
+  "runtimeType": "embedded-module",
+  "surfaces": [
+    {
+      "id": "obsidian-pane",
+      "type": "embedded-pane",
+      "label": "Vault Pane",
+      "description": "Render the user's Obsidian vault as a shell pane."
+    }
+  ],
+  "requestedCapabilities": [
+    {
+      "capability": "filesystem",
+      "granted": false,
+      "scope": "shared",
+      "revocationBehavior": "hard-stop"
+    },
+    {
+      "capability": "ui-embedding",
+      "granted": false,
+      "scope": "system",
+      "revocationBehavior": "hide-surface"
+    },
+    {
+      "capability": "archive-read",
+      "granted": false,
+      "scope": "shared",
+      "revocationBehavior": "degrade"
+    }
+  ],
+  "providerRequirements": {
+    "sharedProfiles": ["shared-local"],
+    "supportsPrivateCredentials": false
+  },
+  "archiveIntegration": {
+    "readScopes": ["living-archive/context", "vault"],
+    "intakeWriteScopes": [],
+    "canRequestIngest": false,
+    "canWriteKnowledgePages": false
+  },
+  "health": {
+    "strategy": "embedded-pane-ready"
+  },
+  "installHooks": {
+    "onInstall": "bind-vault"
+  },
+  "compatibility": {
+    "shellVersion": "^0.1.0",
+    "platforms": ["macOS"]
+  }
+}

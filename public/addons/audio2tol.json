@@ -1,0 +1,71 @@
+{
+  "id": "addon.audio2tol",
+  "name": "Audio2TOL",
+  "version": "0.1.0",
+  "author": "Resonant Alpha",
+  "category": "tool",
+  "description": "Structured TOL pipeline add-on for audio import, transcription, analysis, and bundle emission into Living Archive intake.",
+  "runtimeType": "local-service",
+  "surfaces": [
+    {
+      "id": "audio2tol-page",
+      "type": "page",
+      "label": "Audio2TOL Console",
+      "description": "Control the TOL processing pipeline."
+    },
+    {
+      "id": "audio2tol-monitor",
+      "type": "background-task-monitor",
+      "label": "Pipeline Monitor",
+      "description": "View audio ingestion and processing status."
+    }
+  ],
+  "requestedCapabilities": [
+    {
+      "capability": "filesystem",
+      "granted": false,
+      "scope": "shared",
+      "revocationBehavior": "hard-stop"
+    },
+    {
+      "capability": "archive-intake-write",
+      "granted": false,
+      "scope": "intake-only",
+      "revocationBehavior": "hard-stop"
+    },
+    {
+      "capability": "providers",
+      "granted": false,
+      "scope": "shared",
+      "revocationBehavior": "degrade"
+    },
+    {
+      "capability": "device-integration",
+      "granted": false,
+      "scope": "system",
+      "revocationBehavior": "degrade"
+    }
+  ],
+  "providerRequirements": {
+    "sharedProfiles": ["shared-openai", "shared-local"],
+    "supportsPrivateCredentials": true,
+    "recommendedPrimaryModel": "gpt-5.4"
+  },
+  "archiveIntegration": {
+    "readScopes": ["constitution", "protocols", "living-archive/context"],
+    "intakeWriteScopes": ["LivingArchive/INTAKE/audio2tol"],
+    "canRequestIngest": true,
+    "canWriteKnowledgePages": false
+  },
+  "health": {
+    "strategy": "pipeline-heartbeat"
+  },
+  "installHooks": {
+    "onInstall": "register-pipeline",
+    "onEnable": "start-local-service"
+  },
+  "compatibility": {
+    "shellVersion": "^0.1.0",
+    "platforms": ["macOS"]
+  }
+}
