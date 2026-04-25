@@ -162,8 +162,13 @@ Last updated: 2026-04-25
   - the task is sent to the Resonant Engineer Agent through the existing audited recovery turn loop
   - the host writes `result.md`, `verification.json`, and `logs/audit.jsonl` back into the task workspace
   - this is still a narrow v1 bridge; no external add-on worker dispatch has been enabled yet
+- Added first Delegation Monitor UI on 2026-04-25:
+  - new left-nav Delegation workspace lists host-owned task workspaces
+  - users can start an Engineer task from the center workspace without typing the command phrase
+  - the monitor exposes packet, task, result, verification, artifacts, and audit paths
+  - Augmentor remains the delegation manager; the monitor is only the supervision/control surface
 - Build add-on launcher UX from `docs/product/UX-001-resonantos-app-shell.md`.
-- Add visible Delegation Workspace Monitor UI with Start, Review Result, and Promote/Archive controls so users do not need chat commands.
+- Continue Delegation Monitor with result preview, verification status parsing, and Promote/Archive controls.
 - Add center-workspace app opening state for installed add-ons.
 - Add workspace renderers for add-on runtime types:
   - embedded app

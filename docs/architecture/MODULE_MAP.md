@@ -71,6 +71,12 @@ This map defines which folder owns which feature area so contributors do not kee
   - composer attachment and dictation controller
   - chat-local types, icons, and utilities
 
+- `src/modules/delegation/`
+  - Delegation Monitor center workspace
+  - host-owned task workspace listing
+  - touch-friendly task selection and explicit start controls
+  - supervision surface only; Augmentor remains the delegation manager
+
 - `src/modules/overview/`
   - current home/workbench overview surface
   - service snapshots

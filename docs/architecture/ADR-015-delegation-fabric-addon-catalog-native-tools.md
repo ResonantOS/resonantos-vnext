@@ -133,6 +133,8 @@ Start semantics:
 - failed tool events must mark verification as `needs-review`
 - no worker result is promoted into code, config, or Living Archive memory without a later review/approval action
 
+The Delegation Monitor is the supervision surface for these workspaces. It does not replace Augmentor and must not invent tasks by itself. Its job is to list host-owned task workspaces, expose paths and status in a touch-friendly way, and let the human explicitly start or review work that Augmentor already prepared.
+
 ## Delegation Quality Rules
 
 ResonantOS must reject or require revision for delegation packets that are too vague.
