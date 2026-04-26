@@ -15,11 +15,10 @@ use super::{
     system_time_label, unix_timestamp, ArchiveClassificationProposal,
     ArchiveImportedLibrarySummary, ArchiveLibraryClassificationReview,
     ArchiveLibraryClassificationReviewRequest, ArchiveLibraryImportRequest,
-    ArchiveLibraryImportResult, ArchiveLibraryImportSourceRecord,
-    ArchiveLibraryReorganisationMove, ArchiveLibraryReorganisationPlan,
-    ArchiveLibraryReorganisationPlanRequest, ArchiveRuntime, ArchiveSourceFolderScanRequest,
-    ArchiveSourceFolderScanResult, ArchiveSourceWatchIndexRecord, ArchiveSourceWatchRecord,
-    VaultMappingFile,
+    ArchiveLibraryImportResult, ArchiveLibraryImportSourceRecord, ArchiveLibraryReorganisationMove,
+    ArchiveLibraryReorganisationPlan, ArchiveLibraryReorganisationPlanRequest, ArchiveRuntime,
+    ArchiveSourceFolderScanRequest, ArchiveSourceFolderScanResult, ArchiveSourceWatchIndexRecord,
+    ArchiveSourceWatchRecord, VaultMappingFile,
 };
 
 fn source_watch_roots(runtime: &ArchiveRuntime) -> Vec<&VaultMappingFile> {

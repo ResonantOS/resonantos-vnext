@@ -48,6 +48,7 @@ const {
   requestArchiveLibraryImportMock,
   requestArchiveImportedLibrariesMock,
   requestArchiveLibraryClassificationReviewMock,
+  requestArchiveLibraryReorganisationPlanMock,
   requestArchiveLibraryFolderSelectionMock,
   requestLocalRuntimeStatusMock,
   requestEngineerRecoveryTurnMock,
@@ -445,6 +446,37 @@ const {
       },
     ] as Array<Record<string, unknown>>,
   })),
+  requestArchiveLibraryReorganisationPlanMock: vi.fn(async () => ({
+    plannedAt: "unix:11",
+    actorId: "strategist.core",
+    libraryId: "resonant-os-base",
+    libraryName: "RESONANT_OS_BASE",
+    planPath:
+      "/Users/augmentor/Documents/RESONANT_OS_BASE/_LivingArchive/Memory/INTAKE/imports/mixed/metadata/resonant-os-base-reorganisation-plan.json",
+    rollbackPlanPath:
+      "/Users/augmentor/Documents/RESONANT_OS_BASE/_LivingArchive/Memory/INTAKE/imports/mixed/metadata/resonant-os-base-rollback-plan.json",
+    auditLogPath:
+      "/Users/augmentor/Documents/RESONANT_OS_BASE/_LivingArchive/Memory/INTAKE/imports/mixed/metadata/resonant-os-base-reorganisation-audit.jsonl",
+    requiresApproval: true,
+    structuralChangesAllowed: false,
+    movesPlanned: 1,
+    tagOnlyCount: 0,
+    blockedCount: 1,
+    entries: [
+      {
+        sourceId: "resonant-os-base-notes-identity",
+        title: "identity",
+        proposedTarget: "human-knowledge",
+        sourcePath:
+          "/Users/augmentor/Documents/RESONANT_OS_BASE/_LivingArchive/Memory/INTAKE/imports/mixed/sources/resonant-os-base/notes/identity.md",
+        destinationPath:
+          "/Users/augmentor/Documents/RESONANT_OS_BASE/_LivingArchive/Memory/HUMAN_KNOWLEDGE/sources/resonant-os-base/notes/identity.md",
+        action: "propose-move-after-approval",
+        confidence: "medium",
+        reason: "Matched human-authored path or title signals.",
+      },
+    ] as Array<Record<string, unknown>>,
+  })),
   requestArchiveLibraryFolderSelectionMock: vi.fn(async () => "/Users/augmentor/Documents/RESONANT_OS_BASE"),
   requestLocalRuntimeStatusMock: vi.fn(async () => ({
     available: true,
@@ -591,6 +623,7 @@ vi.mock("./core/runtime", () => ({
   requestArchiveLibraryImport: requestArchiveLibraryImportMock,
   requestArchiveImportedLibraries: requestArchiveImportedLibrariesMock,
   requestArchiveLibraryClassificationReview: requestArchiveLibraryClassificationReviewMock,
+  requestArchiveLibraryReorganisationPlan: requestArchiveLibraryReorganisationPlanMock,
   requestArchiveLibraryFolderSelection: requestArchiveLibraryFolderSelectionMock,
   requestRecoveryRouteCandidates: requestRecoveryRouteCandidatesMock,
   requestProviderServiceChatCompletion: requestProviderServiceChatCompletionMock,
@@ -1055,6 +1088,38 @@ describe("App boot flow", () => {
           reason: "Matched human-authored path or title signals.",
           tags: ["ownership/human", "source-type/md", "review/unapproved"],
           wikilinks: ["[[identity]]"],
+        },
+      ],
+    });
+    requestArchiveLibraryReorganisationPlanMock.mockReset();
+    requestArchiveLibraryReorganisationPlanMock.mockResolvedValue({
+      plannedAt: "unix:11",
+      actorId: "strategist.core",
+      libraryId: "resonant-os-base",
+      libraryName: "RESONANT_OS_BASE",
+      planPath:
+        "/Users/augmentor/Documents/RESONANT_OS_BASE/_LivingArchive/Memory/INTAKE/imports/mixed/metadata/resonant-os-base-reorganisation-plan.json",
+      rollbackPlanPath:
+        "/Users/augmentor/Documents/RESONANT_OS_BASE/_LivingArchive/Memory/INTAKE/imports/mixed/metadata/resonant-os-base-rollback-plan.json",
+      auditLogPath:
+        "/Users/augmentor/Documents/RESONANT_OS_BASE/_LivingArchive/Memory/INTAKE/imports/mixed/metadata/resonant-os-base-reorganisation-audit.jsonl",
+      requiresApproval: true,
+      structuralChangesAllowed: false,
+      movesPlanned: 1,
+      tagOnlyCount: 0,
+      blockedCount: 1,
+      entries: [
+        {
+          sourceId: "resonant-os-base-notes-identity",
+          title: "identity",
+          proposedTarget: "human-knowledge",
+          sourcePath:
+            "/Users/augmentor/Documents/RESONANT_OS_BASE/_LivingArchive/Memory/INTAKE/imports/mixed/sources/resonant-os-base/notes/identity.md",
+          destinationPath:
+            "/Users/augmentor/Documents/RESONANT_OS_BASE/_LivingArchive/Memory/HUMAN_KNOWLEDGE/sources/resonant-os-base/notes/identity.md",
+          action: "propose-move-after-approval",
+          confidence: "medium",
+          reason: "Matched human-authored path or title signals.",
         },
       ],
     });
@@ -1868,6 +1933,17 @@ describe("App boot flow", () => {
     expect(await screen.findByText("1 waiting for full review")).toBeTruthy();
     expect(requestArchiveLibraryClassificationReviewMock).toHaveBeenCalledWith(
       "/Users/augmentor/Documents/RESONANT_OS_BASE/_LivingArchive/Memory/INTAKE/imports/mixed/metadata/resonant-os-base-classification-review.json",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Approve Classification Intent" }));
+    fireEvent.click(screen.getByRole("button", { name: "Generate Reorganisation Plan" }));
+
+    expect(await screen.findByText(/Generated reorganisation plan for RESONANT_OS_BASE/i)).toBeTruthy();
+    expect(await screen.findByText(/Files moved by this command: 0/i)).toBeTruthy();
+    expect(await screen.findByText("approval required")).toBeTruthy();
+    expect(requestArchiveLibraryReorganisationPlanMock).toHaveBeenCalledWith(
+      "/Users/augmentor/Documents/RESONANT_OS_BASE/_LivingArchive/Memory/INTAKE/imports/mixed/metadata/resonant-os-base-classification-review.json",
+      "strategist.core",
     );
   });
 
