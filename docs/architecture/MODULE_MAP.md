@@ -41,13 +41,18 @@ This map defines which folder owns which feature area so contributors do not kee
   - recovery route candidate probing
 
 - `src-tauri/src/archive_service.rs`
-  - Living Archive runtime resolution from `ARCHIVE_CONFIG.json` + `VAULT_MAP.json`
   - SQLite-backed archive stats and recent activity
   - archive search
   - guarded archive document reads
   - intake artifact writes
   - ingest request queue writes
   - review queue reads
+
+- `src-tauri/src/archive_service/archive_runtime.rs`
+  - Living Archive runtime resolution from `ARCHIVE_CONFIG.json` + `VAULT_MAP.json`
+  - vault root, managed memory root, wiki root, intake root, review root, and allowed-root policy
+  - runtime status payload assembly for the Tauri command surface
+  - ingest-agent config/prompt status reporting
 
 - `src-tauri/src/archive_service/archive_system_memory.rs`
   - host-owned System Architecture Memory source collection

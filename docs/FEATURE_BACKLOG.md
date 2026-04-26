@@ -135,6 +135,7 @@ Last updated: 2026-04-26
   - source-hash manifest is generated under `Memory/AI_MEMORY/provenance/system-memory-manifest.json`
   - Strategist and Resonant Engineer chat prompts now load System Architecture Memory before normal user archive context
 - Started archive host modularization on 2026-04-26:
+  - extracted runtime/config resolution and runtime status assembly into `src-tauri/src/archive_service/archive_runtime.rs`
   - extracted System Architecture Memory implementation into `src-tauri/src/archive_service/archive_system_memory.rs`
   - extracted source folder scanning, source-watch indexing, and library import into `src-tauri/src/archive_service/archive_source_library.rs`
   - extracted review artifact generation, approval decisions, and trusted wiki promotion into `src-tauri/src/archive_service/archive_review.rs`

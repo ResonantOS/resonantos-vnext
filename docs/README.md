@@ -6,6 +6,8 @@ This folder is the documentation entrypoint for the current codebase.
 
 - [architecture/MODULE_MAP.md](./architecture/MODULE_MAP.md)
   - current ownership map for modules and shell composition
+- [architecture/ARCHITECTURE_AUDIT_2026-04-26.md](./architecture/ARCHITECTURE_AUDIT_2026-04-26.md)
+  - current modularity checkpoint, validation snapshot, and next refactor risks
 - [architecture/ADR-001-platform-stack.md](./architecture/ADR-001-platform-stack.md)
   - platform and language choices
 - [architecture/ADR-002-modular-codebase.md](./architecture/ADR-002-modular-codebase.md)
