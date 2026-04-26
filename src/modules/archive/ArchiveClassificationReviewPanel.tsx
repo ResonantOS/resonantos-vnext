@@ -2,13 +2,25 @@
 // Intent citation: docs/architecture/ADR-013-living-archive-memory-domains.md
 
 import { useState } from "react";
-import type { ArchiveClassificationProposal, ArchiveLibraryClassificationReview } from "../../core/contracts";
+import type {
+  ArchiveClassificationProposal,
+  ArchiveLibraryClassificationReview,
+  ArchiveLibraryReorganisationPlan,
+} from "../../core/contracts";
 
 type ArchiveClassificationReviewPanelProps = {
   review: ArchiveLibraryClassificationReview;
+  plan: ArchiveLibraryReorganisationPlan | null;
+  busy: boolean;
+  onGenerateReorganisationPlan: (classificationManifestPath: string) => void;
 };
 
-export function ArchiveClassificationReviewPanel({ review }: ArchiveClassificationReviewPanelProps) {
+export function ArchiveClassificationReviewPanel({
+  review,
+  plan,
+  busy,
+  onGenerateReorganisationPlan,
+}: ArchiveClassificationReviewPanelProps) {
   const [intentApproved, setIntentApproved] = useState(false);
   const targetCounts = review.proposals.reduce<Record<string, number>>((counts, proposal) => {
     counts[proposal.proposedTarget] = (counts[proposal.proposedTarget] ?? 0) + 1;
@@ -27,6 +39,15 @@ export function ArchiveClassificationReviewPanel({ review }: ArchiveClassificati
         </div>
         <button type="button" className="button-secondary touch-action" onClick={() => setIntentApproved(true)}>
           Approve Classification Intent
+        </button>
+        <button
+          type="button"
+          className="button-secondary touch-action"
+          onClick={() => onGenerateReorganisationPlan(review.manifestPath)}
+          disabled={!intentApproved || busy}
+          title={intentApproved ? "Generate a plan without moving files." : "Approve classification intent before planning moves."}
+        >
+          {busy ? "Planning..." : "Generate Reorganisation Plan"}
         </button>
       </div>
       <div className="classification-summary-strip" aria-label="Classification summary">
@@ -57,6 +78,35 @@ export function ArchiveClassificationReviewPanel({ review }: ArchiveClassificati
           ? "Classification intent approved. The next step is a separate host-mediated reorganisation plan with audit log and rollback."
           : "No files are moved by this screen. This approval records intent only; structural changes remain blocked here."}
       </div>
+      {plan ? (
+        <article className="classification-plan-card" aria-label="Generated reorganisation plan">
+          <div className="classification-proposal-main">
+            <div>
+              <span className="eyebrow">Generated plan</span>
+              <strong>{plan.libraryName}</strong>
+              <p>
+                {plan.movesPlanned} move(s) planned, {plan.tagOnlyCount} tag-only item(s), {plan.blockedCount} blocked or waiting.
+                Files moved by this command: 0.
+              </p>
+            </div>
+            <span className={`tone ${plan.requiresApproval ? "tone-warning" : "tone-active"}`}>
+              {plan.requiresApproval ? "approval required" : "ready"}
+            </span>
+          </div>
+          <div className="classification-summary-strip" aria-label="Reorganisation plan artifacts">
+            <span>plan artifact</span>
+            <span>rollback plan</span>
+            <span>audit log</span>
+            <span>{plan.structuralChangesAllowed ? "structural changes allowed" : "structural changes blocked"}</span>
+          </div>
+          <details className="archive-mini-details classification-path-details">
+            <summary>Plan paths</summary>
+            <p className="path-chip">{plan.planPath}</p>
+            <p className="path-chip">{plan.rollbackPlanPath}</p>
+            <p className="path-chip">{plan.auditLogPath}</p>
+          </details>
+        </article>
+      ) : null}
       <details className="archive-mini-details classification-path-details">
         <summary>Review artifact</summary>
         <p className="path-chip">{review.manifestPath}</p>

@@ -8,6 +8,7 @@ import type {
   ArchiveDocumentPayload,
   ArchiveImportedLibrarySummary,
   ArchiveLibraryClassificationReview,
+  ArchiveLibraryReorganisationPlan,
   ArchivePromoteReviewArtifactResult,
   ArchiveProcessIngestResult,
   ArchiveIngestProbeResult,
@@ -54,6 +55,7 @@ type ArchiveWorkspaceProps = {
   archiveSourceScanResult: ArchiveSourceFolderScanResult | null;
   archiveImportedLibraries: ArchiveImportedLibrarySummary[];
   archiveClassificationReview: ArchiveLibraryClassificationReview | null;
+  archiveReorganisationPlan: ArchiveLibraryReorganisationPlan | null;
   archiveLibraryImportResult: ArchiveLibraryImportResult | null;
   ingestProbeBusy: boolean;
   ingestProbeResult: {
@@ -71,6 +73,7 @@ type ArchiveWorkspaceProps = {
   onScanSourceFolders: (rootPath?: string) => void;
   onPickLibraryFolder: () => Promise<string | null>;
   onOpenClassificationReview: (classificationManifestPath: string) => void;
+  onGenerateReorganisationPlan: (classificationManifestPath: string) => void;
   onImportLibrary: (input: {
     sourcePath: string;
     domain: ArchiveMemoryDomain;
@@ -108,6 +111,7 @@ export function ArchiveWorkspace({
   archiveSourceScanResult,
   archiveImportedLibraries,
   archiveClassificationReview,
+  archiveReorganisationPlan,
   archiveLibraryImportResult,
   ingestProbeBusy,
   ingestProbeResult,
@@ -120,6 +124,7 @@ export function ArchiveWorkspace({
   onScanSourceFolders,
   onPickLibraryFolder,
   onOpenClassificationReview,
+  onGenerateReorganisationPlan,
   onImportLibrary,
   onQueueWatchedSource,
   onProcessArchiveRequest,
@@ -336,7 +341,14 @@ export function ArchiveWorkspace({
         onScanSourceFolders={onScanSourceFolders}
         onOpenClassificationReview={onOpenClassificationReview}
       />
-      {archiveClassificationReview ? <ArchiveClassificationReviewPanel review={archiveClassificationReview} /> : null}
+      {archiveClassificationReview ? (
+        <ArchiveClassificationReviewPanel
+          review={archiveClassificationReview}
+          plan={archiveReorganisationPlan}
+          busy={archiveSourceScanBusy}
+          onGenerateReorganisationPlan={onGenerateReorganisationPlan}
+        />
+      ) : null}
 
       <Panel
         className="library-importer-panel"

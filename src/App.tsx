@@ -8,6 +8,7 @@ import type {
   ArchiveDocumentPayload,
   ArchiveImportedLibrarySummary,
   ArchiveLibraryClassificationReview,
+  ArchiveLibraryReorganisationPlan,
   ArchivePromoteReviewArtifactResult,
   ArchiveProcessIngestResult,
   ArchiveQueuedIngestRequest,
@@ -42,6 +43,7 @@ import {
   executeArchiveSearch,
   buildArchiveTolBundle,
   decideArchiveReviewArtifact,
+  generateArchiveLibraryReorganisationPlan,
   importArchiveLibrary,
   loadArchiveLibraryClassificationReview,
   loadArchiveImportedLibraries,
@@ -190,6 +192,7 @@ export function App() {
   const [archiveSourceScanResult, setArchiveSourceScanResult] = useState<ArchiveSourceFolderScanResult | null>(null);
   const [archiveImportedLibraries, setArchiveImportedLibraries] = useState<ArchiveImportedLibrarySummary[]>([]);
   const [archiveClassificationReview, setArchiveClassificationReview] = useState<ArchiveLibraryClassificationReview | null>(null);
+  const [archiveReorganisationPlan, setArchiveReorganisationPlan] = useState<ArchiveLibraryReorganisationPlan | null>(null);
   const [archiveLibraryImportResult, setArchiveLibraryImportResult] = useState<ArchiveLibraryImportResult | null>(null);
   const [archiveProbeBusy, setArchiveProbeBusy] = useState(false);
   const [archiveProbeResult, setArchiveProbeResult] = useState<{
@@ -644,6 +647,17 @@ export function App() {
       setArchiveClassificationReview,
       errorMessageOf,
     });
+    setArchiveReorganisationPlan(null);
+  };
+
+  const runArchiveReorganisationPlan = async (classificationManifestPath: string) => {
+    await generateArchiveLibraryReorganisationPlan({
+      classificationManifestPath,
+      setChatNotice,
+      setArchiveSourceScanBusy,
+      setArchiveReorganisationPlan,
+      errorMessageOf,
+    });
   };
 
   const runPickArchiveLibraryFolder = async (): Promise<string | null> =>
@@ -947,6 +961,7 @@ export function App() {
               archiveSourceScanResult={archiveSourceScanResult}
               archiveImportedLibraries={archiveImportedLibraries}
               archiveClassificationReview={archiveClassificationReview}
+              archiveReorganisationPlan={archiveReorganisationPlan}
               archiveLibraryImportResult={archiveLibraryImportResult}
               ingestProbeBusy={archiveProbeBusy}
               ingestProbeResult={archiveProbeResult}
@@ -959,6 +974,7 @@ export function App() {
               onScanSourceFolders={(rootPath) => void runArchiveSourceFolderScan(rootPath)}
               onPickLibraryFolder={runPickArchiveLibraryFolder}
               onOpenClassificationReview={(classificationManifestPath) => void openArchiveClassificationReview(classificationManifestPath)}
+              onGenerateReorganisationPlan={(classificationManifestPath) => void runArchiveReorganisationPlan(classificationManifestPath)}
               onImportLibrary={(input) => void runArchiveLibraryImport(input)}
               onQueueWatchedSource={(source) => void queueWatchedArchiveSource(source)}
               onProcessArchiveRequest={(requestFile) => void runArchiveQueuedRequest(requestFile)}

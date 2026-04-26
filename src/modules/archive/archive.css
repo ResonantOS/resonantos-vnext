@@ -951,6 +951,16 @@
   background: rgba(9, 11, 12, 0.22);
 }
 
+.classification-plan-card {
+  display: grid;
+  gap: 0.7rem;
+  min-width: 0;
+  padding: 0.85rem;
+  border-radius: 18px;
+  border: 1px solid rgba(245, 158, 11, 0.22);
+  background: rgba(245, 158, 11, 0.055);
+}
+
 .classification-proposal-main {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
