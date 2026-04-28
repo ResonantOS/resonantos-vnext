@@ -743,17 +743,6 @@ export const buildDefaultState = (manifests: AddOnManifest[]): ResonantShellStat
     manifests.map((manifest) => [manifest.id, createDefaultInstallation(manifest, "bundled")]),
   );
 
-  const obsidian = installations["addon.obsidian"];
-  if (obsidian) {
-    obsidian.installed = true;
-    obsidian.enabled = true;
-    obsidian.status = "enabled";
-    obsidian.grantedCapabilities = obsidian.grantedCapabilities.map((item) =>
-      item.capability === "filesystem" ? { ...item, granted: true } : item,
-    );
-    obsidian.notes = ["Vault bridge enabled. Select a vault to read markdown notes through host-mediated filesystem access."];
-  }
-
   const telegram = installations["addon.telegram-channel"];
   if (telegram) {
     telegram.installed = true;

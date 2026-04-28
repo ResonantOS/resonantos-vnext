@@ -45,12 +45,14 @@ What the team should review:
 - the app shell, persistent chat rail, and workspace layout direction
 - the current Living Archive import path and guided first-run flow
 - the single private-data root direction in `ADR-022`
+- the alpha handoff audit in `docs/ALPHA_PREVIEW_AUDIT_2026-04-28.md`
 - the add-on SDK direction, especially manifest authority and capability gates
 - the current boundaries between core services, add-ons, provider runtime nodes, and experimental integrations
 
 Known limits for reviewers:
 
 - Living Archive import is safe-copy oriented; move/reorganisation execution is intentionally blocked
+- add-ons are catalog entries and are not installed or trusted by default
 - Browser, Obsidian, OpenCode, and Terminal add-ons are early foundations, not complete production integrations
 - wallet and encrypted vault implementation is architectural only
 - recovery mode exists, but the Engineer is not yet a complete autonomous repair operator

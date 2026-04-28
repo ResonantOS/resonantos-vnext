@@ -53,7 +53,7 @@ Assessment: these are the next architecture risks. They do not block the backend
 
 ## Drift Check
 
-No runtime hard-coded `/Users/augmentor/...` paths were found in the archive host implementation. Remaining absolute user paths are in:
+No runtime hard-coded personal archive paths should remain in the archive host implementation. Absolute paths that appear in tests or historical notes must be treated as fixtures, not product defaults.
 
 - docs that cite inspected local source material
 - frontend tests using fixture paths

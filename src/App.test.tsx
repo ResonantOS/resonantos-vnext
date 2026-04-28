@@ -2867,7 +2867,11 @@ describe("App boot flow", () => {
     expect((await screen.findAllByText("Launch your AI tools from one workbench.")).length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getAllByRole("button", { name: /Add-ons/i })[0]);
-    fireEvent.click(Array.from(document.querySelectorAll(".addon-card")).find((element) => element.textContent?.includes("Obsidian"))!);
+    const obsidianCard = Array.from(document.querySelectorAll(".addon-card")).find((element) =>
+      element.textContent?.includes("Obsidian"),
+    )!;
+    fireEvent.click(obsidianCard);
+    fireEvent.click(within(obsidianCard as HTMLElement).getByRole("button", { name: "Install" }));
     fireEvent.click(await screen.findByRole("button", { name: "Choose vault" }));
 
     await waitFor(() => {
@@ -2972,7 +2976,11 @@ describe("App boot flow", () => {
 
     expect((await screen.findAllByText("Launch your AI tools from one workbench.")).length).toBeGreaterThan(0);
     fireEvent.click(screen.getAllByRole("button", { name: /Add-ons/i })[0]);
-    fireEvent.click(Array.from(document.querySelectorAll(".addon-card")).find((element) => element.textContent?.includes("Obsidian"))!);
+    const obsidianCard = Array.from(document.querySelectorAll(".addon-card")).find((element) =>
+      element.textContent?.includes("Obsidian"),
+    )!;
+    fireEvent.click(obsidianCard);
+    fireEvent.click(within(obsidianCard as HTMLElement).getByRole("button", { name: "Install" }));
     fireEvent.click(await screen.findByRole("button", { name: "Choose vault" }));
 
     expect(await screen.findByText(/2 markdown note/i)).toBeTruthy();

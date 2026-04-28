@@ -43,20 +43,18 @@ The host service does **not** expose generic trusted wiki writes. Trusted page w
 
 ## Primary Source Material
 
-The service design is grounded in the current Living Archive implementation and schema docs:
+The service design is grounded in the Living Archive prototype implementation and schema docs. The local prototype paths were intentionally removed from this alpha documentation because they are not portable product dependencies.
 
-- `/Users/augmentor/resonantos-augmentor/Living_Archive/README.md`
-- `/Users/augmentor/resonantos-augmentor/Living_Archive/mcp-server/runtime.py`
-- `/Users/augmentor/resonantos-augmentor/Living_Archive/mcp-server/storage/database.py`
-- `/Users/augmentor/resonantos-augmentor/Living_Archive/mcp-server/tools/ingest.py`
-- `/Users/augmentor/resonantos-augmentor/Living_Archive/mcp-server/tools/query.py`
-- `/Users/augmentor/resonantos-augmentor/Living_Archive/mcp-server/tools/search.py`
-- `/Users/augmentor/resonantos-augmentor/Living_Archive/vault/CONFIG/WIKI_SCHEMA.md`
-- `/Users/augmentor/resonantos-augmentor/Living_Archive/vault/CONFIG/INGEST_RULES.md`
-- `/Users/augmentor/Documents/RESONANT_OS_BASE/_MANOLO_NOTES/Living Archive MCP Server Implementation Spec.md`
-- `/Users/augmentor/Documents/RESONANT_OS_BASE/_MANOLO_NOTES/Living Archive Onboarding Architecture.md`
+Reference categories:
 
-Public GitHub trace for this subsystem is currently thin, so these local implementation and architecture sources are the authoritative reference for v1.
+- Living Archive runtime resolver
+- Living Archive SQLite provenance/activity database
+- Living Archive ingest/search/query tools
+- Living Archive wiki schema
+- Living Archive ingest rules
+- Living Archive onboarding notes
+
+Public GitHub trace for this subsystem is currently thin, so the architecture captured in this ADR and the current host implementation are the authoritative reference for v1.
 
 ## Rules
 

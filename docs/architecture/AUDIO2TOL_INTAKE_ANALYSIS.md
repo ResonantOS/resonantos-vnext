@@ -18,20 +18,23 @@ The goal is to avoid treating TOL as a generic markdown note. A high-quality TOL
 
 ## Sources Inspected
 
-- `/Users/augmentor/Documents/Audio2TOL/MVP_SPEC.md`
-- `/Users/augmentor/Documents/Audio2TOL/src/App.tsx`
-- `/Users/augmentor/Documents/Audio2TOL/src-tauri/src/lib.rs`
-- `/Users/augmentor/Documents/Audio2TOL/TOL_Analysis_Template.md`
-- `/Users/augmentor/Documents/RESONANT_OS_BASE/_MANOLO_NOTES/Audio2TOL.md`
-- `/Users/augmentor/Documents/RESONANT_OS_BASE/03_TOL/_Prompt_TOL_Analysis_Session.md`
-- `/Users/augmentor/Documents/RESONANT_OS_BASE/03_TOL/RAW Audio`
-- `/Users/augmentor/Documents/RESONANT_OS_BASE/03_TOL/TOL Transcripts`
-- `/Users/augmentor/Documents/RESONANT_OS_BASE/03_TOL/TOL Analysis`
-- `/Users/augmentor/Documents/RESONANT_OS_BASE/_LivingArchive/CONFIG/VAULT_MAP.json`
-- sample output pair:
-  - `/Users/augmentor/Documents/RESONANT_OS_BASE/03_TOL/RAW Audio/260421_1003.mp3`
-  - `/Users/augmentor/Documents/RESONANT_OS_BASE/03_TOL/TOL Transcripts/2026-04-21-1003_TOL_Transcript.md`
-  - `/Users/augmentor/Documents/RESONANT_OS_BASE/03_TOL/TOL Analysis/2026-04-21-1003_TOL_Analysis.md`
+The analysis was based on a local Audio2TOL prototype, a local source vault, and representative generated TOL files. Concrete personal filesystem paths were removed from this alpha document because Audio2TOL is an optional add-on and those local paths are not product dependencies.
+
+Reference categories:
+
+- Audio2TOL MVP specification
+- Audio2TOL Tauri UI and host implementation
+- TOL analysis template
+- vault notes describing Audio2TOL usage
+- TOL protocol prompt
+- raw audio folder
+- generated transcript folder
+- generated analysis folder
+- vault map/config metadata
+- representative sample output triplet:
+  - `03_TOL/RAW Audio/<session>.mp3`
+  - `03_TOL/TOL Transcripts/<session>_TOL_Transcript.md`
+  - `03_TOL/TOL Analysis/<session>_TOL_Analysis.md`
 
 ## Observed Audio2TOL Pipeline
 

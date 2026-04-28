@@ -12,7 +12,7 @@ This app is intentionally separate from the legacy Flask dashboard. It implement
 - explicit capability grants
 - shared/private provider model
 - channel and workspace model
-- bundled add-on examples for Obsidian, Telegram, Audio2TOL, OpenClaw, Shield, Logician, and R-Awareness
+- bundled add-on manifest examples; add-ons are available in the catalog but not installed or trusted by default
 
 ## Run
 

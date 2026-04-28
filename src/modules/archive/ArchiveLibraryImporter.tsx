@@ -121,7 +121,7 @@ export function ArchiveLibraryImporter({
               aria-label="Manual folder or vault path"
               value={libraryPath}
               onChange={(event) => setLibraryPath(event.target.value)}
-              placeholder="/Users/you/Documents/My Knowledge Folder"
+              placeholder="~/Documents/My Knowledge Folder"
             />
           </details>
           {archiveLibraryPreflightResult ? (

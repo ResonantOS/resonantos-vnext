@@ -5,7 +5,7 @@ use std::process::Command;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 
 use crate::host_state::{app_state_dir, read_runtime_state_value, resolve_provider_secret};
 use crate::provider_service::{
@@ -106,13 +106,6 @@ fn engineer_allowed_roots(app: &AppHandle) -> Result<Vec<PathBuf>, String> {
 
     if let Some(workspace_root) = detect_workspace_root() {
         roots.push(workspace_root);
-    }
-
-    if let Ok(documents_dir) = app.path().document_dir() {
-        let archive_root = documents_dir.join("RESONANT_OS_BASE");
-        if let Some(resolved) = canonical_existing_dir(archive_root) {
-            roots.push(resolved);
-        }
     }
 
     roots.extend(configured_recovery_roots());

@@ -226,7 +226,11 @@ pub(crate) fn addons_dir(app: &AppHandle) -> Result<PathBuf, String> {
 }
 
 fn provider_secrets_file(app: &AppHandle) -> Result<PathBuf, String> {
-    Ok(app_state_dir(app)?.join("provider-secrets.json"))
+    let portable_state = ensure_portable_user_state(app)?;
+    let secrets_root = PathBuf::from(portable_state.secrets_root);
+    fs::create_dir_all(&secrets_root)
+        .map_err(|error| format!("Failed to create provider secrets directory: {error}"))?;
+    Ok(secrets_root.join("provider-secrets.json"))
 }
 
 pub(crate) fn read_provider_secrets(app: &AppHandle) -> Result<HashMap<String, String>, String> {

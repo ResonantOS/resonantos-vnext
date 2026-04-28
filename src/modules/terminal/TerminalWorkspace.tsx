@@ -57,8 +57,6 @@ const hasTauri = (): boolean => typeof window !== "undefined" && "__TAURI_INTERN
 const hasGrant = (installation: AddOnInstallation | undefined, capability: CapabilityGrant["capability"]): boolean =>
   Boolean(installation?.enabled && installation.grantedCapabilities.some((grant) => grant.capability === capability && grant.granted));
 
-const defaultCwd = (): string => "/Users/augmentor";
-
 const canUseStorage = (): boolean => typeof window !== "undefined" && typeof window.localStorage !== "undefined";
 
 const loadPersistedTerminalState = (): TerminalPersistedState => {
@@ -103,7 +101,6 @@ export function TerminalWorkspace({ manifest, installation, onConfigureAddon, on
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
-  const [cwd] = useState(defaultCwd);
   const [tabs, setTabs] = useState<TerminalTab[]>(terminalState.tabs);
   const [activeTabId, setActiveTabId] = useState(terminalState.activeTabId);
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
@@ -295,7 +292,6 @@ export function TerminalWorkspace({ manifest, installation, onConfigureAddon, on
         });
         const session = await requestTerminalStartPty({
           sessionId: activeTab.id,
-          cwd,
           cols: terminal.cols,
           rows: terminal.rows,
         });
@@ -323,7 +319,7 @@ export function TerminalWorkspace({ manifest, installation, onConfigureAddon, on
       terminalRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [activeTab, cwd, ready]);
+  }, [activeTab, ready]);
 
   if (!ready) {
     return (

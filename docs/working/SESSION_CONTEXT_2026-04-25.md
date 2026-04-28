@@ -8,9 +8,9 @@ This is not a dump of hidden model context. It is the explicit working state tha
 
 ## Repository State
 
-- Working directory: `/Users/augmentor/resonantos-augmentor/resonantos-vnext`
+- Working directory: local `resonantos-vnext` checkout
 - Git repo: standalone nested repository, not a continuation of the older ResonantOS Alpha codebase
-- Remote: `https://github.com/ManoloRemiddi/resonantos-vnext`
+- Remote: private ResonantOS vNext repository
 - Current branch: `main`
 - Latest known commits:
   - `44d73ca Initial ResonantOS vNext desktop app`

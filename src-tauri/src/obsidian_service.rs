@@ -782,11 +782,11 @@ mod tests {
 
     #[test]
     fn builds_obsidian_open_url_from_absolute_note_path() {
-        let url = obsidian_open_url("/Users/example/Vault/Folder/Note One.md");
+        let url = obsidian_open_url("/ExampleVault/Folder/Note One.md");
 
         assert_eq!(
             url,
-            "obsidian://open?path=%2FUsers%2Fexample%2FVault%2FFolder%2FNote%20One.md"
+            "obsidian://open?path=%2FExampleVault%2FFolder%2FNote%20One.md"
         );
     }
 

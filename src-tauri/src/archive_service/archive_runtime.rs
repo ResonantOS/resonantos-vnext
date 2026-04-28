@@ -6,7 +6,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 
 use crate::host_state::{ensure_portable_user_state, PortableUserStateStatus};
 
@@ -14,7 +14,7 @@ use super::{
     load_archive_stats, load_recent_activity, open_archive_db, ArchiveActivityEntry, ArchiveStats,
 };
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct ArchiveConfigFile {
     mode: Option<String>,
     vault_root: String,
@@ -126,13 +126,7 @@ pub(super) struct ArchiveRuntime {
 impl ArchiveRuntime {
     pub(super) fn resolve(app: &AppHandle) -> Result<Self, String> {
         let portable_user_state = ensure_portable_user_state(app)?;
-        let config_path = archive_config_candidates(app)?
-            .into_iter()
-            .find(|candidate| candidate.exists())
-            .ok_or_else(|| {
-                "No Living Archive config was found. Set RESONANT_ARCHIVE_CONFIG or create _LivingArchive/CONFIG/ARCHIVE_CONFIG.json."
-                    .to_string()
-            })?;
+        let config_path = resolve_archive_config_path(app, &portable_user_state)?;
 
         let raw = fs::read_to_string(&config_path)
             .map_err(|error| format!("Failed to read archive config: {error}"))?;
@@ -266,17 +260,67 @@ fn archive_config_candidates(app: &AppHandle) -> Result<Vec<PathBuf>, String> {
     if let Some(path) = env::var_os("LIVING_ARCHIVE_CONFIG") {
         candidates.push(PathBuf::from(path));
     }
-    if let Ok(documents_dir) = app.path().document_dir() {
-        candidates.push(
-            documents_dir
-                .join("RESONANT_OS_BASE")
-                .join("_LivingArchive")
-                .join("CONFIG")
-                .join("ARCHIVE_CONFIG.json"),
-        );
-    }
+    let portable_state = ensure_portable_user_state(app)?;
+    candidates.push(PathBuf::from(portable_state.config_root).join("ARCHIVE_CONFIG.json"));
 
     Ok(dedupe_paths(candidates))
+}
+
+fn resolve_archive_config_path(
+    app: &AppHandle,
+    portable_user_state: &PortableUserStateStatus,
+) -> Result<PathBuf, String> {
+    if let Some(config_path) = archive_config_candidates(app)?
+        .into_iter()
+        .find(|candidate| candidate.exists())
+    {
+        return Ok(config_path);
+    }
+
+    let config_path = PathBuf::from(&portable_user_state.config_root).join("ARCHIVE_CONFIG.json");
+    write_default_archive_config(&config_path, portable_user_state)?;
+    Ok(config_path)
+}
+
+fn write_default_archive_config(
+    config_path: &PathBuf,
+    portable_user_state: &PortableUserStateStatus,
+) -> Result<(), String> {
+    let root = PathBuf::from(&portable_user_state.root_path);
+    let memory_root = PathBuf::from(&portable_user_state.memory_root);
+    let config_root = PathBuf::from(&portable_user_state.config_root);
+    let logs_root = PathBuf::from(&portable_user_state.logs_root).join("archive");
+    let index_root = memory_root.join("INDEX");
+    let wiki_root = memory_root.join("AI_MEMORY").join("wiki");
+
+    for directory in [&config_root, &logs_root, &index_root, &wiki_root] {
+        fs::create_dir_all(directory).map_err(|error| {
+            format!(
+                "Failed to create default Living Archive directory {}: {error}",
+                directory.display()
+            )
+        })?;
+    }
+
+    let config = ArchiveConfigFile {
+        mode: Some("portable-user-state".to_string()),
+        vault_root: root.display().to_string(),
+        managed_root: memory_root.display().to_string(),
+        wiki_root: wiki_root.display().to_string(),
+        data_root: index_root.display().to_string(),
+        logs_root: logs_root.display().to_string(),
+        config_root: config_root.display().to_string(),
+        mapping_file: None,
+    };
+
+    let payload = serde_json::to_string_pretty(&config)
+        .map_err(|error| format!("Failed to encode default Living Archive config: {error}"))?;
+    fs::write(config_path, payload).map_err(|error| {
+        format!(
+            "Failed to write default Living Archive config {}: {error}",
+            config_path.display()
+        )
+    })
 }
 
 pub(super) fn dedupe_paths(paths: Vec<PathBuf>) -> Vec<PathBuf> {
