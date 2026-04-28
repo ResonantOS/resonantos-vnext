@@ -714,13 +714,13 @@ export const archivePolicy: ArchivePolicy = {
 };
 
 const defaultProvenanceTier = (manifest: AddOnManifest, source: AddOnInstallation["source"]): AddOnInstallation["provenanceTier"] =>
-  manifest.provenance?.tier ?? (source === "bundled" ? "curated-signed" : "sideloaded-unverified");
+  source === "sideload" ? "sideloaded-unverified" : (manifest.provenance?.tier ?? "curated-signed");
 
 const defaultVerificationState = (
   manifest: AddOnManifest,
   source: AddOnInstallation["source"],
 ): AddOnInstallation["verificationState"] =>
-  manifest.provenance?.verificationState ?? (source === "bundled" ? "verified" : "unverified");
+  source === "sideload" ? "unverified" : (manifest.provenance?.verificationState ?? "verified");
 
 export const createDefaultInstallation = (manifest: AddOnManifest, source: AddOnInstallation["source"]): AddOnInstallation => ({
   addonId: manifest.id,
@@ -742,14 +742,6 @@ export const buildDefaultState = (manifests: AddOnManifest[]): ResonantShellStat
   const installations = Object.fromEntries(
     manifests.map((manifest) => [manifest.id, createDefaultInstallation(manifest, "bundled")]),
   );
-
-  const telegram = installations["addon.telegram-channel"];
-  if (telegram) {
-    telegram.installed = true;
-    telegram.enabled = false;
-    telegram.status = "installed";
-    telegram.notes = ["Installed as a Strategist channel add-on. Enable after bot credentials are configured."];
-  }
 
   return {
     strategistIdentity: {

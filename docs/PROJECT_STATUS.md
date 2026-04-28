@@ -25,7 +25,7 @@ The shell direction is a three-zone app:
 
 The latest deterministic check completed with:
 
-- `npm test -- --run`: 110 passed
+- `npm test -- --run`: 115 passed
 - `npm run build`: passed
 - `cargo fmt --check && cargo test`: 53 passed, 2 ignored Browser execution tests
 - `npm run tauri:build`: passed and generated the macOS app and DMG
@@ -161,6 +161,11 @@ Known limits for reviewers:
 - ADR-018 defines Add-on SDK V0 as the binding internal add-on standard.
 - ADR-023 defines the add-on repository and registry model: core app stays separate from creator-owned add-on repos, curated registry metadata, sideloaded add-ons, and first-party add-on repositories.
 - `src/sdk/addons` now exposes manifest validation, stable capabilities, service protocol constants, and add-on SDK types.
+- `src/sdk/addons` now includes Add-on Registry V0 helpers that derive discovery/catalog entries separately from host-owned installation state.
+- Registry V0 records provenance, review state, artifact references, compatibility, requested capabilities, and current install state without installing or trusting add-ons.
+- The Add-ons workspace now surfaces Registry V0 state on add-on cards and detail panels so reviewers can distinguish catalog/discovery, review, verification, and install state.
+- Bundled add-ons now remain available-only by default; no bundled add-on is installed, enabled, or granted capabilities in default state.
+- Sideloaded registry entries are forced to unverified/unreviewed provenance even when their manifest claims stronger trust.
 - Runtime manifest loading validates bundled and sideloaded manifests before they are accepted by the shell.
 - SDK validation now enforces authority consistency: archive scopes require archive capabilities, shared provider profiles require the provider capability, and embedded surfaces require UI embedding.
 - Bundled manifest conformance is covered by deterministic tests.

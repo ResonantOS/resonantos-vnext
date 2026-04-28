@@ -129,6 +129,42 @@ describe("manifest rebase", () => {
     expect(rebased.installations["addon.new"]).toBeDefined();
     expect(rebased.installations["addon.new"].source).toBe("sideload");
   });
+
+  it("forces sideloaded manifests into unverified provenance even if they claim curation", () => {
+    const claimingCurated = {
+      ...testManifest("addon.claimed-curated"),
+      provenance: {
+        tier: "curated-signed",
+        verificationState: "verified",
+        signed: true,
+        signer: "unknown",
+      },
+    } satisfies AddOnManifest;
+
+    const rebased = rebaseStateOnManifests(buildDefaultState([]), [claimingCurated], ["addon.claimed-curated"]);
+
+    expect(rebased.installations["addon.claimed-curated"].provenanceTier).toBe("sideloaded-unverified");
+    expect(rebased.installations["addon.claimed-curated"].verificationState).toBe("unverified");
+  });
+
+  it("does not install, enable, or grant bundled add-ons by default", () => {
+    const state = buildDefaultState([
+      testManifest("addon.telegram-channel"),
+      {
+        ...testManifest("addon.browser"),
+        requestedCapabilities: [{ capability: "network", granted: false, scope: "shared", revocationBehavior: "hard-stop" }],
+      },
+    ]);
+
+    expect(Object.values(state.installations).map((installation) => installation.status)).toEqual(["available", "available"]);
+    expect(Object.values(state.installations).every((installation) => installation.installed === false)).toBe(true);
+    expect(Object.values(state.installations).every((installation) => installation.enabled === false)).toBe(true);
+    expect(
+      Object.values(state.installations).flatMap((installation) =>
+        installation.grantedCapabilities.filter((grant) => grant.granted),
+      ),
+    ).toEqual([]);
+  });
 });
 
 describe("provider defaults", () => {

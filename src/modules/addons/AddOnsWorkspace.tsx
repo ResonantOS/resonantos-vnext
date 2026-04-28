@@ -1,9 +1,16 @@
 // Intent citation: docs/architecture/ADR-002-modular-codebase.md
 
 import { useEffect, useState } from "react";
-import type { AddOnInstallation, AddOnManifest, BrowserEngineStatus, CapabilityGrant } from "../../core/contracts";
+import type {
+  AddOnInstallation,
+  AddOnManifest,
+  AddOnRegistryEntry,
+  BrowserEngineStatus,
+  CapabilityGrant,
+} from "../../core/contracts";
 import { Panel } from "../../components/Panel";
 import { requestBrowserEngineStatus, requestBrowserInstallEngine } from "../../core/runtime";
+import { createAddOnRegistryEntry } from "../../sdk/addons";
 import { ObsidianAddonPanel } from "./ObsidianAddonPanel";
 
 type AddOnsWorkspaceProps = {
@@ -31,8 +38,16 @@ type AddOnsWorkspaceProps = {
 };
 
 const prettyCapability = (grant: CapabilityGrant): string => grant.capability.replaceAll("-", " ");
-const installationLabel = (installation: AddOnInstallation): string =>
-  installation.enabled ? "enabled" : installation.installed ? "installed" : "available";
+const registrySourceForInstallation = (installation: AddOnInstallation | null): AddOnRegistryEntry["registrySource"] =>
+  installation?.source === "sideload" ? "sideloaded-local" : "bundled-catalog";
+const registryEntryFor = (
+  manifest: AddOnManifest,
+  installation: AddOnInstallation | null,
+): AddOnRegistryEntry =>
+  createAddOnRegistryEntry(manifest, {
+    registrySource: registrySourceForInstallation(installation),
+    installation: installation ?? undefined,
+  });
 const hasGrant = (installation: AddOnInstallation | null, capability: CapabilityGrant["capability"]): boolean =>
   Boolean(installation?.grantedCapabilities.some((grant) => grant.capability === capability && grant.granted));
 const isBrowserVisibleReady = (installation: AddOnInstallation | null): boolean =>
@@ -89,6 +104,7 @@ export function AddOnsWorkspace(props: AddOnsWorkspaceProps) {
         <div className="addon-grid">
           {props.filteredManifests.map((manifest) => {
             const effectiveInstallation = props.installations[manifest.id] ?? null;
+            const registryEntry = registryEntryFor(manifest, effectiveInstallation);
             return (
               <article
                 key={manifest.id}
@@ -103,10 +119,15 @@ export function AddOnsWorkspace(props: AddOnsWorkspaceProps) {
                     </p>
                   </div>
                   <span className={`tone tone-${effectiveInstallation?.enabled ? "active" : "neutral"}`}>
-                    {effectiveInstallation ? installationLabel(effectiveInstallation) : "available"}
+                    {registryEntry.installState}
                   </span>
                 </div>
                 <p>{manifest.description}</p>
+                <div className="addon-registry-strip" aria-label={`${manifest.name} registry status`}>
+                  <span>{registryEntry.registrySource.replaceAll("-", " ")}</span>
+                  <span>{registryEntry.reviewState}</span>
+                  <span>{registryEntry.verificationState}</span>
+                </div>
                 <button
                   type="button"
                   className="button-secondary"
@@ -134,111 +155,151 @@ export function AddOnsWorkspace(props: AddOnsWorkspaceProps) {
       </Panel>
 
       {props.selectedManifest && props.selectedInstallation && (
-        <Panel
-          title={props.selectedManifest.name}
-          subtitle="Manifest contract, capability grants, and shell integration."
-          actions={
-            <span className={`tone tone-${props.selectedInstallation.enabled ? "active" : "neutral"}`}>
-              {props.selectedInstallation.source} · {props.selectedInstallation.provenanceTier}
-            </span>
-          }
-        >
-          <div className="detail-grid">
-            <div className="detail-card">
-              <span className="eyebrow">Provenance</span>
-              <ul>
-                <li>Tier: {props.selectedInstallation.provenanceTier}</li>
-                <li>Verification: {props.selectedInstallation.verificationState}</li>
-                <li>
-                  Recommended grants:{" "}
-                  {props.selectedInstallation.recommendedGrantPresetIds.length
-                    ? props.selectedInstallation.recommendedGrantPresetIds.join(", ")
-                    : "none"}
-                </li>
-              </ul>
-            </div>
-            <div className="detail-card">
-              <span className="eyebrow">Surfaces</span>
-              <ul>
-                {props.selectedManifest.surfaces.map((surface) => (
-                  <li key={surface.id}>
-                    <strong>{surface.label}</strong> · {surface.type}
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div className="detail-card">
-              <span className="eyebrow">Capabilities</span>
-              <div className="grant-list">
-                {props.selectedInstallation.grantedCapabilities.map((grant) => (
-                  <button
-                    key={grant.capability}
-                    type="button"
-                    className={`grant-chip ${grant.granted ? "granted" : ""}`}
-                    onClick={() => props.onToggleGrant(props.selectedManifest!.id, grant.capability)}
-                  >
-                    {prettyCapability(grant)} · {grant.scope}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="detail-card">
-              <span className="eyebrow">Archive contract</span>
-              <ul>
-                <li>Read scopes: {props.selectedManifest.archiveIntegration.readScopes.join(", ") || "none"}</li>
-                <li>Intake writes: {props.selectedManifest.archiveIntegration.intakeWriteScopes.join(", ") || "none"}</li>
-                <li>Request ingest: {props.selectedManifest.archiveIntegration.canRequestIngest ? "yes" : "no"}</li>
-                <li>
-                  Knowledge writes: {props.selectedManifest.archiveIntegration.canWriteKnowledgePages ? "yes" : "no"}
-                </li>
-              </ul>
-            </div>
-          </div>
-
-          {props.selectedManifest.id === "addon.obsidian" && (
-            <ObsidianAddonPanel
-              installation={props.selectedInstallation}
-              onConfigChange={(config) => props.onUpdateAddonConfig(props.selectedManifest!.id, config)}
-              onAskAugmentor={props.onAskAugmentor}
-              onGrantArchiveIntake={() =>
-                props.onGrantCapabilities(
-                  props.selectedManifest!.id,
-                  ["archive-intake-write"],
-                  props.selectedManifest!.requestedCapabilities,
-                )
-              }
-              onOpenArchiveReview={props.onOpenArchiveReview}
-            />
-          )}
-
-          {props.selectedManifest.id === "addon.browser" && (
-            <BrowserAddonSetupPanel
-              installation={props.selectedInstallation}
-              onGrantVisibleAccess={() =>
-                props.onGrantCapabilities(
-                  props.selectedManifest!.id,
-                  ["network", "ui-embedding", "browser-control"],
-                  props.selectedManifest!.requestedCapabilities,
-                )
-              }
-            />
-          )}
-
-          {props.selectedManifest.id === "addon.audio2tol" && (
-            <div className="bundle-card">
-              <span className="eyebrow">Audio2TOL bundle contract</span>
-              <ul>
-                <li>raw audio</li>
-                <li>transcript</li>
-                <li>protocol analysis artifact</li>
-                <li>rendered note</li>
-                <li>processing metadata</li>
-              </ul>
-            </div>
-          )}
-        </Panel>
+        <AddOnDetailPanel
+          selectedManifest={props.selectedManifest}
+          selectedInstallation={props.selectedInstallation}
+          registryEntry={registryEntryFor(props.selectedManifest, props.selectedInstallation)}
+          onToggleGrant={props.onToggleGrant}
+          onGrantCapabilities={props.onGrantCapabilities}
+          onUpdateAddonConfig={props.onUpdateAddonConfig}
+          onAskAugmentor={props.onAskAugmentor}
+          onOpenArchiveReview={props.onOpenArchiveReview}
+        />
       )}
     </>
+  );
+}
+
+type AddOnDetailPanelProps = Pick<
+  AddOnsWorkspaceProps,
+  "onAskAugmentor" | "onGrantCapabilities" | "onOpenArchiveReview" | "onToggleGrant" | "onUpdateAddonConfig"
+> & {
+  selectedManifest: AddOnManifest;
+  selectedInstallation: AddOnInstallation;
+  registryEntry: AddOnRegistryEntry;
+};
+
+function AddOnDetailPanel(props: AddOnDetailPanelProps) {
+  return (
+    <Panel
+      title={props.selectedManifest.name}
+      subtitle="Catalog provenance, install state, capability grants, and shell integration."
+      actions={
+        <span className={`tone tone-${props.registryEntry.enabled ? "active" : "neutral"}`}>
+          {props.registryEntry.registrySource} · {props.registryEntry.provenanceTier}
+        </span>
+      }
+    >
+      <div className="addon-registry-summary">
+        <div>
+          <span className="eyebrow">Registry state</span>
+          <strong>{props.registryEntry.reviewState}</strong>
+          <p>
+            This is a discovery record. Installation, enablement, and grants are controlled separately by
+            ResonantOS.
+          </p>
+        </div>
+        <div className="addon-registry-strip">
+          <span>{props.registryEntry.installState}</span>
+          <span>{props.registryEntry.verificationState}</span>
+          <span>{props.registryEntry.manifestRef.label}</span>
+        </div>
+      </div>
+
+      <div className="detail-grid">
+        <div className="detail-card">
+          <span className="eyebrow">Provenance</span>
+          <ul>
+            <li>Tier: {props.registryEntry.provenanceTier}</li>
+            <li>Source: {props.registryEntry.registrySource}</li>
+            <li>Review: {props.registryEntry.reviewState}</li>
+            <li>Verification: {props.registryEntry.verificationState}</li>
+            <li>
+              Recommended grants:{" "}
+              {props.registryEntry.recommendedGrantPresetIds.length
+                ? props.registryEntry.recommendedGrantPresetIds.join(", ")
+                : "none"}
+            </li>
+          </ul>
+        </div>
+        <div className="detail-card">
+          <span className="eyebrow">Surfaces</span>
+          <ul>
+            {props.selectedManifest.surfaces.map((surface) => (
+              <li key={surface.id}>
+                <strong>{surface.label}</strong> · {surface.type}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="detail-card">
+          <span className="eyebrow">Capabilities</span>
+          <div className="grant-list">
+            {props.selectedInstallation.grantedCapabilities.map((grant) => (
+              <button
+                key={grant.capability}
+                type="button"
+                className={`grant-chip ${grant.granted ? "granted" : ""}`}
+                onClick={() => props.onToggleGrant(props.selectedManifest.id, grant.capability)}
+              >
+                {prettyCapability(grant)} · {grant.scope}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="detail-card">
+          <span className="eyebrow">Archive contract</span>
+          <ul>
+            <li>Read scopes: {props.selectedManifest.archiveIntegration.readScopes.join(", ") || "none"}</li>
+            <li>Intake writes: {props.selectedManifest.archiveIntegration.intakeWriteScopes.join(", ") || "none"}</li>
+            <li>Request ingest: {props.selectedManifest.archiveIntegration.canRequestIngest ? "yes" : "no"}</li>
+            <li>Knowledge writes: {props.selectedManifest.archiveIntegration.canWriteKnowledgePages ? "yes" : "no"}</li>
+          </ul>
+        </div>
+      </div>
+
+      {props.selectedManifest.id === "addon.obsidian" && (
+        <ObsidianAddonPanel
+          installation={props.selectedInstallation}
+          onConfigChange={(config) => props.onUpdateAddonConfig(props.selectedManifest.id, config)}
+          onAskAugmentor={props.onAskAugmentor}
+          onGrantArchiveIntake={() =>
+            props.onGrantCapabilities(
+              props.selectedManifest.id,
+              ["archive-intake-write"],
+              props.selectedManifest.requestedCapabilities,
+            )
+          }
+          onOpenArchiveReview={props.onOpenArchiveReview}
+        />
+      )}
+
+      {props.selectedManifest.id === "addon.browser" && (
+        <BrowserAddonSetupPanel
+          installation={props.selectedInstallation}
+          onGrantVisibleAccess={() =>
+            props.onGrantCapabilities(
+              props.selectedManifest.id,
+              ["network", "ui-embedding", "browser-control"],
+              props.selectedManifest.requestedCapabilities,
+            )
+          }
+        />
+      )}
+
+      {props.selectedManifest.id === "addon.audio2tol" && (
+        <div className="bundle-card">
+          <span className="eyebrow">Audio2TOL bundle contract</span>
+          <ul>
+            <li>raw audio</li>
+            <li>transcript</li>
+            <li>protocol analysis artifact</li>
+            <li>rendered note</li>
+            <li>processing metadata</li>
+          </ul>
+        </div>
+      )}
+    </Panel>
   );
 }
 

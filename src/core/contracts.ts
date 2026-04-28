@@ -74,6 +74,9 @@ export type ConversationTranscriptEventAction =
 export type AddOnProvenanceTier = "bundled-core" | "curated-signed" | "enterprise-signed" | "sideloaded-unverified";
 export type ManifestVerificationState = "verified" | "unverified" | "not-applicable" | "failed";
 export type GrantRecommendationSource = "manifest-request" | "preset-bundle" | "manual";
+export type AddOnRegistrySource = "bundled-catalog" | "curated-registry" | "sideloaded-local" | "developer-local";
+export type AddOnRegistryReviewState = "unreviewed" | "reviewed" | "approved" | "blocked" | "deprecated";
+export type AddOnArtifactType = "manifest" | "service-bundle" | "ui-bundle" | "release-archive" | "signature";
 export type RuntimeIsolationBoundary =
   | "shell-ui"
   | "embedded-surface"
@@ -248,6 +251,39 @@ export interface AddOnManifest {
     trustTier: Exclude<TrustTier, "core">;
     workspaceBehavior: WorkspaceBehavior;
   }>;
+}
+
+export interface AddOnArtifactReference {
+  type: AddOnArtifactType;
+  label: string;
+  url?: string;
+  path?: string;
+  sha256?: string;
+  signatureRef?: string;
+}
+
+export interface AddOnRegistryEntry {
+  addonId: string;
+  name: string;
+  version: string;
+  author: string;
+  category: AddOnCategory;
+  description: string;
+  runtimeType: AddOnRuntimeType;
+  registrySource: AddOnRegistrySource;
+  provenanceTier: AddOnProvenanceTier;
+  verificationState: ManifestVerificationState;
+  reviewState: AddOnRegistryReviewState;
+  manifestRef: AddOnArtifactReference;
+  releaseArtifact?: AddOnArtifactReference;
+  sourceRepositoryUrl?: string;
+  compatibility: AddOnManifest["compatibility"];
+  requestedCapabilities: CapabilityGrant[];
+  recommendedGrantPresetIds: string[];
+  installState: InstallationStatus;
+  installed: boolean;
+  enabled: boolean;
+  notes: string[];
 }
 
 export interface ProviderProfile {

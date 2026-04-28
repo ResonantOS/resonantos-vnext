@@ -197,6 +197,13 @@ Last updated: 2026-04-28
   - curated add-ons require review, compatibility metadata, signatures or hash pinning, and explicit capability grants
   - current alpha policy keeps add-ons as catalog concepts rather than trusted default installs
   - experimental add-on implementations should move out of the core repo before public alpha unless they become first-party supported add-ons
+- Added Add-on Registry V0 on 2026-04-28:
+  - `src/sdk/addons/registry.ts` derives catalog/discovery entries from bundled and sideloaded manifests
+  - registry entries track provenance, review state, artifact references, compatibility, requested capabilities, and current install state
+  - install/enable/grant authority remains in host-owned `AddOnInstallation` state, not in the registry
+  - sideloaded entries are forced to unverified/unreviewed provenance even if the manifest claims stronger trust
+  - bundled add-ons are no longer installed or enabled by default, including Telegram
+  - Add-ons workspace cards and detail panels now show registry source, review state, verification state, and install state
 - Added architecture policy on 2026-04-25:
   - `ADR-015` defines Delegation Packets as the source of truth for delegated tasks
   - `TASK.md` is now an interoperability artifact generated from structured delegation state

@@ -1,6 +1,10 @@
 // Intent citation: docs/architecture/ADR-018-addon-sdk-v0.md
 
 export type {
+  AddOnArtifactReference,
+  AddOnRegistryEntry,
+  AddOnRegistryReviewState,
+  AddOnRegistrySource,
   AddOnManifest,
   AddOnToolDefinition,
   Capability,
@@ -15,4 +19,6 @@ export {
   type AddOnSdkManifest,
   type AddOnValidationIssue,
 } from "./contracts";
+export { createAddOnRegistryEntry, createAddOnRegistrySnapshot } from "./registry";
+export type { AddOnRegistryBuildInput, AddOnRegistryEntryOptions, AddOnRegistrySnapshot } from "./registry";
 export { assertValidAddOnManifest, validateAddOnManifest } from "./validation";

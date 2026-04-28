@@ -153,6 +153,22 @@ A curated registry entry must include:
 
 The registry is the discovery layer. The add-on repository is the implementation layer.
 
+## Registry V0 In Core
+
+Until the external registry repository exists, the core app owns a minimal registry snapshot model in `src/sdk/addons`.
+
+V0 rules:
+
+- a registry entry is a catalog/discovery object, not an installation record
+- installation, enablement, and granted capabilities come only from the host-owned `AddOnInstallation` state
+- bundled catalog manifests resolve to `bundled-catalog` entries
+- sideloaded manifests resolve to `sideloaded-local` entries
+- sideloaded entries are forced to `sideloaded-unverified`, `unverified`, and `unreviewed`, even if their manifest claims stronger provenance
+- no V0 registry helper may install, enable, or grant an add-on
+- no bundled add-on may be installed, enabled, or granted by default unless a future release policy explicitly supersedes this rule
+
+The V0 registry model intentionally avoids marketplace behavior. Its job is to give the shell, SDK, and future curated registry a shared vocabulary for provenance, review state, artifact references, and install state.
+
 ## Alpha Policy
 
 For the current internal alpha:
@@ -177,7 +193,8 @@ Near-term work:
 
 - add an alpha build workflow for core app artifacts
 - add a documented alpha distribution profile
-- add an internal/developer catalog mode
+- keep the V0 registry snapshot as a discovery layer separate from host-owned installation state
+- add an internal/developer catalog mode after the registry model is stable
 - keep add-ons unavailable by default for external reviewers
 - extract `src/sdk/addons` to a package when the SDK reaches V1 stability
 

@@ -91,12 +91,58 @@
   gap: 0.85rem;
   cursor: pointer;
   transition: transform 160ms ease, border-color 160ms ease;
+  align-content: start;
 }
 
 .addon-card:hover,
 .addon-card.selected {
   transform: translateY(-2px);
   border-color: rgba(16, 185, 129, 0.36);
+}
+
+.addon-registry-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+  min-width: 0;
+}
+
+.addon-registry-strip span {
+  max-width: 100%;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  padding: 0.25rem 0.5rem;
+  color: var(--text-secondary);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+
+.addon-registry-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: start;
+  margin-bottom: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(255, 248, 236, 0.03);
+}
+
+.addon-registry-summary strong {
+  display: block;
+  margin: 0.2rem 0 0.35rem;
+  color: var(--text-primary);
+  text-transform: capitalize;
+}
+
+.addon-registry-summary p {
+  margin: 0;
+  color: var(--text-secondary);
+  max-width: 48rem;
 }
 
 .grant-list {

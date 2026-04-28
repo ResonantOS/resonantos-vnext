@@ -149,13 +149,13 @@ const defaultProvenanceTier = (
   manifest: AddOnManifest,
   source: AddOnInstallation["source"],
 ): AddOnInstallation["provenanceTier"] =>
-  manifest.provenance?.tier ?? (source === "bundled" ? "curated-signed" : "sideloaded-unverified");
+  source === "sideload" ? "sideloaded-unverified" : (manifest.provenance?.tier ?? "curated-signed");
 
 const defaultVerificationState = (
   manifest: AddOnManifest,
   source: AddOnInstallation["source"],
 ): AddOnInstallation["verificationState"] =>
-  manifest.provenance?.verificationState ?? (source === "bundled" ? "verified" : "unverified");
+  source === "sideload" ? "unverified" : (manifest.provenance?.verificationState ?? "verified");
 
 const rankLocality = (
   node: ProviderRuntimeNode,
@@ -325,8 +325,8 @@ export const createInstallationSnapshot = (
     return {
       ...current,
       source,
-      provenanceTier: manifest.provenance?.tier ?? current.provenanceTier,
-      verificationState: manifest.provenance?.verificationState ?? current.verificationState,
+      provenanceTier: source === "sideload" ? "sideloaded-unverified" : (manifest.provenance?.tier ?? current.provenanceTier),
+      verificationState: source === "sideload" ? "unverified" : (manifest.provenance?.verificationState ?? current.verificationState),
       grantedCapabilities,
       recommendedGrantPresetIds: (manifest.grantPresets ?? []).map((preset) => preset.id),
       grantRecommendationSource: manifest.grantPresets?.length ? "preset-bundle" : current.grantRecommendationSource,
