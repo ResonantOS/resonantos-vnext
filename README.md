@@ -28,6 +28,20 @@ For a browser-only preview:
 npm run dev
 ```
 
+## Internal Alpha Install
+
+The current alpha is distributed from the private GitHub Actions workflow, not from a public release page yet.
+
+Reviewers should open the latest successful `alpha-build` run, download the artifact for their operating system, and install/run that build locally:
+
+- macOS: `resonantos-alpha-macos`
+- Windows: `resonantos-alpha-windows`
+- Linux: `resonantos-alpha-linux`
+
+The alpha is unsigned, so macOS Gatekeeper, Windows SmartScreen, or Linux executable/package warnings are expected.
+
+See [docs/ALPHA_DISTRIBUTION.md](docs/ALPHA_DISTRIBUTION.md) for the full reviewer instructions, privacy boundary, signing status, and release-gate checklist.
+
 ## Current Scope
 
 This is a working foundation, not the full product. The current implementation provides:
