@@ -214,6 +214,7 @@ Last updated: 2026-04-28
   - `docs/product/UX-002-glocal-discovery-interface.md` captures the reusable search, filter, timeline, map, and graph pattern inspired by Glocal Music
   - the pattern can be applied to the Add-on Store, Living Archive, research datasets, marketplaces, and community directories
   - Glocal Music can become a future domain-specific showcase add-on rather than a core feature
+  - ResonantDAO community discovery is recorded as a later use case for finding and connecting communities across a community-of-communities ecosystem
 - Added architecture policy on 2026-04-25:
   - `ADR-015` defines Delegation Packets as the source of truth for delegated tasks
   - `TASK.md` is now an interoperability artifact generated from structured delegation state

@@ -117,6 +117,21 @@ Archive discovery could support:
 
 This should not replace the LLM Wiki. It is a navigation surface over it.
 
+## ResonantDAO And Community Discovery
+
+ResonantDAO is expected to govern a community of communities. The Glocal Discovery Interface can later become a way to find, understand, and connect with communities across the Resonant ecosystem.
+
+Possible future uses:
+
+- discover communities by location, theme, mission, language, capability, project, or governance model
+- map local and global community activity without exposing private user location by default
+- show a timeline of community events, proposals, releases, campaigns, and milestones
+- filter communities by trust/provenance state, membership requirements, contribution type, and DAO relationship
+- graph relationships between communities, projects, add-ons, contributors, proposals, and shared resources
+- allow Augmentor to help a user find the right community, understand norms, and prepare a contribution or introduction
+
+This is an idea to explore after the Alpha. It should not pull focus from the current ResonantOS core, Living Archive, provider fabric, and add-on foundation.
+
 ## Glocal Music Add-on
 
 Glocal Music can become a showcase add-on for ResonantOS.

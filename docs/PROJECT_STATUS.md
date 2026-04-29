@@ -161,7 +161,7 @@ Known limits for reviewers:
 - ADR-018 defines Add-on SDK V0 as the binding internal add-on standard.
 - ADR-023 defines the add-on repository and registry model: core app stays separate from creator-owned add-on repos, curated registry metadata, sideloaded add-ons, and first-party add-on repositories.
 - ADR-024 defines the future Add-on Store and commerce direction: screenshots, ratings, reviews, pricing, subscriptions, and wallet-mediated purchases are store-layer features built on top of Registry trust state, not replacements for capability review.
-- `UX-002` captures the Glocal Discovery Interface: a reusable advanced search, filter, timeline, map, and graph pattern inspired by the Glocal Music startup concept. This can later power the Add-on Store, Living Archive exploration, research datasets, marketplaces, and a future Glocal Music add-on.
+- `UX-002` captures the Glocal Discovery Interface: a reusable advanced search, filter, timeline, map, and graph pattern inspired by the Glocal Music startup concept. This can later power the Add-on Store, Living Archive exploration, research datasets, marketplaces, ResonantDAO community discovery, and a future Glocal Music add-on.
 - `src/sdk/addons` now exposes manifest validation, stable capabilities, service protocol constants, and add-on SDK types.
 - `src/sdk/addons` now includes Add-on Registry V0 helpers that derive discovery/catalog entries separately from host-owned installation state.
 - Registry V0 records provenance, review state, artifact references, compatibility, requested capabilities, and current install state without installing or trusting add-ons.
