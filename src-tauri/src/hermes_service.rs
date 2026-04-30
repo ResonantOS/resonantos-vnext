@@ -243,11 +243,15 @@ fn resolve_hermes_command(home: &Path) -> Option<String> {
 fn hermes_command(binary: &str) -> Command {
     if binary.ends_with(".py") {
         let path = PathBuf::from(binary);
-        let profile_python = path
-            .parent()
-            .and_then(Path::parent)
-            .map(|root| root.join("venv/bin/python"))
-            .filter(|candidate| candidate.exists());
+        let profile_python = path.parent().and_then(Path::parent).and_then(|root| {
+            [
+                root.join("venv").join("bin").join("python"),
+                root.join("venv").join("Scripts").join("python.exe"),
+                root.join("venv").join("Scripts").join("python"),
+            ]
+            .into_iter()
+            .find(|candidate| candidate.exists())
+        });
         let mut command = Command::new(
             profile_python
                 .as_ref()
