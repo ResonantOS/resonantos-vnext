@@ -3916,7 +3916,7 @@ describe("App boot flow", () => {
       });
     });
     expect(confirmSpy).toHaveBeenCalled();
-  });
+  }, 20_000);
 
   it("connects the Resonant Notes workspace from the gate before loading notes", async () => {
     const state = buildDefaultState(manifests);

@@ -12,6 +12,7 @@
     "test:browser-native": "node --test addons/resonant-browser-native/test/*.test.mjs",
     "browser-native:cef:plan": "node addons/resonant-browser-native/scripts/fetch-cef.mjs",
     "browser-native:build": "node scripts/build-native-browser.mjs",
+    "browser-native:build:required": "node scripts/build-native-browser.mjs --required",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "npm run browser-native:build && tauri build"

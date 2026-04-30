@@ -1,15 +1,20 @@
 import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 
 const root = process.cwd();
+const args = new Set(process.argv.slice(2));
+const required = process.env.RESONANT_BUILD_NATIVE_BROWSER === "1" || args.has("--required");
+const forcedSkip = process.env.RESONANT_SKIP_NATIVE_BROWSER === "1" || args.has("--skip");
 const addonRoot = path.join(root, "addons", "resonant-browser-native");
+const cefPlatform = detectCefPlatform();
 const cefRoot = path.join(
   addonRoot,
   "vendor",
   "cef",
-  "cef_binary_147.0.10+gd58e84d+chromium-147.0.7727.118_macosarm64",
+  `cef_binary_147.0.10+gd58e84d+chromium-147.0.7727.118_${cefPlatform ?? "unsupported"}`,
 );
 const nativeHostSource = path.join(addonRoot, "native_host");
 const buildDir = path.join(addonRoot, "build");
@@ -29,10 +34,38 @@ function run(command, args) {
   }
 }
 
+function skip(message) {
+  if (required) {
+    console.error(message);
+    process.exit(1);
+  }
+  mkdirSync(stagedResourceDir, { recursive: true });
+  rmSync(stagedBridgeDylib, { force: true });
+  rmSync(stagedHostZip, { force: true });
+  console.warn(`${message} Skipping native Browser staging for this build.`);
+  process.exit(0);
+}
+
+function detectCefPlatform() {
+  const platformName = os.platform();
+  const arch = os.arch();
+  if (platformName === "darwin" && arch === "arm64") return "macosarm64";
+  if (platformName === "darwin" && arch === "x64") return "macosx64";
+  return null;
+}
+
+if (os.platform() !== "darwin") {
+  skip("Native Browser staging currently supports only macOS CEF artifacts.");
+}
+
+if (forcedSkip) {
+  skip("Native Browser staging disabled by RESONANT_SKIP_NATIVE_BROWSER.");
+}
+
 if (!existsSync(cefRoot)) {
-  console.error(`CEF binary distribution missing: ${cefRoot}`);
-  console.error("Run: node addons/resonant-browser-native/scripts/fetch-cef.mjs --download");
-  process.exit(1);
+  skip(
+    `CEF binary distribution missing: ${cefRoot}. Run: node addons/resonant-browser-native/scripts/fetch-cef.mjs --download.`,
+  );
 }
 
 run("cmake", ["-S", nativeHostSource, "-B", buildDir, `-DCEF_ROOT=${cefRoot}`]);
