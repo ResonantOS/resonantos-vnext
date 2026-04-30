@@ -215,9 +215,12 @@ fn expand_home(value: &str) -> PathBuf {
 
 fn resolve_hermes_command(home: &Path) -> Option<String> {
     let candidates = [
-        home.join("hermes-agent/venv/bin/hermes"),
-        home.join("hermes-agent/hermes_cli/main.py"),
-        home.join("hermes-agent/main.py"),
+        home.join("hermes-agent")
+            .join("venv")
+            .join("bin")
+            .join("hermes"),
+        home.join("hermes-agent").join("hermes_cli").join("main.py"),
+        home.join("hermes-agent").join("main.py"),
     ];
     for candidate in candidates {
         if candidate.exists() {
@@ -697,6 +700,7 @@ fn chrono_like_now() -> String {
 mod tests {
     use super::{clean_hermes_chat_output, hermes_command, resolve_hermes_command};
     use std::fs;
+    use std::path::PathBuf;
 
     #[test]
     fn prefers_profile_venv_hermes_command() {
@@ -705,8 +709,8 @@ mod tests {
             std::process::id()
         ));
         let _ = fs::remove_dir_all(&root);
-        let venv_bin = root.join("hermes-agent/venv/bin");
-        let cli_dir = root.join("hermes-agent/hermes_cli");
+        let venv_bin = root.join("hermes-agent").join("venv").join("bin");
+        let cli_dir = root.join("hermes-agent").join("hermes_cli");
         fs::create_dir_all(&venv_bin).expect("venv bin should be created");
         fs::create_dir_all(&cli_dir).expect("cli dir should be created");
         fs::write(venv_bin.join("hermes"), "#!/bin/sh\n").expect("venv hermes should be written");
@@ -714,7 +718,12 @@ mod tests {
 
         let command = resolve_hermes_command(&root).expect("command should resolve");
 
-        assert!(command.ends_with("hermes-agent/venv/bin/hermes"));
+        assert!(PathBuf::from(command).ends_with(
+            PathBuf::from("hermes-agent")
+                .join("venv")
+                .join("bin")
+                .join("hermes")
+        ));
         let _ = fs::remove_dir_all(root);
     }
 
@@ -725,7 +734,7 @@ mod tests {
             std::process::id()
         ));
         let _ = fs::remove_dir_all(&root);
-        let venv_bin = root.join("venv/bin");
+        let venv_bin = root.join("venv").join("bin");
         let cli_dir = root.join("hermes_cli");
         fs::create_dir_all(&venv_bin).expect("venv bin should be created");
         fs::create_dir_all(&cli_dir).expect("cli dir should be created");
