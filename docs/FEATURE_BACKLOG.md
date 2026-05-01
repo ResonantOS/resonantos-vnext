@@ -1,6 +1,6 @@
 # ResonantOS vNext Feature Backlog
 
-Last updated: 2026-04-30
+Last updated: 2026-05-01
 
 ## Core Shell
 
@@ -9,7 +9,7 @@ Last updated: 2026-04-30
   - Augmentor Chat is now a recommended bundled add-on contract, not a mandatory core assumption
   - Living Archive is now a recommended bundled memory-system add-on contract, not a mandatory core assumption
   - default bundled catalog now starts clean with only `addon.augmentor-chat` and `addon.living-archive`
-  - Browser, Resonant Notes, Terminal, OpenCode, Hermes, Audio2TOL, OpenClaw, Shield, Logician, R-Awareness, and Telegram remain available as development/registry manifests but are not in the basic default catalog
+  - Browser, Resonant Notes, Terminal, OpenCode, Paperclip, Hermes, Audio2TOL, OpenClaw, Shield, Logician, R-Awareness, and Telegram remain available as development/registry manifests but are not in the basic default catalog
 - Implemented first ADR-026 runtime enforcement on 2026-04-30:
   - first-run prompt asks whether to enable Augmentor Chat and Living Archive
   - chat rail is gated by an active `chat-interface` add-on except for the kernel-owned Engineer setup/recovery console
@@ -52,6 +52,23 @@ Last updated: 2026-04-30
 - Conversation compaction and summary checkpoints.
 - Multiple Strategist identities/channels beyond the current desktop baseline.
 - Telegram channel integration.
+
+## Paperclip Add-on
+
+- Accepted direction on 2026-05-01:
+  - `ADR-028` reserves `addon.paperclip` as an optional organizational runtime add-on
+  - Paperclip is supervised by ResonantOS and must not replace Augmentor, Resonant Engineer, provider fabric, add-on capability broker, or Living Archive boundaries
+  - Paperclip should be integrated as a hosted local service plus embedded center workspace
+  - ResonantOS should map Delegation Packets to Paperclip issues and collect Paperclip artifacts back into ResonantOS
+  - Paperclip results, traces, and work products may enter Living Archive only as intake artifacts
+- V0 implementation tasks:
+  - add `paperclip_service.rs` host boundary with `paperclip_status`, `paperclip_start_service`, and `paperclip_stop_service`
+  - add `PaperclipWorkspace` embedded center surface
+  - add `PaperclipStatus`, `PaperclipServiceResult`, and issue/company/agent summary contracts
+  - add optional development manifest for `addon.paperclip`
+  - add capability gates for local service launch, UI embedding, scoped filesystem, local network, delegation, and archive intake
+  - add status probe tests and one delegation-to-issue mapping test
+  - keep Paperclip disabled outside the basic default catalog until explicit install/grants exist
 
 ## Chat Rail
 

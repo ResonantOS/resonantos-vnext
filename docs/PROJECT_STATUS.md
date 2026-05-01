@@ -1,12 +1,12 @@
 # ResonantOS vNext Project Status
 
-Last updated: 2026-04-30
+Last updated: 2026-05-01
 
 This document is the operational checkpoint for what exists now, what is partially built, and what still needs to be done. It is intentionally shorter than the ADRs and backlog: use it to regain project state quickly before deciding the next work item.
 
 ## Current Product Direction
 
-ResonantOS vNext is a desktop-first modular operating system for human-AI collaboration. It is not an OpenClaw dashboard. OpenClaw, Hermes, Obsidian, OpenCode, Audio2TOL, Shield, Logician, and similar systems are add-ons.
+ResonantOS vNext is a desktop-first modular operating system for human-AI collaboration. It is not an OpenClaw dashboard. OpenClaw, Hermes, Obsidian, OpenCode, Paperclip, Audio2TOL, Shield, Logician, and similar systems are add-ons.
 
 The core product direction is now the no-lock-in model from `ADR-026`.
 
@@ -74,6 +74,7 @@ Known limits for reviewers:
 - Living Archive import is safe-copy oriented; move/reorganisation execution is intentionally blocked
 - add-ons are catalog entries and are not installed or trusted by default; the basic default catalog now exposes only recommended Augmentor Chat and Living Archive contracts
 - Browser, Obsidian, OpenCode, and Terminal add-ons are early foundations, not complete production integrations
+- Paperclip is now specified in `ADR-028` as a future optional organizational runtime add-on; no host commands or UI implementation exist yet
 - wallet and encrypted vault implementation is architectural only
 - recovery mode exists, but the Engineer is not yet a complete autonomous repair operator
 - UI polish is still active work, especially around responsiveness and information density
@@ -126,6 +127,14 @@ Known limits for reviewers:
 - Provider diagnostics and smoke-test paths exist.
 - Routing distinguishes normal provider use from recovery/resurrect behavior.
 - Cost-aware strategy is now recognized as a product requirement, but the full policy UI is not built.
+
+### Paperclip Add-on Direction
+
+- `ADR-028` defines Paperclip as an optional hosted organizational runtime add-on.
+- Paperclip should be supervised by ResonantOS, not treated as a replacement shell or trusted memory system.
+- The intended integration is similar to the OpenCode hosted-service pattern, but with stricter boundaries because Paperclip can coordinate multiple agents, budgets, companies, and tickets.
+- V0 should detect/connect/launch Paperclip, embed its UI, list companies/agents/issues, create issues from ResonantOS Delegation Packets, collect artifacts, and queue those artifacts into Living Archive intake.
+- Paperclip outputs are external work artifacts. They must not write trusted Living Archive wiki pages directly.
 
 ### Living Archive Memory System
 

@@ -1,6 +1,6 @@
 # Module Map
 
-Last updated: 2026-04-30
+Last updated: 2026-05-01
 
 ## Intent
 
@@ -53,6 +53,15 @@ This map defines which folder owns which feature area so contributors do not kee
   - detects `opencode` without making it a core dependency
   - launches/stops scoped `opencode web` or `opencode serve` sessions after add-on grants
   - architecture reference: `docs/architecture/ADR-021-opencode-addon-hosted-service.md`
+
+- `src-tauri/src/paperclip_service.rs` (planned)
+  - optional Paperclip add-on host boundary
+  - detects Paperclip without making it a core dependency
+  - launches/stops or connects to a local Paperclip service after add-on grants
+  - lists Paperclip companies, agents, and issues through a host-mediated API bridge
+  - maps ResonantOS Delegation Packets to Paperclip issues
+  - collects Paperclip artifacts into Living Archive intake only
+  - architecture reference: `docs/architecture/ADR-028-paperclip-addon-organizational-runtime.md`
 
 - `src-tauri/src/browser_service.rs`
   - Browser add-on host boundary
@@ -246,6 +255,12 @@ This map defines which folder owns which feature area so contributors do not kee
   - compact toolbar and hidden settings drawer for installed runtime, scoped workspace path, and capability grants
   - embeds OpenCode's own web UI after host launch
   - does not replace Resonant Notes or trusted Living Archive ingest
+
+- `src/modules/paperclip/` (planned)
+  - optional Paperclip organizational runtime workspace
+  - embeds Paperclip's own UI after host launch/connect
+  - shows ResonantOS-owned health, grants, company/agent/issue summaries, and delegation handoff controls
+  - must not duplicate Paperclip's full UI or bypass ResonantOS capability gates
 
 - `src/modules/settings/`
   - provider settings
