@@ -20,7 +20,16 @@ import {
 } from "./contracts";
 
 const runtimeTypes: readonly AddOnRuntimeType[] = ["ui-module", "embedded-module", "local-service", "agent-addon", "channel-addon"];
-const categories: readonly AddOnCategory[] = ["agent", "channel", "memory", "security", "knowledge", "tool", "integration"];
+const categories: readonly AddOnCategory[] = [
+  "agent",
+  "channel",
+  "memory",
+  "security",
+  "knowledge",
+  "tool",
+  "integration",
+  "orchestration",
+];
 const surfaceTypes: readonly AddOnSurfaceType[] = [
   "page",
   "panel",
@@ -339,6 +348,54 @@ export const validateAddOnManifest = (
 
   if (!isRecord(candidate.installHooks)) {
     pushIssue(issues, "error", "install-hooks-object", "installHooks", "installHooks must be an object.");
+  }
+
+  if (isRecord(candidate.engineerSetup)) {
+    validateStringValue(issues, candidate.engineerSetup.documentPath, "engineerSetup.documentPath");
+    validateStringValue(issues, candidate.engineerSetup.objective, "engineerSetup.objective");
+    validateStringArray(issues, candidate.engineerSetup.allowedHostCommands, "engineerSetup.allowedHostCommands");
+    validateStringArray(issues, candidate.engineerSetup.expectedInputs, "engineerSetup.expectedInputs");
+    validateStringArray(issues, candidate.engineerSetup.expectedOutputs, "engineerSetup.expectedOutputs");
+    if (!Array.isArray(candidate.engineerSetup.requiredCapabilities)) {
+      pushIssue(
+        issues,
+        "error",
+        "engineer-setup-capabilities",
+        "engineerSetup.requiredCapabilities",
+        "engineerSetup.requiredCapabilities must be an array of capabilities requested by the manifest.",
+      );
+    } else {
+      candidate.engineerSetup.requiredCapabilities.forEach((capability, capabilityIndex) => {
+        validateEnum(issues, capability, ADDON_CAPABILITIES, `engineerSetup.requiredCapabilities[${capabilityIndex}]`);
+        if (ADDON_CAPABILITIES.includes(capability as Capability) && !requestedCapabilitySet.has(capability as Capability)) {
+          pushIssue(
+            issues,
+            "error",
+            "engineer-setup-unrequested-capability",
+            `engineerSetup.requiredCapabilities[${capabilityIndex}]`,
+            "Engineer setup runbooks may only require capabilities requested by the manifest.",
+          );
+        }
+      });
+    }
+    if (typeof candidate.engineerSetup.requiresHumanApprovalBeforeExecution !== "boolean") {
+      pushIssue(
+        issues,
+        "error",
+        "engineer-setup-approval-boolean",
+        "engineerSetup.requiresHumanApprovalBeforeExecution",
+        "engineerSetup.requiresHumanApprovalBeforeExecution must be boolean.",
+      );
+    }
+    if (typeof candidate.engineerSetup.auditLogRequired !== "boolean") {
+      pushIssue(
+        issues,
+        "error",
+        "engineer-setup-audit-boolean",
+        "engineerSetup.auditLogRequired",
+        "engineerSetup.auditLogRequired must be boolean.",
+      );
+    }
   }
 
   if (!isRecord(candidate.compatibility)) {

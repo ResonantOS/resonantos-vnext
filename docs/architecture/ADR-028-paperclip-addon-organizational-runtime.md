@@ -107,8 +107,12 @@ Denied by default:
 Initial host commands should be narrow and execution-audited:
 
 - `paperclip_status`
+- `paperclip_detect_install`
+- `paperclip_install_local`
+- `paperclip_configure_service`
 - `paperclip_start_service`
 - `paperclip_stop_service`
+- `paperclip_verify_service`
 - `paperclip_open_workspace`
 - `paperclip_list_companies`
 - `paperclip_list_agents`
@@ -118,6 +122,7 @@ Initial host commands should be narrow and execution-audited:
 - `paperclip_append_issue_comment`
 - `paperclip_collect_issue_artifacts`
 - `paperclip_queue_archive_intake`
+- `paperclip_collect_logs`
 
 Commands that mutate Paperclip work should include:
 
@@ -128,6 +133,20 @@ Commands that mutate Paperclip work should include:
 - target issue id, when applicable
 - source Delegation Packet id, when applicable
 - audit log path or event id
+
+## Engineer Setup Runbook
+
+`addon.paperclip` must ship an Engineer setup runbook so the Resonant Engineer can connect, install, configure, verify, and repair the add-on without forcing the human to perform brittle manual setup.
+
+The runbook must:
+
+- use only reviewed Paperclip host commands
+- operate only inside approved Paperclip install/config/data roots
+- ask for human approval before install, service launch, provider/profile wiring, archive intake wiring, or company data mutation
+- use ResonantOS provider profile references rather than raw provider secrets by default
+- produce a setup or repair report and audit log
+
+Initial planned runbook: `docs/architecture/addon-runbooks/paperclip/ENGINEER_SETUP.md`
 
 ## Add-on Manifest Shape
 
@@ -144,6 +163,7 @@ The first manifest should declare:
 - permissions: explicit grants listed above
 - delegation metadata: supported as an organizational runtime, not a direct worker
 - archive integration: intake-only
+- engineer setup runbook: `docs/architecture/addon-runbooks/paperclip/ENGINEER_SETUP.md`
 
 ## Delegation Mapping
 

@@ -220,6 +220,63 @@ describe("add-on SDK manifest validation", () => {
     expect(result.issues.some((issue) => issue.code === "tool-uses-unrequested-capability")).toBe(true);
   });
 
+  it("accepts Engineer setup runbooks only when they stay inside requested capabilities", () => {
+    const baseManifest = validManifest();
+    const valid = validateAddOnManifest(
+      validManifest({
+        requestedCapabilities: [
+          ...baseManifest.requestedCapabilities,
+          { capability: "shell", granted: false, scope: "system", revocationBehavior: "hard-stop" },
+        ],
+        engineerSetup: {
+          documentPath: "addons/browser/ENGINEER_SETUP.md",
+          objective: "Install and verify the Browser engine through host-reviewed commands.",
+          requiredCapabilities: ["shell", "network"],
+          allowedHostCommands: ["browser_engine_status", "browser_engine_install"],
+          expectedInputs: ["target platform", "approved install root"],
+          expectedOutputs: ["install log", "engine status"],
+          requiresHumanApprovalBeforeExecution: true,
+          auditLogRequired: true,
+        },
+      }),
+    );
+
+    expect(valid.valid).toBe(true);
+    expect(valid.issues.filter((issue) => issue.severity === "error")).toHaveLength(0);
+
+    const invalid = validateAddOnManifest(
+      validManifest({
+        engineerSetup: {
+          documentPath: "addons/browser/ENGINEER_SETUP.md",
+          objective: "Invalid setup request.",
+          requiredCapabilities: ["shell"],
+          allowedHostCommands: ["arbitrary_shell"],
+          expectedInputs: ["anything"],
+          expectedOutputs: ["anything"],
+          requiresHumanApprovalBeforeExecution: true,
+          auditLogRequired: true,
+        },
+      }),
+    );
+
+    expect(invalid.valid).toBe(false);
+    expect(invalid.issues.some((issue) => issue.code === "engineer-setup-unrequested-capability")).toBe(true);
+  });
+
+  it("accepts orchestration as a first-class add-on category", () => {
+    const result = validateAddOnManifest(
+      validManifest({
+        id: "addon.paperclip",
+        name: "Paperclip",
+        category: "orchestration",
+        description: "Organizational runtime add-on.",
+      }),
+    );
+
+    expect(result.valid).toBe(true);
+    expect(result.issues.filter((issue) => issue.severity === "error")).toHaveLength(0);
+  });
+
   it("warns but does not fail older local-service manifests that have not declared an executable service yet", () => {
     const { service: _service, ...manifest } = validManifest();
     const result = validateAddOnManifest(manifest);

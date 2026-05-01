@@ -74,6 +74,7 @@ Optional V0 fields:
 - `tools`
 - `delegation`
 - `agents`
+- `engineerSetup`
 
 ### Runtime Types
 
@@ -84,6 +85,19 @@ Supported runtime categories:
 - `local-service`
 - `agent-addon`
 - `channel-addon`
+
+### Categories
+
+Supported V0 categories:
+
+- `agent`
+- `channel`
+- `memory`
+- `security`
+- `knowledge`
+- `tool`
+- `integration`
+- `orchestration`
 
 ### Capabilities
 
@@ -100,6 +114,35 @@ Supported V0 capabilities:
 - `agent-delegation`
 - `notifications`
 - `device-integration`
+
+### Engineer Setup Runbook Contract
+
+Add-ons that need installation, local service wiring, external account setup, provider/profile wiring, or repair should declare an `engineerSetup` contract in the manifest.
+
+The setup runbook is an instruction file for the Resonant Engineer Agent. It lets the Engineer set up the add-on for the human through ResonantOS-mediated commands, while keeping authorization inside the manifest, capability grants, and host policy.
+
+The manifest field must declare:
+
+- `documentPath`
+- `objective`
+- `requiredCapabilities`
+- `allowedHostCommands`
+- `expectedInputs`
+- `expectedOutputs`
+- `requiresHumanApprovalBeforeExecution`
+- `auditLogRequired`
+
+Rules:
+
+- `requiredCapabilities` may only reference capabilities already requested by the manifest.
+- `allowedHostCommands` must list reviewed host commands, not arbitrary shell commands.
+- Raw provider credentials must stay inside the ResonantOS provider vault.
+- The Engineer may use provider profile references and mediated provider routes, not unmanaged secrets by default.
+- The runbook is not an authorization grant; it is constrained by the same capability system as the add-on.
+- Privileged setup actions require audit logging.
+- Human approval is required before install, filesystem mutation, service launch, provider/profile wiring, or external account mutation unless a future signed enterprise policy explicitly grants otherwise.
+
+Template: `docs/architecture/ADDON_ENGINEER_SETUP_RUNBOOK_TEMPLATE.md`
 
 ### Service Contract
 
@@ -139,6 +182,7 @@ The host must verify capability grants before executing any tool.
 - The Browser add-on can move from embedded iframe prototype to Chromium engine without changing the shell-level add-on contract.
 - Existing manifests can continue to load, but SDK validation will prevent unsafe patterns from becoming executable.
 - The SDK creates a stable target for future public documentation and third-party add-on creation.
+- Add-on setup becomes an Engineer-assisted flow instead of a human-only manual checklist, without giving add-ons direct privileged access.
 
 ## Experimental Tier
 

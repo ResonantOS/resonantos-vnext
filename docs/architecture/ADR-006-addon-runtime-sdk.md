@@ -40,6 +40,10 @@ Sideloaded add-ons are never implicitly trusted.
 - Curated add-ons may ship with preset recommended grants.
 - Recommended grants are defaults, not permanent entitlements.
 - Sideloaded add-ons start from minimal trust and must not inherit curated defaults.
+- Add-ons that need setup or repair may ship an Engineer setup runbook, but the runbook is not an entitlement and must execute only through reviewed host-mediated commands.
+- Engineer setup runbooks may reference provider profile ids and approved roots, but must not instruct the Engineer to expose raw provider secrets to the add-on by default.
+
+Add-ons may also use the `orchestration` category when they supervise work across multiple agents, tools, or organizational workflows while still remaining under ResonantOS capability authority.
 
 ## Provenance Tiers
 
@@ -125,6 +129,20 @@ Must define:
 - what IPC surface is exposed
 - what happens on grant revocation
 - what degraded mode looks like
+
+### Engineer Setup Runbook
+
+May define:
+
+- setup objective
+- setup document path
+- required capabilities
+- reviewed host commands
+- expected inputs and outputs
+- human approval requirement
+- audit logging requirement
+
+The Resonant Engineer may use the runbook to install, configure, verify, or repair an add-on. The host must still enforce capability grants, approved roots, command allowlists, and audit logging.
 
 ## Consequences
 

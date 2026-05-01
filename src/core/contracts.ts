@@ -30,7 +30,15 @@ export type AddOnSurfaceType =
   | "tool-action"
   | "background-task-monitor"
   | "channel";
-export type AddOnCategory = "agent" | "channel" | "memory" | "security" | "knowledge" | "tool" | "integration";
+export type AddOnCategory =
+  | "agent"
+  | "channel"
+  | "memory"
+  | "security"
+  | "knowledge"
+  | "tool"
+  | "integration"
+  | "orchestration";
 export type SystemSlotId = "primary-agent" | "chat-interface" | "memory-system" | "communication-channel";
 export type TrustTier = "core" | "addon" | "external";
 export type WorkspaceBehavior = "primary" | "delegated" | "background";
@@ -206,6 +214,17 @@ export interface AddOnLocalServiceDefinition {
   shutdownCommand?: string;
 }
 
+export interface AddOnEngineerSetupRunbook {
+  documentPath: string;
+  objective: string;
+  requiredCapabilities: Capability[];
+  allowedHostCommands: string[];
+  expectedInputs: string[];
+  expectedOutputs: string[];
+  requiresHumanApprovalBeforeExecution: boolean;
+  auditLogRequired: boolean;
+}
+
 export interface AddOnManifest {
   sdkVersion?: string;
   id: string;
@@ -254,6 +273,7 @@ export interface AddOnManifest {
     onEnable?: string;
     onUpgrade?: string;
   };
+  engineerSetup?: AddOnEngineerSetupRunbook;
   compatibility: {
     shellVersion: string;
     platforms: string[];
