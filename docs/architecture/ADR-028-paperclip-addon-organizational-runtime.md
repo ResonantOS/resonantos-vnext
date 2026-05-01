@@ -42,6 +42,9 @@ Paperclip is an organizational execution control plane. It coordinates many AI w
 The correct relationship is therefore symbiotic:
 
 - Augmentor decides when a job needs organization-level execution.
+- Augmentor first discusses the user's high-level vision, goals, constraints, budget, and desired operating style.
+- Augmentor researches the relevant business/project context when data-driven structure is needed.
+- Augmentor proposes the Paperclip company architecture, agent roles, responsibilities, prompts, and task flows for human approval.
 - ResonantOS packages intent, constraints, provider/cost policy, memory references, and approvals into a Delegation Packet.
 - Paperclip turns that into structured company work.
 - Worker agents execute under Paperclip's internal model.
@@ -148,6 +151,27 @@ The runbook must:
 
 Initial planned runbook: `docs/architecture/addon-runbooks/paperclip/ENGINEER_SETUP.md`
 
+## Augmentor Organizational Skill
+
+`addon.paperclip` must also ship an Augmentor skill because Paperclip setup is not only technical. The valuable workflow is strategic: helping the human design an AI company or operating team before creating agents and tasks.
+
+The Paperclip Augmentor skill must guide Augmentor through:
+
+- human vision intake
+- operating constraints and provider/cost strategy
+- data-driven research when the business/project domain requires it
+- proposed company/team architecture
+- agent role design, including CEO/CTO/Coder-style roles when appropriate
+- system prompt and job description drafting
+- task and issue template design
+- human approval before creating or modifying Paperclip company structures
+- implementation through host-mediated Paperclip tools after approval
+- artifact collection into Living Archive intake
+
+The skill must not let Augmentor silently create an organization. The human approves the high-level architecture first, then approves implementation.
+
+Initial planned skill: `docs/architecture/addon-skills/paperclip/AUGMENTOR_SKILL.md`
+
 ## Add-on Manifest Shape
 
 The first manifest should declare:
@@ -164,6 +188,7 @@ The first manifest should declare:
 - delegation metadata: supported as an organizational runtime, not a direct worker
 - archive integration: intake-only
 - engineer setup runbook: `docs/architecture/addon-runbooks/paperclip/ENGINEER_SETUP.md`
+- augmentor skill: `docs/architecture/addon-skills/paperclip/AUGMENTOR_SKILL.md`
 
 ## Delegation Mapping
 
@@ -286,6 +311,7 @@ V0 should do only:
 - create a Paperclip issue from a ResonantOS Delegation Packet
 - collect issue status and final artifacts
 - queue collected artifacts into Living Archive intake
+- define the Augmentor Paperclip organizational skill contract
 
 Out of V0:
 
@@ -297,6 +323,8 @@ Out of V0:
 - direct Paperclip-to-ResonantOS tool calls
 - trusted archive writes
 - wallet/web3 actions
+
+Company creation may be planned in V0 but should not be executed automatically until the host-mediated Paperclip tools and approval UI exist.
 
 ## Consequences
 

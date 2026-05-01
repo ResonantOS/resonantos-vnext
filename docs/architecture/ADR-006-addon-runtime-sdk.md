@@ -42,6 +42,7 @@ Sideloaded add-ons are never implicitly trusted.
 - Sideloaded add-ons start from minimal trust and must not inherit curated defaults.
 - Add-ons that need setup or repair may ship an Engineer setup runbook, but the runbook is not an entitlement and must execute only through reviewed host-mediated commands.
 - Engineer setup runbooks may reference provider profile ids and approved roots, but must not instruct the Engineer to expose raw provider secrets to the add-on by default.
+- Add-ons that require a specific Strategist operating method may ship Augmentor skills, but those skills are guidance constrained by declared tools, capabilities, and approval gates.
 
 Add-ons may also use the `orchestration` category when they supervise work across multiple agents, tools, or organizational workflows while still remaining under ResonantOS capability authority.
 
@@ -143,6 +144,22 @@ May define:
 - audit logging requirement
 
 The Resonant Engineer may use the runbook to install, configure, verify, or repair an add-on. The host must still enforce capability grants, approved roots, command allowlists, and audit logging.
+
+### Augmentor Skill
+
+May define:
+
+- skill objective
+- skill document path
+- required capabilities
+- required add-on tools
+- workflow phases
+- approval gates
+- expected inputs and outputs
+- whether the skill produces Delegation Packets
+- audit logging requirement
+
+Augmentor may use the skill to guide high-level human collaboration with the add-on. The host must still enforce declared tools, capability grants, provider/cost policy, and human approval gates before execution.
 
 ## Consequences
 

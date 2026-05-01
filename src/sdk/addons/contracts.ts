@@ -1,6 +1,7 @@
 // Intent citation: docs/architecture/ADR-018-addon-sdk-v0.md
 
 import type {
+  AddOnAugmentorSkill,
   AddOnEngineerSetupRunbook,
   AddOnLocalServiceDefinition,
   AddOnManifest,
@@ -16,6 +17,7 @@ export type AddOnSdkManifest = AddOnManifest & {
   service?: AddOnLocalServiceDefinition;
   tools?: AddOnToolDefinition[];
   engineerSetup?: AddOnEngineerSetupRunbook;
+  augmentorSkills?: AddOnAugmentorSkill[];
 };
 
 export type AddOnManifestSource = "bundled" | "sideload";

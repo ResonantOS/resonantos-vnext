@@ -225,6 +225,19 @@ export interface AddOnEngineerSetupRunbook {
   auditLogRequired: boolean;
 }
 
+export interface AddOnAugmentorSkill {
+  documentPath: string;
+  objective: string;
+  requiredCapabilities: Capability[];
+  requiredTools: string[];
+  workflowPhases: string[];
+  approvalGates: string[];
+  expectedInputs: string[];
+  expectedOutputs: string[];
+  producesDelegationPackets: boolean;
+  auditLogRequired: boolean;
+}
+
 export interface AddOnManifest {
   sdkVersion?: string;
   id: string;
@@ -274,6 +287,7 @@ export interface AddOnManifest {
     onUpgrade?: string;
   };
   engineerSetup?: AddOnEngineerSetupRunbook;
+  augmentorSkills?: AddOnAugmentorSkill[];
   compatibility: {
     shellVersion: string;
     platforms: string[];

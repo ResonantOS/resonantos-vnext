@@ -428,8 +428,8 @@ export const validateAddOnManifest = (
     );
   }
 
+  const declaredToolNames = new Set<string>();
   if (Array.isArray(candidate.tools)) {
-    const toolNames = new Set<string>();
     candidate.tools.forEach((tool, index) => {
       const path = `tools[${index}]`;
       if (!isRecord(tool)) {
@@ -439,10 +439,10 @@ export const validateAddOnManifest = (
       validateStringValue(issues, tool.name, `${path}.name`);
       validateStringValue(issues, tool.description, `${path}.description`);
       if (isString(tool.name)) {
-        if (toolNames.has(tool.name)) {
+        if (declaredToolNames.has(tool.name)) {
           pushIssue(issues, "error", "duplicate-tool", `${path}.name`, "Tool names must be unique.");
         }
-        toolNames.add(tool.name);
+        declaredToolNames.add(tool.name);
       }
       if (!Array.isArray(tool.requiredCapabilities)) {
         pushIssue(issues, "error", "tool-capabilities-array", `${path}.requiredCapabilities`, "Tool requiredCapabilities must be an array.");
@@ -474,6 +474,76 @@ export const validateAddOnManifest = (
         });
       } else {
         pushIssue(issues, "error", "tool-audit-artifacts", `${path}.audit.artifactTypes`, "Tool audit artifactTypes must be an array.");
+      }
+    });
+  }
+
+  if (Array.isArray(candidate.augmentorSkills)) {
+    candidate.augmentorSkills.forEach((skill, index) => {
+      const path = `augmentorSkills[${index}]`;
+      if (!isRecord(skill)) {
+        pushIssue(issues, "error", "augmentor-skill-object", path, "Augmentor skill must be an object.");
+        return;
+      }
+      validateStringValue(issues, skill.documentPath, `${path}.documentPath`);
+      validateStringValue(issues, skill.objective, `${path}.objective`);
+      validateStringArray(issues, skill.requiredTools, `${path}.requiredTools`);
+      validateStringArray(issues, skill.workflowPhases, `${path}.workflowPhases`);
+      validateStringArray(issues, skill.approvalGates, `${path}.approvalGates`);
+      validateStringArray(issues, skill.expectedInputs, `${path}.expectedInputs`);
+      validateStringArray(issues, skill.expectedOutputs, `${path}.expectedOutputs`);
+      if (!Array.isArray(skill.requiredCapabilities)) {
+        pushIssue(
+          issues,
+          "error",
+          "augmentor-skill-capabilities",
+          `${path}.requiredCapabilities`,
+          "Augmentor skill requiredCapabilities must be an array of capabilities requested by the manifest.",
+        );
+      } else {
+        skill.requiredCapabilities.forEach((capability, capabilityIndex) => {
+          validateEnum(issues, capability, ADDON_CAPABILITIES, `${path}.requiredCapabilities[${capabilityIndex}]`);
+          if (ADDON_CAPABILITIES.includes(capability as Capability) && !requestedCapabilitySet.has(capability as Capability)) {
+            pushIssue(
+              issues,
+              "error",
+              "augmentor-skill-unrequested-capability",
+              `${path}.requiredCapabilities[${capabilityIndex}]`,
+              "Augmentor skills may only require capabilities requested by the manifest.",
+            );
+          }
+        });
+      }
+      if (Array.isArray(skill.requiredTools)) {
+        skill.requiredTools.forEach((toolName, toolIndex) => {
+          if (isString(toolName) && !declaredToolNames.has(toolName)) {
+            pushIssue(
+              issues,
+              "error",
+              "augmentor-skill-unknown-tool",
+              `${path}.requiredTools[${toolIndex}]`,
+              "Augmentor skills may only require tools declared by the manifest.",
+            );
+          }
+        });
+      }
+      if (typeof skill.producesDelegationPackets !== "boolean") {
+        pushIssue(
+          issues,
+          "error",
+          "augmentor-skill-delegation-boolean",
+          `${path}.producesDelegationPackets`,
+          "Augmentor skill producesDelegationPackets must be boolean.",
+        );
+      }
+      if (typeof skill.auditLogRequired !== "boolean") {
+        pushIssue(
+          issues,
+          "error",
+          "augmentor-skill-audit-boolean",
+          `${path}.auditLogRequired`,
+          "Augmentor skill auditLogRequired must be boolean.",
+        );
       }
     });
   }

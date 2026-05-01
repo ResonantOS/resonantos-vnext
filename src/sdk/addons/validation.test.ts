@@ -277,6 +277,69 @@ describe("add-on SDK manifest validation", () => {
     expect(result.issues.filter((issue) => issue.severity === "error")).toHaveLength(0);
   });
 
+  it("accepts Augmentor skills only when they stay inside declared tools and capabilities", () => {
+    const baseManifest = validManifest();
+    const valid = validateAddOnManifest(
+      validManifest({
+        requestedCapabilities: [
+          ...baseManifest.requestedCapabilities,
+          { capability: "agent-delegation", granted: false, scope: "workspace", revocationBehavior: "degrade" },
+        ],
+        tools: [
+          ...(baseManifest.tools ?? []),
+          {
+            name: "paperclip.create_company_plan",
+            description: "Prepare a Paperclip company architecture plan for human approval.",
+            requiredCapabilities: ["agent-delegation"],
+            inputSchema: {},
+            outputSchema: {},
+            audit: { logRequest: true, logResult: true, artifactTypes: ["markdown"] },
+          },
+        ],
+        augmentorSkills: [
+          {
+            documentPath: "addons/paperclip/AUGMENTOR_SKILL.md",
+            objective: "Design and approve a Paperclip organization before implementation.",
+            requiredCapabilities: ["agent-delegation", "network"],
+            requiredTools: ["paperclip.create_company_plan"],
+            workflowPhases: ["vision intake", "research", "architecture approval", "implementation"],
+            approvalGates: ["approve business architecture", "approve company creation"],
+            expectedInputs: ["human intent", "provider policy", "budget constraints"],
+            expectedOutputs: ["company architecture", "agent role specs", "delegation packets"],
+            producesDelegationPackets: true,
+            auditLogRequired: true,
+          },
+        ],
+      }),
+    );
+
+    expect(valid.valid).toBe(true);
+    expect(valid.issues.filter((issue) => issue.severity === "error")).toHaveLength(0);
+
+    const invalid = validateAddOnManifest(
+      validManifest({
+        augmentorSkills: [
+          {
+            documentPath: "addons/paperclip/AUGMENTOR_SKILL.md",
+            objective: "Invalid skill.",
+            requiredCapabilities: ["providers"],
+            requiredTools: ["paperclip.create_company_plan"],
+            workflowPhases: ["implementation"],
+            approvalGates: ["approval"],
+            expectedInputs: ["intent"],
+            expectedOutputs: ["company"],
+            producesDelegationPackets: true,
+            auditLogRequired: true,
+          },
+        ],
+      }),
+    );
+
+    expect(invalid.valid).toBe(false);
+    expect(invalid.issues.some((issue) => issue.code === "augmentor-skill-unrequested-capability")).toBe(true);
+    expect(invalid.issues.some((issue) => issue.code === "augmentor-skill-unknown-tool")).toBe(true);
+  });
+
   it("warns but does not fail older local-service manifests that have not declared an executable service yet", () => {
     const { service: _service, ...manifest } = validManifest();
     const result = validateAddOnManifest(manifest);

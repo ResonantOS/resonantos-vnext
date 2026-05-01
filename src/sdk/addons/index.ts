@@ -1,7 +1,9 @@
 // Intent citation: docs/architecture/ADR-018-addon-sdk-v0.md
 
 export type {
+  AddOnAugmentorSkill,
   AddOnArtifactReference,
+  AddOnEngineerSetupRunbook,
   AddOnRegistryEntry,
   AddOnRegistryReviewState,
   AddOnRegistrySource,

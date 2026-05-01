@@ -75,6 +75,7 @@ Optional V0 fields:
 - `delegation`
 - `agents`
 - `engineerSetup`
+- `augmentorSkills`
 
 ### Runtime Types
 
@@ -106,6 +107,8 @@ Supported V0 capabilities:
 - `filesystem`
 - `archive-read`
 - `archive-intake-write`
+- `chat-interface`
+- `memory-provider`
 - `providers`
 - `shell`
 - `network`
@@ -143,6 +146,42 @@ Rules:
 - Human approval is required before install, filesystem mutation, service launch, provider/profile wiring, or external account mutation unless a future signed enterprise policy explicitly grants otherwise.
 
 Template: `docs/architecture/ADDON_ENGINEER_SETUP_RUNBOOK_TEMPLATE.md`
+
+### Augmentor Skill Contract
+
+Add-ons may declare `augmentorSkills` when the add-on needs a specific operating method for Augmentor, not just raw tools.
+
+This is different from `engineerSetup`:
+
+- `engineerSetup` tells the Resonant Engineer how to install, configure, verify, and repair the add-on.
+- `augmentorSkills` tell Augmentor how to use the add-on strategically with the human.
+
+An Augmentor skill is appropriate when an add-on requires domain workflow, human intent discovery, research, planning, approval gates, delegated execution, or artifact return.
+
+The manifest field must declare, per skill:
+
+- `documentPath`
+- `objective`
+- `requiredCapabilities`
+- `requiredTools`
+- `workflowPhases`
+- `approvalGates`
+- `expectedInputs`
+- `expectedOutputs`
+- `producesDelegationPackets`
+- `auditLogRequired`
+
+Rules:
+
+- `requiredCapabilities` may only reference capabilities already requested by the manifest.
+- `requiredTools` may only reference tools declared by the manifest.
+- The skill may guide Augmentor's reasoning and workflow, but it does not grant extra authority.
+- The skill should define where Augmentor must consult the human before implementation.
+- Research-driven skills must define how evidence and sources are returned.
+- Skills that create tasks must produce Delegation Packets or equivalent host-owned task contracts.
+- Add-on skills should make the add-on easier to use without hiding provider cost, external-risk, archive, or approval boundaries from the human.
+
+Template: `docs/architecture/ADDON_AUGMENTOR_SKILL_TEMPLATE.md`
 
 ### Service Contract
 
