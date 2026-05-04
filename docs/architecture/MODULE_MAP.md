@@ -54,13 +54,15 @@ This map defines which folder owns which feature area so contributors do not kee
   - launches/stops scoped `opencode web` or `opencode serve` sessions after add-on grants
   - architecture reference: `docs/architecture/ADR-021-opencode-addon-hosted-service.md`
 
-- `src-tauri/src/paperclip_service.rs` (planned)
+- `src-tauri/src/paperclip_service.rs`
   - optional Paperclip add-on host boundary
-  - detects Paperclip without making it a core dependency
-  - launches/stops or connects to a local Paperclip service after add-on grants
-  - lists Paperclip companies, agents, and issues through a host-mediated API bridge
-  - maps ResonantOS Delegation Packets to Paperclip issues
-  - collects Paperclip artifacts into Living Archive intake only
+  - checks `npx`/Paperclip availability without making Paperclip a core dependency
+  - connects/disconnects an existing local Paperclip loopback endpoint after `network` and `ui-embedding` grants
+  - restricts V0 embedding to `http://localhost` or `http://127.0.0.1` endpoints
+  - intentionally does not run broad install/start shell commands yet; managed setup remains behind the Engineer setup runbook
+  - planned next bridge: list companies, agents, and issues through a host-mediated API connector
+  - planned next bridge: map ResonantOS Delegation Packets to Paperclip issues
+  - planned next bridge: collect Paperclip artifacts into Living Archive intake only
   - architecture reference: `docs/architecture/ADR-028-paperclip-addon-organizational-runtime.md`
 
 - `src-tauri/src/browser_service.rs`
@@ -159,6 +161,14 @@ This map defines which folder owns which feature area so contributors do not kee
   - capability-gated network/UI embedding/browser-control state
   - Browser engine action reference: `docs/architecture/ADR-017-resonant-browser-addon.md`
 
+- `src/modules/paperclip/`
+  - Paperclip optional add-on workspace
+  - local endpoint status and connection controls
+  - center workspace embedded Paperclip UI
+  - capability-gated local network and UI embedding state
+  - V0 connector-only surface; setup/install automation must go through the Engineer runbook until reviewed host setup commands are implemented
+  - organizational runtime reference: `docs/architecture/ADR-028-paperclip-addon-organizational-runtime.md`
+
 - `src/modules/archive/archive.css`
   - Living Archive workspace, review, search, reader, and import styling
 
@@ -203,6 +213,22 @@ This map defines which folder owns which feature area so contributors do not kee
   - sideloadable reference add-on manifests and local services used to prove replacement contracts
   - `examples/addons/reference-memory.json`
   - `examples/reference-memory-service.mjs`
+  - `examples/living-archive-mcp.mjs`
+    - standalone stdio MCP bridge for external clients that need scoped Living Archive and memory-provider tools
+    - V1 live mode proxies `RESONANTOS_MEMORY_SERVICE_URL` / `--memory-service-url` to the host-mediated `POST /memory/{operation}` contract
+    - portable fallback points at `ResonantOS_User/Memory` through `RESONANTOS_MEMORY_ROOT` or `--memory-root`
+    - cannot write trusted AI Memory wiki pages directly; portable writes are restricted to intake and review-request artifacts, while live trusted promotion must go through approved host review artifacts
+    - architecture reference: `docs/architecture/ADR-029-living-archive-mcp-bridge.md`
+  - `examples/living-archive-memory-service.mjs`
+    - loopback HTTP memory service for the portable `ResonantOS_User/Memory` folder
+    - implements the V1 `POST /memory/{operation}` contract for status/search/read/intake/ingest-request/review-listing/lint
+    - deliberately rejects provider-only trusted promotion and semantic operations until those are mediated by the full desktop host provider
+    - lets MCP clients point `RESONANTOS_MEMORY_SERVICE_URL` at a real ResonantOS-owned local endpoint instead of a mock
+  - `src-tauri/src/memory_service.rs`
+    - host-owned launcher for the Living Archive local memory service
+    - resolves the canonical Portable User State memory root, starts/stops the Node service on loopback, and reports endpoint/session status through narrow IPC commands
+  - `src/modules/settings/SettingsWorkspace.tsx`
+    - Memory Bridge section exposes start/stop/status controls for the local memory service
   - `ArchiveReviewDesk` touch-friendly ingest queue, review artifact, approval, and promotion workflow
   - `ArchiveSourceRegistry` imported-library and mapped-source registry
   - `ArchiveLibraryImporter` folder/vault import surface
@@ -256,9 +282,10 @@ This map defines which folder owns which feature area so contributors do not kee
   - embeds OpenCode's own web UI after host launch
   - does not replace Resonant Notes or trusted Living Archive ingest
 
-- `src/modules/paperclip/` (planned)
-  - optional Paperclip organizational runtime workspace
-  - embeds Paperclip's own UI after host launch/connect
+- `src/modules/paperclip/`
+  - development-only Paperclip organizational runtime workspace
+  - excluded from the public default add-on catalog until an explicit future add-on release
+  - embeds Paperclip's own UI after host-mediated connection to a local loopback endpoint
   - shows ResonantOS-owned health, grants, company/agent/issue summaries, and delegation handoff controls
   - must not duplicate Paperclip's full UI or bypass ResonantOS capability gates
 

@@ -1,5 +1,6 @@
 .message-bubble {
   max-width: min(76ch, 82%);
+  min-width: 0;
   padding: 0.55rem 0.62rem;
   border-radius: 16px;
   border: 0;
@@ -46,6 +47,10 @@
 .message-renderer {
   color: var(--text-primary);
   line-height: 1.45;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 .message-renderer > :first-child {
@@ -139,7 +144,9 @@
 .message-renderer ol,
 .message-renderer pre,
 .message-renderer blockquote {
+  max-width: 100%;
   margin: 0 0 0.55rem;
+  overflow-wrap: anywhere;
 }
 
 .message-renderer ul,
@@ -152,10 +159,13 @@
   padding: 0.08rem 0.28rem;
   border-radius: 6px;
   background: rgba(255, 248, 236, 0.09);
+  white-space: break-spaces;
+  overflow-wrap: anywhere;
 }
 
 .message-renderer pre {
   overflow-x: auto;
+  max-width: 100%;
   padding: 0.65rem 0.75rem;
   border-radius: 12px;
   background: rgba(255, 248, 236, 0.06);

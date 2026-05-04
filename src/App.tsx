@@ -31,6 +31,8 @@ import type {
   ArchiveSemanticLintResult,
   ChatRunPhase,
   ConversationThread,
+  LivingArchiveMemoryServiceResult,
+  LivingArchiveMemoryServiceStatus,
   LocalRuntimeStatus,
   ProviderDiagnosticReport,
   ProviderSmokeTestResult,
@@ -118,6 +120,7 @@ import {
 import type { ComposerAttachment, ThinkingDepth } from "./modules/chat/types";
 import { Panel } from "./components/Panel";
 import { OpenCodeWorkspace } from "./modules/opencode/OpenCodeWorkspace";
+import { PaperclipWorkspace } from "./modules/paperclip/PaperclipWorkspace";
 import { promoteRecoveryRoute, RECOVERY_RUNBOOK_PROMPT, setRecoveryMode } from "./modules/recovery/controller";
 import {
   applyFirstRunRecommendedAddOns,
@@ -134,8 +137,11 @@ import {
 } from "./modules/shell/system-slots";
 import {
   executeRefreshProviderDiagnostics,
+  executeRefreshMemoryServiceStatus,
   executeProviderSmokeTest,
   executeSaveProviderSecret,
+  executeStartMemoryService,
+  executeStopMemoryService,
   updateProviderProfile,
 } from "./modules/settings/controller";
 import type { SettingsSection } from "./modules/settings/SettingsWorkspace";
@@ -190,6 +196,7 @@ type DockIconId =
   | "browser"
   | "obsidian"
   | "opencode"
+  | "paperclip"
   | "terminal"
   | "agent"
   | "settings";
@@ -205,7 +212,7 @@ type VendorIconId =
   | "settings"
   | "world";
 
-const dockIconMap: Record<Exclude<DockIconId, "obsidian" | "opencode" | "terminal">, VendorIconId> = {
+const dockIconMap: Record<Exclude<DockIconId, "obsidian" | "opencode" | "paperclip" | "terminal">, VendorIconId> = {
   home: "home",
   archive: "database",
   delegation: "route-alt-left",
@@ -266,6 +273,9 @@ export function App() {
   const [activeProviderProbeId, setActiveProviderProbeId] = useState<string | null>(null);
   const [providerSmokeResults, setProviderSmokeResults] = useState<Record<string, ProviderSmokeTestResult>>({});
   const [providerSmokeBusyId, setProviderSmokeBusyId] = useState<string | null>(null);
+  const [memoryServiceStatus, setMemoryServiceStatus] = useState<LivingArchiveMemoryServiceStatus | null>(null);
+  const [memoryServiceBusy, setMemoryServiceBusy] = useState(false);
+  const [memoryServiceLastResult, setMemoryServiceLastResult] = useState<LivingArchiveMemoryServiceResult | null>(null);
   const [thinkingDepth, setThinkingDepth] = useState<ThinkingDepth>("high");
   const [selectedChatModel, setSelectedChatModel] = useState<string>("");
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
@@ -425,6 +435,13 @@ export function App() {
     }
     void refreshProviderDiagnostics();
   }, [loadState, settingsSection, providerDiagnostics.length]);
+
+  useEffect(() => {
+    if (loadState.phase !== "ready" || settingsSection !== "memory" || memoryServiceStatus) {
+      return;
+    }
+    void refreshMemoryServiceStatus();
+  }, [loadState, settingsSection, memoryServiceStatus]);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -732,6 +749,35 @@ export function App() {
       providerId,
       setProviderSmokeBusyId,
       setProviderSmokeResults,
+      setSettingsNotice,
+      errorMessageOf,
+    });
+  };
+
+  const refreshMemoryServiceStatus = async () => {
+    await executeRefreshMemoryServiceStatus({
+      setMemoryServiceBusy,
+      setMemoryServiceStatus,
+      setSettingsNotice,
+      errorMessageOf,
+    });
+  };
+
+  const startMemoryService = async () => {
+    await executeStartMemoryService({
+      setMemoryServiceBusy,
+      setMemoryServiceStatus,
+      setMemoryServiceLastResult,
+      setSettingsNotice,
+      errorMessageOf,
+    });
+  };
+
+  const stopMemoryService = async () => {
+    await executeStopMemoryService({
+      setMemoryServiceBusy,
+      setMemoryServiceStatus,
+      setMemoryServiceLastResult,
       setSettingsNotice,
       errorMessageOf,
     });
@@ -1188,6 +1234,8 @@ export function App() {
   const obsidianInstallation = state.installations["addon.obsidian"];
   const opencodeManifest = allManifests.find((manifest) => manifest.id === "addon.opencode");
   const opencodeInstallation = state.installations["addon.opencode"];
+  const paperclipManifest = allManifests.find((manifest) => manifest.id === "addon.paperclip");
+  const paperclipInstallation = state.installations["addon.paperclip"];
   const terminalManifest = allManifests.find((manifest) => manifest.id === "addon.terminal");
   const terminalInstallation = state.installations["addon.terminal"];
   const grantBrowserVisibleAccess = () => {
@@ -1392,6 +1440,49 @@ export function App() {
       return draft;
     });
   };
+  const grantPaperclipWorkspaceAccess = () => {
+    if (!paperclipManifest) {
+      return;
+    }
+    updateRuntimeState((draft) => {
+      const installation = draft.installations[paperclipManifest.id];
+      if (!installation) {
+        return draft;
+      }
+      installation.installed = true;
+      installation.enabled = true;
+      installation.status = "enabled";
+      const existingGrants = new Map(installation.grantedCapabilities.map((grant) => [grant.capability, grant]));
+      const missingRequestedGrants = paperclipManifest.requestedCapabilities.filter((grant) => !existingGrants.has(grant.capability));
+      installation.grantedCapabilities = [...installation.grantedCapabilities, ...missingRequestedGrants].map((grant) =>
+        ["network", "ui-embedding", "agent-delegation"].includes(grant.capability) ? { ...grant, granted: true } : grant,
+      );
+      installation.config = {
+        ...(installation.config ?? {}),
+        endpoint: typeof installation.config?.endpoint === "string" ? installation.config.endpoint : "http://127.0.0.1:3100",
+      };
+      installation.notes = ["Installed, enabled, and granted local network, UI embedding, and delegation issue creation for Paperclip."];
+      draft.uiPreferences.activeSection = "paperclip";
+      return draft;
+    });
+  };
+  const updatePaperclipEndpoint = (endpoint: string) => {
+    if (!paperclipManifest) {
+      return;
+    }
+    updateRuntimeState((draft) => {
+      const installation = draft.installations[paperclipManifest.id];
+      if (!installation) {
+        return draft;
+      }
+      installation.config = {
+        ...(installation.config ?? {}),
+        endpoint,
+        lastEndpointUpdatedAt: new Date().toISOString(),
+      };
+      return draft;
+    });
+  };
   const grantTerminalWorkspaceAccess = () => {
     if (!terminalManifest) {
       return;
@@ -1425,6 +1516,7 @@ export function App() {
   const browserDockEnabled = Boolean(browserManifest && browserInstallation?.installed && browserInstallation.enabled);
   const obsidianDockEnabled = Boolean(obsidianManifest && obsidianInstallation?.installed && obsidianInstallation.enabled);
   const opencodeDockEnabled = Boolean(opencodeManifest && opencodeInstallation?.installed && opencodeInstallation.enabled);
+  const paperclipDockEnabled = Boolean(paperclipManifest && paperclipInstallation?.installed && paperclipInstallation.enabled);
   const terminalDockEnabled = Boolean(terminalManifest && terminalInstallation?.installed && terminalInstallation.enabled);
   const addOnNavItems = [
     ...(obsidianDockEnabled
@@ -1435,6 +1527,9 @@ export function App() {
       : []),
     ...(opencodeDockEnabled
       ? [{ id: "opencode" as Section, label: opencodeManifest?.name ?? "OpenCode", eyebrow: "code", icon: "opencode" as DockIconId, pinned: true }]
+      : []),
+    ...(paperclipDockEnabled
+      ? [{ id: "paperclip" as Section, label: paperclipManifest?.name ?? "Paperclip", eyebrow: "org", icon: "paperclip" as DockIconId, pinned: true }]
       : []),
     ...(terminalDockEnabled
       ? [
@@ -1563,6 +1658,8 @@ export function App() {
             !recoveryModeActive && currentSection === "terminal" ? "terminal-active" : ""
           } ${
             !recoveryModeActive && currentSection === "opencode" ? "opencode-active" : ""
+          } ${
+            !recoveryModeActive && currentSection === "paperclip" ? "paperclip-active" : ""
           } ${
             !recoveryModeActive && currentSection === "obsidian" ? "notes-active" : ""
           }`}
@@ -1843,6 +1940,20 @@ export function App() {
             />
           )}
 
+          {!recoveryModeActive && (
+            <PaperclipWorkspace
+              active={currentSection === "paperclip"}
+              manifest={paperclipManifest}
+              installation={paperclipInstallation}
+              onConfigureAddon={() => {
+                setSelectedAddonId("addon.paperclip");
+                setSection("addons");
+              }}
+              onGrantWorkspaceAccess={grantPaperclipWorkspaceAccess}
+              onEndpointChange={updatePaperclipEndpoint}
+            />
+          )}
+
           {!recoveryModeActive && currentSection === "terminal" && (
             <Suspense
               fallback={
@@ -1941,6 +2052,9 @@ export function App() {
                 providerSmokeResults={providerSmokeResults}
                 providerSmokeBusyId={providerSmokeBusyId}
                 providerDrafts={providerDrafts}
+                memoryServiceStatus={memoryServiceStatus}
+                memoryServiceBusy={memoryServiceBusy}
+                memoryServiceLastResult={memoryServiceLastResult}
                 onSettingsSectionChange={setSettingsSection}
                 onUpdateProvider={(profileId, field, value) =>
                   updateProviderProfile(profileId, field, value, updateRuntimeState)
@@ -1952,6 +2066,9 @@ export function App() {
                 onProbeProvider={(profileId) => void refreshProviderDiagnostics(profileId)}
                 onProbeAllProviders={() => void refreshProviderDiagnostics()}
                 onSmokeTestProvider={(profileId) => void runProviderSmokeTest(profileId)}
+                onRefreshMemoryServiceStatus={() => void refreshMemoryServiceStatus()}
+                onStartMemoryService={() => void startMemoryService()}
+                onStopMemoryService={() => void stopMemoryService()}
               />
             </Suspense>
           )}
@@ -2308,6 +2425,14 @@ function DockIcon(props: { icon: DockIconId }) {
         strokeLinejoin="round"
       >
         <use href="/icons/resonant.svg#ros-terminal" />
+      </svg>
+    );
+  }
+
+  if (props.icon === "paperclip") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M8.2 12.6 13.8 7a3.2 3.2 0 0 1 4.5 4.5l-7.1 7.1a4.8 4.8 0 0 1-6.8-6.8l7.7-7.7a6.2 6.2 0 0 1 8.8 8.8l-7.8 7.8" />
       </svg>
     );
   }

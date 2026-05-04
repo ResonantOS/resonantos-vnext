@@ -13,11 +13,12 @@
   height: calc(100vh / var(--app-zoom, 1));
   transform: scale(var(--app-zoom, 1));
   transform-origin: top left;
+  overflow: hidden;
 }
 
 .shell {
   display: grid;
-  grid-template-columns: 76px minmax(0, 1fr) var(--chat-rail-width, 460px);
+  grid-template-columns: 76px minmax(0, 1fr) minmax(340px, min(var(--chat-rail-width, 460px), 42vw));
   grid-template-rows: 38px minmax(0, 1fr);
   grid-template-areas:
     "topbar topbar topbar"
@@ -40,7 +41,7 @@
 }
 
 .shell.layout-chat-main {
-  grid-template-columns: 76px var(--chat-rail-width, 460px) minmax(0, 1fr);
+  grid-template-columns: 76px minmax(340px, min(var(--chat-rail-width, 460px), 42vw)) minmax(0, 1fr);
   grid-template-areas:
     "topbar topbar topbar"
     "dock chat main";
@@ -507,8 +508,10 @@
   grid-auto-rows: max-content;
   align-content: start;
   min-height: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   padding-right: 0.25rem;
+  overscroll-behavior-x: none;
 }
 
 .content-grid.notes-active {
@@ -794,7 +797,10 @@
 .home-workspace {
   display: grid;
   gap: 0.95rem;
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
+  overflow-x: hidden;
 }
 
 .home-hero-panel,

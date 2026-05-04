@@ -56,6 +56,8 @@ import type {
   HermesChatResult,
   HermesInstallStatus,
   LocalRuntimeStatus,
+  LivingArchiveMemoryServiceResult,
+  LivingArchiveMemoryServiceStatus,
   ObsidianNoteOperationResult,
   ObsidianNotePayload,
   ObsidianNoteSummary,
@@ -66,6 +68,10 @@ import type {
   OpenCodeLaunchMode,
   OpenCodeServiceResult,
   OpenCodeStatus,
+  PaperclipServiceResult,
+  PaperclipStatus,
+  PaperclipDashboardSnapshot,
+  PaperclipCreateIssueResult,
   ProviderDiagnosticReport,
   ProviderProfile,
   ProviderSmokeTestResult,
@@ -283,6 +289,46 @@ export const requestArchiveRuntimeStatus = async (): Promise<ArchiveRuntimeStatu
     return (await invoke("archive_runtime_status")) as ArchiveRuntimeStatus;
   }
   throw new Error("Living Archive runtime status is available only in the desktop shell.");
+};
+
+export const requestLivingArchiveMemoryServiceStatus = async (input: {
+  port?: number;
+  sessionId?: string;
+} = {}): Promise<LivingArchiveMemoryServiceStatus> => {
+  if (hasTauri()) {
+    return (await invoke("living_archive_memory_service_status", { request: input })) as LivingArchiveMemoryServiceStatus;
+  }
+  return {
+    available: false,
+    running: false,
+    endpoint: `http://127.0.0.1:${input.port ?? 4888}`,
+    memoryRoot: "",
+    sessionId: input.sessionId ?? "living-archive-memory-service",
+    readonly: false,
+    pid: null,
+    command: "node examples/living-archive-memory-service.mjs",
+    statusDetail: "Living Archive memory service controls are available only in the desktop shell.",
+  };
+};
+
+export const requestLivingArchiveMemoryServiceStart = async (input: {
+  port?: number;
+  sessionId?: string;
+  readonly?: boolean;
+} = {}): Promise<LivingArchiveMemoryServiceResult> => {
+  if (hasTauri()) {
+    return (await invoke("living_archive_memory_service_start", { request: input })) as LivingArchiveMemoryServiceResult;
+  }
+  throw new Error("Living Archive memory service launch is available only in the desktop shell.");
+};
+
+export const requestLivingArchiveMemoryServiceStop = async (
+  sessionId?: string,
+): Promise<LivingArchiveMemoryServiceResult> => {
+  if (hasTauri()) {
+    return (await invoke("living_archive_memory_service_stop", { request: { sessionId } })) as LivingArchiveMemoryServiceResult;
+  }
+  throw new Error("Living Archive memory service shutdown is available only in the desktop shell.");
 };
 
 export const requestArchiveSourceFolderScan = async (rootPath?: string): Promise<ArchiveSourceFolderScanResult> => {
@@ -518,6 +564,70 @@ export const requestOpenCodeStopService = async (sessionId?: string): Promise<Op
     return (await invoke("opencode_stop_service", { request: { sessionId } })) as OpenCodeServiceResult;
   }
   throw new Error("OpenCode service shutdown is available only in the desktop shell.");
+};
+
+export const requestPaperclipStatus = async (endpoint?: string): Promise<PaperclipStatus> => {
+  const normalizedEndpoint = endpoint?.trim() || "http://127.0.0.1:3100";
+  if (hasTauri()) {
+    return (await invoke("paperclip_status", { request: { endpoint: normalizedEndpoint } })) as PaperclipStatus;
+  }
+  return {
+    installed: false,
+    version: null,
+    binaryPath: null,
+    endpoint: normalizedEndpoint,
+    endpointReachable: false,
+    installHint: "Paperclip status is available only in the desktop shell.",
+    supportsWebUi: true,
+    supportsServerApi: true,
+    managedLaunchAvailable: false,
+  };
+};
+
+export const requestPaperclipStartService = async (input: {
+  endpoint?: string;
+  sessionId?: string;
+}): Promise<PaperclipServiceResult> => {
+  if (hasTauri()) {
+    return (await invoke("paperclip_start_service", { request: input })) as PaperclipServiceResult;
+  }
+  throw new Error("Paperclip connection is available only in the desktop shell.");
+};
+
+export const requestPaperclipStopService = async (sessionId?: string): Promise<PaperclipServiceResult> => {
+  if (hasTauri()) {
+    return (await invoke("paperclip_stop_service", { request: { sessionId } })) as PaperclipServiceResult;
+  }
+  throw new Error("Paperclip disconnect is available only in the desktop shell.");
+};
+
+export const requestPaperclipDashboardSnapshot = async (input: {
+  endpoint?: string;
+  apiToken: string;
+  companyId?: string;
+}): Promise<PaperclipDashboardSnapshot> => {
+  if (hasTauri()) {
+    return (await invoke("paperclip_dashboard_snapshot", { request: input })) as PaperclipDashboardSnapshot;
+  }
+  throw new Error("Paperclip API snapshots are available only in the desktop shell.");
+};
+
+export const requestPaperclipCreateIssueFromDelegation = async (input: {
+  endpoint?: string;
+  apiToken: string;
+  companyId: string;
+  title: string;
+  description: string;
+  priority?: "low" | "medium" | "high" | "urgent";
+  assigneeAgentId?: string;
+  projectId?: string;
+  goalId?: string;
+  parentId?: string;
+}): Promise<PaperclipCreateIssueResult> => {
+  if (hasTauri()) {
+    return (await invoke("paperclip_create_issue_from_delegation", { request: input })) as PaperclipCreateIssueResult;
+  }
+  throw new Error("Paperclip issue creation is available only in the desktop shell.");
 };
 
 export const requestBrowserOpenUrl = async (url: string, viewport?: BrowserViewportInput): Promise<BrowserOpenUrlResult> => {

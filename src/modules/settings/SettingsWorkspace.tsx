@@ -1,13 +1,21 @@
 // Intent citation: docs/architecture/ADR-002-modular-codebase.md
 
-import type { ProviderDiagnosticReport, ProviderProfile, ProviderSmokeTestResult, ResonantShellState } from "../../core/contracts";
+import type {
+  LivingArchiveMemoryServiceResult,
+  LivingArchiveMemoryServiceStatus,
+  ProviderDiagnosticReport,
+  ProviderProfile,
+  ProviderSmokeTestResult,
+  ResonantShellState,
+} from "../../core/contracts";
 import { Panel } from "../../components/Panel";
 
-export type SettingsSection = "providers" | "strategy" | "defaults" | "shell";
+export type SettingsSection = "providers" | "strategy" | "memory" | "defaults" | "shell";
 
 export const settingsItems: Array<{ id: SettingsSection; label: string; eyebrow: string }> = [
   { id: "providers", label: "Providers", eyebrow: "models + secrets" },
   { id: "strategy", label: "Strategy", eyebrow: "roles + fallbacks" },
+  { id: "memory", label: "Memory Bridge", eyebrow: "MCP + local service" },
   { id: "defaults", label: "Defaults", eyebrow: "core behavior" },
   { id: "shell", label: "Shell", eyebrow: "layout + app" },
 ];
@@ -22,6 +30,9 @@ type SettingsWorkspaceProps = {
   providerSmokeResults: Record<string, ProviderSmokeTestResult>;
   providerSmokeBusyId: string | null;
   providerDrafts: Record<string, string>;
+  memoryServiceStatus: LivingArchiveMemoryServiceStatus | null;
+  memoryServiceBusy: boolean;
+  memoryServiceLastResult: LivingArchiveMemoryServiceResult | null;
   onSettingsSectionChange: (section: SettingsSection) => void;
   onUpdateProvider: (profileId: string, field: "primaryModel" | "fallbackModel" | "status", value: string) => void;
   onProviderDraftChange: (profileId: string, value: string) => void;
@@ -29,6 +40,9 @@ type SettingsWorkspaceProps = {
   onProbeProvider: (profileId: string) => void;
   onProbeAllProviders: () => void;
   onSmokeTestProvider: (profileId: string) => void;
+  onRefreshMemoryServiceStatus: () => void;
+  onStartMemoryService: () => void;
+  onStopMemoryService: () => void;
 };
 
 const providerNeedsSecret = (profile: ProviderProfile): boolean =>
@@ -178,6 +192,92 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
               <SettingNote label="Default Strategist name" value={props.state.strategistIdentity.defaultName} />
               <SettingNote label="Archive write authority" value={props.state.archivePolicy.ingestServiceId} />
               <SettingNote label="Telegram mode" value="Strategist channel add-on" />
+            </div>
+          </Panel>
+        )}
+
+        {props.settingsSection === "memory" && (
+          <Panel
+            title="Living Archive Memory Bridge"
+            subtitle="Expose scoped memory to external MCP clients without giving them direct trusted wiki write authority."
+          >
+            {props.settingsNotice && <div className="inline-notice">{props.settingsNotice}</div>}
+            <div className="memory-service-hero">
+              <div>
+                <p className="eyebrow">Local endpoint</p>
+                <h3>{props.memoryServiceStatus?.running ? "Bridge running" : "Bridge stopped"}</h3>
+                <p>
+                  Start this service when Codex, Claude Desktop, OpenCode, or another MCP-capable client needs scoped access to
+                  the Living Archive.
+                </p>
+              </div>
+              <span className={`tone tone-${props.memoryServiceStatus?.running ? "active" : "neutral"}`}>
+                {props.memoryServiceStatus?.running ? "online" : "offline"}
+              </span>
+            </div>
+
+            <div className="provider-toolbar">
+              <div className="provider-toolbar-copy">
+                <strong>{props.memoryServiceStatus?.endpoint ?? "http://127.0.0.1:4888"}</strong>
+                <p>
+                  MCP clients should set{" "}
+                  <code>RESONANTOS_MEMORY_SERVICE_URL={props.memoryServiceStatus?.endpoint ?? "http://127.0.0.1:4888"}</code>.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="button-secondary touch-action"
+                onClick={props.onRefreshMemoryServiceStatus}
+                disabled={props.memoryServiceBusy}
+              >
+                {props.memoryServiceBusy ? "Checking..." : "Refresh"}
+              </button>
+              {props.memoryServiceStatus?.running ? (
+                <button
+                  type="button"
+                  className="button-secondary touch-action"
+                  onClick={props.onStopMemoryService}
+                  disabled={props.memoryServiceBusy}
+                >
+                  Stop
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="button-primary touch-action"
+                  onClick={props.onStartMemoryService}
+                  disabled={props.memoryServiceBusy || props.memoryServiceStatus?.available === false}
+                >
+                  Start Bridge
+                </button>
+              )}
+            </div>
+
+            <div className="settings-grid">
+              <SettingNote label="Memory root" value={props.memoryServiceStatus?.memoryRoot || "Not resolved yet"} />
+              <SettingNote label="Session" value={props.memoryServiceStatus?.sessionId || "living-archive-memory-service"} />
+              <SettingNote label="Readonly" value={props.memoryServiceStatus?.readonly ? "enabled" : "disabled"} />
+              <SettingNote label="Process" value={props.memoryServiceStatus?.pid ? `pid ${props.memoryServiceStatus.pid}` : "not running"} />
+            </div>
+
+            <div className="provider-card">
+              <div className="provider-head">
+                <div>
+                  <strong>Boundary</strong>
+                  <p>{props.memoryServiceStatus?.statusDetail ?? "Run status to inspect the host-owned bridge state."}</p>
+                </div>
+                <span className="tone tone-warning">intake-only writes</span>
+              </div>
+              <ul>
+                <li>External clients can search/read scoped memory and write raw artifacts to intake.</li>
+                <li>Trusted AI Memory wiki pages are still written only by the Strategist-owned ingest/review flow.</li>
+                <li>Provider-backed promotion and semantic repair stay inside the desktop host boundary.</li>
+              </ul>
+              {props.memoryServiceLastResult ? (
+                <p className="mono-inline">
+                  Last action: {props.memoryServiceLastResult.endpoint} · {props.memoryServiceLastResult.command}
+                </p>
+              ) : null}
             </div>
           </Panel>
         )}

@@ -1,6 +1,6 @@
 # ResonantOS vNext Project Status
 
-Last updated: 2026-05-01
+Last updated: 2026-05-04
 
 This document is the operational checkpoint for what exists now, what is partially built, and what still needs to be done. It is intentionally shorter than the ADRs and backlog: use it to regain project state quickly before deciding the next work item.
 
@@ -40,10 +40,12 @@ The shell direction is a three-zone app:
 
 The latest deterministic check completed with:
 
-- `npm test -- --run`: 133 passed
+- `npm test -- --run`: 143 passed
+- `npm run test:living-archive-mcp`: passed
+- `npm run test:living-archive-memory-service`: passed
 - `npm run build`: passed
 - `cargo fmt --check`: passed
-- `cargo test --quiet`: 81 passed, 3 ignored
+- `cargo test --quiet`: 91 passed, 3 ignored
 - `git diff --check`: passed
 
 Known validation notes:
@@ -54,9 +56,11 @@ Known validation notes:
 
 This status document records that result as the current worktree checkpoint. Re-run the same commands before tagging a release or merging a large follow-up.
 
-## Early Access Pause Point
+## Public Source Preview Scope
 
-This is a reasonable checkpoint for an internal dev-team review, not for public release.
+This is a reasonable checkpoint for a public source preview of ResonantOS vNext and the add-on SDK foundation.
+
+This is not a finished consumer product release and not a packaged stable installer release.
 
 What the team should review:
 
@@ -69,12 +73,20 @@ What the team should review:
 - the add-on SDK direction, especially manifest authority and capability gates
 - the current boundaries between core services, add-ons, provider runtime nodes, and experimental integrations
 
+Release scope:
+
+- publish the vNext repository as the visible current ResonantOS codebase
+- keep the older OpenClaw-centered Alpha repository private to avoid product confusion
+- ship the SDK/contracts and default recommended catalog
+- do not release any new optional add-on in this checkpoint
+- keep Paperclip development connector code excluded from the public default add-on catalog until a future explicit add-on release
+
 Known limits for reviewers:
 
 - Living Archive import is safe-copy oriented; move/reorganisation execution is intentionally blocked
 - add-ons are catalog entries and are not installed or trusted by default; the basic default catalog now exposes only recommended Augmentor Chat and Living Archive contracts
 - Browser, Obsidian, OpenCode, and Terminal add-ons are early foundations, not complete production integrations
-- Paperclip is now specified in `ADR-028` as a future optional organizational runtime add-on; no host commands or UI implementation exist yet
+- Paperclip is now specified in `ADR-028` as a future optional organizational runtime add-on; development connector code exists, but it is excluded from the public default catalog until explicitly released
 - wallet and encrypted vault implementation is architectural only
 - recovery mode exists, but the Engineer is not yet a complete autonomous repair operator
 - UI polish is still active work, especially around responsiveness and information density
@@ -143,6 +155,9 @@ Known limits for reviewers:
 - Augmentor chat memory retrieval, chat insight intake, and the stable Archive workspace flows route through the active memory-provider broker instead of directly depending on Living Archive.
 - The broker now supports sideloaded `http-json` memory providers via `POST /memory/{operation}` endpoints.
 - A working reference third-party memory provider exists at `examples/reference-memory-service.mjs` with sideload manifest `examples/addons/reference-memory.json`; automated tests spawn it and prove a non-Living Archive provider can satisfy the broker.
+- A standalone Living Archive MCP bridge now exists at `examples/living-archive-mcp.mjs`; V1 exposes scoped status/search/read/intake/ingest-request/review/maintenance/lint tools over stdio, proxies a live `POST /memory/{operation}` provider when `RESONANTOS_MEMORY_SERVICE_URL` is configured, and falls back to `ResonantOS_User/Memory` portable-folder mode without allowing direct trusted wiki writes.
+- A local loopback Living Archive memory service now exists at `examples/living-archive-memory-service.mjs`; it exposes the V1 `POST /memory/{operation}` contract for portable status/search/read/intake/review-listing/lint so external MCP clients can use a real local endpoint before the full desktop host provider launcher is productized.
+- The desktop host now has a narrow Memory Bridge launcher in `src-tauri/src/memory_service.rs` and a Settings section that can start, stop, and inspect the local Living Archive memory service using the canonical Portable User State memory root.
 - Native Living Archive IPC commands are now brokered by the active add-on contract: `addon.living-archive` must be enabled with `memory-provider` and the action-specific grant before the Rust host executes archive actions.
 - If another memory add-on owns the `memory-system` slot, the shell does not render the bundled Living Archive workspace as if it were core memory.
 - Runtime/config resolution, archive status, search, document reads, intake writes, ingest request queueing, and review queue operations are present.

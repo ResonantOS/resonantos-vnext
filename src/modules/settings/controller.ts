@@ -2,9 +2,23 @@
 // Intent citation: docs/architecture/ADR-009-rust-service-ipc-boundary.md
 
 import type { Dispatch, SetStateAction } from "react";
-import type { AddOnManifest, ProviderDiagnosticReport, ProviderSmokeTestResult, ResonantShellState } from "../../core/contracts";
+import type {
+  AddOnManifest,
+  LivingArchiveMemoryServiceResult,
+  LivingArchiveMemoryServiceStatus,
+  ProviderDiagnosticReport,
+  ProviderSmokeTestResult,
+  ResonantShellState,
+} from "../../core/contracts";
 import { applyProviderDiagnostics } from "../../core/policies";
-import { requestProviderDiagnostics, requestProviderSmokeTest, saveProviderSecret } from "../../core/runtime";
+import {
+  requestLivingArchiveMemoryServiceStart,
+  requestLivingArchiveMemoryServiceStatus,
+  requestLivingArchiveMemoryServiceStop,
+  requestProviderDiagnostics,
+  requestProviderSmokeTest,
+  saveProviderSecret,
+} from "../../core/runtime";
 
 type ReadyShellSnapshot = {
   state: ResonantShellState;
@@ -45,6 +59,17 @@ type RunProviderSmokeTestInput = {
   setProviderSmokeResults: Dispatch<SetStateAction<Record<string, ProviderSmokeTestResult>>>;
   setSettingsNotice: Dispatch<SetStateAction<string | null>>;
   errorMessageOf: (error: unknown, fallback: string) => string;
+};
+
+type RefreshMemoryServiceStatusInput = {
+  setMemoryServiceBusy: Dispatch<SetStateAction<boolean>>;
+  setMemoryServiceStatus: Dispatch<SetStateAction<LivingArchiveMemoryServiceStatus | null>>;
+  setSettingsNotice: Dispatch<SetStateAction<string | null>>;
+  errorMessageOf: (error: unknown, fallback: string) => string;
+};
+
+type StartMemoryServiceInput = RefreshMemoryServiceStatusInput & {
+  setMemoryServiceLastResult: Dispatch<SetStateAction<LivingArchiveMemoryServiceResult | null>>;
 };
 
 export const executeRefreshProviderDiagnostics = async ({
@@ -193,4 +218,68 @@ export const updateProviderProfile = (
     }
     return draft;
   });
+};
+
+export const executeRefreshMemoryServiceStatus = async ({
+  setMemoryServiceBusy,
+  setMemoryServiceStatus,
+  setSettingsNotice,
+  errorMessageOf,
+}: RefreshMemoryServiceStatusInput): Promise<void> => {
+  try {
+    setMemoryServiceBusy(true);
+    const status = await requestLivingArchiveMemoryServiceStatus();
+    setMemoryServiceStatus(status);
+    setSettingsNotice(status.statusDetail);
+  } catch (error) {
+    setSettingsNotice(errorMessageOf(error, "Failed to read Living Archive memory service status."));
+  } finally {
+    setMemoryServiceBusy(false);
+  }
+};
+
+export const executeStartMemoryService = async ({
+  setMemoryServiceBusy,
+  setMemoryServiceStatus,
+  setMemoryServiceLastResult,
+  setSettingsNotice,
+  errorMessageOf,
+}: StartMemoryServiceInput): Promise<void> => {
+  try {
+    setMemoryServiceBusy(true);
+    const result = await requestLivingArchiveMemoryServiceStart();
+    setMemoryServiceLastResult(result);
+    const status = await requestLivingArchiveMemoryServiceStatus({ sessionId: result.sessionId });
+    setMemoryServiceStatus(status);
+    setSettingsNotice(
+      result.alreadyRunning
+        ? `Living Archive memory service is already running at ${result.endpoint}.`
+        : `Living Archive memory service started at ${result.endpoint}.`,
+    );
+  } catch (error) {
+    setSettingsNotice(errorMessageOf(error, "Failed to start Living Archive memory service."));
+  } finally {
+    setMemoryServiceBusy(false);
+  }
+};
+
+export const executeStopMemoryService = async ({
+  setMemoryServiceBusy,
+  setMemoryServiceStatus,
+  setMemoryServiceLastResult,
+  setSettingsNotice,
+  errorMessageOf,
+}: StartMemoryServiceInput): Promise<void> => {
+  try {
+    setMemoryServiceBusy(true);
+    const result = await requestLivingArchiveMemoryServiceStop();
+    setMemoryServiceLastResult(result);
+    const status = await requestLivingArchiveMemoryServiceStatus({ sessionId: result.sessionId });
+    setMemoryServiceStatus(status);
+    setSettingsNotice(`Living Archive memory service stopped at ${result.endpoint}.`);
+  } catch (error) {
+    setSettingsNotice(errorMessageOf(error, "Failed to stop Living Archive memory service."));
+  } finally {
+    setMemoryServiceBusy(false);
+  }
 };

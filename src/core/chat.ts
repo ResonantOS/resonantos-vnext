@@ -1,7 +1,7 @@
 // Intent citation: docs/architecture/ADR-004-chat-rail.md
 // Intent citation: docs/architecture/ADR-010-recovery-ladder.md
 
-import type { ConversationMessage, ConversationThread, LocalRuntimeStatus, ResonantShellState } from "./contracts";
+import type { AddOnManifest, ConversationMessage, ConversationThread, LocalRuntimeStatus, ResonantShellState } from "./contracts";
 import { appendTranscriptEvent, messageTranscriptPayload } from "./context-memory";
 import { strategistDisplayName } from "./policies";
 
@@ -141,8 +141,53 @@ export const createStrategistThread = (
   };
 };
 
-export const strategistSystemPrompt = (state: ResonantShellState): string => {
+const installedEnabledAddOnManifests = (state: ResonantShellState, manifests: AddOnManifest[]): AddOnManifest[] =>
+  manifests.filter((manifest) => {
+    const installation = state.installations[manifest.id];
+    return Boolean(installation?.installed && installation.enabled && installation.status === "enabled");
+  });
+
+export const formatEnabledAugmentorSkillsForPrompt = (
+  state: ResonantShellState,
+  manifests: AddOnManifest[],
+): string => {
+  const skillBlocks = installedEnabledAddOnManifests(state, manifests)
+    .flatMap((manifest) =>
+      (manifest.augmentorSkills ?? []).map((skill) => {
+        const phases = skill.workflowPhases.length ? skill.workflowPhases.join(" -> ") : "not declared";
+        const tools = skill.requiredTools.length ? skill.requiredTools.join(", ") : "none declared";
+        const approvals = skill.approvalGates.length ? skill.approvalGates.join("; ") : "none declared";
+        const outputs = skill.expectedOutputs.length ? skill.expectedOutputs.join(", ") : "not declared";
+
+        return [
+          `Add-on: ${manifest.name} (${manifest.id})`,
+          `Skill objective: ${skill.objective}`,
+          `Skill document: ${skill.documentPath}`,
+          `Workflow phases: ${phases}`,
+          `Required host-mediated tools: ${tools}`,
+          `Approval gates: ${approvals}`,
+          `Expected outputs: ${outputs}`,
+          `Produces delegation packets: ${skill.producesDelegationPackets ? "yes" : "no"}`,
+          `Audit log required: ${skill.auditLogRequired ? "yes" : "no"}`,
+        ].join("\n");
+      }),
+    );
+
+  if (!skillBlocks.length) {
+    return "";
+  }
+
+  return [
+    "Enabled add-on operating skills:",
+    "Use these only when the corresponding add-on is installed/enabled and the task fits the skill objective.",
+    "Do not bypass capability grants, approval gates, provider policy, or Living Archive boundaries.",
+    skillBlocks.join("\n\n"),
+  ].join("\n");
+};
+
+export const strategistSystemPrompt = (state: ResonantShellState, manifests: AddOnManifest[] = []): string => {
   const strategistName = strategistDisplayName(state);
+  const addOnSkills = formatEnabledAugmentorSkillsForPrompt(state, manifests);
   return [
     `You are ${strategistName}, the Strategist agent inside ResonantOS.`,
     "You are the main trusted AI the human talks to.",
@@ -150,6 +195,7 @@ export const strategistSystemPrompt = (state: ResonantShellState): string => {
     "Do not pretend a tool, archive integration, or automation is wired if it is not.",
     "If a capability is not yet implemented, say so plainly and offer the next practical step.",
     "Respect the ResonantOS architecture: add-ons are modular, Living Archive knowledge writes belong to the Strategist-owned ingest path, and external agents are not equal to the Strategist.",
+    addOnSkills,
   ].join(" ");
 };
 

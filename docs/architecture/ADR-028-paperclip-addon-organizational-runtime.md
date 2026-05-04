@@ -4,7 +4,7 @@ Date: 2026-05-01
 
 ## Status
 
-Proposed.
+Accepted for architecture. V0 connector is development-only and is not in the public default catalog.
 
 ## Decision
 
@@ -15,6 +15,16 @@ The add-on id is reserved as `addon.paperclip`.
 Paperclip is not a ResonantOS core service and must not replace the ResonantOS shell, Resonant Engineer, provider fabric, capability broker, Living Archive boundary, or Augmentor trust model. It is a powerful external control plane that ResonantOS can host, supervise, and communicate with.
 
 The V1 integration should follow a hosted local-service pattern similar to `ADR-021` for OpenCode, but with stricter governance because Paperclip is itself a multi-agent orchestration layer.
+
+The development V0 intentionally starts smaller than the full V1 target:
+
+- development manifest: kept outside the bundled default catalog until a future explicit add-on release
+- center workspace: `src/modules/paperclip/PaperclipWorkspace.tsx`
+- host boundary: `src-tauri/src/paperclip_service.rs`
+- runtime wrappers: `requestPaperclipStatus`, `requestPaperclipStartService`, `requestPaperclipStopService`
+- current behavior: connect/embed an already running local Paperclip endpoint
+- current endpoint policy: `http://localhost:<port>` or `http://127.0.0.1:<port>` only, defaulting to `http://127.0.0.1:3100`
+- current managed launch policy: not implemented; broad shell setup is deferred to reviewed Engineer setup commands
 
 ResonantOS will:
 
@@ -57,6 +67,8 @@ This avoids duplicating Paperclip's org-management product while preserving Reso
 
 - Paperclip is optional and replaceable.
 - Paperclip must not be enabled by default in the basic ResonantOS catalog.
+- Paperclip must not appear in the public default bundled catalog until the add-on is intentionally released.
+- Paperclip may later appear in a curated add-on catalog as available, but it must remain disabled until the user installs/enables it.
 - Paperclip requires explicit install/enable and explicit capability grants.
 - Paperclip may not receive unrestricted filesystem access.
 - Paperclip may not receive raw provider credentials by default.
@@ -110,16 +122,26 @@ Denied by default:
 Initial host commands should be narrow and execution-audited:
 
 - `paperclip_status`
+- `paperclip_start_service`
+- `paperclip_stop_service`
+- `paperclip_dashboard_snapshot`
+
+Implemented V0 semantics:
+
+- `paperclip_status` checks a local endpoint and detects `npx` availability.
+- `paperclip_start_service` currently means "connect to an already running local Paperclip endpoint"; it does not spawn Paperclip.
+- `paperclip_stop_service` currently means "disconnect the ResonantOS session"; it does not terminate the external Paperclip process.
+- `paperclip_dashboard_snapshot` reads `/api/companies`, `/api/companies/{companyId}/agents`, and `/api/companies/{companyId}/issues` with a session-scoped Paperclip API token.
+- All V0 endpoint connections are local-loopback only.
+- The V0 Paperclip API token is entered into the workspace session and is not persisted in add-on config.
+
+Planned reviewed host commands:
+
 - `paperclip_detect_install`
 - `paperclip_install_local`
 - `paperclip_configure_service`
-- `paperclip_start_service`
-- `paperclip_stop_service`
 - `paperclip_verify_service`
 - `paperclip_open_workspace`
-- `paperclip_list_companies`
-- `paperclip_list_agents`
-- `paperclip_list_issues`
 - `paperclip_create_issue_from_delegation`
 - `paperclip_read_issue`
 - `paperclip_append_issue_comment`
@@ -178,7 +200,7 @@ The first manifest should declare:
 
 - `id = addon.paperclip`
 - category: `orchestration`
-- runtime: `local-service`
+- runtime: `embedded-module` in the SDK manifest, backed by host-command service commands
 - service protocol: `host-command`
 - health command: `paperclip_status`
 - start command: `paperclip_start_service`

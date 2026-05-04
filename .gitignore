@@ -19,6 +19,9 @@ Memory/
 Living_Archive/
 .resonantos/
 
+# Development-only add-on manifests excluded from the current public catalog
+public/addons/paperclip.json
+
 # Secrets and local environment
 .env
 .env.*

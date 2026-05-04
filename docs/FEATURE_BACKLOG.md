@@ -138,6 +138,9 @@ Last updated: 2026-05-01
   - ingest writer and verifier model/provider fields can be split so the verifier can use a different configured route
   - trusted wiki promotion now uses section-aware markdown merge with superseded-section provenance instead of pure append-only drift
   - memory-provider broker and reference third-party memory service now include `background-cycle`, `lint`, and `semantic-lint`
+  - standalone Living Archive MCP bridge now exposes scoped status/search/read/intake/ingest-request/review/maintenance/lint tools for external clients, with live `POST /memory/{operation}` proxy mode and portable `ResonantOS_User/Memory` fallback
+  - local Living Archive memory service now exposes the V1 `POST /memory/{operation}` contract over loopback for portable status/search/read/intake/review-listing/lint, giving MCP clients a real local endpoint
+  - desktop Settings now includes a Memory Bridge launcher backed by Rust IPC, so users can start/stop the local memory service without terminal commands
 
 - Completed on 2026-04-23:
   - added a real host-mediated archive service in `src-tauri/src/archive_service.rs`

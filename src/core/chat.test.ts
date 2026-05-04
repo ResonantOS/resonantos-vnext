@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { appendAssistantMessage, appendUserMessage, createStrategistThread } from "./chat";
+import type { AddOnManifest } from "./contracts";
+import { appendAssistantMessage, appendUserMessage, createStrategistThread, strategistSystemPrompt } from "./chat";
 import { buildDefaultState } from "./defaults";
 
 describe("chat transcript ledger", () => {
@@ -119,5 +120,99 @@ describe("chat transcript ledger", () => {
 
     const message = next.conversationThreads.find((thread) => thread.id === "thread-hermes-test")?.messages.at(-1);
     expect(message?.author).toBe("Hermes");
+  });
+
+  it("adds enabled add-on Augmentor skills to the Strategist system prompt", () => {
+    const paperclipManifest: AddOnManifest = {
+      id: "addon.paperclip",
+      name: "Paperclip",
+      version: "0.1.0",
+      author: "test",
+      category: "orchestration",
+      description: "test",
+      runtimeType: "embedded-module",
+      surfaces: [],
+      requestedCapabilities: [],
+      providerRequirements: { sharedProfiles: [], supportsPrivateCredentials: false },
+      archiveIntegration: {
+        readScopes: [],
+        intakeWriteScopes: [],
+        canRequestIngest: false,
+        canWriteKnowledgePages: false,
+      },
+      health: { strategy: "test" },
+      installHooks: {},
+      compatibility: { shellVersion: "^0.1.0", platforms: ["macOS"] },
+      augmentorSkills: [
+        {
+          documentPath: "docs/architecture/addon-skills/paperclip/AUGMENTOR_SKILL.md",
+          objective: "Design and create an approved Paperclip organizational structure.",
+          requiredCapabilities: ["network", "providers", "agent-delegation"],
+          requiredTools: ["paperclip.status", "paperclip.create_delegation_packet"],
+          workflowPhases: ["intent capture", "proposal", "human approval", "delegation packet creation"],
+          approvalGates: ["Approve company mission before creating Paperclip structures."],
+          expectedInputs: ["human intent"],
+          expectedOutputs: ["business architecture proposal", "Paperclip delegation packet"],
+          producesDelegationPackets: true,
+          auditLogRequired: true,
+        },
+      ],
+    };
+    const state = buildDefaultState([paperclipManifest]);
+    state.installations["addon.paperclip"].installed = true;
+    state.installations["addon.paperclip"].enabled = true;
+    state.installations["addon.paperclip"].status = "enabled";
+
+    const prompt = strategistSystemPrompt(state, [paperclipManifest]);
+
+    expect(prompt).toContain("Enabled add-on operating skills");
+    expect(prompt).toContain("Paperclip");
+    expect(prompt).toContain("Design and create an approved Paperclip organizational structure.");
+    expect(prompt).toContain("paperclip.create_delegation_packet");
+    expect(prompt).toContain("Approve company mission before creating Paperclip structures.");
+  });
+
+  it("does not add Augmentor skills for disabled add-ons", () => {
+    const paperclipManifest: AddOnManifest = {
+      id: "addon.paperclip",
+      name: "Paperclip",
+      version: "0.1.0",
+      author: "test",
+      category: "orchestration",
+      description: "test",
+      runtimeType: "embedded-module",
+      surfaces: [],
+      requestedCapabilities: [],
+      providerRequirements: { sharedProfiles: [], supportsPrivateCredentials: false },
+      archiveIntegration: {
+        readScopes: [],
+        intakeWriteScopes: [],
+        canRequestIngest: false,
+        canWriteKnowledgePages: false,
+      },
+      health: { strategy: "test" },
+      installHooks: {},
+      compatibility: { shellVersion: "^0.1.0", platforms: ["macOS"] },
+      augmentorSkills: [
+        {
+          documentPath: "docs/architecture/addon-skills/paperclip/AUGMENTOR_SKILL.md",
+          objective: "Design and create an approved Paperclip organizational structure.",
+          requiredCapabilities: ["network"],
+          requiredTools: ["paperclip.status"],
+          workflowPhases: ["intent capture"],
+          approvalGates: ["Approve first."],
+          expectedInputs: ["human intent"],
+          expectedOutputs: ["proposal"],
+          producesDelegationPackets: true,
+          auditLogRequired: true,
+        },
+      ],
+    };
+    const state = buildDefaultState([paperclipManifest]);
+
+    const prompt = strategistSystemPrompt(state, [paperclipManifest]);
+
+    expect(prompt).not.toContain("Enabled add-on operating skills");
+    expect(prompt).not.toContain("Design and create an approved Paperclip organizational structure.");
   });
 });

@@ -155,6 +155,31 @@
   min-width: 0;
 }
 
+.memory-service-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  border-radius: 18px;
+  border: 1px solid rgba(16, 185, 129, 0.22);
+  background:
+    radial-gradient(circle at 12% 10%, rgba(16, 185, 129, 0.13), transparent 38%),
+    rgba(255, 248, 236, 0.035);
+}
+
+.memory-service-hero h3 {
+  margin: 0.1rem 0 0.35rem;
+  font-size: 1.25rem;
+  letter-spacing: -0.04em;
+}
+
+.memory-service-hero p {
+  margin: 0;
+  max-width: 56rem;
+  color: var(--text-secondary);
+}
+
 .setting-note strong {
   font-size: 0.92rem;
 }

@@ -18,6 +18,7 @@ const manifests: AddOnManifest[] = [
   createManifest("addon.obsidian", "Resonant Notes", "knowledge"),
   createBrowserManifest(),
   createOpenCodeManifest(),
+  createPaperclipManifest(),
   createManifest("addon.audio2tol", "Audio2TOL", "tool"),
   createManifest("addon.openclaw", "OpenClaw", "agent"),
 ];
@@ -72,6 +73,11 @@ const {
   requestOpenCodeStatusMock,
   requestOpenCodeStartServiceMock,
   requestOpenCodeStopServiceMock,
+  requestPaperclipStatusMock,
+  requestPaperclipStartServiceMock,
+  requestPaperclipStopServiceMock,
+  requestPaperclipDashboardSnapshotMock,
+  requestPaperclipCreateIssueFromDelegationMock,
   requestBrowserEngineStatusMock,
   requestBrowserInstallEngineMock,
   requestBrowserOpenUrlMock,
@@ -97,6 +103,9 @@ const {
   requestRecoveryRouteCandidatesMock,
   requestProviderDiagnosticsMock,
   requestProviderSmokeTestMock,
+  requestLivingArchiveMemoryServiceStatusMock,
+  requestLivingArchiveMemoryServiceStartMock,
+  requestLivingArchiveMemoryServiceStopMock,
   openFloatingChatWindowMock,
   persistStateMock,
 } = vi.hoisted(() => {
@@ -776,6 +785,78 @@ const {
     pid: 42,
     alreadyRunning: false,
   })),
+  requestPaperclipStatusMock: vi.fn(async () => ({
+    installed: true,
+    version: null,
+    binaryPath: "/usr/local/bin/npx",
+    endpoint: "http://127.0.0.1:3100",
+    endpointReachable: false,
+    installHint: "Start Paperclip with npx paperclipai onboard --yes.",
+    supportsWebUi: true,
+    supportsServerApi: true,
+    managedLaunchAvailable: false,
+  })),
+  requestPaperclipStartServiceMock: vi.fn(async () => ({
+    sessionId: "paperclip-main",
+    endpoint: "http://127.0.0.1:3100",
+    apiBaseUrl: "http://127.0.0.1:3100",
+    webUrl: "http://127.0.0.1:3100",
+    command: "connect to existing local Paperclip endpoint",
+    pid: null as number | null,
+    alreadyRunning: false,
+  })),
+  requestPaperclipStopServiceMock: vi.fn(async () => ({
+    sessionId: "paperclip-main",
+    endpoint: "http://127.0.0.1:3100",
+    apiBaseUrl: "http://127.0.0.1:3100",
+    webUrl: "http://127.0.0.1:3100",
+    command: "connect to existing local Paperclip endpoint",
+    pid: null as number | null,
+    alreadyRunning: false,
+  })),
+  requestPaperclipDashboardSnapshotMock: vi.fn(async () => ({
+    endpoint: "http://127.0.0.1:3100",
+    companyId: "company-1",
+    companies: [
+      {
+        id: "company-1",
+        name: "Resonant Venture",
+        description: "Test company",
+        status: "active",
+        budgetMonthlyCents: 100000,
+      },
+    ],
+    agents: [
+      {
+        id: "agent-1",
+        name: "CEO",
+        role: "ceo",
+        title: "Chief Executive Officer",
+        status: "running",
+      },
+    ],
+    issues: [
+      {
+        id: "issue-1",
+        title: "Design business architecture",
+        status: "todo",
+        priority: "high",
+        assigneeAgentId: "agent-1",
+      },
+    ],
+    fetchedAt: "unix:1",
+  })),
+  requestPaperclipCreateIssueFromDelegationMock: vi.fn(async () => ({
+    endpoint: "http://127.0.0.1:3100",
+    companyId: "company-1",
+    issue: {
+      id: "issue-2",
+      title: "Approved delegation",
+      status: "todo",
+      priority: "medium",
+    },
+    auditSummary: "Created Paperclip issue issue-2 in company company-1 from a ResonantOS delegation payload.",
+  })),
   requestBrowserEngineStatusMock: vi.fn(async () => ({
     installed: true,
     enginePath: "/tmp/chromium",
@@ -1062,6 +1143,35 @@ const {
     checkedAt: "unix:2",
     summary: "Provider smoke test passed.",
   })),
+  requestLivingArchiveMemoryServiceStatusMock: vi.fn(async () => ({
+    available: true,
+    running: false,
+    endpoint: "http://127.0.0.1:4888",
+    memoryRoot: "/Users/example/ResonantOS_User/Memory",
+    sessionId: "living-archive-memory-service",
+    readonly: false,
+    pid: null as number | null,
+    command: "node examples/living-archive-memory-service.mjs",
+    statusDetail: "Living Archive memory service is available but not running.",
+  })),
+  requestLivingArchiveMemoryServiceStartMock: vi.fn(async () => ({
+    sessionId: "living-archive-memory-service",
+    endpoint: "http://127.0.0.1:4888",
+    memoryRoot: "/Users/example/ResonantOS_User/Memory",
+    readonly: false,
+    command: "node examples/living-archive-memory-service.mjs",
+    pid: 4242,
+    alreadyRunning: false,
+  })),
+  requestLivingArchiveMemoryServiceStopMock: vi.fn(async () => ({
+    sessionId: "living-archive-memory-service",
+    endpoint: "http://127.0.0.1:4888",
+    memoryRoot: "/Users/example/ResonantOS_User/Memory",
+    readonly: false,
+    command: "node examples/living-archive-memory-service.mjs",
+    pid: 4242,
+    alreadyRunning: false,
+  })),
   openFloatingChatWindowMock: vi.fn(async () => undefined),
   persistStateMock: vi.fn(async () => undefined),
   };
@@ -1092,6 +1202,9 @@ vi.mock("./core/runtime", () => ({
   requestLocalRuntimeStatus: requestLocalRuntimeStatusMock,
   requestProviderDiagnostics: requestProviderDiagnosticsMock,
   requestProviderSmokeTest: requestProviderSmokeTestMock,
+  requestLivingArchiveMemoryServiceStatus: requestLivingArchiveMemoryServiceStatusMock,
+  requestLivingArchiveMemoryServiceStart: requestLivingArchiveMemoryServiceStartMock,
+  requestLivingArchiveMemoryServiceStop: requestLivingArchiveMemoryServiceStopMock,
   requestArchiveRuntimeStatus: requestArchiveRuntimeStatusMock,
   requestArchiveSystemMemory: requestArchiveSystemMemoryMock,
   requestArchiveSystemMemoryRefresh: requestArchiveSystemMemoryRefreshMock,
@@ -1132,6 +1245,11 @@ vi.mock("./core/runtime", () => ({
   requestOpenCodeStatus: requestOpenCodeStatusMock,
   requestOpenCodeStartService: requestOpenCodeStartServiceMock,
   requestOpenCodeStopService: requestOpenCodeStopServiceMock,
+  requestPaperclipStatus: requestPaperclipStatusMock,
+  requestPaperclipStartService: requestPaperclipStartServiceMock,
+  requestPaperclipStopService: requestPaperclipStopServiceMock,
+  requestPaperclipDashboardSnapshot: requestPaperclipDashboardSnapshotMock,
+  requestPaperclipCreateIssueFromDelegation: requestPaperclipCreateIssueFromDelegationMock,
   requestBrowserEngineStatus: requestBrowserEngineStatusMock,
   requestBrowserInstallEngine: requestBrowserInstallEngineMock,
   requestBrowserOpenUrl: requestBrowserOpenUrlMock,
@@ -1946,6 +2064,83 @@ describe("App boot flow", () => {
       pid: 42,
       alreadyRunning: false,
     });
+    requestPaperclipStatusMock.mockReset();
+    requestPaperclipStatusMock.mockResolvedValue({
+      installed: true,
+      version: null,
+      binaryPath: "/usr/local/bin/npx",
+      endpoint: "http://127.0.0.1:3100",
+      endpointReachable: false,
+      installHint: "Start Paperclip with npx paperclipai onboard --yes.",
+      supportsWebUi: true,
+      supportsServerApi: true,
+      managedLaunchAvailable: false,
+    });
+    requestPaperclipStartServiceMock.mockReset();
+    requestPaperclipStartServiceMock.mockResolvedValue({
+      sessionId: "paperclip-main",
+      endpoint: "http://127.0.0.1:3100",
+      apiBaseUrl: "http://127.0.0.1:3100",
+      webUrl: "http://127.0.0.1:3100",
+      command: "connect to existing local Paperclip endpoint",
+      pid: null as number | null,
+      alreadyRunning: false,
+    });
+    requestPaperclipStopServiceMock.mockReset();
+    requestPaperclipStopServiceMock.mockResolvedValue({
+      sessionId: "paperclip-main",
+      endpoint: "http://127.0.0.1:3100",
+      apiBaseUrl: "http://127.0.0.1:3100",
+      webUrl: "http://127.0.0.1:3100",
+      command: "connect to existing local Paperclip endpoint",
+      pid: null as number | null,
+      alreadyRunning: false,
+    });
+    requestPaperclipDashboardSnapshotMock.mockReset();
+    requestPaperclipDashboardSnapshotMock.mockResolvedValue({
+      endpoint: "http://127.0.0.1:3100",
+      companyId: "company-1",
+      companies: [
+        {
+          id: "company-1",
+          name: "Resonant Venture",
+          description: "Test company",
+          status: "active",
+          budgetMonthlyCents: 100000,
+        },
+      ],
+      agents: [
+        {
+          id: "agent-1",
+          name: "CEO",
+          role: "ceo",
+          title: "Chief Executive Officer",
+          status: "running",
+        },
+      ],
+      issues: [
+        {
+          id: "issue-1",
+          title: "Design business architecture",
+          status: "todo",
+          priority: "high",
+          assigneeAgentId: "agent-1",
+        },
+      ],
+      fetchedAt: "unix:1",
+    });
+    requestPaperclipCreateIssueFromDelegationMock.mockReset();
+    requestPaperclipCreateIssueFromDelegationMock.mockResolvedValue({
+      endpoint: "http://127.0.0.1:3100",
+      companyId: "company-1",
+      issue: {
+        id: "issue-2",
+        title: "Approved delegation",
+        status: "todo",
+        priority: "medium",
+      },
+      auditSummary: "Created Paperclip issue issue-2 in company company-1 from a ResonantOS delegation payload.",
+    });
     requestBrowserEngineStatusMock.mockReset();
     requestBrowserEngineStatusMock.mockResolvedValue({
       installed: true,
@@ -2285,6 +2480,38 @@ describe("App boot flow", () => {
       checkedAt: "unix:2",
       summary: "Provider smoke test passed.",
     });
+    requestLivingArchiveMemoryServiceStatusMock.mockReset();
+    requestLivingArchiveMemoryServiceStatusMock.mockResolvedValue({
+      available: true,
+      running: false,
+      endpoint: "http://127.0.0.1:4888",
+      memoryRoot: "/Users/example/ResonantOS_User/Memory",
+      sessionId: "living-archive-memory-service",
+      readonly: false,
+      pid: null as number | null,
+      command: "node examples/living-archive-memory-service.mjs",
+      statusDetail: "Living Archive memory service is available but not running.",
+    });
+    requestLivingArchiveMemoryServiceStartMock.mockReset();
+    requestLivingArchiveMemoryServiceStartMock.mockResolvedValue({
+      sessionId: "living-archive-memory-service",
+      endpoint: "http://127.0.0.1:4888",
+      memoryRoot: "/Users/example/ResonantOS_User/Memory",
+      readonly: false,
+      command: "node examples/living-archive-memory-service.mjs",
+      pid: 4242,
+      alreadyRunning: false,
+    });
+    requestLivingArchiveMemoryServiceStopMock.mockReset();
+    requestLivingArchiveMemoryServiceStopMock.mockResolvedValue({
+      sessionId: "living-archive-memory-service",
+      endpoint: "http://127.0.0.1:4888",
+      memoryRoot: "/Users/example/ResonantOS_User/Memory",
+      readonly: false,
+      command: "node examples/living-archive-memory-service.mjs",
+      pid: 4242,
+      alreadyRunning: false,
+    });
     openFloatingChatWindowMock.mockReset();
     openFloatingChatWindowMock.mockResolvedValue(undefined);
     persistStateMock.mockClear();
@@ -2606,6 +2833,16 @@ describe("App boot flow", () => {
     expect(screen.getByLabelText("Native embedded Chromium target")).toBeTruthy();
   });
 
+  it("shows Paperclip in the Add-ons catalog before installation", async () => {
+    render(<App />);
+
+    expect((await screen.findAllByText("Launch your AI tools from one workbench.")).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getAllByRole("button", { name: /Add-ons/i })[0]);
+
+    expect(await screen.findByPlaceholderText("Search add-ons")).toBeTruthy();
+    expect((await screen.findAllByText("Paperclip")).length).toBeGreaterThan(0);
+  });
+
   it("opens OpenCode as an optional add-on workspace with scoped launch gates", async () => {
     const state = buildDefaultState(manifests);
     const opencodeInstallation = state.installations["addon.opencode"];
@@ -2658,6 +2895,77 @@ describe("App boot flow", () => {
       });
     });
     expect(await screen.findByLabelText("OpenCode embedded workspace")).toBeTruthy();
+  });
+
+  it("opens Paperclip as an optional embedded organizational runtime", async () => {
+    const state = buildDefaultState(manifests);
+    const paperclipInstallation = state.installations["addon.paperclip"];
+    paperclipInstallation.installed = true;
+    paperclipInstallation.enabled = true;
+    paperclipInstallation.status = "enabled";
+    hydrateStateMock.mockResolvedValueOnce(state);
+    requestPaperclipStatusMock.mockResolvedValue({
+      installed: true,
+      version: null,
+      binaryPath: "/usr/local/bin/npx",
+      endpoint: "http://127.0.0.1:3100",
+      endpointReachable: true,
+      installHint: "Paperclip is reachable.",
+      supportsWebUi: true,
+      supportsServerApi: true,
+      managedLaunchAvailable: false,
+    });
+
+    render(<App />);
+
+    expect((await screen.findAllByText("Launch your AI tools from one workbench.")).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getAllByRole("button", { name: "Paperclip" })[0]);
+
+    expect(await screen.findByTestId("paperclip-workspace")).toBeTruthy();
+    expect(screen.getByText("Paperclip UI will appear here after connection.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Connect" }));
+    await waitFor(() => {
+      expect(requestPaperclipStartServiceMock).toHaveBeenCalledWith({
+        endpoint: "http://127.0.0.1:3100",
+        sessionId: "paperclip-main",
+      });
+    });
+    expect(await screen.findByLabelText("Paperclip embedded workspace")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Paperclip workspace settings" }));
+    fireEvent.change(await screen.findByPlaceholderText("pcp_... or agent token"), {
+      target: { value: "paperclip-test-token" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Refresh Organization Snapshot" }));
+    await waitFor(() => {
+      expect(requestPaperclipDashboardSnapshotMock).toHaveBeenCalledWith({
+        endpoint: "http://127.0.0.1:3100",
+        apiToken: "paperclip-test-token",
+        companyId: undefined,
+      });
+    });
+    expect(await screen.findByText("Resonant Venture")).toBeTruthy();
+    expect(await screen.findByText("Chief Executive Officer")).toBeTruthy();
+    expect(await screen.findByText("Design business architecture")).toBeTruthy();
+
+    fireEvent.change(screen.getByPlaceholderText("Implement approved operating plan"), {
+      target: { value: "Approved delegation" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("Paste the approved delegation brief from Augmentor."), {
+      target: { value: "Create the initial Paperclip company operating issue." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create Delegation Issue" }));
+    await waitFor(() => {
+      expect(requestPaperclipCreateIssueFromDelegationMock).toHaveBeenCalledWith({
+        endpoint: "http://127.0.0.1:3100",
+        apiToken: "paperclip-test-token",
+        companyId: "company-1",
+        title: "Approved delegation",
+        description: "Create the initial Paperclip company operating issue.",
+        priority: "medium",
+      });
+    });
+    expect(await screen.findByText(/Created Paperclip issue issue-2/i)).toBeTruthy();
   });
 
   it("auto-launches OpenCode when workspace access is already configured", async () => {
@@ -3278,6 +3586,37 @@ describe("App boot flow", () => {
         model: "MiniMax-M2.7",
       }),
     );
+  });
+
+  it("starts the Living Archive memory bridge from settings", async () => {
+    render(<App />);
+
+    expect((await screen.findAllByText("Launch your AI tools from one workbench.")).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getAllByRole("button", { name: /Settings/i })[0]);
+    fireEvent.click(await screen.findByRole("button", { name: /Memory Bridge/i }));
+
+    expect(await screen.findByText("Living Archive Memory Bridge")).toBeTruthy();
+    expect(await screen.findByText("Bridge stopped")).toBeTruthy();
+    expect(requestLivingArchiveMemoryServiceStatusMock).toHaveBeenCalled();
+
+    requestLivingArchiveMemoryServiceStatusMock.mockResolvedValueOnce({
+      available: true,
+      running: true,
+      endpoint: "http://127.0.0.1:4888",
+      memoryRoot: "/Users/example/ResonantOS_User/Memory",
+      sessionId: "living-archive-memory-service",
+      readonly: false,
+      pid: 4242,
+      command: "node examples/living-archive-memory-service.mjs",
+      statusDetail: "Managed Living Archive memory service is running.",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Start Bridge" }));
+
+    expect(await screen.findByText("Bridge running")).toBeTruthy();
+    expect(screen.getByText(/pid 4242/i)).toBeTruthy();
+    expect(requestLivingArchiveMemoryServiceStartMock).toHaveBeenCalled();
   });
 
   it("runs the archive ingest probe through the archive workload route", async () => {
@@ -4513,6 +4852,59 @@ function createOpenCodeManifest(): AddOnManifest {
       entrypoint: "opencode_start_service",
       healthCommand: "opencode_status",
       shutdownCommand: "opencode_stop_service",
+    },
+  };
+}
+
+function createPaperclipManifest(): AddOnManifest {
+  return {
+    ...createManifest("addon.paperclip", "Paperclip", "orchestration"),
+    sdkVersion: "0.1.0",
+    description: "Paperclip organizational runtime add-on hosted through a local loopback endpoint.",
+    runtimeType: "embedded-module",
+    surfaces: [
+      {
+        id: "paperclip-workspace",
+        type: "embedded-pane",
+        label: "Paperclip Workspace",
+        description: "Open Paperclip's local control-plane UI inside ResonantOS.",
+      },
+    ],
+    requestedCapabilities: [
+      {
+        capability: "network",
+        granted: false,
+        scope: "self",
+        revocationBehavior: "hard-stop",
+      },
+      {
+        capability: "ui-embedding",
+        granted: false,
+        scope: "system",
+        revocationBehavior: "hide-surface",
+      },
+      {
+        capability: "providers",
+        granted: false,
+        scope: "shared",
+        revocationBehavior: "degrade",
+      },
+      {
+        capability: "agent-delegation",
+        granted: false,
+        scope: "shared",
+        revocationBehavior: "degrade",
+      },
+    ],
+    providerRequirements: {
+      sharedProfiles: ["shared-local"],
+      supportsPrivateCredentials: false,
+    },
+    service: {
+      protocol: "host-command",
+      entrypoint: "paperclip_start_service",
+      healthCommand: "paperclip_status",
+      shutdownCommand: "paperclip_stop_service",
     },
   };
 }

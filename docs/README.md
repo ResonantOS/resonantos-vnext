@@ -50,6 +50,8 @@ This folder is the documentation entrypoint for the current codebase.
   - minimal kernel, replaceable Augmentor Chat, replaceable Living Archive, and no-lock-in default add-on rules
 - [architecture/ADR-027-living-archive-llm-wiki-compliance.md](./architecture/ADR-027-living-archive-llm-wiki-compliance.md)
   - Living Archive / LLM Wiki compliance, background sync, verifier approval, semantic lint, repair queueing, and V1 completion baseline
+- [architecture/ADR-029-living-archive-mcp-bridge.md](./architecture/ADR-029-living-archive-mcp-bridge.md)
+  - scoped Living Archive MCP bridge, local memory service, portable fallback, and external-client memory boundaries
 - [ALPHA_DISTRIBUTION.md](./ALPHA_DISTRIBUTION.md)
   - internal alpha build workflow, platform artifacts, signing status, privacy boundary, and reviewer instructions
 - [working/SESSION_CONTEXT_2026-04-25.md](./working/SESSION_CONTEXT_2026-04-25.md)
@@ -93,6 +95,8 @@ This folder is the documentation entrypoint for the current codebase.
   - `ADR-026`
 - `Does the Living Archive still match the original LLM Wiki pattern?`
   - `ADR-027`
+- `How can external AI clients access scoped Living Archive memory?`
+  - `ADR-029`
 - `How do we build and share the internal alpha on macOS, Windows, and Linux?`
   - `ALPHA_DISTRIBUTION`
 - `What should a future compacted/new session reload first?`

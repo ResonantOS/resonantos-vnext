@@ -17,7 +17,7 @@
 
 @media (max-width: 1220px) {
   .shell {
-    grid-template-columns: 76px minmax(0, 1fr) minmax(360px, var(--chat-rail-width, 520px));
+    grid-template-columns: 76px minmax(0, 1fr) minmax(320px, min(var(--chat-rail-width, 520px), 42vw));
   }
 
   .shell.chat-closed {
@@ -25,7 +25,7 @@
   }
 
   .shell.layout-chat-main {
-    grid-template-columns: 76px minmax(360px, var(--chat-rail-width, 520px)) minmax(0, 1fr);
+    grid-template-columns: 76px minmax(320px, min(var(--chat-rail-width, 520px), 42vw)) minmax(0, 1fr);
   }
 
   .shell.layout-chat-main.chat-closed {

@@ -10,6 +10,7 @@
   backdrop-filter: blur(18px);
   height: 100%;
   overflow: hidden;
+  max-width: 100%;
   min-width: 0;
 }
 
@@ -164,10 +165,11 @@
 
 .chat-workspace {
   display: grid;
-  grid-template-columns: var(--chat-history-width, 300px) minmax(420px, 1fr);
+  grid-template-columns: minmax(180px, var(--chat-history-width, 300px)) minmax(0, 1fr);
   gap: 0.86rem;
   flex: 1 1 auto;
   min-height: 0;
+  min-width: 0;
 }
 
 .chat-workspace.history-closed {
@@ -518,6 +520,7 @@
   gap: 0.62rem;
   min-width: 0;
   min-height: 0;
+  overflow: hidden;
 }
 
 .thread-tab {

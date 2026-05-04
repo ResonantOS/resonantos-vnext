@@ -2,17 +2,17 @@
 
 New desktop-first ResonantOS foundation built as a Tauri + React shell.
 
-This app is intentionally separate from the legacy Flask dashboard. It implements the first executable layer of the vNext architecture:
+This app is intentionally separate from the legacy OpenClaw-centered Alpha dashboard. It implements the first executable layer of the vNext architecture:
 
-- core shell
-- Strategist identity
-- Setup agent
-- Living Archive policy model
+- modular desktop shell
+- Resonant Engineer kernel assistant
+- replaceable Augmentor Chat default add-on
+- replaceable Living Archive default add-on
 - add-on SDK manifest format
 - explicit capability grants
 - shared/private provider model
 - channel and workspace model
-- bundled add-on manifest examples; add-ons are available in the catalog but not installed or trusted by default
+- local memory/MCP bridge examples for external clients
 
 ## Run
 
@@ -28,19 +28,20 @@ For a browser-only preview:
 npm run dev
 ```
 
-## Internal Alpha Install
+## Public Source Preview
 
-The current alpha is distributed from the private GitHub Actions workflow, not from a public release page yet.
+This repository is a public source preview of the new ResonantOS direction plus the SDK foundation for creating add-ons.
 
-Reviewers should open the latest successful `alpha-build` run, download the artifact for their operating system, and install/run that build locally:
+It is not a finished consumer release and it is not the legacy Alpha dashboard. The current release scope is:
 
-- macOS: `resonantos-alpha-macos`
-- Windows: `resonantos-alpha-windows`
-- Linux: `resonantos-alpha-linux`
+- ResonantOS vNext shell and runtime foundation
+- Add-on manifest contracts, validation, registry helpers, and capability model
+- Default recommended catalog containing only Augmentor Chat and Living Archive
+- Example memory-provider and Living Archive MCP bridge services for SDK validation
 
-The alpha is unsigned, so macOS Gatekeeper, Windows SmartScreen, or Linux executable/package warnings are expected.
+No new optional add-on is released in this checkpoint. Files outside `public/addons/index.json` may exist as SDK references, historical contracts, or development-only work; they are not installed, enabled, trusted, or advertised by default.
 
-See [docs/ALPHA_DISTRIBUTION.md](docs/ALPHA_DISTRIBUTION.md) for the full reviewer instructions, privacy boundary, signing status, and release-gate checklist.
+Packaged installers are still alpha-grade and unsigned. See [docs/ALPHA_DISTRIBUTION.md](docs/ALPHA_DISTRIBUTION.md) for current artifact and platform notes.
 
 ## Current Scope
 
@@ -51,11 +52,14 @@ This is a working foundation, not the full product. The current implementation p
 - add-on manifest sideloading
 - policy enforcement helpers for archive trust and provider fallback
 - a branded shell UI showing the target operating model
+- scoped Living Archive memory bridge examples for external tools
 
 ## Structure
 
 - `src/core/contracts.ts`: public interfaces and types
 - `src/core/defaults.ts`: core services, providers, archive policy, and default state
 - `src/core/policies.ts`: archive write guards and provider selection logic
-- `public/addons/*.json`: bundled add-on SDK manifest examples
-- `src-tauri/src/lib.rs`: desktop persistence and sideload commands
+- `src/sdk/addons`: add-on SDK validation and registry helpers
+- `public/addons/index.json`: default public add-on catalog
+- `examples`: SDK/reference local services and MCP bridge examples
+- `src-tauri/src/lib.rs`: desktop persistence, sideload commands, and IPC registration

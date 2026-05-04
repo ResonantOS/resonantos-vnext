@@ -424,7 +424,7 @@ export const executeChatTurn = async ({
             activeRuntimeKind: runtimeNode.kind,
             localRuntimeStatus: runtimeStatusForPrompt,
           })
-        : strategistSystemPrompt(routedState);
+        : strategistSystemPrompt(routedState, [...snapshot.bundled, ...snapshot.sideloaded]);
 
     const recoveryAgentActive = activeThread.owningAgentId === routedState.recoverySession.engineerAgentId;
     const memoryProvider = resolveMemoryProviderBroker(routedState, [...snapshot.bundled, ...snapshot.sideloaded]);

@@ -1709,6 +1709,93 @@ export interface OpenCodeServiceResult {
   alreadyRunning: boolean;
 }
 
+export interface PaperclipStatus {
+  installed: boolean;
+  version?: string | null;
+  binaryPath?: string | null;
+  endpoint: string;
+  endpointReachable: boolean;
+  installHint: string;
+  supportsWebUi: boolean;
+  supportsServerApi: boolean;
+  managedLaunchAvailable: boolean;
+}
+
+export interface PaperclipServiceResult {
+  sessionId: string;
+  endpoint: string;
+  apiBaseUrl: string;
+  webUrl: string;
+  command: string;
+  pid?: number | null;
+  alreadyRunning: boolean;
+}
+
+export interface LivingArchiveMemoryServiceStatus {
+  available: boolean;
+  running: boolean;
+  endpoint: string;
+  memoryRoot: string;
+  sessionId: string;
+  readonly: boolean;
+  pid?: number | null;
+  command: string;
+  statusDetail: string;
+}
+
+export interface LivingArchiveMemoryServiceResult {
+  sessionId: string;
+  endpoint: string;
+  memoryRoot: string;
+  readonly: boolean;
+  command: string;
+  pid?: number | null;
+  alreadyRunning: boolean;
+}
+
+export interface PaperclipCompanySummary {
+  id: string;
+  name: string;
+  description?: string | null;
+  status?: string | null;
+  budgetMonthlyCents?: number | null;
+}
+
+export interface PaperclipAgentSummary {
+  id: string;
+  name: string;
+  role?: string | null;
+  title?: string | null;
+  status?: string | null;
+  budgetMonthlyCents?: number | null;
+  spentMonthlyCents?: number | null;
+}
+
+export interface PaperclipIssueSummary {
+  id: string;
+  title: string;
+  status?: string | null;
+  priority?: string | null;
+  assigneeAgentId?: string | null;
+  projectId?: string | null;
+}
+
+export interface PaperclipDashboardSnapshot {
+  endpoint: string;
+  companyId?: string | null;
+  companies: PaperclipCompanySummary[];
+  agents: PaperclipAgentSummary[];
+  issues: PaperclipIssueSummary[];
+  fetchedAt: string;
+}
+
+export interface PaperclipCreateIssueResult {
+  endpoint: string;
+  companyId: string;
+  issue: PaperclipIssueSummary;
+  auditSummary: string;
+}
+
 export interface StrategistIdentity {
   id: string;
   defaultName: string;
@@ -1915,6 +2002,7 @@ export interface UiPreferences {
     | "obsidian"
     | "browser"
     | "opencode"
+    | "paperclip"
     | "terminal"
     | "settings";
   activeChatThreadId: string;

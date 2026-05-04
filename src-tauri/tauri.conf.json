@@ -36,6 +36,8 @@
     ],
     "resources": [
       "../docs",
+      "../examples/living-archive-memory-service.mjs",
+      "../examples/living-archive-mcp.mjs",
       "../addons/resonant-browser-host",
       "../build/native-browser"
     ]

@@ -5,8 +5,10 @@ mod browser_service;
 mod delegation_service;
 mod hermes_service;
 mod host_state;
+mod memory_service;
 mod obsidian_service;
 mod opencode_service;
+mod paperclip_service;
 mod provider_service;
 mod recovery_service;
 mod terminal_service;
@@ -86,6 +88,11 @@ use crate::host_state::{
     read_provider_secrets, read_runtime_state_value, state_file, validate_manifest,
     write_provider_secrets,
 };
+use crate::memory_service::{
+    query_memory_service_status, start_memory_service, stop_memory_service, MemoryServiceResult,
+    MemoryServiceStartRequest, MemoryServiceStatus, MemoryServiceStatusRequest,
+    MemoryServiceStopRequest,
+};
 use crate::obsidian_service::{
     archive_obsidian_note, create_obsidian_folder, create_obsidian_note, index_obsidian_vault,
     list_obsidian_notes, move_obsidian_note, open_obsidian_note, query_obsidian_vault_status,
@@ -99,6 +106,13 @@ use crate::obsidian_service::{
 use crate::opencode_service::{
     query_opencode_status, start_opencode_service, stop_opencode_service, OpenCodeServiceResult,
     OpenCodeStartRequest, OpenCodeStatus, OpenCodeStopRequest,
+};
+use crate::paperclip_service::{
+    create_paperclip_issue_from_delegation, query_paperclip_dashboard_snapshot,
+    query_paperclip_status, start_paperclip_service, stop_paperclip_service,
+    PaperclipCreateIssueRequest, PaperclipCreateIssueResult, PaperclipDashboardRequest,
+    PaperclipDashboardSnapshot, PaperclipServiceResult, PaperclipStartRequest, PaperclipStatus,
+    PaperclipStatusRequest, PaperclipStopRequest,
 };
 use crate::provider_service::{
     abort_provider_service_chat_stream, execute_archive_ingest_probe,
@@ -643,6 +657,11 @@ fn opencode_status() -> OpenCodeStatus {
 }
 
 #[tauri::command]
+fn paperclip_status(request: PaperclipStatusRequest) -> PaperclipStatus {
+    query_paperclip_status(request)
+}
+
+#[tauri::command]
 fn hermes_status(profile_home: Option<String>) -> HermesInstallStatus {
     query_hermes_status(profile_home)
 }
@@ -656,6 +675,33 @@ async fn hermes_chat(
     tauri::async_runtime::spawn_blocking(move || execute_hermes_chat(request))
         .await
         .map_err(|error| format!("Hermes bridge task failed: {error}"))?
+}
+
+#[tauri::command]
+fn living_archive_memory_service_status(
+    app: AppHandle,
+    request: MemoryServiceStatusRequest,
+) -> Result<MemoryServiceStatus, String> {
+    assert_living_archive_host_access(&app, &["archive-read"])?;
+    query_memory_service_status(&app, request)
+}
+
+#[tauri::command]
+fn living_archive_memory_service_start(
+    app: AppHandle,
+    request: MemoryServiceStartRequest,
+) -> Result<MemoryServiceResult, String> {
+    assert_living_archive_host_access(&app, &["filesystem", "archive-read"])?;
+    start_memory_service(&app, request)
+}
+
+#[tauri::command]
+fn living_archive_memory_service_stop(
+    app: AppHandle,
+    request: MemoryServiceStopRequest,
+) -> Result<MemoryServiceResult, String> {
+    assert_living_archive_host_access(&app, &["filesystem", "archive-read"])?;
+    stop_memory_service(request)
 }
 
 #[tauri::command]
@@ -678,6 +724,42 @@ fn opencode_stop_service(
 ) -> Result<OpenCodeServiceResult, String> {
     assert_addon_capabilities(&app, "addon.opencode", &["shell"])?;
     stop_opencode_service(request)
+}
+
+#[tauri::command]
+fn paperclip_start_service(
+    app: AppHandle,
+    request: PaperclipStartRequest,
+) -> Result<PaperclipServiceResult, String> {
+    assert_addon_capabilities(&app, "addon.paperclip", &["network", "ui-embedding"])?;
+    start_paperclip_service(request)
+}
+
+#[tauri::command]
+fn paperclip_stop_service(
+    app: AppHandle,
+    request: PaperclipStopRequest,
+) -> Result<PaperclipServiceResult, String> {
+    assert_addon_capabilities(&app, "addon.paperclip", &["ui-embedding"])?;
+    stop_paperclip_service(request)
+}
+
+#[tauri::command]
+async fn paperclip_dashboard_snapshot(
+    app: AppHandle,
+    request: PaperclipDashboardRequest,
+) -> Result<PaperclipDashboardSnapshot, String> {
+    assert_addon_capabilities(&app, "addon.paperclip", &["network"])?;
+    query_paperclip_dashboard_snapshot(request).await
+}
+
+#[tauri::command]
+async fn paperclip_create_issue_from_delegation(
+    app: AppHandle,
+    request: PaperclipCreateIssueRequest,
+) -> Result<PaperclipCreateIssueResult, String> {
+    assert_addon_capabilities(&app, "addon.paperclip", &["network", "agent-delegation"])?;
+    create_paperclip_issue_from_delegation(request).await
 }
 
 #[tauri::command]
@@ -1079,9 +1161,17 @@ pub fn run() {
             browser_native_bridge_probe,
             hermes_status,
             hermes_chat,
+            living_archive_memory_service_status,
+            living_archive_memory_service_start,
+            living_archive_memory_service_stop,
             opencode_status,
             opencode_start_service,
             opencode_stop_service,
+            paperclip_status,
+            paperclip_start_service,
+            paperclip_stop_service,
+            paperclip_dashboard_snapshot,
+            paperclip_create_issue_from_delegation,
             terminal_status,
             terminal_run_command,
             terminal_start_pty,
