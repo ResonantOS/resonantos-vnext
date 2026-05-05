@@ -66,6 +66,7 @@ Public GitHub trace for this subsystem is currently thin, so the architecture ca
   - ingest-agent config presence
   - SQLite stats and recent activity when available
 - Archive search must operate over the real wiki/source registry, not a fake shell dataset.
+- Archive search may return matching imported/intake source excerpts as read-only evidence, but those hits must be clearly labeled as raw source material and must not be treated as trusted promoted wiki pages.
 - Guarded document reads must stay inside resolved archive roots.
 - Strategist chat may retrieve scoped archive context for a turn, but it must use host-mediated read/search calls and inject compact context into the model prompt rather than granting direct filesystem access.
 - Intake writes must land in managed intake roots only.

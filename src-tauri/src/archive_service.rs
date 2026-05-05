@@ -68,6 +68,7 @@ pub(crate) struct ArchiveSearchSourceHit {
     pub(crate) source_type: String,
     pub(crate) raw_path: String,
     pub(crate) processed: bool,
+    pub(crate) snippet: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -941,15 +942,14 @@ use archive_review::{
 };
 
 mod archive_source_library;
-#[cfg(test)]
-use archive_source_library::{
-    collect_imported_library_manifests, import_archive_library_with_runtime, supported_source_file,
-};
+use archive_source_library::collect_imported_library_manifests;
 pub(crate) use archive_source_library::{
     import_archive_library, list_imported_archive_libraries, preflight_archive_library_import,
     read_archive_library_classification_review, scan_archive_source_folders,
     write_archive_library_reorganisation_plan,
 };
+#[cfg(test)]
+use archive_source_library::{import_archive_library_with_runtime, supported_source_file};
 
 fn source_hash(path: &Path) -> Result<String, String> {
     let bytes = fs::read(path)
@@ -2080,6 +2080,182 @@ fn manual_archive_search(
     Ok(hits)
 }
 
+const ARCHIVE_SEARCH_STOPWORDS: &[&str] = &[
+    "about", "after", "again", "also", "and", "are", "can", "could", "did", "does", "for", "from",
+    "have", "how", "into", "know", "more", "not", "that", "the", "this", "what", "when", "where",
+    "which", "who", "why", "with", "you", "your",
+];
+
+fn archive_search_terms(query: &str) -> Vec<String> {
+    let mut terms = query
+        .split(|character: char| !character.is_alphanumeric())
+        .map(|term| term.to_lowercase())
+        .filter(|term| term.len() >= 3 && !ARCHIVE_SEARCH_STOPWORDS.contains(&term.as_str()))
+        .collect::<Vec<_>>();
+    terms.sort();
+    terms.dedup();
+    if terms.is_empty() {
+        let compact = query.trim().to_lowercase();
+        if !compact.is_empty() {
+            terms.push(compact);
+        }
+    }
+    terms
+}
+
+fn text_source_extension(path: &Path) -> bool {
+    matches!(
+        path.extension()
+            .and_then(|extension| extension.to_str())
+            .map(|extension| extension.to_lowercase())
+            .as_deref(),
+        Some("md")
+            | Some("markdown")
+            | Some("txt")
+            | Some("rtf")
+            | Some("csv")
+            | Some("json")
+            | Some("yaml")
+            | Some("yml")
+            | Some("html")
+            | Some("htm")
+    )
+}
+
+fn source_excerpt_for_terms(content: &str, terms: &[String]) -> String {
+    let matching_lines = content
+        .lines()
+        .filter(|line| {
+            let lower = line.to_lowercase();
+            terms.iter().any(|term| lower.contains(term))
+        })
+        .take(5)
+        .collect::<Vec<_>>();
+    let excerpt = if matching_lines.is_empty() {
+        content.lines().take(5).collect::<Vec<_>>().join(" ")
+    } else {
+        matching_lines.join(" ")
+    };
+    let compact = excerpt.split_whitespace().collect::<Vec<_>>().join(" ");
+    if compact.chars().count() > 700 {
+        format!("{}...", compact.chars().take(700).collect::<String>())
+    } else {
+        compact
+    }
+}
+
+fn imported_source_search(
+    runtime: &ArchiveRuntime,
+    query: &str,
+    limit: usize,
+    existing_source_ids: &HashSet<String>,
+) -> Result<Vec<ArchiveSearchSourceHit>, String> {
+    let terms = archive_search_terms(query);
+    if terms.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut libraries = Vec::new();
+    for (_, domain_root) in runtime.memory_domain_roots() {
+        collect_imported_library_manifests(&domain_root.join("metadata"), &mut libraries)?;
+    }
+
+    let mut hits = Vec::new();
+    for library in libraries {
+        let raw = fs::read_to_string(&library.manifest_path)
+            .map_err(|error| format!("Failed to read imported library manifest: {error}"))?;
+        let payload = serde_json::from_str::<Value>(&raw)
+            .map_err(|error| format!("Invalid imported library manifest JSON: {error}"))?;
+        let records = payload
+            .get("records")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+
+        for record in records {
+            let source_id = record
+                .get("sourceId")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            if source_id.is_empty() || existing_source_ids.contains(&source_id) {
+                continue;
+            }
+            let title = record
+                .get("title")
+                .and_then(Value::as_str)
+                .unwrap_or("Imported source")
+                .to_string();
+            let canonical_path = record
+                .get("canonicalPath")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            if canonical_path.is_empty() {
+                continue;
+            }
+            let original_path = record
+                .get("originalPath")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let title_and_path = format!("{title} {canonical_path} {original_path}").to_lowercase();
+            let title_or_path_match = terms.iter().any(|term| title_and_path.contains(term));
+            let source_path = PathBuf::from(&canonical_path);
+            let mut snippet = None;
+            let mut content_match = false;
+
+            if text_source_extension(&source_path) {
+                if let Ok(metadata) = fs::metadata(&source_path) {
+                    if metadata.len() <= 1_500_000 {
+                        if let Ok(content) = fs::read_to_string(&source_path) {
+                            let lower = content.to_lowercase();
+                            content_match = terms.iter().any(|term| lower.contains(term));
+                            if content_match || title_or_path_match {
+                                snippet = Some(source_excerpt_for_terms(&content, &terms));
+                            }
+                        }
+                    }
+                }
+            }
+
+            if !title_or_path_match && !content_match {
+                continue;
+            }
+
+            let score = if title.to_lowercase().contains(&terms[0]) {
+                4
+            } else if title_or_path_match {
+                3
+            } else {
+                1
+            };
+            hits.push((
+                score,
+                ArchiveSearchSourceHit {
+                    source_id,
+                    title,
+                    source_type: record
+                        .get("sourceType")
+                        .and_then(Value::as_str)
+                        .unwrap_or("source")
+                        .to_string(),
+                    raw_path: canonical_path,
+                    processed: false,
+                    snippet,
+                },
+            ));
+        }
+    }
+
+    hits.sort_by(|left, right| {
+        right
+            .0
+            .cmp(&left.0)
+            .then_with(|| left.1.title.cmp(&right.1.title))
+    });
+    Ok(hits.into_iter().map(|(_, hit)| hit).take(limit).collect())
+}
+
 pub(crate) fn archive_system_memory_status(
     app: &AppHandle,
 ) -> Result<ArchiveSystemMemoryStatus, String> {
@@ -2151,7 +2327,7 @@ pub(crate) fn search_archive(
     let limit = request.limit.unwrap_or(12).clamp(1, 50);
     let search_term = format!("%{query}%");
 
-    let (pages, sources) = match open_archive_db(&runtime)? {
+    let (pages, mut sources) = match open_archive_db(&runtime)? {
         Some(connection) => {
             let mut page_statement = connection
                 .prepare(
@@ -2220,6 +2396,7 @@ pub(crate) fn search_archive(
                         source_type: row.get("type")?,
                         raw_path: row.get("raw_path")?,
                         processed: row.get::<_, i64>("processed")? == 1,
+                        snippet: None,
                     })
                 })
                 .map_err(|error| format!("Failed to run archive source search: {error}"))?;
@@ -2234,6 +2411,18 @@ pub(crate) fn search_archive(
         }
         None => (manual_archive_search(&runtime, &query, limit)?, Vec::new()),
     };
+    let existing_source_ids = sources
+        .iter()
+        .map(|source| source.source_id.clone())
+        .collect::<HashSet<_>>();
+    if sources.len() < limit {
+        sources.extend(imported_source_search(
+            &runtime,
+            &query,
+            limit - sources.len(),
+            &existing_source_ids,
+        )?);
+    }
 
     Ok(ArchiveSearchResult {
         query,
@@ -2454,6 +2643,7 @@ mod tests {
     use super::{ArchiveWikiNavigationLogEntry, ArchiveWikiNavigationPage};
     use rusqlite::{params, Connection};
     use serde_json::{json, Value};
+    use std::collections::HashSet;
     use std::fs;
     use std::path::Path;
 
@@ -3084,6 +3274,54 @@ mod tests {
             mapping_file: root.join("CONFIG").join("VAULT_MAP.json"),
             mappings: Vec::new(),
         }
+    }
+
+    #[test]
+    fn searches_imported_source_library_with_question_terms() {
+        let root = std::env::temp_dir().join(format!(
+            "resonantos-imported-source-search-test-{}-{}",
+            std::process::id(),
+            super::unix_timestamp().replace(':', "-")
+        ));
+        let source_root = root.join("source-folder").join("02_PROTOCOL_LIBRARY");
+        fs::create_dir_all(&source_root).expect("test source folder should be writable");
+        fs::write(
+            source_root.join("Play_047_The_Mixtape_Constraint.md"),
+            "# Play #47: The Mixtape Constraint\n\nThe Protocol of Mixtape forbids average answers by adding deliberate curation and friction.",
+        )
+        .expect("test source file should write");
+
+        let runtime = test_archive_runtime(&root);
+        super::import_archive_library_with_runtime(
+            &runtime,
+            super::ArchiveLibraryImportRequest {
+                source_path: root.join("source-folder").display().to_string(),
+                domain: "mixed-library".to_string(),
+                import_mode: "copy".to_string(),
+                library_name: Some("Protocol Library".to_string()),
+                actor_id: "strategist.core".to_string(),
+                excluded_top_folders: None,
+            },
+        )
+        .expect("library import should succeed");
+
+        let hits = super::imported_source_search(
+            &runtime,
+            "do you know what's the mixtape protocol?",
+            5,
+            &HashSet::new(),
+        )
+        .expect("imported source search should succeed");
+
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].title, "Play_047_The_Mixtape_Constraint");
+        assert!(hits[0]
+            .snippet
+            .as_deref()
+            .unwrap_or_default()
+            .contains("Protocol of Mixtape"));
+
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

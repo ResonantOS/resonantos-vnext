@@ -25,6 +25,7 @@ export type ArchiveContextBundle = {
     sourceType: string;
     rawPath: string;
     processed: boolean;
+    snippet?: string;
   }>;
   failures: string[];
 };
@@ -168,12 +169,16 @@ export const buildArchiveContextBundle = async (
   return {
     query,
     pages,
-    sources: search.sources.slice(0, 3).map((source) => ({
-      title: source.title,
-      sourceType: source.sourceType,
-      rawPath: source.rawPath,
-      processed: source.processed,
-    })),
+    sources: search.sources.slice(0, 3).map((source) => {
+      const sourceWithSnippet = source as typeof source & { snippet?: string };
+      return {
+        title: source.title,
+        sourceType: source.sourceType,
+        rawPath: source.rawPath,
+        processed: source.processed,
+        snippet: sourceWithSnippet.snippet,
+      };
+    }),
     failures,
   };
 };
@@ -196,14 +201,21 @@ export const formatArchiveContextForPrompt = (bundle: ArchiveContextBundle | nul
     ].join("\n"),
   );
   const sourceBlocks = bundle.sources.map((source, index) =>
-    `Source ${index + 1}: ${source.title} (${source.sourceType}, processed=${source.processed}) at ${source.rawPath}`,
+    [
+      `Source ${index + 1}: ${source.title} (${source.sourceType}, processed=${source.processed})`,
+      `Path: ${source.rawPath}`,
+      "Boundary: raw/imported source evidence, not yet a trusted promoted wiki page.",
+      source.snippet ? `Excerpt: ${source.snippet}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n"),
   );
   const failureBlock = bundle.failures.length ? [`Read failures:`, ...bundle.failures].join("\n") : "";
 
   return [
     "Living Archive context retrieved for this turn.",
     `Search query: ${bundle.query}`,
-    "Use this context as memory evidence. If it is insufficient, say what is missing.",
+    "Use this context as memory evidence. Clearly distinguish promoted wiki pages from raw/imported source evidence. If it is insufficient, say what is missing.",
     ...pageBlocks,
     sourceBlocks.length ? ["Tracked source hits:", ...sourceBlocks].join("\n") : "",
     failureBlock,
@@ -241,9 +253,19 @@ export const formatSystemMemoryForPrompt = (bundle: SystemMemoryContextBundle | 
 };
 
 export const archiveCitationsFromBundle = (bundle: ArchiveContextBundle | null) =>
-  bundle?.pages.map((page) => ({
-    title: page.title,
-    path: page.path,
-    pageType: page.pageType,
-    snippet: page.snippet,
-  })) ?? [];
+  bundle
+    ? [
+        ...bundle.pages.map((page) => ({
+          title: page.title,
+          path: page.path,
+          pageType: page.pageType,
+          snippet: page.snippet,
+        })),
+        ...bundle.sources.map((source) => ({
+          title: source.title,
+          path: source.rawPath,
+          pageType: "raw-imported-source",
+          snippet: source.snippet,
+        })),
+      ]
+    : [];
