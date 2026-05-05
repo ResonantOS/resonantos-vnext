@@ -54,6 +54,7 @@ export type RuntimeNodeKind = "cloud" | "local" | "remote-user-owned";
 export type RuntimeNodeLocality = "cloud" | "desktop-local" | "lan-remote" | "wan-remote";
 export type RuntimeNodeHealthState = "ready" | "degraded" | "deployable" | "unavailable";
 export type ProviderExecutionAdapterId = "cloud-openai-compatible" | "cloud-minimax-compatible" | "local-ollama";
+export type ProviderCostPosture = "free-local" | "subscription" | "paid-api" | "emergency-only" | "unknown";
 export type RoutingResolutionReason =
   | "primary-healthy"
   | "primary-unavailable"
@@ -566,6 +567,7 @@ export interface StrategyRouteReference {
   providerProfileId: string;
   runtimeNodeId?: string;
   model: string;
+  costPosture?: ProviderCostPosture;
   note?: string;
 }
 

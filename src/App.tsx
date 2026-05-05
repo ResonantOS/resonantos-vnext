@@ -142,8 +142,11 @@ import {
   executeRefreshMemoryServiceStatus,
   executeProviderSmokeTest,
   executeSaveProviderSecret,
+  executeSetupProviderProfile,
   executeStartMemoryService,
   executeStopMemoryService,
+  updateModelWorkloadStrategy,
+  updateModelWorkloadStrategyRoute,
   updateProviderProfile,
   type CreateProviderProfileInput,
 } from "./modules/settings/controller";
@@ -736,6 +739,16 @@ export function App() {
   const handleCreateProviderProfile = async (input: CreateProviderProfileInput) => {
     await executeCreateProviderProfile({
       ...input,
+      updateRuntimeState,
+      setSettingsNotice,
+      errorMessageOf,
+    });
+  };
+
+  const handleSetupProviderProfile = async (profileId: string) => {
+    await executeSetupProviderProfile({
+      snapshot: { state, bundled, sideloaded },
+      profileId,
       updateRuntimeState,
       setSettingsNotice,
       errorMessageOf,
@@ -2075,12 +2088,19 @@ export function App() {
                   updateProviderProfile(profileId, field, value, updateRuntimeState)
                 }
                 onCreateProvider={(input) => void handleCreateProviderProfile(input)}
+                onUpdateWorkloadStrategy={(strategyId, patch) =>
+                  updateModelWorkloadStrategy(strategyId, patch, updateRuntimeState)
+                }
+                onUpdateWorkloadStrategyRoute={(strategyId, routeKey) =>
+                  updateModelWorkloadStrategyRoute(strategyId, routeKey, updateRuntimeState)
+                }
                 onProviderDraftChange={(profileId, value) =>
                   setProviderDrafts((current) => ({ ...current, [profileId]: value }))
                 }
                 onSaveProviderSecret={(profileId) => void handleSaveProviderSecret(profileId)}
                 onProbeProvider={(profileId) => void refreshProviderDiagnostics(profileId)}
                 onProbeAllProviders={() => void refreshProviderDiagnostics()}
+                onSetupProvider={(profileId) => void handleSetupProviderProfile(profileId)}
                 onSmokeTestProvider={(profileId) => void runProviderSmokeTest(profileId)}
                 onRefreshMemoryServiceStatus={() => void refreshMemoryServiceStatus()}
                 onStartMemoryService={() => void startMemoryService()}

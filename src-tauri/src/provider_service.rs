@@ -1,10 +1,11 @@
 use std::collections::HashSet;
+use std::net::{Ipv4Addr, UdpSocket};
 use std::process::{Command, Stdio};
 use std::sync::{LazyLock, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use futures_util::StreamExt;
+use futures_util::{stream, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Window};
@@ -439,6 +440,9 @@ fn resolve_provider_execution_adapter(
 ) -> Result<ProviderExecutionAdapter, String> {
     match runtime_node_kind.unwrap_or("cloud") {
         "local" => Ok(ProviderExecutionAdapter::LocalOllama),
+        "remote-user-owned" if provider_type == "local" => {
+            Ok(ProviderExecutionAdapter::LocalOllama)
+        }
         "cloud" => match provider_type {
             "minimax" => Ok(ProviderExecutionAdapter::CloudMiniMaxCompatible),
             "openai" | "openai-compatible" => Ok(ProviderExecutionAdapter::CloudOpenAiCompatible),
@@ -517,7 +521,7 @@ pub(crate) fn ensure_runtime_kind_supported(
     auth_tier: Option<&str>,
 ) -> Result<(), String> {
     if let Some(kind) = runtime_node_kind {
-        if kind != "cloud" && kind != "local" {
+        if kind != "cloud" && kind != "local" && kind != "remote-user-owned" {
             let tier_note = auth_tier
                 .map(|tier| format!(" ({tier})"))
                 .unwrap_or_default();
@@ -525,7 +529,7 @@ pub(crate) fn ensure_runtime_kind_supported(
                 .map(|node| format!("Runtime node `{node}`"))
                 .unwrap_or_else(|| "Selected runtime node".to_string());
             return Err(format!(
-                "{node_note} is a {kind} route{tier_note}, but live Strategist chat currently supports only cloud and desktop-local runtime nodes."
+                "{node_note} is a {kind} route{tier_note}, but live Strategist chat currently supports only cloud, desktop-local, and user-owned LAN runtime nodes."
             ));
         }
     }
@@ -605,6 +609,136 @@ fn extract_ollama_tag_model_ids(payload: &Value) -> Vec<String> {
 
 fn first_two_models(models: &[String]) -> (Option<String>, Option<String>) {
     (models.first().cloned(), models.get(1).cloned())
+}
+
+async fn fetch_ollama_tags(
+    client: &reqwest::Client,
+    base_url: &str,
+) -> Result<(String, Vec<String>), String> {
+    let endpoint = ollama_tags_endpoint(base_url);
+    let response =
+        client.get(&endpoint).send().await.map_err(|error| {
+            format!("Failed to reach Ollama model list at `{endpoint}`: {error}")
+        })?;
+    let status = response.status();
+    let payload = response.json::<Value>().await.map_err(|error| {
+        format!("Failed to decode Ollama model list from `{endpoint}`: {error}")
+    })?;
+    if !status.is_success() {
+        return Err(format!(
+            "Ollama model discovery failed with HTTP {status} at `{endpoint}`."
+        ));
+    }
+    Ok((endpoint, extract_ollama_tag_model_ids(&payload)))
+}
+
+fn normalized_ollama_base_url(url: &str) -> String {
+    url.trim_end_matches('/').to_string()
+}
+
+fn push_unique_url(urls: &mut Vec<String>, url: String) {
+    let normalized = normalized_ollama_base_url(&url);
+    if !normalized.is_empty() && !urls.contains(&normalized) {
+        urls.push(normalized);
+    }
+}
+
+fn local_subnet_ollama_candidates() -> Vec<String> {
+    let socket = match UdpSocket::bind("0.0.0.0:0") {
+        Ok(socket) => socket,
+        Err(_) => return Vec::new(),
+    };
+    if socket.connect("8.8.8.8:80").is_err() {
+        return Vec::new();
+    }
+    let local_ip = match socket.local_addr().map(|addr| addr.ip()) {
+        Ok(std::net::IpAddr::V4(ip)) => ip,
+        _ => return Vec::new(),
+    };
+    let octets = local_ip.octets();
+    (1..=254)
+        .filter_map(|host| {
+            let candidate = Ipv4Addr::new(octets[0], octets[1], octets[2], host);
+            if candidate == local_ip {
+                None
+            } else {
+                Some(format!("http://{candidate}:11434"))
+            }
+        })
+        .collect()
+}
+
+fn remote_ollama_discovery_candidates(configured_base_url: &str) -> Vec<String> {
+    let mut urls = Vec::new();
+    push_unique_url(&mut urls, configured_base_url.to_string());
+    for host in [
+        "http://gx10.local:11434",
+        "http://asus-gx10.local:11434",
+        "http://dgx-spark.local:11434",
+        "http://ollama.local:11434",
+    ] {
+        push_unique_url(&mut urls, host.to_string());
+    }
+    urls
+}
+
+async fn discover_remote_ollama_runtime(
+    configured_base_url: &str,
+) -> Result<(String, Vec<String>, String), String> {
+    let fixed_client = reqwest::Client::builder()
+        .timeout(Duration::from_millis(1_250))
+        .build()
+        .map_err(|error| format!("Failed to build HTTP client: {error}"))?;
+    let mut failures = Vec::new();
+    for candidate in remote_ollama_discovery_candidates(configured_base_url) {
+        match fetch_ollama_tags(&fixed_client, &candidate).await {
+            Ok((endpoint, models)) if !models.is_empty() => {
+                return Ok((
+                    candidate,
+                    models,
+                    format!("Discovered Ollama via `{endpoint}`."),
+                ));
+            }
+            Ok((endpoint, _)) => failures.push(format!("{endpoint}: no models returned")),
+            Err(error) => failures.push(error),
+        }
+    }
+
+    let scan_client = reqwest::Client::builder()
+        .timeout(Duration::from_millis(320))
+        .build()
+        .map_err(|error| format!("Failed to build HTTP client: {error}"))?;
+    let mut scans = stream::iter(
+        local_subnet_ollama_candidates()
+            .into_iter()
+            .map(|candidate| {
+                let client = scan_client.clone();
+                async move {
+                    let result = fetch_ollama_tags(&client, &candidate).await;
+                    (candidate, result)
+                }
+            }),
+    )
+    .buffer_unordered(48);
+
+    while let Some((candidate, result)) = scans.next().await {
+        match result {
+            Ok((endpoint, models)) if !models.is_empty() => {
+                return Ok((
+                    candidate,
+                    models,
+                    format!("Discovered Ollama via LAN scan at `{endpoint}`."),
+                ));
+            }
+            Ok((endpoint, _)) => failures.push(format!("{endpoint}: no models returned")),
+            Err(_) => {}
+        }
+    }
+
+    Err(format!(
+        "No Ollama runtime with installed models was discovered. Tried configured endpoint, common host aliases, and the local /24 subnet. First failures: {}",
+        failures.into_iter().take(3).collect::<Vec<_>>().join(" | ")
+    ))
 }
 
 fn parse_ollama_model_names(stdout: &str) -> Vec<String> {
@@ -1595,22 +1729,45 @@ pub(crate) async fn execute_provider_setup_probe(
     };
 
     if request.provider_type == "local" && !base_url.trim_end_matches('/').ends_with("/v1") {
-        let endpoint = ollama_tags_endpoint(&base_url);
-        let response = reqwest::Client::builder()
-            .timeout(Duration::from_secs(8))
-            .build()
-            .map_err(|error| format!("Failed to build HTTP client: {error}"))?
-            .get(&endpoint)
-            .send()
-            .await
-            .map_err(|error| {
-                format!("Failed to reach Ollama model list at `{endpoint}`: {error}")
-            })?;
-        let status = response.status();
-        let payload = response.json::<Value>().await.map_err(|error| {
-            format!("Failed to decode Ollama model list from `{endpoint}`: {error}")
-        })?;
-        if !status.is_success() {
+        let discovery = if request.runtime_node_kind.as_deref() == Some("remote-user-owned") {
+            discover_remote_ollama_runtime(&base_url).await
+        } else {
+            let client = reqwest::Client::builder()
+                .timeout(Duration::from_secs(8))
+                .build()
+                .map_err(|error| format!("Failed to build HTTP client: {error}"))?;
+            fetch_ollama_tags(&client, &base_url)
+                .await
+                .map(|(endpoint, models)| {
+                    (
+                        base_url.clone(),
+                        models,
+                        format!("Discovered Ollama via `{endpoint}`."),
+                    )
+                })
+        };
+
+        let (resolved_base_url, models, discovery_detail) = match discovery {
+            Ok(discovery) => discovery,
+            Err(error) => {
+                let endpoint = ollama_tags_endpoint(&base_url);
+                return Ok(ProviderSetupProbeResult {
+                    provider_id: request.provider_id,
+                    ok: false,
+                    setup_state: "unavailable".to_string(),
+                    discovered_models: Vec::new(),
+                    recommended_primary_model: None,
+                    recommended_fallback_model: None,
+                    endpoint,
+                    checked_at,
+                    summary: "Ollama model discovery failed.".to_string(),
+                    detail: error,
+                    source: "ollama-tags".to_string(),
+                });
+            }
+        };
+
+        if models.is_empty() {
             return Ok(ProviderSetupProbeResult {
                 provider_id: request.provider_id,
                 ok: false,
@@ -1618,14 +1775,13 @@ pub(crate) async fn execute_provider_setup_probe(
                 discovered_models: Vec::new(),
                 recommended_primary_model: None,
                 recommended_fallback_model: None,
-                endpoint,
+                endpoint: ollama_tags_endpoint(&resolved_base_url),
                 checked_at,
-                summary: format!("Ollama model discovery failed with HTTP {status}."),
+                summary: "Ollama responded, but no installed models were returned.".to_string(),
                 detail: "Ollama setup uses the official /api/tags model-list endpoint.".to_string(),
                 source: "ollama-tags".to_string(),
             });
         }
-        let models = extract_ollama_tag_model_ids(&payload);
         let (primary, fallback) = first_two_models(&models);
         let has_primary = primary.is_some();
         return Ok(ProviderSetupProbeResult {
@@ -1639,14 +1795,14 @@ pub(crate) async fn execute_provider_setup_probe(
             discovered_models: models,
             recommended_primary_model: primary,
             recommended_fallback_model: fallback,
-            endpoint,
+            endpoint: resolved_base_url,
             checked_at,
             summary: if has_primary {
                 "Ollama runtime responded with installed models.".to_string()
             } else {
                 "Ollama responded, but no installed models were returned.".to_string()
             },
-            detail: "Discovered through Ollama /api/tags; no model names were guessed.".to_string(),
+            detail: format!("{discovery_detail} No model names were guessed."),
             source: "ollama-tags".to_string(),
         });
     }
@@ -1899,14 +2055,13 @@ mod tests {
     }
 
     #[test]
-    fn rejects_remote_runtime_nodes_for_live_provider_service_chat() {
-        let error = ensure_runtime_kind_supported(
+    fn accepts_user_owned_lan_runtime_nodes_for_live_provider_service_chat() {
+        ensure_runtime_kind_supported(
             Some("node-gx10-qwen"),
             Some("remote-user-owned"),
             Some("supported"),
         )
-        .expect_err("remote runtime should still be rejected for live provider service chat");
-        assert!(error.contains("cloud and desktop-local runtime nodes"));
+        .expect("user-owned LAN runtime should be allowed for live provider service chat after setup probe");
     }
 
     #[test]

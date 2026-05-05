@@ -15,7 +15,7 @@ describe("strategist provider service routing", () => {
     expect(resolved.decision.resolutionReason).toBe("primary-healthy");
   });
 
-  it("falls back to the local resurrect runtime when cloud routes are unavailable", () => {
+  it("falls back to the user-owned remote runtime before the desktop resurrect floor once setup verified it", () => {
     const state = buildDefaultState([]);
     const degradedState = {
       ...state,
@@ -23,11 +23,36 @@ describe("strategist provider service routing", () => {
         provider.providerType === "local" ? provider : { ...provider, status: "missing" as const },
       ),
       runtimeNodes: state.runtimeNodes.map((node) =>
-        node.kind === "cloud" ? { ...node, healthState: "unavailable" as const } : node,
+        node.kind === "cloud"
+          ? { ...node, healthState: "unavailable" as const }
+          : node.id === "node-gx10-qwen"
+            ? { ...node, healthState: "ready" as const }
+            : node,
       ),
     };
 
     const resolved = resolveStrategistChatRoute(degradedState);
+
+    expect(resolved.provider?.id).toBe("shared-local");
+    expect(resolved.runtimeNode?.id).toBe("node-gx10-qwen");
+    expect(resolved.decision.executionAdapterId).toBe("local-ollama");
+    expect(resolved.model).toBe("qwen-3.5");
+    expect(resolved.decision.resolutionReason).toBe("fallback-in-policy");
+  });
+
+  it("uses the desktop resurrect floor when cloud and remote user-owned routes are unavailable", () => {
+    const state = buildDefaultState([]);
+    const unavailableState = {
+      ...state,
+      providers: state.providers.map((provider) =>
+        provider.providerType === "local" ? provider : { ...provider, status: "missing" as const },
+      ),
+      runtimeNodes: state.runtimeNodes.map((node) =>
+        node.kind === "cloud" || node.kind === "remote-user-owned" ? { ...node, healthState: "unavailable" as const } : node,
+      ),
+    };
+
+    const resolved = resolveStrategistChatRoute(unavailableState);
 
     expect(resolved.provider?.id).toBe("shared-local");
     expect(resolved.runtimeNode?.id).toBe("node-local-resurrect");

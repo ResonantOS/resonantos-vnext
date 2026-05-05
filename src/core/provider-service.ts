@@ -35,16 +35,16 @@ export const resolveAgentChatRoute = (
     ? resolveStrategyRoute(state, strategy, {
         consumerId: agent?.id ?? agentId,
         preferredModel,
-        allowedRuntimeKinds: isRecoveryAgent ? ["local", "cloud"] : ["cloud", "local"],
-        preferredLocalities: isRecoveryAgent ? ["desktop-local", "cloud"] : ["cloud", "desktop-local"],
+        allowedRuntimeKinds: isRecoveryAgent ? ["local", "cloud", "remote-user-owned"] : ["cloud", "local", "remote-user-owned"],
+        preferredLocalities: isRecoveryAgent ? ["desktop-local", "cloud", "lan-remote"] : ["cloud", "desktop-local", "lan-remote"],
       })
     : resolveProviderRoute(state, {
         consumerId: agent?.id ?? agentId,
         primaryProviderProfileId: agent?.providerProfileId,
         fallbackProviderProfileId: agent?.fallbackProviderProfileId,
         preferredModels: preferredModel ? [preferredModel] : undefined,
-        allowedRuntimeKinds: isRecoveryAgent ? ["local", "cloud"] : localRecoveryPinned ? ["local"] : ["cloud", "local"],
-        preferredLocalities: isRecoveryAgent ? ["desktop-local", "cloud"] : localRecoveryPinned ? ["desktop-local"] : ["cloud", "desktop-local"],
+        allowedRuntimeKinds: isRecoveryAgent ? ["local", "cloud", "remote-user-owned"] : localRecoveryPinned ? ["local"] : ["cloud", "local", "remote-user-owned"],
+        preferredLocalities: isRecoveryAgent ? ["desktop-local", "cloud", "lan-remote"] : localRecoveryPinned ? ["desktop-local"] : ["cloud", "desktop-local", "lan-remote"],
         fallbackPolicyId: localRecoveryPinned ? "strict-supported-only" : "core-default",
         allowResurrection: true,
       });
@@ -75,13 +75,13 @@ export const resolveWorkloadRoute = (
     ? resolveStrategyRoute(state, strategy, {
         consumerId: `workload:${workloadClass}`,
         preferredModel,
-        allowedRuntimeKinds: workloadClass === "archive-ingest" ? ["cloud"] : ["cloud", "local"],
+        allowedRuntimeKinds: workloadClass === "archive-ingest" ? ["cloud"] : ["cloud", "local", "remote-user-owned"],
         preferredLocalities: workloadClass === "archive-ingest" ? ["cloud"] : ["cloud", "lan-remote", "desktop-local"],
       })
     : resolveProviderRoute(state, {
         consumerId: `workload:${workloadClass}`,
         preferredModels: preferredModel ? [preferredModel] : undefined,
-        allowedRuntimeKinds: workloadClass === "archive-ingest" ? ["cloud"] : ["cloud", "local"],
+        allowedRuntimeKinds: workloadClass === "archive-ingest" ? ["cloud"] : ["cloud", "local", "remote-user-owned"],
         preferredLocalities: workloadClass === "archive-ingest" ? ["cloud"] : ["cloud", "lan-remote", "desktop-local"],
         fallbackPolicyId: workloadClass === "archive-ingest" ? "core-default" : "core-default",
         allowResurrection: workloadClass !== "archive-ingest",

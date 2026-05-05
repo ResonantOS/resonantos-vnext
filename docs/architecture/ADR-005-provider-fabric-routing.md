@@ -162,6 +162,8 @@ The Engineer/setup path must verify provider setup through provider-owned or run
 - OpenAI and OpenAI-compatible cloud/gateway routes use `GET /v1/models` with the saved credential.
 - OpenAI-compatible gateways use their documented base URL plus `/models`.
 - Ollama uses `GET /api/tags` against the selected local runtime endpoint.
+- User-owned LAN runtimes such as GX10/DGX-class machines must start as non-routable placeholders until setup discovers a real HTTP runtime endpoint.
+- LAN runtime setup may try the configured endpoint, known local host aliases, and bounded local subnet discovery for Ollama `/api/tags`; routing is enabled only after a real model-list response.
 - Unsupported native providers may be saved as profiles, but the probe must return `adapter-pending` instead of inventing a model list.
 - The setup probe may update provider model lists only from discovery responses. Catalog starter models are hints, not proof of availability.
 
@@ -173,6 +175,29 @@ Must express:
 - whether experimental routes are permitted
 - whether resurrection is allowed
 - whether the route is hard-stop or degrade-on-failure
+
+### Model Strategy Profile
+
+The user and Resonant Engineer Agent must be able to maintain a workload-level strategy profile. This is where cost, subscription posture, locality, and quality expectations become explicit operating policy instead of hidden routing behavior.
+
+Must express:
+
+- workload owner: agent or system workload
+- workload class: primary chat, recovery, archive ingest, routine/background work, coding, or future classes
+- primary route: provider profile, runtime node, model, and cost posture
+- fallback chain: ordered provider/runtime/model routes
+- failure behavior: hard-stop or use agreed fallbacks
+- emergency hard floor: a deployable local route that remains available when richer routes fail
+
+Cost posture must be visible using at least these labels:
+
+- `free-local`
+- `subscription`
+- `paid-api`
+- `emergency-only`
+- `unknown`
+
+Routing still belongs to the provider fabric. The strategy profile is user-agreed policy input; it is not a bypass that lets an add-on choose unmanaged providers directly.
 
 ## Consequences
 

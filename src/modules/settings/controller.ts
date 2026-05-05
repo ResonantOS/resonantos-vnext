@@ -12,6 +12,7 @@ import type {
   ProviderSmokeTestResult,
   ResonantShellState,
 } from "../../core/contracts";
+import { routeFromOptionKey, updateWorkloadStrategy, type WorkloadStrategyPatch } from "../../core/model-strategy";
 import { applyProviderDiagnostics } from "../../core/policies";
 import {
   requestLivingArchiveMemoryServiceStart,
@@ -73,6 +74,14 @@ export type CreateProviderProfileInput = {
 };
 
 type ExecuteCreateProviderProfileInput = CreateProviderProfileInput & {
+  updateRuntimeState: (updater: (current: ResonantShellState) => ResonantShellState) => void;
+  setSettingsNotice: Dispatch<SetStateAction<string | null>>;
+  errorMessageOf: (error: unknown, fallback: string) => string;
+};
+
+type ExecuteSetupProviderProfileInput = {
+  snapshot: ReadyShellSnapshot;
+  profileId: string;
   updateRuntimeState: (updater: (current: ResonantShellState) => ResonantShellState) => void;
   setSettingsNotice: Dispatch<SetStateAction<string | null>>;
   errorMessageOf: (error: unknown, fallback: string) => string;
@@ -229,6 +238,66 @@ const createStableProviderId = (label: string, templateId: ProviderTemplateId): 
   return `provider-${safeLabel || templateId}-${suffix}`;
 };
 
+const applySetupProbeToProvider = async ({
+  provider,
+  runtimeNode,
+  errorMessageOf,
+}: {
+  provider: ProviderProfile;
+  runtimeNode: ProviderRuntimeNode;
+  errorMessageOf: (error: unknown, fallback: string) => string;
+}): Promise<{ provider: ProviderProfile; runtimeNode: ProviderRuntimeNode; notice: string }> => {
+  try {
+    const setupProbe = await requestProviderSetupProbe({
+      providerId: provider.id,
+      providerType: provider.providerType,
+      apiBaseUrl: provider.apiBaseUrl,
+      runtimeNodeKind: runtimeNode.kind,
+      runtimeNodeEndpoint: runtimeNode.endpoint,
+      authTier: provider.authTier,
+    });
+    if (setupProbe.discoveredModels.length === 0) {
+      return {
+        provider,
+        runtimeNode,
+        notice: `${provider.label} setup probe finished: ${setupProbe.summary}`,
+      };
+    }
+    const nextProvider: ProviderProfile = {
+      ...provider,
+      apiBaseUrl: setupProbe.endpoint.startsWith("http") ? setupProbe.endpoint : provider.apiBaseUrl,
+      allowedModels: setupProbe.discoveredModels,
+      primaryModel: setupProbe.recommendedPrimaryModel ?? setupProbe.discoveredModels[0] ?? provider.primaryModel,
+      fallbackModel: setupProbe.recommendedFallbackModel ?? setupProbe.discoveredModels[1] ?? provider.fallbackModel,
+      modelContext: setupProbe.discoveredModels.map((model) => ({
+        model,
+        maxContextTokens: 32_000,
+        tokenEstimateMethod: "provider-metadata",
+        source: "provider-default",
+      })),
+      status: setupProbe.setupState === "routable-now" ? "ready" : "missing",
+    };
+    const nextRuntimeNode: ProviderRuntimeNode = {
+      ...runtimeNode,
+      endpoint: setupProbe.endpoint.startsWith("http") ? setupProbe.endpoint : runtimeNode.endpoint,
+      supportedModels: setupProbe.discoveredModels,
+      healthState: setupProbe.setupState === "routable-now" ? "ready" : "unavailable",
+      notes: [`${setupProbe.setupState}: ${setupProbe.summary}`, setupProbe.detail],
+    };
+    return {
+      provider: nextProvider,
+      runtimeNode: nextRuntimeNode,
+      notice: `${provider.label} setup probe finished: ${setupProbe.summary}`,
+    };
+  } catch (error) {
+    return {
+      provider,
+      runtimeNode,
+      notice: `${provider.label} setup probe failed: ${errorMessageOf(error, "Probe failed.")}`,
+    };
+  }
+};
+
 export const executeCreateProviderProfile = async ({
   templateId,
   label,
@@ -294,54 +363,39 @@ export const executeCreateProviderProfile = async ({
       await saveProviderSecret(providerId, cleanSecret);
     }
 
-    let nextProvider = provider;
-    let nextRuntimeNode = runtimeNode;
-    let setupNotice = `${cleanLabel} was added to the provider fabric.`;
-
-    try {
-      const setupProbe = await requestProviderSetupProbe({
-        providerId,
-        providerType: provider.providerType,
-        apiBaseUrl: provider.apiBaseUrl,
-        runtimeNodeKind: runtimeNode.kind,
-        runtimeNodeEndpoint: runtimeNode.endpoint,
-        authTier: provider.authTier,
-      });
-      if (setupProbe.discoveredModels.length > 0) {
-        nextProvider = {
-          ...provider,
-          allowedModels: setupProbe.discoveredModels,
-          primaryModel: setupProbe.recommendedPrimaryModel ?? setupProbe.discoveredModels[0] ?? provider.primaryModel,
-          fallbackModel: setupProbe.recommendedFallbackModel ?? setupProbe.discoveredModels[1] ?? provider.fallbackModel,
-          modelContext: setupProbe.discoveredModels.map((model) => ({
-            model,
-            maxContextTokens: 32_000,
-            tokenEstimateMethod: "provider-metadata",
-            source: "provider-default",
-          })),
-          status: setupProbe.setupState === "routable-now" ? "ready" : setupProbe.setupState === "adapter-pending" ? "missing" : "missing",
-        };
-        nextRuntimeNode = {
-          ...runtimeNode,
-          supportedModels: setupProbe.discoveredModels,
-          healthState: setupProbe.setupState === "routable-now" ? "ready" : setupProbe.setupState === "adapter-pending" ? "unavailable" : "unavailable",
-          notes: [`${setupProbe.setupState}: ${setupProbe.summary}`, setupProbe.detail],
-        };
-      }
-      setupNotice = `${cleanLabel} was added. ${setupProbe.summary}`;
-    } catch (error) {
-      setupNotice = `${cleanLabel} was added, but automated setup probe failed: ${errorMessageOf(error, "Probe failed.")}`;
-    }
+    const setupResult = await applySetupProbeToProvider({ provider, runtimeNode, errorMessageOf });
 
     updateRuntimeState((draft) => ({
       ...draft,
-      providers: [...draft.providers, nextProvider],
-      runtimeNodes: [...draft.runtimeNodes, nextRuntimeNode],
+      providers: [...draft.providers, setupResult.provider],
+      runtimeNodes: [...draft.runtimeNodes, setupResult.runtimeNode],
     }));
-    setSettingsNotice(setupNotice);
+    setSettingsNotice(`${cleanLabel} was added. ${setupResult.notice}`);
   } catch (error) {
     setSettingsNotice(errorMessageOf(error, "Failed to add provider profile."));
   }
+};
+
+export const executeSetupProviderProfile = async ({
+  snapshot,
+  profileId,
+  updateRuntimeState,
+  setSettingsNotice,
+  errorMessageOf,
+}: ExecuteSetupProviderProfileInput): Promise<void> => {
+  const provider = snapshot.state.providers.find((item) => item.id === profileId);
+  const runtimeNode = snapshot.state.runtimeNodes.find((node) => node.providerProfileId === profileId);
+  if (!provider || !runtimeNode) {
+    setSettingsNotice(`Provider ${profileId} is missing a profile or runtime node.`);
+    return;
+  }
+  const setupResult = await applySetupProbeToProvider({ provider, runtimeNode, errorMessageOf });
+  updateRuntimeState((draft) => ({
+    ...draft,
+    providers: draft.providers.map((item) => (item.id === profileId ? setupResult.provider : item)),
+    runtimeNodes: draft.runtimeNodes.map((node) => (node.id === runtimeNode.id ? setupResult.runtimeNode : node)),
+  }));
+  setSettingsNotice(setupResult.notice);
 };
 
 export const updateProviderProfile = (
@@ -363,6 +417,25 @@ export const updateProviderProfile = (
       profile.primaryModel = value;
     }
     return draft;
+  });
+};
+
+export const updateModelWorkloadStrategy = (
+  strategyId: string,
+  patch: WorkloadStrategyPatch,
+  updateRuntimeState: (updater: (current: ResonantShellState) => ResonantShellState) => void,
+): void => {
+  updateRuntimeState((draft) => updateWorkloadStrategy(draft, strategyId, patch));
+};
+
+export const updateModelWorkloadStrategyRoute = (
+  strategyId: string,
+  routeKey: string,
+  updateRuntimeState: (updater: (current: ResonantShellState) => ResonantShellState) => void,
+): void => {
+  updateRuntimeState((draft) => {
+    const route = routeFromOptionKey(draft, routeKey);
+    return route ? updateWorkloadStrategy(draft, strategyId, { primaryRoute: route }) : draft;
   });
 };
 

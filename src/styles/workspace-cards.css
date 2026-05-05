@@ -728,6 +728,10 @@
   gap: 0.85rem;
 }
 
+.strategy-editor-card {
+  align-content: start;
+}
+
 .strategy-header h3 {
   margin: 0.18rem 0 0.3rem;
   font-size: 1.2rem;

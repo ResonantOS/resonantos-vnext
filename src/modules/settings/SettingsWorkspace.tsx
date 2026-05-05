@@ -9,6 +9,14 @@ import type {
   ProviderSmokeTestResult,
   ResonantShellState,
 } from "../../core/contracts";
+import {
+  buildStrategyRouteOptions,
+  costPostureLabel,
+  formatStrategyRoute,
+  routeOptionKey,
+  type WorkloadStrategyPatch,
+} from "../../core/model-strategy";
+import { resolveAgentChatRoute, resolveWorkloadRoute } from "../../core/provider-service";
 import { Panel } from "../../components/Panel";
 import type { CreateProviderProfileInput } from "./controller";
 import {
@@ -45,10 +53,13 @@ type SettingsWorkspaceProps = {
   onSettingsSectionChange: (section: SettingsSection) => void;
   onUpdateProvider: (profileId: string, field: "primaryModel" | "fallbackModel" | "status", value: string) => void;
   onCreateProvider: (input: CreateProviderProfileInput) => void;
+  onUpdateWorkloadStrategy: (strategyId: string, patch: WorkloadStrategyPatch) => void;
+  onUpdateWorkloadStrategyRoute: (strategyId: string, routeKey: string) => void;
   onProviderDraftChange: (profileId: string, value: string) => void;
   onSaveProviderSecret: (profileId: string) => void;
   onProbeProvider: (profileId: string) => void;
   onProbeAllProviders: () => void;
+  onSetupProvider: (profileId: string) => void;
   onSmokeTestProvider: (profileId: string) => void;
   onRefreshMemoryServiceStatus: () => void;
   onStartMemoryService: () => void;
@@ -96,6 +107,7 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
   const [addProviderBaseUrl, setAddProviderBaseUrl] = useState(providerTemplates[0]?.defaultApiBaseUrl ?? "");
   const selectedProviderTemplate =
     providerTemplates.find((template) => template.id === addProviderTemplateId) ?? providerTemplates[0];
+  const strategyRouteOptions = buildStrategyRouteOptions(props.state);
 
   const toggleProviderExpanded = (profileId: string) => {
     setExpandedProviderIds((current) => {
@@ -210,6 +222,9 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
                       </button>
                       <button type="button" className="button-quiet" onClick={() => props.onProbeProvider(profile.id)} disabled={props.providerDiagnosticsBusy}>
                         Probe
+                      </button>
+                      <button type="button" className="button-quiet" onClick={() => props.onSetupProvider(profile.id)}>
+                        Setup
                       </button>
                       <button type="button" className="button-quiet" onClick={() => props.onSmokeTestProvider(profile.id)} disabled={props.providerSmokeBusyId === profile.id}>
                         Test
@@ -493,46 +508,99 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
             </div>
 
             <div className="strategy-grid">
-              {props.state.modelStrategy.workloadStrategies.map((strategy) => (
-                <article key={strategy.id} className="provider-card">
-                  <div className="provider-head">
-                    <div>
-                      <strong>{strategy.label}</strong>
+              {props.state.modelStrategy.workloadStrategies.map((strategy) => {
+                const routeDecision =
+                  strategy.ownerType === "agent"
+                    ? resolveAgentChatRoute(props.state, strategy.ownerId)
+                    : resolveWorkloadRoute(props.state, strategy.workloadClass);
+                return (
+                  <article key={strategy.id} className="provider-card strategy-editor-card">
+                    <div className="provider-head">
+                      <div>
+                        <strong>{strategy.label}</strong>
+                        <p>
+                          {strategy.workloadClass} · {strategy.ownerType} · {strategy.ownerId}
+                        </p>
+                      </div>
+                      <span className={`tone tone-${strategy.hardStopWhenNoFallback ? "warning" : "active"}`}>
+                        {strategy.hardStopWhenNoFallback ? "hard-stop" : "fallback-ok"}
+                      </span>
+                    </div>
+                    <div className="strategy-route-block">
+                      <span className="eyebrow">Current decision</span>
+                      <strong>{routeDecision.model ?? "No viable route"}</strong>
                       <p>
-                        {strategy.workloadClass} · {strategy.ownerType} · {strategy.ownerId}
+                        {routeDecision.provider?.label ?? "Missing provider"}
+                        {routeDecision.runtimeNode ? ` via ${routeDecision.runtimeNode.label}` : ""} ·{" "}
+                        {routeDecision.decision.resolutionReason}
                       </p>
                     </div>
-                    <span className={`tone tone-${strategy.hardStopWhenNoFallback ? "warning" : "active"}`}>
-                      {strategy.hardStopWhenNoFallback ? "hard-stop" : "fallback-ok"}
-                    </span>
-                  </div>
-                  <div className="strategy-route-block">
-                    <span className="eyebrow">Primary route</span>
-                    <strong>{strategy.primaryRoute.model}</strong>
-                    <p>
-                      {strategy.primaryRoute.providerProfileId}
-                      {strategy.primaryRoute.runtimeNodeId ? ` via ${strategy.primaryRoute.runtimeNodeId}` : ""}
-                    </p>
-                  </div>
-                  <div className="strategy-chain-block">
-                    <span className="eyebrow">Fallback chain</span>
-                    <strong>{resolveFallbackLabel(props.state, strategy.fallbackChainId)}</strong>
+                    <label className="field">
+                      <span>Primary route</span>
+                      <select
+                        value={routeOptionKey(strategy.primaryRoute)}
+                        onChange={(event) => props.onUpdateWorkloadStrategyRoute(strategy.id, event.target.value)}
+                      >
+                        {strategyRouteOptions.map((option) => (
+                          <option key={option.key} value={option.key}>
+                            {option.label} · {option.detail}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="strategy-route-block">
+                      <span className="eyebrow">Agreed primary</span>
+                      <strong>{formatStrategyRoute(props.state, strategy.primaryRoute)}</strong>
+                      <p>{costPostureLabel(strategy.primaryRoute.costPosture)}</p>
+                    </div>
+                    <label className="field">
+                      <span>Fallback chain</span>
+                      <select
+                        value={strategy.fallbackChainId}
+                        onChange={(event) =>
+                          props.onUpdateWorkloadStrategy(strategy.id, { fallbackChainId: event.target.value })
+                        }
+                      >
+                        {props.state.modelStrategy.fallbackChains.map((chain) => (
+                          <option key={chain.id} value={chain.id}>
+                            {chain.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>Failure behavior</span>
+                      <select
+                        value={strategy.hardStopWhenNoFallback ? "hard-stop" : "fallback"}
+                        onChange={(event) =>
+                          props.onUpdateWorkloadStrategy(strategy.id, {
+                            hardStopWhenNoFallback: event.target.value === "hard-stop",
+                          })
+                        }
+                      >
+                        <option value="fallback">Use agreed fallbacks</option>
+                        <option value="hard-stop">Hard-stop if chain fails</option>
+                      </select>
+                    </label>
+                    <div className="strategy-chain-block">
+                      <span className="eyebrow">Fallback order</span>
+                      <strong>{resolveFallbackLabel(props.state, strategy.fallbackChainId)}</strong>
+                      <ul>
+                        {resolveFallbackSteps(props.state, strategy.fallbackChainId).map((route) => (
+                          <li key={`${strategy.id}:${route.providerProfileId}:${route.model}`}>
+                            {formatStrategyRoute(props.state, route)} · {costPostureLabel(route.costPosture)}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                     <ul>
-                      {resolveFallbackSteps(props.state, strategy.fallbackChainId).map((route) => (
-                        <li key={`${strategy.id}:${route.providerProfileId}:${route.model}`}>
-                          {route.model} · {route.providerProfileId}
-                          {route.runtimeNodeId ? ` · ${route.runtimeNodeId}` : ""}
-                        </li>
+                      {strategy.notes.map((note) => (
+                        <li key={note}>{note}</li>
                       ))}
                     </ul>
-                  </div>
-                  <ul>
-                    {strategy.notes.map((note) => (
-                      <li key={note}>{note}</li>
-                    ))}
-                  </ul>
-                </article>
-              ))}
+                  </article>
+                );
+              })}
             </div>
 
             <div className="strategy-emergency-block">
@@ -548,21 +616,15 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
                 <ul>
                   {props.state.modelStrategy.emergencyPolicy.orderedPromotionTargets.map((route) => (
                     <li key={`emergency:${route.providerProfileId}:${route.model}`}>
-                      {route.model} · {route.providerProfileId}
-                      {route.runtimeNodeId ? ` · ${route.runtimeNodeId}` : ""}
+                      {formatStrategyRoute(props.state, route)} · {costPostureLabel(route.costPosture)}
                     </li>
                   ))}
                 </ul>
               </div>
               <div className="strategy-route-block">
                 <span className="eyebrow">Hard floor</span>
-                <strong>{props.state.modelStrategy.emergencyPolicy.hardFloorRoute.model}</strong>
-                <p>
-                  {props.state.modelStrategy.emergencyPolicy.hardFloorRoute.providerProfileId}
-                  {props.state.modelStrategy.emergencyPolicy.hardFloorRoute.runtimeNodeId
-                    ? ` via ${props.state.modelStrategy.emergencyPolicy.hardFloorRoute.runtimeNodeId}`
-                    : ""}
-                </p>
+                <strong>{formatStrategyRoute(props.state, props.state.modelStrategy.emergencyPolicy.hardFloorRoute)}</strong>
+                <p>{costPostureLabel(props.state.modelStrategy.emergencyPolicy.hardFloorRoute.costPosture)}</p>
               </div>
             </div>
           </Panel>

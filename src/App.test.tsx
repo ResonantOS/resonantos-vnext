@@ -3640,7 +3640,7 @@ describe("App boot flow", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add Provider" }));
 
     expect(await screen.findByText("Studio Local Runtime")).toBeTruthy();
-    expect(screen.getByText("Studio Local Runtime was added. Ollama runtime responded with installed models.")).toBeTruthy();
+    expect(screen.getByText(/Studio Local Runtime was added.*Ollama runtime responded with installed models/i)).toBeTruthy();
     expect(requestProviderSetupProbeMock).toHaveBeenCalledWith(
       expect.objectContaining({
         providerType: "local",
