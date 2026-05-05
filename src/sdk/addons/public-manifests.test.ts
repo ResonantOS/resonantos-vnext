@@ -40,4 +40,14 @@ describe("bundled add-on manifests", () => {
 
     expect(validation.issues.filter((issue) => issue.severity === "error")).toEqual([]);
   });
+
+  it("keeps the experimental RecursiveMAS add-on manifest sideloadable", () => {
+    const manifest = JSON.parse(
+      readFileSync(resolve(process.cwd(), "examples", "addons", "recursive-mas.json"), "utf8"),
+    ) as unknown;
+
+    const validation = validateAddOnManifest(manifest, { source: "sideload" });
+
+    expect(validation.issues.filter((issue) => issue.severity === "error")).toEqual([]);
+  });
 });

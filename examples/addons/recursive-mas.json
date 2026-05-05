@@ -1,0 +1,246 @@
+{
+  "id": "addon.recursive-mas",
+  "name": "RecursiveMAS",
+  "version": "0.1.0",
+  "author": "Resonant Alpha",
+  "category": "agent",
+  "sdkVersion": "0.1.0",
+  "description": "Experimental recursive multi-agent reasoning runtime for local or user-owned open-model compute.",
+  "runtimeType": "local-service",
+  "surfaces": [
+    {
+      "id": "recursive-mas-status",
+      "type": "panel",
+      "label": "RecursiveMAS",
+      "description": "Configure and monitor the experimental RecursiveMAS reasoning runtime."
+    },
+    {
+      "id": "recursive-mas-runs",
+      "type": "background-task-monitor",
+      "label": "RecursiveMAS Runs",
+      "description": "Track delegated recursive reasoning runs and returned artifacts."
+    }
+  ],
+  "requestedCapabilities": [
+    {
+      "capability": "providers",
+      "granted": false,
+      "scope": "system",
+      "revocationBehavior": "hard-stop"
+    },
+    {
+      "capability": "network",
+      "granted": false,
+      "scope": "self",
+      "revocationBehavior": "hard-stop"
+    },
+    {
+      "capability": "agent-delegation",
+      "granted": false,
+      "scope": "workspace",
+      "revocationBehavior": "degrade"
+    },
+    {
+      "capability": "notifications",
+      "granted": false,
+      "scope": "self",
+      "revocationBehavior": "degrade"
+    },
+    {
+      "capability": "filesystem",
+      "granted": false,
+      "scope": "self",
+      "revocationBehavior": "hard-stop"
+    },
+    {
+      "capability": "shell",
+      "granted": false,
+      "scope": "system",
+      "revocationBehavior": "hard-stop"
+    },
+    {
+      "capability": "archive-read",
+      "granted": false,
+      "scope": "workspace",
+      "revocationBehavior": "degrade"
+    },
+    {
+      "capability": "archive-intake-write",
+      "granted": false,
+      "scope": "intake-only",
+      "revocationBehavior": "degrade"
+    }
+  ],
+  "provenance": {
+    "tier": "sideloaded-unverified",
+    "verificationState": "unverified",
+    "signed": false
+  },
+  "runtimeIsolation": {
+    "boundary": "host-mediated-service",
+    "supportsDegradedMode": true,
+    "requiresReviewedGrant": true
+  },
+  "grantPresets": [
+    {
+      "id": "recursive-mas-experimental-local",
+      "label": "Experimental local RecursiveMAS",
+      "description": "Expose a local RecursiveMAS service as an experimental delegated reasoning runtime.",
+      "grants": [
+        {
+          "capability": "providers",
+          "granted": true,
+          "scope": "system",
+          "revocationBehavior": "hard-stop"
+        },
+        {
+          "capability": "network",
+          "granted": true,
+          "scope": "self",
+          "revocationBehavior": "hard-stop"
+        },
+        {
+          "capability": "agent-delegation",
+          "granted": true,
+          "scope": "workspace",
+          "revocationBehavior": "degrade"
+        },
+        {
+          "capability": "notifications",
+          "granted": true,
+          "scope": "self",
+          "revocationBehavior": "degrade"
+        }
+      ]
+    }
+  ],
+  "providerRequirements": {
+    "sharedProfiles": [],
+    "supportsPrivateCredentials": false,
+    "preferredRuntimeKinds": ["local", "remote-user-owned"],
+    "allowExperimentalAuth": true,
+    "fallbackPolicyId": "experimental-local-recursive-reasoning"
+  },
+  "archiveIntegration": {
+    "readScopes": ["living-archive/scoped-context"],
+    "intakeWriteScopes": ["LivingArchive/INTAKE/recursive-mas"],
+    "canRequestIngest": true,
+    "canWriteKnowledgePages": false
+  },
+  "health": {
+    "strategy": "http-json-recursive-mas-status",
+    "endpoint": "http://127.0.0.1:4891/health"
+  },
+  "service": {
+    "protocol": "http-json",
+    "entrypoint": "http://127.0.0.1:4891",
+    "healthCommand": "recursive_mas_status",
+    "shutdownCommand": "recursive_mas_stop_service"
+  },
+  "delegation": {
+    "acceptsTasks": true,
+    "taskTypes": ["research", "design", "knowledge-organization", "archive-prep", "system-diagnosis"],
+    "artifactReturnTypes": ["summary", "markdown", "diagnostic-report", "verification-report", "archive-intake-bundle", "log"],
+    "defaultTargetRuntime": "local-service",
+    "requiresHumanApprovalBeforeExecution": true,
+    "notes": [
+      "Experimental runtime for final-answer recursive reasoning, not direct code editing.",
+      "Use sequential_light first until real-model validation passes."
+    ]
+  },
+  "tools": [
+    {
+      "name": "recursive_mas.status",
+      "description": "Read RecursiveMAS service, model, and style availability.",
+      "requiredCapabilities": ["network", "providers"],
+      "inputSchema": {},
+      "outputSchema": {},
+      "audit": {
+        "logRequest": true,
+        "logResult": true,
+        "artifactTypes": ["diagnostic-report"]
+      },
+      "requiresHumanApproval": false
+    },
+    {
+      "name": "recursive_mas.run_task",
+      "description": "Run an approved Delegation Packet through RecursiveMAS and return artifacts.",
+      "requiredCapabilities": ["network", "providers", "agent-delegation"],
+      "inputSchema": {},
+      "outputSchema": {},
+      "audit": {
+        "logRequest": true,
+        "logResult": true,
+        "artifactTypes": ["summary", "markdown", "verification-report", "log"]
+      },
+      "requiresHumanApproval": true
+    },
+    {
+      "name": "recursive_mas.queue_archive_intake",
+      "description": "Queue RecursiveMAS final reports and run metadata into Living Archive intake.",
+      "requiredCapabilities": ["archive-intake-write"],
+      "inputSchema": {},
+      "outputSchema": {},
+      "audit": {
+        "logRequest": true,
+        "logResult": true,
+        "artifactTypes": ["archive-intake-bundle"]
+      },
+      "requiresHumanApproval": true
+    }
+  ],
+  "installHooks": {
+    "onInstall": "configure-recursive-mas-endpoint",
+    "onEnable": "verify-recursive-mas-service"
+  },
+  "engineerSetup": {
+    "documentPath": "docs/architecture/addon-runbooks/recursive-mas/ENGINEER_SETUP.md",
+    "objective": "Connect, configure, and verify the experimental RecursiveMAS local-service runtime through reviewed host commands.",
+    "requiredCapabilities": ["providers", "network", "agent-delegation", "filesystem", "shell"],
+    "allowedHostCommands": [
+      "recursive_mas_status",
+      "recursive_mas_detect_install",
+      "recursive_mas_configure_service",
+      "recursive_mas_start_service",
+      "recursive_mas_stop_service",
+      "recursive_mas_verify_service",
+      "recursive_mas_list_models",
+      "recursive_mas_list_styles",
+      "recursive_mas_estimate_task",
+      "recursive_mas_run_task",
+      "recursive_mas_cancel_task",
+      "recursive_mas_collect_artifacts",
+      "recursive_mas_collect_logs"
+    ],
+    "expectedInputs": ["approved install root", "approved model root", "service endpoint", "selected reasoning style"],
+    "expectedOutputs": ["setup report", "health result", "model list", "style list", "smoke run artifact"],
+    "requiresHumanApprovalBeforeExecution": true,
+    "auditLogRequired": true
+  },
+  "augmentorSkills": [
+    {
+      "documentPath": "docs/architecture/addon-skills/recursive-mas/AUGMENTOR_SKILL.md",
+      "objective": "Decide when to delegate specialist reasoning to RecursiveMAS and how to review returned artifacts.",
+      "requiredCapabilities": ["providers", "network", "agent-delegation"],
+      "requiredTools": ["recursive_mas.status", "recursive_mas.run_task"],
+      "workflowPhases": ["fit check", "route check", "delegation packet", "execution", "review", "optional intake"],
+      "approvalGates": ["sensitive archive context", "long-running local job", "remote runtime", "archive intake"],
+      "expectedInputs": ["human question", "cost policy", "provider policy", "optional scoped memory context"],
+      "expectedOutputs": ["final report", "runtime metadata", "verification notes", "artifact paths"],
+      "producesDelegationPackets": true,
+      "auditLogRequired": true
+    }
+  ],
+  "compatibility": {
+    "shellVersion": "^0.1.0",
+    "platforms": ["macOS", "linux", "windows"]
+  },
+  "agents": [
+    {
+      "id": "addon.recursive-mas.specialist",
+      "displayName": "RecursiveMAS Specialist",
+      "trustTier": "addon",
+      "workspaceBehavior": "delegated"
+    }
+  ]
+}
