@@ -5,6 +5,7 @@ import { useEffect, useState, type PointerEvent as ReactPointerEvent, type RefOb
 import type {
   ChannelDefinition,
   ChatProject,
+  ChatRunEvent,
   ChatRunPhase,
   ContextBudget,
   ContextMemoryState,
@@ -56,6 +57,7 @@ type StrategistChatRailProps = {
   chatCanStop: boolean;
   chatSupportsAbort: boolean;
   chatRunPhase: ChatRunPhase;
+  chatRunEvents: ChatRunEvent[];
   chatNotice: string | null;
   composer: string;
   attachments: ComposerAttachment[];
@@ -170,6 +172,29 @@ export function StrategistChatRail(props: StrategistChatRailProps) {
       case "idle":
       default:
         return "Standing by";
+    }
+  };
+  const eventPhaseLabel = (event: ChatRunEvent): string => {
+    switch (event.phase) {
+      case "retrieving":
+        return "Read";
+      case "streaming":
+        return "Write";
+      case "tool-running":
+        return "Tool";
+      case "command":
+        return "Command";
+      case "search":
+        return "Search";
+      case "completed":
+        return "Done";
+      case "failed":
+        return "Failed";
+      case "interrupted":
+        return "Stopped";
+      case "thinking":
+      default:
+        return "Think";
     }
   };
   const threadUpdatedAt = (thread: ConversationThread): number => {
@@ -696,10 +721,35 @@ export function StrategistChatRail(props: StrategistChatRailProps) {
               <div className="chat-run-status-card" aria-live="polite">
                 <div className="chat-run-status-head">
                   <span className="agent-activity-pulse" />
-                  <strong>{phaseLabel(props.chatRunPhase)}</strong>
+                  <strong>Working for {formatElapsed(activeRunStartedAt)}</strong>
+                  <small>{phaseLabel(props.chatRunPhase)}</small>
+                </div>
+                <div className="chat-run-events">
+                  {(props.chatRunEvents.length
+                    ? props.chatRunEvents
+                    : [
+                        {
+                          id: "fallback",
+                          runId: "fallback",
+                          createdAt: new Date().toISOString(),
+                          phase: props.chatRunPhase === "idle" ? "thinking" : props.chatRunPhase,
+                          label: props.activityLabel,
+                          transient: true,
+                        } satisfies ChatRunEvent,
+                      ]
+                  ).map((event) => (
+                    <div key={event.id} className={`chat-run-event phase-${event.phase}`}>
+                      <span>{eventPhaseLabel(event)}</span>
+                      <div>
+                        <strong>{event.label}</strong>
+                        {event.detail ? <small>{event.detail}</small> : null}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="chat-run-status-foot">
                   <small>{formatElapsed(activeRunStartedAt)}</small>
                 </div>
-                <p>{props.activityLabel}</p>
               </div>
             )}
             <div ref={props.chatScrollAnchorRef} />

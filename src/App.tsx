@@ -29,6 +29,7 @@ import type {
   ArchiveRuntimeStatus,
   ArchiveSearchResult,
   ArchiveSemanticLintResult,
+  ChatRunEvent,
   ChatRunPhase,
   ConversationThread,
   LivingArchiveMemoryServiceResult,
@@ -136,6 +137,7 @@ import {
   systemSlotAvailable,
 } from "./modules/shell/system-slots";
 import {
+  executeCreateProviderProfile,
   executeRefreshProviderDiagnostics,
   executeRefreshMemoryServiceStatus,
   executeProviderSmokeTest,
@@ -143,6 +145,7 @@ import {
   executeStartMemoryService,
   executeStopMemoryService,
   updateProviderProfile,
+  type CreateProviderProfileInput,
 } from "./modules/settings/controller";
 import type { SettingsSection } from "./modules/settings/SettingsWorkspace";
 import {
@@ -264,6 +267,7 @@ export function App() {
   const [composer, setComposer] = useState("");
   const [chatBusy, setChatBusy] = useState(false);
   const [chatRunPhase, setChatRunPhase] = useState<ChatRunPhase>("idle");
+  const [chatRunEvents, setChatRunEvents] = useState<ChatRunEvent[]>([]);
   const [chatNotice, setChatNotice] = useState<string | null>(null);
   const [providerDrafts, setProviderDrafts] = useState<Record<string, string>>({});
   const [settingsNotice, setSettingsNotice] = useState<string | null>(null);
@@ -729,6 +733,15 @@ export function App() {
     });
   };
 
+  const handleCreateProviderProfile = async (input: CreateProviderProfileInput) => {
+    await executeCreateProviderProfile({
+      ...input,
+      updateRuntimeState,
+      setSettingsNotice,
+      errorMessageOf,
+    });
+  };
+
   const refreshProviderDiagnostics = async (providerId?: string) => {
     await executeRefreshProviderDiagnostics({
       snapshot: { state, bundled, sideloaded },
@@ -1088,6 +1101,7 @@ export function App() {
       setChatNotice,
       setChatBusy,
       setChatRunPhase,
+      setChatRunEvents,
       setAgentActivityLabel,
       setProviderDiagnostics,
       setRecoveryRuntimeStatus,
@@ -1169,6 +1183,7 @@ export function App() {
       setChatNotice,
       setChatBusy,
       setChatRunPhase,
+      setChatRunEvents,
       setAgentActivityLabel,
       setProviderDiagnostics,
       setRecoveryRuntimeStatus,
@@ -2059,6 +2074,7 @@ export function App() {
                 onUpdateProvider={(profileId, field, value) =>
                   updateProviderProfile(profileId, field, value, updateRuntimeState)
                 }
+                onCreateProvider={(input) => void handleCreateProviderProfile(input)}
                 onProviderDraftChange={(profileId, value) =>
                   setProviderDrafts((current) => ({ ...current, [profileId]: value }))
                 }
@@ -2123,6 +2139,7 @@ export function App() {
         chatCanStop={chatRunPhase !== "idle"}
         chatSupportsAbort={activeRoute.executionAdapter?.supportsAbort === true}
         chatRunPhase={chatRunPhase}
+        chatRunEvents={chatRunEvents}
         chatNotice={chatNotice}
         composer={composer}
         attachments={attachments}
@@ -2247,7 +2264,7 @@ export function App() {
         }
         onComposerChange={setComposer}
         onSend={() => void sendStrategistMessage()}
-        onStopGeneration={() =>
+        onStopGeneration={() => {
           stopChatGenerationAction({
             chatBusy,
             activeThread,
@@ -2257,8 +2274,9 @@ export function App() {
             setChatRunPhase,
             setAgentActivityLabel,
             setChatNotice,
-          })
-        }
+          });
+          setChatRunEvents([]);
+        }}
         onCompactThread={() =>
           compactActiveChatContextAction({
             activeThread,

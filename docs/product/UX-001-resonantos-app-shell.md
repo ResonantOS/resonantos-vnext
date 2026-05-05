@@ -154,6 +154,8 @@ Additional UX rules:
 - The history strip must keep a top-level `Chats` section for conversations that do not belong to any project.
 - Project controls must be available from the rail, including create, pin, rename, branch, and delete. Deleting a project must not delete its chats by default.
 - While an agent is working, the rail must show visible background activity state such as thinking, reading context, running tools, streaming, elapsed time, or interruption state.
+- Active chat runs render a transient work log with elapsed time and host-owned progress events. This log is removed when the final assistant answer is committed, keeping the completed transcript clean.
+- The transient work log must describe observable ResonantOS activity only. It must not expose or fabricate hidden chain-of-thought.
 - In emergency recovery, the rail can be replaced by the Resonant Engineer Agent rail.
 - Standard window zoom shortcuts must work in the desktop shell: Command/Ctrl `+`, Command/Ctrl `-`, and Command/Ctrl `0`. This is full-shell interface zoom, not text-size-only zoom.
 

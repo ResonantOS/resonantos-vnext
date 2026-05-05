@@ -1,5 +1,6 @@
 // Intent citation: docs/architecture/ADR-002-modular-codebase.md
 
+import { useState } from "react";
 import type {
   LivingArchiveMemoryServiceResult,
   LivingArchiveMemoryServiceStatus,
@@ -9,6 +10,8 @@ import type {
   ResonantShellState,
 } from "../../core/contracts";
 import { Panel } from "../../components/Panel";
+import type { CreateProviderProfileInput } from "./controller";
+import { providerTemplates, type ProviderTemplateId } from "./provider-templates";
 
 export type SettingsSection = "providers" | "strategy" | "memory" | "defaults" | "shell";
 
@@ -35,6 +38,7 @@ type SettingsWorkspaceProps = {
   memoryServiceLastResult: LivingArchiveMemoryServiceResult | null;
   onSettingsSectionChange: (section: SettingsSection) => void;
   onUpdateProvider: (profileId: string, field: "primaryModel" | "fallbackModel" | "status", value: string) => void;
+  onCreateProvider: (input: CreateProviderProfileInput) => void;
   onProviderDraftChange: (profileId: string, value: string) => void;
   onSaveProviderSecret: (profileId: string) => void;
   onProbeProvider: (profileId: string) => void;
@@ -59,6 +63,50 @@ const providerSecretPlaceholder = (profile: ProviderProfile): string => {
 };
 
 export function SettingsWorkspace(props: SettingsWorkspaceProps) {
+  const [expandedProviderIds, setExpandedProviderIds] = useState<Set<string>>(new Set());
+  const [editingProviderId, setEditingProviderId] = useState<string | null>(null);
+  const [addProviderOpen, setAddProviderOpen] = useState(false);
+  const [addProviderTemplateId, setAddProviderTemplateId] = useState<ProviderTemplateId>("minimax");
+  const [addProviderLabel, setAddProviderLabel] = useState(providerTemplates[0]?.label ?? "");
+  const [addProviderSecret, setAddProviderSecret] = useState("");
+  const [addProviderBaseUrl, setAddProviderBaseUrl] = useState(providerTemplates[0]?.defaultApiBaseUrl ?? "");
+  const selectedProviderTemplate =
+    providerTemplates.find((template) => template.id === addProviderTemplateId) ?? providerTemplates[0];
+
+  const toggleProviderExpanded = (profileId: string) => {
+    setExpandedProviderIds((current) => {
+      const next = new Set(current);
+      if (next.has(profileId)) {
+        next.delete(profileId);
+      } else {
+        next.add(profileId);
+      }
+      return next;
+    });
+  };
+
+  const handleProviderTemplateChange = (templateId: ProviderTemplateId) => {
+    const template = providerTemplates.find((item) => item.id === templateId);
+    setAddProviderTemplateId(templateId);
+    setAddProviderLabel(template?.label ?? "");
+    setAddProviderBaseUrl(template?.defaultApiBaseUrl ?? "");
+    setAddProviderSecret("");
+  };
+
+  const handleCreateProvider = () => {
+    if (!selectedProviderTemplate) {
+      return;
+    }
+    props.onCreateProvider({
+      templateId: selectedProviderTemplate.id,
+      label: addProviderLabel,
+      secret: addProviderSecret,
+      apiBaseUrl: addProviderBaseUrl,
+    });
+    setAddProviderOpen(false);
+    setAddProviderSecret("");
+  };
+
   return (
     <div className="settings-shell">
       <aside className="settings-sidebar">
@@ -83,105 +131,227 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
 
       <div className="settings-content">
         {props.settingsSection === "providers" && (
-          <Panel title="Provider Profiles" subtitle="Shared providers live in ResonantOS. Secrets stay on the desktop side.">
+          <Panel title="AI Providers" subtitle="Configure the model routes ResonantOS can use for agents, archive work, and recovery.">
             {props.settingsNotice && <div className="inline-notice">{props.settingsNotice}</div>}
-            <div className="provider-toolbar">
-              <div className="provider-toolbar-copy">
-                <strong>Provider diagnostics</strong>
-                <p>Probe credentials, runtime routes, and host reachability from the desktop service boundary.</p>
+            <div className="provider-hero">
+              <div className="provider-hero-copy">
+                <p className="eyebrow">Provider fabric</p>
+                <h3>Add one provider, then let ResonantOS route work through policy.</h3>
+                <p>
+                  Keep this page focused: add credentials at the top, scan health when needed, and expand a provider only when
+                  you need technical details.
+                </p>
               </div>
-              <button type="button" className="button-secondary" onClick={props.onProbeAllProviders} disabled={props.providerDiagnosticsBusy}>
-                {props.providerDiagnosticsBusy && !props.activeProviderProbeId ? "Probing..." : "Refresh Diagnostics"}
-              </button>
+              <div className="provider-hero-actions">
+                <button type="button" className="button-primary touch-action" onClick={() => setAddProviderOpen(true)}>
+                  Add AI Provider
+                </button>
+                <button type="button" className="button-secondary touch-action" onClick={props.onProbeAllProviders} disabled={props.providerDiagnosticsBusy}>
+                  {props.providerDiagnosticsBusy && !props.activeProviderProbeId ? "Checking..." : "Check Health"}
+                </button>
+              </div>
             </div>
-            <div className="provider-grid">
+
+            <div className="provider-list" aria-label="Configured AI providers">
               {props.state.providers.map((profile) => (
-                <article key={profile.id} className="provider-card">
-                  <div className="provider-head">
-                    <div>
-                      <strong>{profile.label}</strong>
-                      <p>
-                        {profile.providerType} · {profile.authMethod} · {profile.authTier}
-                      </p>
+                <article key={profile.id} className={`provider-row ${expandedProviderIds.has(profile.id) ? "expanded" : ""}`}>
+                  <div className="provider-row-main">
+                    <button
+                      type="button"
+                      className="provider-row-title"
+                      onClick={() => toggleProviderExpanded(profile.id)}
+                      aria-expanded={expandedProviderIds.has(profile.id)}
+                    >
+                      <span className={`provider-dot provider-dot-${profile.status}`} aria-hidden="true" />
+                      <span>
+                        <strong>{profile.label}</strong>
+                        <small>
+                          {profile.providerType} · {profile.authTier}
+                        </small>
+                      </span>
+                    </button>
+                    <div className="provider-row-models">
+                      <span>{profile.primaryModel}</span>
+                      <small>{profile.fallbackModel ? `Fallback ${profile.fallbackModel}` : "No fallback"}</small>
                     </div>
-                    <div className="provider-badges">
+                    <div className="provider-row-meta">
                       <span className={`tone tone-${profile.credentialStatus === "configured" ? "active" : "warning"}`}>
                         {profile.credentialStatus}
                       </span>
-                      <select value={profile.status} onChange={(event) => props.onUpdateProvider(profile.id, "status", event.target.value)}>
-                        <option value="ready">ready</option>
-                        <option value="fallback">fallback</option>
-                        <option value="missing">missing</option>
-                      </select>
+                      <span>{profile.allowedModels.length} models</span>
+                    </div>
+                    <div className="provider-row-actions">
+                      <button type="button" className="button-quiet" onClick={() => setEditingProviderId(editingProviderId === profile.id ? null : profile.id)}>
+                        {editingProviderId === profile.id ? "Close" : "Edit"}
+                      </button>
+                      <button type="button" className="button-quiet" onClick={() => props.onProbeProvider(profile.id)} disabled={props.providerDiagnosticsBusy}>
+                        Probe
+                      </button>
+                      <button type="button" className="button-quiet" onClick={() => props.onSmokeTestProvider(profile.id)} disabled={props.providerSmokeBusyId === profile.id}>
+                        Test
+                      </button>
                     </div>
                   </div>
-                  {renderProviderDiagnostics(
-                    props.providerDiagnostics.find((report) => report.providerId === profile.id),
-                    props.providerDiagnosticsBusy && props.activeProviderProbeId === profile.id,
-                    () => props.onProbeProvider(profile.id),
-                    props.providerSmokeResults[profile.id],
-                    props.providerSmokeBusyId === profile.id,
-                    () => props.onSmokeTestProvider(profile.id),
+
+                  {(expandedProviderIds.has(profile.id) || editingProviderId === profile.id) && (
+                    <div className="provider-row-detail">
+                      {editingProviderId === profile.id && (
+                        <div className="provider-edit-panel">
+                          <label className="field">
+                            <span>Status</span>
+                            <select value={profile.status} onChange={(event) => props.onUpdateProvider(profile.id, "status", event.target.value)}>
+                              <option value="ready">ready</option>
+                              <option value="fallback">fallback</option>
+                              <option value="missing">missing</option>
+                            </select>
+                          </label>
+                          <label className="field">
+                            <span>Primary model</span>
+                            <select value={profile.primaryModel} onChange={(event) => props.onUpdateProvider(profile.id, "primaryModel", event.target.value)}>
+                              {profile.allowedModels.map((model) => (
+                                <option key={model} value={model}>
+                                  {model}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="field">
+                            <span>Fallback model</span>
+                            <input
+                              value={profile.fallbackModel ?? ""}
+                              onChange={(event) => props.onUpdateProvider(profile.id, "fallbackModel", event.target.value)}
+                              placeholder="optional"
+                            />
+                          </label>
+                          {providerNeedsSecret(profile) && (
+                            <div className="provider-secret-block">
+                              <label className="field">
+                                <span>{providerSecretLabel(profile)}</span>
+                                <input
+                                  type="password"
+                                  value={props.providerDrafts[profile.id] ?? ""}
+                                  onChange={(event) => props.onProviderDraftChange(profile.id, event.target.value)}
+                                  placeholder={providerSecretPlaceholder(profile)}
+                                />
+                              </label>
+                              <button type="button" className="button-secondary touch-action" onClick={() => props.onSaveProviderSecret(profile.id)}>
+                                Save Key
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="provider-detail-grid">
+                        <div>
+                          <span className="eyebrow">Consumers</span>
+                          <p>{profile.consumerScopes.join(", ")}</p>
+                        </div>
+                        <div>
+                          <span className="eyebrow">Endpoint</span>
+                          <p>{profile.apiBaseUrl ?? "Managed by runtime node"}</p>
+                        </div>
+                        <div>
+                          <span className="eyebrow">Available models</span>
+                          <p>{profile.allowedModels.join(", ")}</p>
+                        </div>
+                      </div>
+
+                      {renderProviderDiagnostics(
+                        props.providerDiagnostics.find((report) => report.providerId === profile.id),
+                        props.providerDiagnosticsBusy && props.activeProviderProbeId === profile.id,
+                        () => props.onProbeProvider(profile.id),
+                        props.providerSmokeResults[profile.id],
+                        props.providerSmokeBusyId === profile.id,
+                        () => props.onSmokeTestProvider(profile.id),
+                      )}
+
+                      <div className="provider-runtime-list">
+                        <span className="eyebrow">Runtime nodes</span>
+                        <ul>
+                          {props.state.runtimeNodes
+                            .filter((node) => node.providerProfileId === profile.id)
+                            .map((node) => (
+                              <li key={node.id}>
+                                <strong>{node.label}</strong>
+                                <span>
+                                  {node.kind} · {node.locality} · {node.healthState}
+                                </span>
+                              </li>
+                            ))}
+                        </ul>
+                      </div>
+                    </div>
                   )}
+                </article>
+              ))}
+            </div>
+
+            {addProviderOpen && selectedProviderTemplate && (
+              <div className="provider-dialog-backdrop" role="presentation" onClick={() => setAddProviderOpen(false)}>
+                <form
+                  className="provider-dialog-card"
+                  onClick={(event) => event.stopPropagation()}
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    handleCreateProvider();
+                  }}
+                >
+                  <div className="provider-dialog-head">
+                    <div>
+                      <p className="eyebrow">Add provider</p>
+                      <h3>Connect an AI provider</h3>
+                    </div>
+                    <button type="button" className="button-quiet" onClick={() => setAddProviderOpen(false)}>
+                      Close
+                    </button>
+                  </div>
                   <label className="field">
-                    <span>Primary model</span>
-                    <select value={profile.primaryModel} onChange={(event) => props.onUpdateProvider(profile.id, "primaryModel", event.target.value)}>
-                      {profile.allowedModels.map((model) => (
-                        <option key={model} value={model}>
-                          {model}
+                    <span>Provider</span>
+                    <select value={addProviderTemplateId} onChange={(event) => handleProviderTemplateChange(event.target.value as ProviderTemplateId)}>
+                      {providerTemplates.map((template) => (
+                        <option key={template.id} value={template.id}>
+                          {template.label}
                         </option>
                       ))}
                     </select>
                   </label>
                   <label className="field">
-                    <span>Fallback model</span>
-                    <input
-                      value={profile.fallbackModel ?? ""}
-                      onChange={(event) => props.onUpdateProvider(profile.id, "fallbackModel", event.target.value)}
-                      placeholder="optional"
-                    />
+                    <span>Name in ResonantOS</span>
+                    <input value={addProviderLabel} onChange={(event) => setAddProviderLabel(event.target.value)} placeholder={selectedProviderTemplate.label} />
                   </label>
-                  {providerNeedsSecret(profile) && (
-                    <div className="provider-secret-block">
-                      <label className="field">
-                        <span>{providerSecretLabel(profile)}</span>
-                        <input
-                          type="password"
-                          value={props.providerDrafts[profile.id] ?? ""}
-                          onChange={(event) => props.onProviderDraftChange(profile.id, event.target.value)}
-                          placeholder={providerSecretPlaceholder(profile)}
-                        />
-                      </label>
-                      <div className="provider-secret-actions">
-                        <span>
-                          The Strategist chat uses this provider through the desktop backend. Browser code never sends the
-                          secret directly to the model provider.
-                        </span>
-                        <button type="button" className="button-secondary" onClick={() => props.onSaveProviderSecret(profile.id)}>
-                          Save Key
-                        </button>
-                      </div>
-                    </div>
+                  {selectedProviderTemplate.requiresBaseUrl && (
+                    <label className="field">
+                      <span>API base URL</span>
+                      <input value={addProviderBaseUrl} onChange={(event) => setAddProviderBaseUrl(event.target.value)} placeholder="https://api.provider.com/v1" />
+                    </label>
                   )}
-                  <p className="provider-scope">Consumers: {profile.consumerScopes.join(", ")}</p>
-                  <div className="provider-runtime-list">
-                    <span className="eyebrow">Runtime nodes</span>
-                    <ul>
-                      {props.state.runtimeNodes
-                        .filter((node) => node.providerProfileId === profile.id)
-                        .map((node) => (
-                          <li key={node.id}>
-                            <strong>{node.label}</strong>
-                            <span>
-                              {node.kind} · {node.locality} · {node.healthState}
-                            </span>
-                          </li>
-                        ))}
-                    </ul>
+                  {selectedProviderTemplate.requiresSecret && (
+                    <label className="field">
+                      <span>{selectedProviderTemplate.id === "minimax" ? "Token Plan / API key" : "API key"}</span>
+                      <input
+                        type="password"
+                        value={addProviderSecret}
+                        onChange={(event) => setAddProviderSecret(event.target.value)}
+                        placeholder={selectedProviderTemplate.id === "minimax" ? "minimax-..." : "sk-..."}
+                      />
+                    </label>
+                  )}
+                  <div className="provider-template-note">
+                    <strong>{selectedProviderTemplate.shortLabel}</strong>
+                    <p>{selectedProviderTemplate.note}</p>
                   </div>
-                </article>
-              ))}
-            </div>
+                  <div className="provider-dialog-actions">
+                    <button type="button" className="button-secondary touch-action" onClick={() => setAddProviderOpen(false)}>
+                      Cancel
+                    </button>
+                    <button type="submit" className="button-primary touch-action">
+                      Add Provider
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
           </Panel>
         )}
 

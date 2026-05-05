@@ -4,6 +4,8 @@
 import type { Dispatch, SetStateAction } from "react";
 import type {
   AddOnManifest,
+  ChatRunEvent,
+  ChatRunEventPhase,
   ChatRunPhase,
   ConversationThread,
   LocalRuntimeStatus,
@@ -86,6 +88,7 @@ type ChatTurnControllerInput = {
   setChatNotice: Dispatch<SetStateAction<string | null>>;
   setChatBusy: Dispatch<SetStateAction<boolean>>;
   setChatRunPhase: Dispatch<SetStateAction<ChatRunPhase>>;
+  setChatRunEvents: Dispatch<SetStateAction<ChatRunEvent[]>>;
   setAgentActivityLabel: Dispatch<SetStateAction<string>>;
   setProviderDiagnostics: Dispatch<SetStateAction<ProviderDiagnosticReport[]>>;
   setRecoveryRuntimeStatus: Dispatch<SetStateAction<LocalRuntimeStatus | null>>;
@@ -131,6 +134,7 @@ export const executeChatTurn = async ({
   setChatNotice,
   setChatBusy,
   setChatRunPhase,
+  setChatRunEvents,
   setAgentActivityLabel,
   setProviderDiagnostics,
   setRecoveryRuntimeStatus,
@@ -144,6 +148,26 @@ export const executeChatTurn = async ({
   }
 
   const { state } = snapshot;
+  let eventCounter = 0;
+  const recordRunEvent = (phase: ChatRunEventPhase, label: string, detail?: string) => {
+    const event: ChatRunEvent = {
+      id: `${runToken}:event-${eventCounter++}`,
+      runId: runToken,
+      createdAt: new Date().toISOString(),
+      phase,
+      label,
+      detail,
+      transient: true,
+    };
+    setChatRunEvents((current) => [...current, event].slice(-10));
+  };
+  const markProgress = (phase: ChatRunPhase, label: string, detail?: string) => {
+    setChatRunPhase(phase);
+    setAgentActivityLabel(label);
+    if (phase !== "idle") {
+      recordRunEvent(phase, label, detail);
+    }
+  };
   const trimmed = outgoing;
   const outgoingAttachments = overrideMessage ? [] : attachments;
   const attachmentBlock = outgoingAttachments.length ? `\n\n${attachmentPromptBlock(outgoingAttachments)}` : "";
@@ -157,23 +181,25 @@ export const executeChatTurn = async ({
   setAttachments([]);
   setChatNotice(null);
   setChatBusy(true);
-  setChatRunPhase("thinking");
-  setAgentActivityLabel(
+  setChatRunEvents([]);
+  markProgress(
+    "thinking",
     activeThread.owningAgentId === state.recoverySession.engineerAgentId
       ? "Establishing facts and checking the recovery floor."
       : "Thinking on the active Strategist route.",
+    `Thread: ${activeThread.title}`,
   );
   commitReadyState(nextState);
 
   try {
     const engineerWorkspaceId = activeThread.owningAgentId === "strategist.core" ? parseStartEngineerTaskWorkspaceId(trimmed) : null;
     if (engineerWorkspaceId) {
-      setChatRunPhase("tool-running");
-      setAgentActivityLabel("Starting the delegated Engineer task workspace.");
+      markProgress("tool-running", "Starting the delegated Engineer task workspace.", engineerWorkspaceId);
       const payload = await requestReadTaskWorkspace(engineerWorkspaceId);
       if (!isRunCurrent(runToken)) {
         return;
       }
+      recordRunEvent("tool-running", "Read delegated workspace packet.", payload.workspace.id);
       const engineerRoute = resolveAgentChatRoute(nextState, nextState.recoverySession.engineerAgentId, activeChatModel);
       const engineerProvider = engineerRoute.provider;
       const engineerRuntimeNode = engineerRoute.runtimeNode;
@@ -190,6 +216,11 @@ export const executeChatTurn = async ({
         return;
       }
       setRecoveryRuntimeStatus(runtimeStatusForPrompt);
+      recordRunEvent(
+        "tool-running",
+        "Checked local recovery runtime.",
+        runtimeStatusForPrompt.recoveryModelRunning ? "Recovery model is running." : "Recovery model is not currently loaded.",
+      );
       const recoveryTurn = await requestEngineerRecoveryTurn({
         providerId: engineerProvider.id,
         providerType: engineerProvider.providerType,
@@ -210,6 +241,13 @@ export const executeChatTurn = async ({
       if (!isRunCurrent(runToken)) {
         return;
       }
+      recoveryTurn.toolEvents.forEach((event) => {
+        recordRunEvent(
+          event.status === "failed" ? "failed" : "tool-running",
+          `${event.tool}: ${event.summary}`,
+          event.status,
+        );
+      });
       const finished = await requestFinishTaskWorkspace({
         workspaceId: payload.workspace.id,
         resultMarkdown: renderEngineerTaskResultMarkdown({
@@ -245,14 +283,12 @@ export const executeChatTurn = async ({
       ];
       commitReadyState(withAssistant);
       setChatNotice("Delegated Engineer task finished. Review the result before promoting changes.");
-      setAgentActivityLabel("Delegated Engineer task finished.");
-      setChatRunPhase("completed");
+      markProgress("completed", "Delegated Engineer task finished.");
       return;
     }
 
     if (activeThread.owningAgentId === "strategist.core" && shouldDelegateToEngineer(trimmed)) {
-      setChatRunPhase("tool-running");
-      setAgentActivityLabel("Creating an Engineer delegation workspace.");
+      markProgress("tool-running", "Creating an Engineer delegation workspace.");
       const packet = createEngineerDelegationPacket(nextState, {
         mission: trimmed,
         context:
@@ -266,14 +302,12 @@ export const executeChatTurn = async ({
       const withAssistant = appendAssistantMessage(cloneState(nextState), activeThread.id, reply);
       commitReadyState(withAssistant);
       setChatNotice("Engineer delegation workspace created. Execution has not started.");
-      setAgentActivityLabel("Engineer delegation workspace ready.");
-      setChatRunPhase("completed");
+      markProgress("completed", "Engineer delegation workspace ready.");
       return;
     }
 
     if (activeThread.owningAgentId === "strategist.core" && shouldDelegateToHermes(trimmed)) {
-      setChatRunPhase("tool-running");
-      setAgentActivityLabel("Creating a Hermes delegation workspace.");
+      markProgress("tool-running", "Creating a Hermes delegation workspace.");
       const packet = createHermesDelegationPacket(nextState, {
         mission: trimmed,
         context:
@@ -287,14 +321,12 @@ export const executeChatTurn = async ({
       const withAssistant = appendAssistantMessage(cloneState(nextState), activeThread.id, reply);
       commitReadyState(withAssistant);
       setChatNotice("Hermes delegation workspace created. Execution has not started.");
-      setAgentActivityLabel("Hermes delegation workspace ready.");
-      setChatRunPhase("completed");
+      markProgress("completed", "Hermes delegation workspace ready.");
       return;
     }
 
     if (activeThread.owningAgentId === "hermes.agent") {
-      setChatRunPhase("tool-running");
-      setAgentActivityLabel("Hermes is reading your message in the local profile.");
+      markProgress("tool-running", "Hermes is reading your message in the local profile.");
       const thread = threadById(nextState, activeThread.id);
       if (!thread) {
         throw new Error("Active Hermes thread was not found.");
@@ -307,7 +339,7 @@ export const executeChatTurn = async ({
       const placeholderMessageId = threadById(withHermesPlaceholder, activeThread.id)?.messages.at(-1)?.id ?? null;
       commitReadyState(withHermesPlaceholder);
       await yieldForPaint();
-      setAgentActivityLabel("Hermes is working through your prompt. This can take a moment for local profile startup.");
+      markProgress("tool-running", "Hermes is working through your prompt. This can take a moment for local profile startup.");
       const profileHome =
         typeof nextState.installations["addon.hermes"]?.config?.profileHome === "string"
           ? nextState.installations["addon.hermes"]?.config?.profileHome
@@ -326,19 +358,19 @@ export const executeChatTurn = async ({
           }))
         : appendAssistantMessage(cloneState(nextState), activeThread.id, result.reply);
       commitReadyState(withAssistant);
-      setAgentActivityLabel("Hermes reply ready from the local profile.");
-      setChatRunPhase("completed");
+      markProgress("completed", "Hermes reply ready from the local profile.");
       return;
     }
 
     let routedState = nextState;
     try {
-      setChatRunPhase("tool-running");
+      markProgress("tool-running", "Running provider diagnostics.");
       const reports = await requestProviderDiagnostics();
       if (!isRunCurrent(runToken)) {
         return;
       }
       setProviderDiagnostics(reports);
+      recordRunEvent("tool-running", `Checked ${reports.length} provider route${reports.length === 1 ? "" : "s"}.`);
       routedState = applyProviderDiagnostics(nextState, reports);
       commitReadyState(routedState);
     } catch {
@@ -375,8 +407,7 @@ export const executeChatTurn = async ({
       modelId: route.model,
     });
     if (shouldAutoCompactContext(contextBudget)) {
-      setChatRunPhase("tool-running");
-      setAgentActivityLabel("Auto-compacting conversation memory before the next provider call.");
+      markProgress("tool-running", "Auto-compacting conversation memory before the next provider call.");
       routedState = compactThreadContext(routedState, activeThread.id);
       commitReadyState(routedState);
       setChatNotice("Context reached the automatic compaction threshold. Conversation memory was compacted before sending.");
@@ -413,7 +444,7 @@ export const executeChatTurn = async ({
         return;
       }
       setRecoveryRuntimeStatus(runtimeStatusForPrompt);
-      setAgentActivityLabel("Inspecting the local recovery floor and validating runtime health.");
+      markProgress("tool-running", "Inspecting the local recovery floor and validating runtime health.");
     }
 
     const systemPrompt =
@@ -429,16 +460,16 @@ export const executeChatTurn = async ({
     const recoveryAgentActive = activeThread.owningAgentId === routedState.recoverySession.engineerAgentId;
     const memoryProvider = resolveMemoryProviderBroker(routedState, [...snapshot.bundled, ...snapshot.sideloaded]);
     if (recoveryAgentActive) {
-      setChatRunPhase("tool-running");
-      setAgentActivityLabel("Probing stronger routes, reading state, and preparing the next recovery step.");
+      markProgress("tool-running", "Probing stronger routes, reading state, and preparing the next recovery step.");
     }
-    setChatRunPhase("retrieving");
+    markProgress("retrieving", "Loading ResonantOS system memory.");
     const systemMemoryContext = await buildSystemMemoryContextBundle(memoryProvider).catch(() => null);
     if (!isRunCurrent(runToken)) {
       return;
     }
     if (systemMemoryContext?.status === "ready") {
-      setAgentActivityLabel(
+      markProgress(
+        "retrieving",
         recoveryAgentActive
           ? "Loaded ResonantOS system memory for recovery context."
           : "Loaded ResonantOS system memory before archive context.",
@@ -452,7 +483,8 @@ export const executeChatTurn = async ({
       return;
     }
     if (archiveContext) {
-      setAgentActivityLabel(
+      markProgress(
+        "retrieving",
         archiveContext.pages.length
           ? `Retrieved ${archiveContext.pages.length} Living Archive page${archiveContext.pages.length === 1 ? "" : "s"} for context.`
           : "Checked the Living Archive; no directly relevant page was found.",
@@ -468,7 +500,11 @@ export const executeChatTurn = async ({
           formatArchiveContextForPrompt(archiveContext),
         ].join("\n\n");
 
-    setChatRunPhase(recoveryAgentActive ? "tool-running" : "thinking");
+    markProgress(
+      recoveryAgentActive ? "tool-running" : "thinking",
+      recoveryAgentActive ? "Running the Engineer recovery tool loop." : `Calling ${provider.label} on ${routedModel}.`,
+      runtimeNode.label,
+    );
     const recoveryTurn = recoveryAgentActive
       ? await requestEngineerRecoveryTurn({
           providerId: provider.id,
@@ -498,6 +534,9 @@ export const executeChatTurn = async ({
       }
       setChatRunPhase("streaming");
       setAgentActivityLabel("Streaming the reply from the active provider route.");
+      if (!streamedReply) {
+        recordRunEvent("streaming", "Streaming the reply from the active provider route.", routedModel);
+      }
       streamedReply += chunk;
       if (!streamedAssistantMessageId) {
         streamedState = appendAssistantMessage(cloneState(streamedState), activeThread.id, streamedReply, {
@@ -551,6 +590,15 @@ export const executeChatTurn = async ({
               } else if (event.type === "usage") {
                 try {
                   providerUsage = JSON.parse(event.content) as ProviderUsageTelemetry;
+                  recordRunEvent(
+                    "streaming",
+                    "Received provider usage telemetry.",
+                    providerUsage.source === "local-runtime" && typeof providerUsage.tokensPerSecond === "number"
+                      ? `${providerUsage.tokensPerSecond.toFixed(1)} TPS`
+                      : providerUsage.totalTokens
+                        ? `${providerUsage.totalTokens.toLocaleString()} total tokens`
+                        : providerUsage.model,
+                  );
                 } catch {
                   providerUsage = undefined;
                 }
@@ -560,7 +608,7 @@ export const executeChatTurn = async ({
             if (streamedReply || !isRunCurrent(runToken)) {
               throw streamError;
             }
-            setAgentActivityLabel("Streaming is unavailable on this route; using the non-streaming fallback.");
+            markProgress("thinking", "Streaming is unavailable on this route; using the non-streaming fallback.");
             return nonStreamingRequest();
           })
         : await nonStreamingRequest());
@@ -588,13 +636,15 @@ export const executeChatTurn = async ({
         ),
       ];
       setChatNotice(`Engineer tools used: ${recoveryTurn.toolEvents.map((event) => event.tool).join(", ")}`);
-      setAgentActivityLabel(
+      markProgress(
+        "completed",
         recoveryTurn.toolEvents.some((event) => event.tool === "provider_probe")
           ? "Checked provider routes and updated the recovery trail."
           : `Completed ${recoveryTurn.toolEvents.length} recovery action${recoveryTurn.toolEvents.length === 1 ? "" : "s"}.`,
       );
     } else {
-      setAgentActivityLabel(
+      markProgress(
+        "completed",
         recoveryAgentActive
           ? "Recovery turn completed. Waiting for the next action."
           : archiveContext?.pages.length
@@ -613,12 +663,11 @@ export const executeChatTurn = async ({
     commitReadyState(withFailure);
     setChatNotice(failure);
     setChatRunPhase("failed");
-    setAgentActivityLabel(
-      state.recoverySession.active ? "Recovery action failed. Review the latest error in chat." : "Reply failed. Review the latest error.",
-    );
+    markProgress("failed", state.recoverySession.active ? "Recovery action failed. Review the latest error in chat." : "Reply failed. Review the latest error.");
   } finally {
     if (isRunCurrent(runToken)) {
       setChatBusy(false);
+      setChatRunEvents([]);
     }
   }
 };

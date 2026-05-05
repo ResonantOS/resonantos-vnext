@@ -75,6 +75,16 @@ export type ArchiveAction = "archive-read" | "archive-intake-write" | "archive-k
 export type ConversationRole = "user" | "assistant";
 export type ConversationMessageStatus = "complete" | "interrupted" | "failed";
 export type ChatRunPhase = "idle" | "thinking" | "retrieving" | "streaming" | "tool-running" | "interrupted" | "failed" | "completed";
+export type ChatRunEventPhase = Exclude<ChatRunPhase, "idle"> | "command" | "search";
+export interface ChatRunEvent {
+  id: string;
+  runId: string;
+  createdAt: string;
+  phase: ChatRunEventPhase;
+  label: string;
+  detail?: string;
+  transient: boolean;
+}
 export type ConversationTranscriptEventAction =
   | "thread-created"
   | "thread-branched"

@@ -1,6 +1,6 @@
 # ResonantOS vNext Feature Backlog
 
-Last updated: 2026-05-01
+Last updated: 2026-05-05
 
 ## Core Shell
 
@@ -208,6 +208,10 @@ Last updated: 2026-05-01
   - default page is now a guided Start screen with one clear import action
   - Review, Sources, Search, Help, and Advanced are separate tabs so users do not see every subsystem at once
   - explanatory material moved into Help; Start should remain low-friction and action-oriented
+- Added persistent Living Archive memory overview on 2026-05-05:
+  - Start tab now reads the host imported-library registry and shows existing imported libraries after restart
+  - current memory overview shows memory root, domain map, imported/skipped counts, review count, and latest canonical library path
+  - importer is hidden when memory already exists and opens only for an explicit `Import Another Folder` action
 - Added System Architecture Memory foundation on 2026-04-25:
   - `ADR-014` defines host-owned ResonantOS architecture memory available before user knowledge intake
   - archive host now exposes `archive_system_memory` and `archive_refresh_system_memory`

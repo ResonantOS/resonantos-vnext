@@ -7,6 +7,8 @@ import type {
   LivingArchiveMemoryServiceResult,
   LivingArchiveMemoryServiceStatus,
   ProviderDiagnosticReport,
+  ProviderProfile,
+  ProviderRuntimeNode,
   ProviderSmokeTestResult,
   ResonantShellState,
 } from "../../core/contracts";
@@ -19,6 +21,7 @@ import {
   requestProviderSmokeTest,
   saveProviderSecret,
 } from "../../core/runtime";
+import { findProviderTemplate, type ProviderTemplateId } from "./provider-templates";
 
 type ReadyShellSnapshot = {
   state: ResonantShellState;
@@ -57,6 +60,19 @@ type RunProviderSmokeTestInput = {
   providerId: string;
   setProviderSmokeBusyId: Dispatch<SetStateAction<string | null>>;
   setProviderSmokeResults: Dispatch<SetStateAction<Record<string, ProviderSmokeTestResult>>>;
+  setSettingsNotice: Dispatch<SetStateAction<string | null>>;
+  errorMessageOf: (error: unknown, fallback: string) => string;
+};
+
+export type CreateProviderProfileInput = {
+  templateId: ProviderTemplateId;
+  label: string;
+  secret?: string;
+  apiBaseUrl?: string;
+};
+
+type ExecuteCreateProviderProfileInput = CreateProviderProfileInput & {
+  updateRuntimeState: (updater: (current: ResonantShellState) => ResonantShellState) => void;
   setSettingsNotice: Dispatch<SetStateAction<string | null>>;
   errorMessageOf: (error: unknown, fallback: string) => string;
 };
@@ -195,6 +211,96 @@ export const executeProviderSmokeTest = async ({
     setSettingsNotice(errorMessageOf(error, "Provider smoke test failed."));
   } finally {
     setProviderSmokeBusyId(null);
+  }
+};
+
+const createStableProviderId = (label: string, templateId: ProviderTemplateId): string => {
+  const safeLabel = label
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 34);
+  const suffix =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID().slice(0, 8)
+      : `${Date.now()}`.slice(-8);
+  return `provider-${safeLabel || templateId}-${suffix}`;
+};
+
+export const executeCreateProviderProfile = async ({
+  templateId,
+  label,
+  secret,
+  apiBaseUrl,
+  updateRuntimeState,
+  setSettingsNotice,
+  errorMessageOf,
+}: ExecuteCreateProviderProfileInput): Promise<void> => {
+  const template = findProviderTemplate(templateId);
+  if (!template) {
+    setSettingsNotice(`Provider template ${templateId} was not found.`);
+    return;
+  }
+  const cleanLabel = label.trim() || template.label;
+  const cleanSecret = secret?.trim() ?? "";
+  const cleanApiBaseUrl = apiBaseUrl?.trim() || template.defaultApiBaseUrl;
+
+  if (template.requiresBaseUrl && !cleanApiBaseUrl) {
+    setSettingsNotice(`${template.label} needs an API base URL.`);
+    return;
+  }
+  if (template.requiresSecret && !cleanSecret) {
+    setSettingsNotice(`${template.label} needs a credential before it can be added.`);
+    return;
+  }
+
+  try {
+    const providerId = createStableProviderId(cleanLabel, template.id);
+    const credentialStatus: ProviderProfile["credentialStatus"] = template.requiresSecret ? "configured" : "configured";
+    const provider: ProviderProfile = {
+      id: providerId,
+      label: cleanLabel,
+      providerType: template.providerType,
+      authSource: template.requiresSecret ? "shared-vault" : "manual",
+      authMethod: template.authMethod,
+      authTier: template.authTier,
+      apiBaseUrl: cleanApiBaseUrl,
+      allowedModels: [...template.allowedModels],
+      primaryModel: template.primaryModel,
+      fallbackModel: template.fallbackModel,
+      modelContext: template.modelContext.map((policy) => ({ ...policy })),
+      consumerScopes: [...template.consumerScopes],
+      shared: true,
+      status: template.id === "local" ? "fallback" : "ready",
+      credentialStatus,
+    };
+    const runtimeNode: ProviderRuntimeNode = {
+      id: `node-${providerId}`,
+      label: `${cleanLabel} Runtime`,
+      providerProfileId: providerId,
+      kind: template.runtimeKind,
+      locality: template.runtimeLocality,
+      endpoint: cleanApiBaseUrl,
+      supportedModels: [...template.allowedModels],
+      authTier: template.authTier,
+      healthState: template.id === "local" ? "deployable" : "ready",
+      deployableOnDemand: template.id === "local",
+      notes: [template.note],
+    };
+
+    if (template.requiresSecret) {
+      await saveProviderSecret(providerId, cleanSecret);
+    }
+
+    updateRuntimeState((draft) => ({
+      ...draft,
+      providers: [...draft.providers, provider],
+      runtimeNodes: [...draft.runtimeNodes, runtimeNode],
+    }));
+    setSettingsNotice(`${cleanLabel} was added to the provider fabric.`);
+  } catch (error) {
+    setSettingsNotice(errorMessageOf(error, "Failed to add provider profile."));
   }
 };
 

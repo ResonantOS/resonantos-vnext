@@ -3132,11 +3132,16 @@ describe("App boot flow", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Send message" })[0]);
 
     expect(await screen.findByText("Partial")).toBeTruthy();
+    expect(await screen.findByText(/Working for/i)).toBeTruthy();
+    expect((await screen.findAllByText(/Streaming the reply from the active provider route/i)).length).toBeGreaterThan(0);
     expect(requestProviderServiceChatCompletionMock).not.toHaveBeenCalled();
 
     continueStream.resolve();
 
     expect(await screen.findByText("Partial streamed reply.")).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.queryByText(/Working for/i)).toBeNull();
+    });
   });
 
   it("uses non-streaming chat when the selected adapter does not support streaming", async () => {
@@ -3571,11 +3576,14 @@ describe("App boot flow", () => {
 
     fireEvent.click(screen.getAllByRole("button", { name: /Settings/i })[0]);
 
-    expect(await screen.findByText("Provider diagnostics")).toBeTruthy();
+    expect(await screen.findByText("AI Providers")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Add AI Provider/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Shared MiniMax/i }));
+    expect(await screen.findByText("Diagnostics")).toBeTruthy();
     expect((await screen.findAllByText("MiniMax Cloud Runtime")).length).toBeGreaterThan(0);
     expect(requestProviderDiagnosticsMock).toHaveBeenCalled();
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Smoke Test" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Test" })[0]);
 
     expect((await screen.findAllByText("Provider smoke test passed.")).length).toBeGreaterThan(0);
     expect(screen.getByText(/MiniMax-M2.7 · 50 tokens/i)).toBeTruthy();
@@ -3586,6 +3594,21 @@ describe("App boot flow", () => {
         model: "MiniMax-M2.7",
       }),
     );
+  });
+
+  it("adds a provider profile through the compact settings modal", async () => {
+    render(<App />);
+
+    expect((await screen.findAllByText("Launch your AI tools from one workbench.")).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getAllByRole("button", { name: /Settings/i })[0]);
+    fireEvent.click(await screen.findByRole("button", { name: /Add AI Provider/i }));
+    fireEvent.change(screen.getByLabelText("Provider"), { target: { value: "local" } });
+    fireEvent.change(screen.getByLabelText("Name in ResonantOS"), { target: { value: "Studio Local Runtime" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add Provider" }));
+
+    expect(await screen.findByText("Studio Local Runtime")).toBeTruthy();
+    expect(screen.getByText("Studio Local Runtime was added to the provider fabric.")).toBeTruthy();
   });
 
   it("starts the Living Archive memory bridge from settings", async () => {
@@ -4305,6 +4328,46 @@ describe("App boot flow", () => {
     expect(await screen.findByText("1 note(s)")).toBeTruthy();
     expect(requestObsidianVaultStatusMock).toHaveBeenCalledWith("/Users/augmentor/Documents/ResonantVault");
     expect(requestObsidianNoteListMock).toHaveBeenCalledWith("/Users/augmentor/Documents/ResonantVault", 500);
+  });
+
+  it("shows previously imported Living Archive libraries on the Start page after restart", async () => {
+    requestArchiveImportedLibrariesMock.mockResolvedValue([
+      {
+        importedAt: "unix:10",
+        domain: "mixed-library",
+        importMode: "copy",
+        libraryId: "resonant-os-base",
+        libraryName: "RESONANT_OS_BASE",
+        originalPath: "/Users/augmentor/Documents/RESONANT_OS_BASE",
+        canonicalRoot:
+          "/Users/augmentor/ResonantOS_User/Memory/INTAKE/imports/mixed/sources/resonant-os-base",
+        filesSeen: 1454,
+        filesImported: 1454,
+        skippedFiles: 17306,
+        manifestPath:
+          "/Users/augmentor/ResonantOS_User/Memory/INTAKE/imports/mixed/metadata/resonant-os-base-manifest.json",
+        versionLedgerPath:
+          "/Users/augmentor/ResonantOS_User/Memory/INTAKE/imports/mixed/metadata/resonant-os-base-version-ledger.jsonl",
+        classificationManifestPath:
+          "/Users/augmentor/ResonantOS_User/Memory/INTAKE/imports/mixed/metadata/resonant-os-base-classification-review.json",
+        classificationStatus: "needs-ai-assisted-classification",
+        metadataStandard: "obsidian-frontmatter-wikilinks",
+        obsidianVaultDetected: false,
+        recommendedAddon: "addon.obsidian",
+        recordsCount: 1454,
+      },
+    ]);
+
+    render(<App />);
+
+    expect((await screen.findAllByText("Launch your AI tools from one workbench.")).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getAllByRole("button", { name: /Archive/i })[0]);
+
+    expect(await screen.findByText("Your archive is already connected.")).toBeTruthy();
+    expect(await screen.findByText("RESONANT_OS_BASE")).toBeTruthy();
+    expect(await screen.findByText(new RegExp("ResonantOS_User/Memory/INTAKE/imports/mixed/sources/resonant-os-base"))).toBeTruthy();
+    expect(screen.getByText("1 imported library")).toBeTruthy();
+    expect(screen.queryByText("Library Importer")).toBeNull();
   });
 
   it("opens a host-owned mixed library classification review from the source registry", async () => {

@@ -35,6 +35,7 @@ import { ArchiveClassificationReviewPanel } from "./ArchiveClassificationReviewP
 import { ArchiveDiagnostics } from "./ArchiveDiagnostics";
 import { ArchiveDocumentReader } from "./ArchiveDocumentReader";
 import { ArchiveLibraryImporter } from "./ArchiveLibraryImporter";
+import { ArchiveMemoryOverview } from "./ArchiveMemoryOverview";
 import { ArchiveRecentActivity } from "./ArchiveRecentActivity";
 import { ArchiveReviewDesk } from "./ArchiveReviewDesk";
 import { ArchiveSearchPanel } from "./ArchiveSearchPanel";
@@ -171,6 +172,7 @@ export function ArchiveWorkspace({
   const runMaintenanceRef = useRef(onRunArchiveMaintenance);
   const [activeTab, setActiveTab] = useState<ArchiveWorkspaceTab>("start");
   const [autoMaintenanceEnabled, setAutoMaintenanceEnabled] = useState(false);
+  const [importerOpen, setImporterOpen] = useState(false);
 
   useEffect(() => {
     if (focusTarget !== "review") {
@@ -187,6 +189,9 @@ export function ArchiveWorkspace({
   const audio2TolInstallation = state.installations["addon.audio2tol"];
   const audio2TolEnabled = Boolean(audio2TolInstallation?.installed && audio2TolInstallation.enabled);
   const needsWork = archiveQueue.length + pendingArtifacts + unprocessedSources;
+  const hasImportedLibraries = archiveImportedLibraries.length > 0;
+  const importerVisible =
+    importerOpen || !hasImportedLibraries || Boolean(archiveLibraryPreflightResult) || Boolean(archiveLibraryImportResult);
 
   useEffect(() => {
     runMaintenanceRef.current = onRunArchiveMaintenance;
@@ -210,6 +215,7 @@ export function ArchiveWorkspace({
 
   const scrollToImporter = () => {
     setActiveTab("start");
+    setImporterOpen(true);
     window.requestAnimationFrame(() => {
       importerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
@@ -222,12 +228,16 @@ export function ArchiveWorkspace({
           <div className="archive-start-copy">
             <span className={`archive-status-dot ${archiveReady ? "ready" : "warning"}`} />
             <span className="eyebrow">Living Archive</span>
-            <h2>Turn your folders into organised AI-readable memory.</h2>
-            <p>Preserve the original human source, let ResonantOS prepare a safe import plan, then review it with Augmentor.</p>
+            <h2>{hasImportedLibraries ? "Your memory is persistent." : "Turn folders into AI-readable memory."}</h2>
+            <p>
+              {hasImportedLibraries
+                ? "Imported libraries stay in ResonantOS memory. Open the structure, review queue, or add another source."
+                : "Choose a folder once. ResonantOS keeps the managed copy and shows where memory is stored."}
+            </p>
           </div>
           <div className="archive-start-actions">
             <button type="button" className="button-primary touch-action" onClick={scrollToImporter}>
-              Start Memory Import
+              {hasImportedLibraries ? "Import Another Folder" : "Start Memory Import"}
             </button>
             <button type="button" className="button-secondary touch-action" onClick={onRefreshArchiveStatus} disabled={archiveStatusBusy}>
               {archiveStatusBusy ? "Checking..." : archiveReady ? "Archive Online" : "Check Archive"}
@@ -237,6 +247,7 @@ export function ArchiveWorkspace({
 
         <div className="archive-start-summary" aria-label="Archive status summary">
           <span className={archiveReady ? "ready" : "warning"}>{archiveReady ? "Archive online" : "Archive needs check"}</span>
+          <span>{archiveImportedLibraries.length} imported librar{archiveImportedLibraries.length === 1 ? "y" : "ies"}</span>
           <span>{needsWork} item(s) need attention</span>
           <span>{pagesTotal} wiki page(s)</span>
         </div>
@@ -264,17 +275,29 @@ export function ArchiveWorkspace({
       </nav>
 
       {activeTab === "start" ? (
-        <div ref={importerRef}>
-          <ArchiveLibraryImporter
-            archiveSourceScanBusy={archiveSourceScanBusy}
-            archiveLibraryImportResult={archiveLibraryImportResult}
-            archiveLibraryPreflightResult={archiveLibraryPreflightResult}
-            onPickLibraryFolder={onPickLibraryFolder}
-            onPreflightLibrary={onPreflightLibrary}
-            onAskAugmentorAboutPreflight={onAskAugmentorAboutPreflight}
-            onImportLibrary={onImportLibrary}
+        <>
+          <ArchiveMemoryOverview
+            archiveStatus={archiveStatus}
+            archiveImportedLibraries={archiveImportedLibraries}
+            needsWork={needsWork}
+            onOpenSources={() => setActiveTab("sources")}
+            onOpenReview={() => setActiveTab("review")}
+            onImportAnother={scrollToImporter}
           />
-        </div>
+          {importerVisible ? (
+            <div ref={importerRef}>
+              <ArchiveLibraryImporter
+                archiveSourceScanBusy={archiveSourceScanBusy}
+                archiveLibraryImportResult={archiveLibraryImportResult}
+                archiveLibraryPreflightResult={archiveLibraryPreflightResult}
+                onPickLibraryFolder={onPickLibraryFolder}
+                onPreflightLibrary={onPreflightLibrary}
+                onAskAugmentorAboutPreflight={onAskAugmentorAboutPreflight}
+                onImportLibrary={onImportLibrary}
+              />
+            </div>
+          ) : null}
+        </>
       ) : null}
 
       {activeTab === "review" ? (

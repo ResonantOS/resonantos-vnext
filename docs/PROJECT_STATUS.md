@@ -1,6 +1,6 @@
 # ResonantOS vNext Project Status
 
-Last updated: 2026-05-04
+Last updated: 2026-05-05
 
 This document is the operational checkpoint for what exists now, what is partially built, and what still needs to be done. It is intentionally shorter than the ADRs and backlog: use it to regain project state quickly before deciding the next work item.
 
@@ -40,7 +40,7 @@ The shell direction is a three-zone app:
 
 The latest deterministic check completed with:
 
-- `npm test -- --run`: 143 passed
+- `npm test -- --run`: 146 passed
 - `npm run test:living-archive-mcp`: passed
 - `npm run test:living-archive-memory-service`: passed
 - `npm run build`: passed
@@ -212,6 +212,7 @@ Current Living Archive status:
 - The preflight UI can open a new Augmentor session with a structured prompt containing the current preflight and recommended-plan context, so the user can ask why files were skipped or what to do next from inside ResonantOS.
 - The Living Archive workspace is now guided by default: the first screen is a short import-oriented start page, with Review, Sources, Search, Help, and Advanced panels behind tabs instead of rendering every subsystem at once.
 - The Help tab owns explanatory copy; the default Start tab should stay action-oriented and avoid long reading blocks.
+- The Start tab now shows a persistent Current Memory overview when imported libraries already exist, including managed memory location, domain map, imported/skipped counts, and the latest canonical library path. The importer stays hidden until the user imports another folder.
 - Reorganisation plans can be generated as preview-only artifacts.
 - Reorganisation plans are explicitly marked `eligibleForExecution = false`.
 - Actual file moves are not implemented and should not be added without audit, rollback, approval, and tests.
