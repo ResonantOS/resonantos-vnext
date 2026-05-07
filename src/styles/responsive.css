@@ -375,7 +375,6 @@
 
 .chat-collapsed-toggle {
   writing-mode: vertical-rl;
-  transform: rotate(180deg);
   letter-spacing: 0.18em;
   text-transform: uppercase;
   font-size: 0.74rem;
