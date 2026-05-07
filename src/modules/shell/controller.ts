@@ -14,6 +14,7 @@ import {
   loadBundledManifests,
   loadProviderCredentialStatuses,
   loadSideloadedManifests,
+  persistState,
   requestLocalRuntimeStatus,
   requestRecoveryRouteCandidates,
 } from "../../core/runtime";
@@ -32,6 +33,7 @@ export const loadInitialShellState = async (): Promise<BootedShellState> => {
   const state = await hydrateState(bundled, sideloaded);
   const credentialStatuses = await loadProviderCredentialStatuses();
   const nextState = applyProviderCredentialStatuses(state, credentialStatuses);
+  await persistState(nextState);
   if (!nextState.recoverySession.active) {
     nextState.uiPreferences.activeSection = "overview";
   }

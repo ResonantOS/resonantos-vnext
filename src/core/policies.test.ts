@@ -79,7 +79,13 @@ describe("provider routing", () => {
   });
 
   it("resolves a primary provider runtime node when a healthy route exists", () => {
-    const state = buildDefaultState([]);
+    const base = buildDefaultState([]);
+    const state = {
+      ...base,
+      providers: base.providers.map((p) =>
+        p.providerType !== "local" ? { ...p, credentialStatus: "configured" as const } : p,
+      ),
+    };
     const resolved = resolveProviderRoute(state, {
       consumerId: "strategist.core",
       primaryProviderProfileId: "shared-minimax",

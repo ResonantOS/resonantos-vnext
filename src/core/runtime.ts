@@ -1372,14 +1372,10 @@ export const hydrateState = async (bundled: AddOnManifest[], sideloaded: AddOnMa
   const persisted = await readPersistedState();
 
   if (!persisted) {
-    const next = rebaseStateOnManifests(base, manifests, sideloaded.map((manifest) => manifest.id));
-    await persistState(next);
-    return next;
+    return rebaseStateOnManifests(base, manifests, sideloaded.map((manifest) => manifest.id));
   }
 
-  const next = rebaseStateOnManifests(normalizeState(persisted, base), manifests, sideloaded.map((manifest) => manifest.id));
-  await persistState(next);
-  return next;
+  return rebaseStateOnManifests(normalizeState(persisted, base), manifests, sideloaded.map((manifest) => manifest.id));
 };
 
 export const rebaseStateOnManifests = (
@@ -1456,6 +1452,7 @@ const normalizeProviders = (
       authMethod: profile.authMethod,
       authTier: profile.authTier,
       providerType: profile.providerType,
+      credentialStatus: profile.credentialStatus,
       primaryModel,
       fallbackModel,
     };
