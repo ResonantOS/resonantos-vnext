@@ -44,6 +44,20 @@ type ViewModelInput = {
 const latestProviderUsageFor = (thread: ConversationThread | null): ProviderUsageTelemetry | undefined =>
   [...(thread?.messages ?? [])].reverse().find((message) => message.providerUsage)?.providerUsage;
 
+const DEFAULT_HERMES_MODEL = "gemma-4-26b-a4b-q4_k_m.gguf";
+
+const uniqueModels = (models: string[]): string[] =>
+  Array.from(new Set(models.map((model) => model.trim()).filter(Boolean)));
+
+const configuredHermesModels = (state: ResonantShellState): string[] => {
+  const config = state.installations["addon.hermes"]?.config ?? {};
+  const configuredModel = typeof config.hermesModel === "string" ? config.hermesModel : "";
+  const configuredModels = Array.isArray(config.hermesAvailableModels)
+    ? config.hermesAvailableModels.filter((item): item is string => typeof item === "string")
+    : [];
+  return uniqueModels([configuredModel, ...configuredModels, DEFAULT_HERMES_MODEL]);
+};
+
 export const channelAllowedByOwningAddon = (state: ResonantShellState, channel: ChannelDefinition): boolean => {
   const addonId = channel.metadata?.addonId;
   if (!addonId) {
@@ -110,6 +124,9 @@ export const resolveActiveProviderForSelection = (
   const activeThread = activeThreadId ? state.conversationThreads.find((thread) => thread.id === activeThreadId) : null;
   const activeAgentId =
     activeThread?.owningAgentId ?? (state.recoverySession.active ? state.recoverySession.engineerAgentId : "strategist.core");
+  if (activeAgentId === "hermes.agent") {
+    return state.providers.find((profile) => profile.id === "shared-local") ?? state.providers.find((profile) => profile.providerType === "local");
+  }
   return (
     resolveAgentChatRoute(state, activeAgentId, selectedChatModel).provider ??
     resolveProviderPath(
@@ -135,6 +152,9 @@ export const resolveSelectableChatModelsForSelection = (
   const activeThread = activeThreadId ? state.conversationThreads.find((thread) => thread.id === activeThreadId) : null;
   const activeAgentId =
     activeThread?.owningAgentId ?? (state.recoverySession.active ? state.recoverySession.engineerAgentId : "strategist.core");
+  if (activeAgentId === "hermes.agent") {
+    return configuredHermesModels(state);
+  }
   return selectableAgentChatModels(state, activeAgentId);
 };
 
@@ -193,13 +213,18 @@ export const buildShellViewModel = ({
   const activeAgentId = activeThread?.owningAgentId ?? (recoveryModeActive ? state.recoverySession.engineerAgentId : "strategist.core");
   const activeRoute = resolveAgentChatRoute(state, activeAgentId, selectedChatModel);
   const strategistRoute = resolveStrategistChatRoute(state, selectedChatModel);
-  const activeProvider = activeRoute.provider ?? providerResolution.active;
-  const activeRuntimeNode = activeRoute.runtimeNode;
-  const selectableChatModels = selectableAgentChatModels(state, activeAgentId);
+  const hermesAgentActive = activeAgentId === "hermes.agent";
+  const activeProvider = hermesAgentActive
+    ? state.providers.find((profile) => profile.id === "shared-local") ?? activeRoute.provider ?? providerResolution.active
+    : activeRoute.provider ?? providerResolution.active;
+  const activeRuntimeNode = hermesAgentActive ? undefined : activeRoute.runtimeNode;
+  const selectableChatModels = hermesAgentActive ? configuredHermesModels(state) : selectableAgentChatModels(state, activeAgentId);
   const activeChatModel =
     selectedChatModel && selectableChatModels.includes(selectedChatModel)
       ? selectedChatModel
-      : activeRoute.model || activeProvider?.primaryModel || "";
+      : hermesAgentActive
+        ? selectableChatModels[0] ?? DEFAULT_HERMES_MODEL
+        : activeRoute.model || activeProvider?.primaryModel || "";
   const strategistRecoveryActive =
     recoveryModeActive || strategist?.providerProfileId === "shared-local" || activeRuntimeNode?.kind === "local";
   const latestCompactState = activeThread ? latestCompactStateForThread(state, activeThread.id) : null;

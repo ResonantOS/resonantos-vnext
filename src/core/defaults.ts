@@ -575,7 +575,7 @@ export const workspaces: WorkspaceDefinition[] = [
     title: "Hermes Integration",
     visibility: "user-facing",
     sharedArtifacts: false,
-    surfaces: ["chat", "delegation", "compatibility-audit"],
+    surfaces: ["chat", "dashboard", "kanban", "profiles", "slashgoal", "archivist", "compatibility-audit"],
     channelIds: ["desktop-hermes"],
   },
 ];

@@ -61,6 +61,15 @@ const artifactTypes: readonly DelegationArtifactType[] = [
   "verification-report",
   "archive-intake-bundle",
 ];
+const installModes = ["detect-existing-only", "detect-existing-or-install", "bundled", "manual"] as const;
+const credentialSetupModes = ["none", "user-guided", "host-vault", "external"] as const;
+const auditRemediationPolicies = ["suggest-only", "approval-gated", "automatic-safe"] as const;
+const embeddedWorkspaceModes = ["hosted-dashboard", "native-panel", "terminal", "browser"] as const;
+const settingsVisibilityModes = ["hidden-collapsible", "visible", "separate-panel"] as const;
+const modelMetadataSources = ["runtime-audit", "provider-profile", "manifest-default", "user-config"] as const;
+const outputFilteringModes = ["assistant-reply-only", "structured-events", "raw-log"] as const;
+const archiveReadModes = ["none", "read-only-context", "retrieval-with-citations"] as const;
+const archiveWriteModes = ["none", "intake-only"] as const;
 
 const addonIdPattern = /^addon\.[a-z0-9][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*)*$/;
 const semanticVersionPattern = /^\d+\.\d+\.\d+(?:[-+][a-z0-9.-]+)?$/i;
@@ -108,6 +117,47 @@ const validateStringArray = (
   if (!Array.isArray(value) || value.some((item) => !isString(item))) {
     pushIssue(issues, "error", "string-array", path, `${path} must be an array of non-empty strings.`);
   }
+};
+
+const validateCapabilityReferences = (
+  issues: AddOnValidationIssue[],
+  value: unknown,
+  path: string,
+  requestedCapabilitySet: Set<Capability>,
+  code: string,
+  message: string,
+) => {
+  if (!Array.isArray(value)) {
+    pushIssue(issues, "error", "capabilities-array", path, `${path} must be an array of capabilities requested by the manifest.`);
+    return;
+  }
+  value.forEach((capability, capabilityIndex) => {
+    validateEnum(issues, capability, ADDON_CAPABILITIES, `${path}[${capabilityIndex}]`);
+    if (ADDON_CAPABILITIES.includes(capability as Capability) && !requestedCapabilitySet.has(capability as Capability)) {
+      pushIssue(issues, "error", code, `${path}[${capabilityIndex}]`, message);
+    }
+  });
+};
+
+const validateToolReference = (
+  issues: AddOnValidationIssue[],
+  value: unknown,
+  path: string,
+  declaredToolNames: Set<string>,
+) => {
+  if (isString(value) && !declaredToolNames.has(value)) {
+    pushIssue(issues, "error", "unknown-tool-reference", path, `${path} must reference a tool declared by the manifest.`);
+  }
+};
+
+const validateRequiredToolReference = (
+  issues: AddOnValidationIssue[],
+  value: unknown,
+  path: string,
+  declaredToolNames: Set<string>,
+) => {
+  validateStringValue(issues, value, path);
+  validateToolReference(issues, value, path, declaredToolNames);
 };
 
 const validateEnum = <T extends string>(
@@ -545,6 +595,221 @@ export const validateAddOnManifest = (
           "Augmentor skill auditLogRequired must be boolean.",
         );
       }
+    });
+  }
+
+  if (isRecord(candidate.install)) {
+    validateEnum(issues, candidate.install.mode, installModes, "install.mode");
+    validateCapabilityReferences(
+      issues,
+      candidate.install.requiredCapabilities,
+      "install.requiredCapabilities",
+      requestedCapabilitySet,
+      "install-unrequested-capability",
+      "Install contracts may only require capabilities requested by the manifest.",
+    );
+    validateToolReference(issues, candidate.install.detectionTool, "install.detectionTool", declaredToolNames);
+    validateToolReference(issues, candidate.install.installTool, "install.installTool", declaredToolNames);
+    validateToolReference(issues, candidate.install.repairTool, "install.repairTool", declaredToolNames);
+    validateEnum(issues, candidate.install.credentialSetup, credentialSetupModes, "install.credentialSetup");
+    if (typeof candidate.install.requiresHumanApprovalBeforeInstall !== "boolean") {
+      pushIssue(issues, "error", "install-approval-boolean", "install.requiresHumanApprovalBeforeInstall", "Install approval must be boolean.");
+    }
+    if (typeof candidate.install.preservesExistingUserConfig !== "boolean") {
+      pushIssue(issues, "error", "install-preserves-config-boolean", "install.preservesExistingUserConfig", "preservesExistingUserConfig must be boolean.");
+    }
+    if (typeof candidate.install.auditLogRequired !== "boolean") {
+      pushIssue(issues, "error", "install-audit-boolean", "install.auditLogRequired", "Install auditLogRequired must be boolean.");
+    }
+    if (Array.isArray(candidate.install.expectedArtifacts)) {
+      candidate.install.expectedArtifacts.forEach((artifactType, artifactIndex) => {
+        validateEnum(issues, artifactType, artifactTypes, `install.expectedArtifacts[${artifactIndex}]`);
+      });
+    } else {
+      pushIssue(issues, "error", "install-artifacts-array", "install.expectedArtifacts", "Install expectedArtifacts must be an array.");
+    }
+    if (candidate.install.mode === "detect-existing-or-install" && !candidate.install.preservesExistingUserConfig) {
+      pushIssue(
+        issues,
+        "error",
+        "install-must-preserve-existing-config",
+        "install.preservesExistingUserConfig",
+        "Installers that detect existing local software must preserve existing user configuration.",
+      );
+    }
+    if (candidate.install.mode === "detect-existing-or-install" && candidate.install.requiresHumanApprovalBeforeInstall !== true) {
+      pushIssue(
+        issues,
+        "error",
+        "install-requires-human-approval",
+        "install.requiresHumanApprovalBeforeInstall",
+        "Host-mediated installation of external software requires human approval.",
+      );
+    }
+  }
+
+  if (isRecord(candidate.audit)) {
+    validateRequiredToolReference(issues, candidate.audit.tool, "audit.tool", declaredToolNames);
+    validateStringArray(issues, candidate.audit.checks, "audit.checks");
+    validateCapabilityReferences(
+      issues,
+      candidate.audit.requiredCapabilities,
+      "audit.requiredCapabilities",
+      requestedCapabilitySet,
+      "audit-unrequested-capability",
+      "Audit contracts may only require capabilities requested by the manifest.",
+    );
+    validateEnum(issues, candidate.audit.remediationPolicy, auditRemediationPolicies, "audit.remediationPolicy");
+    if (typeof candidate.audit.auditLogRequired !== "boolean") {
+      pushIssue(issues, "error", "audit-log-boolean", "audit.auditLogRequired", "Audit auditLogRequired must be boolean.");
+    }
+  }
+
+  if (isRecord(candidate.embeddedWorkspace)) {
+    const embeddedWorkspace = candidate.embeddedWorkspace;
+    validateStringValue(issues, candidate.embeddedWorkspace.surfaceId, "embeddedWorkspace.surfaceId");
+    if (
+      isString(embeddedWorkspace.surfaceId) &&
+      Array.isArray(candidate.surfaces) &&
+      !candidate.surfaces.some((surface) => isRecord(surface) && surface.id === embeddedWorkspace.surfaceId)
+    ) {
+      pushIssue(
+        issues,
+        "error",
+        "embedded-workspace-unknown-surface",
+        "embeddedWorkspace.surfaceId",
+        "Embedded workspace contracts must reference a declared surface.",
+      );
+    }
+    validateEnum(issues, candidate.embeddedWorkspace.mode, embeddedWorkspaceModes, "embeddedWorkspace.mode");
+    validateEnum(issues, candidate.embeddedWorkspace.settingsVisibility, settingsVisibilityModes, "embeddedWorkspace.settingsVisibility");
+    validateToolReference(issues, candidate.embeddedWorkspace.healthTool, "embeddedWorkspace.healthTool", declaredToolNames);
+    validateCapabilityReferences(
+      issues,
+      candidate.embeddedWorkspace.requiredCapabilities,
+      "embeddedWorkspace.requiredCapabilities",
+      requestedCapabilitySet,
+      "embedded-workspace-unrequested-capability",
+      "Embedded workspace contracts may only require capabilities requested by the manifest.",
+    );
+    if (typeof candidate.embeddedWorkspace.autoStart !== "boolean") {
+      pushIssue(issues, "error", "embedded-workspace-autostart-boolean", "embeddedWorkspace.autoStart", "autoStart must be boolean.");
+    }
+  }
+
+  if (isRecord(candidate.memoryAccess)) {
+    validateEnum(issues, candidate.memoryAccess.archiveReadMode, archiveReadModes, "memoryAccess.archiveReadMode");
+    validateEnum(issues, candidate.memoryAccess.archiveWriteMode, archiveWriteModes, "memoryAccess.archiveWriteMode");
+    if (typeof candidate.memoryAccess.citationRequired !== "boolean") {
+      pushIssue(issues, "error", "memory-access-citation-boolean", "memoryAccess.citationRequired", "citationRequired must be boolean.");
+    }
+    if (candidate.memoryAccess.directKnowledgeWriteAllowed !== false) {
+      pushIssue(
+        issues,
+        "error",
+        "memory-access-knowledge-write-forbidden",
+        "memoryAccess.directKnowledgeWriteAllowed",
+        "Add-on memory contracts must explicitly keep trusted knowledge writes disabled.",
+      );
+    }
+    if (candidate.memoryAccess.archiveReadMode !== "none" && !requestedCapabilitySet.has("archive-read")) {
+      pushIssue(
+        issues,
+        "error",
+        "memory-access-read-requires-capability",
+        "requestedCapabilities",
+        "Memory read contracts require archive-read.",
+      );
+    }
+    if (candidate.memoryAccess.archiveWriteMode === "intake-only" && !requestedCapabilitySet.has("archive-intake-write")) {
+      pushIssue(
+        issues,
+        "error",
+        "memory-access-intake-requires-capability",
+        "requestedCapabilities",
+        "Memory intake contracts require archive-intake-write.",
+      );
+    }
+  }
+
+  if (isRecord(candidate.agentRuntime)) {
+    validateRequiredToolReference(issues, candidate.agentRuntime.invocationTool, "agentRuntime.invocationTool", declaredToolNames);
+    validateStringValue(issues, candidate.agentRuntime.chatAuthorLabel, "agentRuntime.chatAuthorLabel");
+    validateEnum(issues, candidate.agentRuntime.displayNameSource, ["manifest", "runtime-profile"] as const, "agentRuntime.displayNameSource");
+    validateEnum(issues, candidate.agentRuntime.outputFiltering, outputFilteringModes, "agentRuntime.outputFiltering");
+    validateCapabilityReferences(
+      issues,
+      candidate.agentRuntime.requiredCapabilities,
+      "agentRuntime.requiredCapabilities",
+      requestedCapabilitySet,
+      "agent-runtime-unrequested-capability",
+      "Agent runtime contracts may only require capabilities requested by the manifest.",
+    );
+    for (const booleanField of ["supportsStreaming", "supportsCancellation", "supportsModelSelection"] as const) {
+      if (typeof candidate.agentRuntime[booleanField] !== "boolean") {
+        pushIssue(issues, "error", "agent-runtime-boolean", `agentRuntime.${booleanField}`, `${booleanField} must be boolean.`);
+      }
+    }
+    if (candidate.agentRuntime.supportsModelSelection && !isRecord(candidate.agentRuntime.modelSelection)) {
+      pushIssue(
+        issues,
+        "error",
+        "agent-runtime-model-selection-required",
+        "agentRuntime.modelSelection",
+        "Agent runtimes that support model selection must declare modelSelection.",
+      );
+    }
+    if (isRecord(candidate.agentRuntime.modelSelection)) {
+      validateEnum(issues, candidate.agentRuntime.modelSelection.source, modelMetadataSources, "agentRuntime.modelSelection.source");
+      validateStringValue(issues, candidate.agentRuntime.modelSelection.currentModelField, "agentRuntime.modelSelection.currentModelField");
+      validateToolReference(issues, candidate.agentRuntime.modelSelection.changeTool, "agentRuntime.modelSelection.changeTool", declaredToolNames);
+      if (typeof candidate.agentRuntime.modelSelection.selectable !== "boolean") {
+        pushIssue(issues, "error", "model-selection-selectable-boolean", "agentRuntime.modelSelection.selectable", "selectable must be boolean.");
+      }
+      validateCapabilityReferences(
+        issues,
+        candidate.agentRuntime.modelSelection.requiredCapabilities,
+        "agentRuntime.modelSelection.requiredCapabilities",
+        requestedCapabilitySet,
+        "model-selection-unrequested-capability",
+        "Model selection contracts may only require capabilities requested by the manifest.",
+      );
+    }
+    if (candidate.agentRuntime.outputFiltering === "raw-log") {
+      pushIssue(
+        issues,
+        "warning",
+        "agent-runtime-raw-log-output",
+        "agentRuntime.outputFiltering",
+        "Agent chat integrations should normally filter terminal/TUI output and return assistant-visible reply text.",
+      );
+    }
+  }
+
+  if (Array.isArray(candidate.smokeTests)) {
+    candidate.smokeTests.forEach((smokeTest, index) => {
+      const path = `smokeTests[${index}]`;
+      if (!isRecord(smokeTest)) {
+        pushIssue(issues, "error", "smoke-test-object", path, "Smoke test must be an object.");
+        return;
+      }
+      validateStringValue(issues, smokeTest.id, `${path}.id`);
+      validateRequiredToolReference(issues, smokeTest.tool, `${path}.tool`, declaredToolNames);
+      if (!isRecord(smokeTest.input)) {
+        pushIssue(issues, "error", "smoke-test-input-object", `${path}.input`, "Smoke test input must be an object.");
+      }
+      validateStringValue(issues, smokeTest.expectedOutputPattern, `${path}.expectedOutputPattern`);
+      if (typeof smokeTest.timeoutMs !== "number" || smokeTest.timeoutMs <= 0) {
+        pushIssue(issues, "error", "smoke-test-timeout", `${path}.timeoutMs`, "Smoke test timeoutMs must be a positive number.");
+      }
+      validateCapabilityReferences(
+        issues,
+        smokeTest.requiredCapabilities,
+        `${path}.requiredCapabilities`,
+        requestedCapabilitySet,
+        "smoke-test-unrequested-capability",
+        "Smoke tests may only require capabilities requested by the manifest.",
+      );
     });
   }
 

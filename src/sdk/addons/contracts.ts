@@ -5,7 +5,13 @@ import type {
   AddOnEngineerSetupRunbook,
   AddOnLocalServiceDefinition,
   AddOnManifest,
+  AddOnAgentRuntimeContract,
+  AddOnAuditContract,
+  AddOnEmbeddedWorkspaceContract,
+  AddOnInstallContract,
+  AddOnMemoryAccessContract,
   AddOnServiceProtocol,
+  AddOnDeterministicSmokeTest,
   AddOnToolDefinition,
   Capability,
 } from "../../core/contracts";
@@ -18,6 +24,12 @@ export type AddOnSdkManifest = AddOnManifest & {
   tools?: AddOnToolDefinition[];
   engineerSetup?: AddOnEngineerSetupRunbook;
   augmentorSkills?: AddOnAugmentorSkill[];
+  install?: AddOnInstallContract;
+  audit?: AddOnAuditContract;
+  embeddedWorkspace?: AddOnEmbeddedWorkspaceContract;
+  agentRuntime?: AddOnAgentRuntimeContract;
+  memoryAccess?: AddOnMemoryAccessContract;
+  smokeTests?: AddOnDeterministicSmokeTest[];
 };
 
 export type AddOnManifestSource = "bundled" | "sideload";

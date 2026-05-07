@@ -76,6 +76,12 @@ Optional V0 fields:
 - `agents`
 - `engineerSetup`
 - `augmentorSkills`
+- `install`
+- `audit`
+- `embeddedWorkspace`
+- `agentRuntime`
+- `memoryAccess`
+- `smokeTests`
 
 ### Runtime Types
 
@@ -182,6 +188,74 @@ Rules:
 - Add-on skills should make the add-on easier to use without hiding provider cost, external-risk, archive, or approval boundaries from the human.
 
 Template: `docs/architecture/ADDON_AUGMENTOR_SKILL_TEMPLATE.md`
+
+### Agent Add-on Operating Contracts
+
+The Hermes integration proved that agent add-ons need more than a surface, a tool list, and broad capability grants. They need explicit contracts for existing local installs, compatibility audit, chat output filtering, model metadata, workspace embedding, memory boundaries, and deterministic verification.
+
+Agent add-ons may declare these additional manifest fields:
+
+- `install`
+- `audit`
+- `embeddedWorkspace`
+- `agentRuntime`
+- `memoryAccess`
+- `smokeTests`
+
+Rules:
+
+- Add-ons that can reuse existing local software should use `install.mode: "detect-existing-or-install"` and must set `preservesExistingUserConfig: true`.
+- Host-mediated installation of external software requires `requiresHumanApprovalBeforeInstall: true`.
+- Installer and audit contracts may only use capabilities requested by the manifest.
+- Installer, audit, workspace, model, runtime, and smoke-test tool references must point to tools declared by the same manifest.
+- Agent chat integrations should return assistant-visible reply text, not terminal banners, ANSI/TUI frames, setup logs, or session trailers.
+- If an agent supports model selection, `agentRuntime.modelSelection` must declare the source of truth and required capabilities.
+- Embedded dashboards should declare whether they auto-start and where settings live; workspace-first dashboards should normally use `settingsVisibility: "hidden-collapsible"`.
+- Agent memory access must stay read-only for trusted Living Archive knowledge. Writes must go through intake boundaries.
+- Agent add-ons should ship deterministic smoke tests that prove the installed/runtime path can answer a bounded prompt before asking the human to test manually.
+
+Recommended baseline for a local agent add-on:
+
+```json
+{
+  "install": {
+    "mode": "detect-existing-or-install",
+    "detectionTool": "<addon>.audit",
+    "installTool": "<addon>.install",
+    "requiredCapabilities": ["network", "shell"],
+    "requiresHumanApprovalBeforeInstall": true,
+    "preservesExistingUserConfig": true,
+    "credentialSetup": "user-guided",
+    "auditLogRequired": true,
+    "expectedArtifacts": ["diagnostic-report", "log"]
+  },
+  "audit": {
+    "tool": "<addon>.audit",
+    "checks": ["version", "runtime", "identity", "skills", "memory", "model"],
+    "requiredCapabilities": ["shell"],
+    "remediationPolicy": "approval-gated",
+    "auditLogRequired": true
+  },
+  "agentRuntime": {
+    "invocationTool": "<addon>.chat",
+    "chatAuthorLabel": "<Agent Name>",
+    "displayNameSource": "runtime-profile",
+    "supportsStreaming": false,
+    "supportsCancellation": true,
+    "supportsModelSelection": true,
+    "outputFiltering": "assistant-reply-only",
+    "requiredCapabilities": ["shell", "providers"]
+  },
+  "memoryAccess": {
+    "archiveReadMode": "retrieval-with-citations",
+    "archiveWriteMode": "intake-only",
+    "citationRequired": true,
+    "directKnowledgeWriteAllowed": false
+  }
+}
+```
+
+Template: `docs/architecture/ADDON_AGENT_CONTRACT_TEMPLATE.md`
 
 ### Service Contract
 

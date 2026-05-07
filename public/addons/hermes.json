@@ -12,6 +12,12 @@
       "type": "panel",
       "label": "Hermes Console",
       "description": "Manage communication workflows, approvals, and delivery status."
+    },
+    {
+      "id": "hermes-workspace",
+      "type": "embedded-pane",
+      "label": "Hermes Workspace",
+      "description": "Embed the local Hermes dashboard, Kanban board, profiles, curator, and long-running goal controls in the central workspace."
     }
   ],
   "requestedCapabilities": [
@@ -38,6 +44,12 @@
       "granted": false,
       "scope": "self",
       "revocationBehavior": "degrade"
+    },
+    {
+      "capability": "ui-embedding",
+      "granted": false,
+      "scope": "self",
+      "revocationBehavior": "hide-surface"
     },
     {
       "capability": "archive-read",
@@ -67,6 +79,80 @@
   "health": {
     "strategy": "agent-heartbeat"
   },
+  "tools": [
+    {
+      "name": "hermes.audit",
+      "description": "Audit the local Hermes profile, command, config, identity, memory, skills, model metadata, and gateway state.",
+      "requiredCapabilities": ["shell"],
+      "inputSchema": { "type": "object" },
+      "outputSchema": { "type": "object" },
+      "audit": {
+        "logRequest": true,
+        "logResult": true,
+        "artifactTypes": ["diagnostic-report", "log"]
+      }
+    },
+    {
+      "name": "hermes.install",
+      "description": "Install the official Nous Research Hermes Agent into the selected local Hermes profile path after explicit user approval.",
+      "requiredCapabilities": ["network", "shell"],
+      "inputSchema": { "type": "object" },
+      "outputSchema": { "type": "object" },
+      "audit": {
+        "logRequest": true,
+        "logResult": true,
+        "artifactTypes": ["diagnostic-report", "log"]
+      }
+    },
+    {
+      "name": "hermes.chat",
+      "description": "Send a direct prompt to the existing local Hermes profile through the ResonantOS chat bridge.",
+      "requiredCapabilities": ["shell", "providers"],
+      "inputSchema": { "type": "object" },
+      "outputSchema": { "type": "object" },
+      "audit": {
+        "logRequest": true,
+        "logResult": true,
+        "artifactTypes": ["summary", "log", "citation-bundle"]
+      }
+    },
+    {
+      "name": "hermes.create_delegation_workspace",
+      "description": "Create an approval-gated Hermes delegation workspace for communication, coordination, routine research, or follow-up work.",
+      "requiredCapabilities": ["providers", "archive-read"],
+      "inputSchema": { "type": "object" },
+      "outputSchema": { "type": "object" },
+      "audit": {
+        "logRequest": true,
+        "logResult": true,
+        "artifactTypes": ["markdown", "log"]
+      }
+    },
+    {
+      "name": "hermes.start_delegation_task",
+      "description": "Start a Hermes delegation task through the local Hermes profile and return reviewable artifacts without approving outbound sends.",
+      "requiredCapabilities": ["shell", "providers", "archive-read"],
+      "inputSchema": { "type": "object" },
+      "outputSchema": { "type": "object" },
+      "audit": {
+        "logRequest": true,
+        "logResult": true,
+        "artifactTypes": ["summary", "markdown", "log"]
+      }
+    },
+    {
+      "name": "hermes.dashboard",
+      "description": "Start, stop, or inspect the embedded local Hermes dashboard workspace.",
+      "requiredCapabilities": ["shell", "ui-embedding"],
+      "inputSchema": { "type": "object" },
+      "outputSchema": { "type": "object" },
+      "audit": {
+        "logRequest": true,
+        "logResult": true,
+        "artifactTypes": ["diagnostic-report", "log"]
+      }
+    }
+  ],
   "delegation": {
     "acceptsTasks": true,
     "taskTypes": ["communication", "routine-work", "research"],
@@ -91,6 +177,118 @@
       "displayName": "Hermes",
       "trustTier": "addon",
       "workspaceBehavior": "delegated"
+    }
+  ],
+  "install": {
+    "mode": "detect-existing-or-install",
+    "detectionTool": "hermes.audit",
+    "installTool": "hermes.install",
+    "requiredCapabilities": ["network", "shell"],
+    "requiresHumanApprovalBeforeInstall": true,
+    "preservesExistingUserConfig": true,
+    "credentialSetup": "user-guided",
+    "auditLogRequired": true,
+    "expectedArtifacts": ["diagnostic-report", "log"]
+  },
+  "audit": {
+    "tool": "hermes.audit",
+    "checks": [
+      "local command discovery",
+      "Hermes Agent version and update age",
+      "Python runtime compatibility",
+      "provider model configuration",
+      "profile identity, skills, memory, and session inventory",
+      "gateway and dashboard reachability"
+    ],
+    "requiredCapabilities": ["shell"],
+    "remediationPolicy": "approval-gated",
+    "auditLogRequired": true
+  },
+  "embeddedWorkspace": {
+    "surfaceId": "hermes-workspace",
+    "mode": "hosted-dashboard",
+    "autoStart": true,
+    "settingsVisibility": "hidden-collapsible",
+    "healthTool": "hermes.dashboard",
+    "requiredCapabilities": ["shell", "ui-embedding"]
+  },
+  "memoryAccess": {
+    "archiveReadMode": "retrieval-with-citations",
+    "archiveWriteMode": "intake-only",
+    "citationRequired": true,
+    "directKnowledgeWriteAllowed": false
+  },
+  "agentRuntime": {
+    "invocationTool": "hermes.chat",
+    "chatAuthorLabel": "Hermes",
+    "displayNameSource": "runtime-profile",
+    "supportsStreaming": false,
+    "supportsCancellation": true,
+    "supportsModelSelection": true,
+    "outputFiltering": "assistant-reply-only",
+    "requiredCapabilities": ["shell", "providers"],
+    "modelSelection": {
+      "source": "runtime-audit",
+      "currentModelField": "currentModel",
+      "selectable": true,
+      "changeTool": "hermes.chat",
+      "requiredCapabilities": ["providers"]
+    }
+  },
+  "smokeTests": [
+    {
+      "id": "hermes-direct-chat-smoke",
+      "tool": "hermes.chat",
+      "input": {
+        "prompt": "Say exactly: HERMES_ONBOARDING_CHECK"
+      },
+      "expectedOutputPattern": "^HERMES_ONBOARDING_CHECK$",
+      "timeoutMs": 120000,
+      "requiredCapabilities": ["shell", "providers"]
+    }
+  ],
+  "augmentorSkills": [
+    {
+      "documentPath": "docs/architecture/addon-skills/hermes/AUGMENTOR_SKILL.md",
+      "objective": "Use Hermes as a delegated communication, coordination, routine research, follow-up, and channel-workflow agent while preserving ResonantOS approval gates and Living Archive boundaries.",
+      "requiredCapabilities": ["network", "shell", "ui-embedding", "providers", "archive-read", "archive-intake-write"],
+      "requiredTools": [
+        "hermes.audit",
+        "hermes.install",
+        "hermes.chat",
+        "hermes.create_delegation_workspace",
+        "hermes.start_delegation_task",
+        "hermes.dashboard"
+      ],
+      "workflowPhases": [
+        "detect or install Hermes",
+        "audit local profile compatibility",
+        "choose direct chat or delegation workspace",
+        "inject read-only Living Archive context when granted",
+        "run Hermes through the local profile",
+        "return reviewable drafts and approval requests",
+        "human approval before outbound send"
+      ],
+      "approvalGates": [
+        "Ask before installing Hermes or modifying its profile, identity, skills, memory, or config.",
+        "Ask before any public, external, financial, or identity-sensitive send.",
+        "Use Living Archive context as read-only evidence; trusted knowledge writes must go through reviewed ResonantOS intake."
+      ],
+      "expectedInputs": [
+        "communication or coordination request",
+        "routine research or follow-up request",
+        "Hermes profile path when the default profile is not used",
+        "human approval for installation, remediation, or outbound sends"
+      ],
+      "expectedOutputs": [
+        "Hermes audit finding or installation result",
+        "Hermes direct reply",
+        "Hermes delegation workspace",
+        "reviewable draft or coordination plan",
+        "approval needs and residual risks"
+      ],
+      "producesDelegationPackets": true,
+      "auditLogRequired": true
     }
   ]
 }

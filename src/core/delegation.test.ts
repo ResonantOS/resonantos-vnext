@@ -3,6 +3,7 @@ import type { AddOnManifest, DelegationPacket } from "./contracts";
 import { buildDefaultState } from "./defaults";
 import {
   createEngineerDelegationPacket,
+  createHermesDelegationPacket,
   delegationTargetsForState,
   delegationTargetsFromManifests,
   engineerTaskAuditEvent,
@@ -10,11 +11,15 @@ import {
   engineerTaskVerificationPayload,
   formatTaskWorkspaceCreatedReply,
   formatEngineerTaskFinishedReply,
+  hermesTaskAuditEvent,
+  hermesTaskPromptFromWorkspace,
+  hermesTaskVerificationPayload,
   nativeDelegationTargetsFromState,
   parseStartEngineerTaskWorkspaceId,
   renderEngineerTaskResultMarkdown,
   renderDelegationTaskMarkdown,
   shouldDelegateToEngineer,
+  shouldDelegateToHermes,
   validateDelegationPacket,
 } from "./delegation";
 
@@ -75,6 +80,68 @@ const basePacket = (overrides: Partial<DelegationPacket> = {}): DelegationPacket
   },
   auditLogPath: "TaskWorkspace/logs/audit.jsonl",
   ...overrides,
+});
+
+describe("Hermes delegation packet factory", () => {
+  it("creates a valid approval-gated Hermes communication packet", () => {
+    const state = buildDefaultState([]);
+    const packet = createHermesDelegationPacket(state, {
+      mission: "Draft a follow-up message to the research collaborator summarizing next actions.",
+      createdAt: "2026-05-06T10:00:00.000Z",
+    });
+
+    expect(packet.targetAgentId).toBe("hermes.agent");
+    expect(packet.targetRuntime).toBe("addon-agent");
+    expect(packet.humanApprovalRequired).toBe(true);
+    expect(packet.approvalReasons).toContain("public-action");
+    expect(packet.forbiddenActions.join("\n")).toContain("Do not write trusted Living Archive knowledge pages");
+    expect(validateDelegationPacket(packet).valid).toBe(true);
+  });
+
+  it("builds a Hermes task prompt and completion artifacts with approval boundaries", () => {
+    const state = buildDefaultState([]);
+    const packet = createHermesDelegationPacket(state, {
+      mission: "Prepare a coordination summary for the collaborator before any outbound send.",
+      createdAt: "2026-05-06T10:00:00.000Z",
+    });
+    const payload = {
+      workspace: {
+        id: "workspace-hermes-test",
+        packetId: packet.id,
+        rootPath: "/tmp/workspace-hermes-test",
+        packetPath: "/tmp/workspace-hermes-test/delegation.packet.json",
+        taskMarkdownPath: "/tmp/workspace-hermes-test/TASK.md",
+        artifactsPath: "/tmp/workspace-hermes-test/artifacts",
+        logsPath: "/tmp/workspace-hermes-test/logs",
+        resultPath: "/tmp/workspace-hermes-test/result.md",
+        verificationPath: "/tmp/workspace-hermes-test/verification.json",
+      },
+      packet,
+      taskMarkdown: renderDelegationTaskMarkdown(packet),
+      resultMarkdown: "# Delegation Result\n\nPending.",
+      verification: {},
+    };
+
+    const prompt = hermesTaskPromptFromWorkspace(payload);
+    expect(prompt).toContain("Use the existing Hermes profile identity");
+    expect(prompt).toContain("Living Archive material as read-only context");
+    expect(prompt).toContain("Do not send public, external, or identity-sensitive messages");
+
+    const verification = hermesTaskVerificationPayload({ packetId: packet.id, profileHome: "/Users/augmentor/.hermes" });
+    expect(verification.approval.outboundSendApproved).toBe(false);
+
+    const audit = hermesTaskAuditEvent({
+      packetId: packet.id,
+      workspaceId: payload.workspace.id,
+      profileHome: "/Users/augmentor/.hermes",
+    });
+    expect(audit.approvalBoundary).toBe("no-outbound-send-approved");
+  });
+
+  it("detects explicit Hermes delegation requests", () => {
+    expect(shouldDelegateToHermes("Delegate this email follow-up to Hermes")).toBe(true);
+    expect(shouldDelegateToHermes("What is ResonantOS?")).toBe(false);
+  });
 });
 
 const manifest = (overrides: Partial<AddOnManifest>): AddOnManifest => ({

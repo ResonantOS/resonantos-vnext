@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { AddOnInstallation, CapabilityGrant, HermesInstallStatus } from "../../core/contracts";
-import { requestHermesStatus } from "../../core/runtime";
+import { requestHermesInstall, requestHermesStatus } from "../../core/runtime";
 
 type HermesAddonPanelProps = {
   installation: AddOnInstallation;
@@ -34,8 +34,13 @@ export function HermesAddonPanel({
   const [profileHome, setProfileHome] = useState(configuredProfileHome);
   const [status, setStatus] = useState<HermesInstallStatus | null>(null);
   const [busy, setBusy] = useState(false);
+  const [installing, setInstalling] = useState(false);
   const [error, setError] = useState("");
+  const [installLog, setInstallLog] = useState("");
+  const [installNotice, setInstallNotice] = useState("");
+  const networkGranted = hasGrant(installation, "network");
   const shellGranted = hasGrant(installation, "shell");
+  const embeddingGranted = hasGrant(installation, "ui-embedding");
   const providersGranted = hasGrant(installation, "providers");
   const archiveReadGranted = hasGrant(installation, "archive-read");
   const intakeGranted = hasGrant(installation, "archive-intake-write");
@@ -50,6 +55,34 @@ export function HermesAddonPanel({
       setError(auditError instanceof Error ? auditError.message : "Could not audit Hermes.");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const installHermes = async () => {
+    if (!networkGranted || !shellGranted) {
+      setError("Grant network and shell access before installing Hermes.");
+      return;
+    }
+    setInstalling(true);
+    setError("");
+    setInstallNotice("");
+    setInstallLog("");
+    try {
+      const result = await requestHermesInstall({
+        profileHome: profileHome.trim() || undefined,
+        branch: "main",
+      });
+      setStatus(result.status);
+      setInstallLog(result.log);
+      setInstallNotice(
+        result.success
+          ? "Hermes installed. Run `hermes setup` in Terminal to configure provider keys, then run the audit again."
+          : "Hermes installer completed, but the post-install audit is not ready.",
+      );
+    } catch (installError) {
+      setError(installError instanceof Error ? installError.message : "Hermes installation failed.");
+    } finally {
+      setInstalling(false);
     }
   };
 
@@ -94,6 +127,12 @@ export function HermesAddonPanel({
 
       <div className="hermes-grant-strip">
         <span className={`tone tone-${shellGranted ? "active" : "neutral"}`}>shell {shellGranted ? "granted" : "needed"}</span>
+        <span className={`tone tone-${networkGranted ? "active" : "neutral"}`}>
+          network {networkGranted ? "granted" : "needed"}
+        </span>
+        <span className={`tone tone-${embeddingGranted ? "active" : "neutral"}`}>
+          workspace {embeddingGranted ? "granted" : "needed"}
+        </span>
         <span className={`tone tone-${providersGranted ? "active" : "neutral"}`}>
           providers {providersGranted ? "granted" : "optional"}
         </span>
@@ -106,14 +145,43 @@ export function HermesAddonPanel({
         <button
           type="button"
           className="button-primary touch-action"
-          onClick={() => onGrantCapabilities(["shell", "providers", "archive-read", "archive-intake-write"], requestedCapabilities)}
-          disabled={shellGranted && providersGranted && archiveReadGranted && intakeGranted}
+          onClick={() => onGrantCapabilities(["network", "shell", "ui-embedding", "providers", "archive-read", "archive-intake-write"], requestedCapabilities)}
+          disabled={networkGranted && shellGranted && embeddingGranted && providersGranted && archiveReadGranted && intakeGranted}
         >
-          {shellGranted && providersGranted && archiveReadGranted && intakeGranted
+          {networkGranted && shellGranted && embeddingGranted && providersGranted && archiveReadGranted && intakeGranted
             ? "Hermes access granted"
             : "Grant Hermes bridge access"}
         </button>
       </div>
+
+      {status && !status.detected ? (
+        <div className="hermes-install-card">
+          <div>
+            <span className="eyebrow">Install Hermes</span>
+            <strong>Hermes was not found on this machine.</strong>
+            <p>
+              ResonantOS can install the official Nous Research Hermes Agent into the selected profile path. The installer
+              skips the credential setup wizard; provider keys still need explicit user setup afterward.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="button-primary touch-action"
+            onClick={() => void installHermes()}
+            disabled={installing || !networkGranted || !shellGranted}
+          >
+            {installing ? "Installing..." : "Install Hermes"}
+          </button>
+        </div>
+      ) : null}
+
+      {installNotice ? <p className="inline-notice">{installNotice}</p> : null}
+      {installLog ? (
+        <details className="hermes-install-log">
+          <summary>Installer log</summary>
+          <pre>{installLog}</pre>
+        </details>
+      ) : null}
 
       {error ? (
         <p className="form-error" role="alert">

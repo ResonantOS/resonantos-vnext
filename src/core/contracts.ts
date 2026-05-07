@@ -249,6 +249,81 @@ export interface AddOnAugmentorSkill {
   auditLogRequired: boolean;
 }
 
+export type AddOnInstallMode = "detect-existing-only" | "detect-existing-or-install" | "bundled" | "manual";
+export type AddOnCredentialSetupMode = "none" | "user-guided" | "host-vault" | "external";
+export type AddOnAuditRemediationPolicy = "suggest-only" | "approval-gated" | "automatic-safe";
+export type AddOnEmbeddedWorkspaceMode = "hosted-dashboard" | "native-panel" | "terminal" | "browser";
+export type AddOnSettingsVisibility = "hidden-collapsible" | "visible" | "separate-panel";
+export type AddOnModelMetadataSource = "runtime-audit" | "provider-profile" | "manifest-default" | "user-config";
+export type AddOnOutputFilteringMode = "assistant-reply-only" | "structured-events" | "raw-log";
+
+export interface AddOnInstallContract {
+  mode: AddOnInstallMode;
+  detectionTool?: string;
+  installTool?: string;
+  repairTool?: string;
+  requiredCapabilities: Capability[];
+  requiresHumanApprovalBeforeInstall: boolean;
+  preservesExistingUserConfig: boolean;
+  credentialSetup: AddOnCredentialSetupMode;
+  auditLogRequired: boolean;
+  expectedArtifacts: DelegationArtifactType[];
+}
+
+export interface AddOnAuditContract {
+  tool: string;
+  checks: string[];
+  requiredCapabilities: Capability[];
+  remediationPolicy: AddOnAuditRemediationPolicy;
+  auditLogRequired: boolean;
+}
+
+export interface AddOnEmbeddedWorkspaceContract {
+  surfaceId: string;
+  mode: AddOnEmbeddedWorkspaceMode;
+  autoStart: boolean;
+  settingsVisibility: AddOnSettingsVisibility;
+  healthTool?: string;
+  requiredCapabilities: Capability[];
+}
+
+export interface AddOnModelSelectionContract {
+  source: AddOnModelMetadataSource;
+  currentModelField: string;
+  selectable: boolean;
+  changeTool?: string;
+  requiredCapabilities: Capability[];
+  fallbackPolicy?: string;
+}
+
+export interface AddOnMemoryAccessContract {
+  archiveReadMode: "none" | "read-only-context" | "retrieval-with-citations";
+  archiveWriteMode: "none" | "intake-only";
+  citationRequired: boolean;
+  directKnowledgeWriteAllowed: false;
+}
+
+export interface AddOnAgentRuntimeContract {
+  invocationTool: string;
+  chatAuthorLabel: string;
+  displayNameSource: "manifest" | "runtime-profile";
+  supportsStreaming: boolean;
+  supportsCancellation: boolean;
+  supportsModelSelection: boolean;
+  modelSelection?: AddOnModelSelectionContract;
+  outputFiltering: AddOnOutputFilteringMode;
+  requiredCapabilities: Capability[];
+}
+
+export interface AddOnDeterministicSmokeTest {
+  id: string;
+  tool: string;
+  input: Record<string, unknown>;
+  expectedOutputPattern: string;
+  timeoutMs: number;
+  requiredCapabilities: Capability[];
+}
+
 export interface AddOnManifest {
   sdkVersion?: string;
   id: string;
@@ -299,6 +374,12 @@ export interface AddOnManifest {
   };
   engineerSetup?: AddOnEngineerSetupRunbook;
   augmentorSkills?: AddOnAugmentorSkill[];
+  install?: AddOnInstallContract;
+  audit?: AddOnAuditContract;
+  embeddedWorkspace?: AddOnEmbeddedWorkspaceContract;
+  agentRuntime?: AddOnAgentRuntimeContract;
+  memoryAccess?: AddOnMemoryAccessContract;
+  smokeTests?: AddOnDeterministicSmokeTest[];
   compatibility: {
     shellVersion: string;
     platforms: string[];
@@ -467,13 +548,73 @@ export interface HermesInstallStatus {
   inventory: HermesInventory;
   findings: HermesAuditFinding[];
   compatibility: "ready" | "degraded" | "blocked";
+  currentModel?: string;
+  availableModels: string[];
   checkedAt: string;
+}
+
+export interface HermesInstallResult {
+  success: boolean;
+  profileHome: string;
+  command: string;
+  log: string;
+  status: HermesInstallStatus;
 }
 
 export interface HermesChatResult {
   reply: string;
   command: string;
   profileHome: string;
+  model?: string;
+}
+
+export interface HermesDashboardStatus {
+  running: boolean;
+  url: string;
+  host: string;
+  port: number;
+  detail: string;
+  rawStatus: string;
+}
+
+export interface HermesProfileSummary {
+  name: string;
+  model: string;
+  gateway: string;
+  alias: string;
+  current: boolean;
+}
+
+export interface HermesCuratorStatus {
+  enabled: boolean;
+  interval?: string;
+  staleAfter?: string;
+  archiveAfter?: string;
+  rawStatus: string;
+}
+
+export interface HermesKanbanTask {
+  id: string;
+  title: string;
+  status: string;
+  assignee?: string;
+}
+
+export interface HermesKanbanSnapshot {
+  counts: [string, number][];
+  tasks: HermesKanbanTask[];
+  assigneesRaw: string;
+  rawStats: string;
+}
+
+export interface HermesWorkspaceSnapshot {
+  install: HermesInstallStatus;
+  dashboard: HermesDashboardStatus;
+  profiles: HermesProfileSummary[];
+  curator: HermesCuratorStatus;
+  kanban: HermesKanbanSnapshot;
+  slashgoalCommand: string;
+  archivistRecommendation: string;
 }
 
 export interface ProviderRuntimeNode {
@@ -2086,6 +2227,7 @@ export interface UiPreferences {
     | "browser"
     | "opencode"
     | "paperclip"
+    | "hermes"
     | "terminal"
     | "settings";
   activeChatThreadId: string;

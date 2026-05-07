@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { AddOnManifest } from "./contracts";
 import { appendAssistantMessage, appendUserMessage, createStrategistThread, strategistSystemPrompt } from "./chat";
@@ -214,6 +216,23 @@ describe("chat transcript ledger", () => {
 
     expect(prompt).not.toContain("Enabled add-on operating skills");
     expect(prompt).not.toContain("Design and create an approved Paperclip organizational structure.");
+  });
+
+  it("teaches Augmentor how to use the enabled Hermes add-on", () => {
+    const hermesManifest = JSON.parse(
+      readFileSync(resolve(process.cwd(), "public", "addons", "hermes.json"), "utf8"),
+    ) as AddOnManifest;
+    const state = buildDefaultState([hermesManifest]);
+    state.installations["addon.hermes"].installed = true;
+    state.installations["addon.hermes"].enabled = true;
+    state.installations["addon.hermes"].status = "enabled";
+
+    const prompt = strategistSystemPrompt(state, [hermesManifest]);
+
+    expect(prompt).toContain("Use Hermes as a delegated communication");
+    expect(prompt).toContain("hermes.create_delegation_workspace");
+    expect(prompt).toContain("human approval before outbound send");
+    expect(prompt).toContain("Living Archive boundaries");
   });
 
   it("adds authoritative route and model context to the Strategist prompt", () => {

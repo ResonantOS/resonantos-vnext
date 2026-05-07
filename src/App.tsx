@@ -124,6 +124,7 @@ import {
 } from "./modules/chat/thread-controller";
 import type { ComposerAttachment, ThinkingDepth } from "./modules/chat/types";
 import { Panel } from "./components/Panel";
+import { HermesWorkspace } from "./modules/hermes/HermesWorkspace";
 import { OpenCodeWorkspace } from "./modules/opencode/OpenCodeWorkspace";
 import { PaperclipWorkspace } from "./modules/paperclip/PaperclipWorkspace";
 import { promoteRecoveryRoute, RECOVERY_RUNBOOK_PROMPT, setRecoveryMode } from "./modules/recovery/controller";
@@ -212,6 +213,7 @@ type DockIconId =
   | "obsidian"
   | "opencode"
   | "paperclip"
+  | "hermes"
   | "terminal"
   | "agent"
   | "settings";
@@ -227,7 +229,7 @@ type VendorIconId =
   | "settings"
   | "world";
 
-const dockIconMap: Record<Exclude<DockIconId, "obsidian" | "opencode" | "paperclip" | "terminal">, VendorIconId> = {
+const dockIconMap: Record<Exclude<DockIconId, "obsidian" | "opencode" | "paperclip" | "hermes" | "terminal">, VendorIconId> = {
   home: "home",
   archive: "database",
   delegation: "route-alt-left",
@@ -1310,6 +1312,8 @@ export function App() {
   const opencodeInstallation = state.installations["addon.opencode"];
   const paperclipManifest = allManifests.find((manifest) => manifest.id === "addon.paperclip");
   const paperclipInstallation = state.installations["addon.paperclip"];
+  const hermesManifest = allManifests.find((manifest) => manifest.id === "addon.hermes");
+  const hermesInstallation = state.installations["addon.hermes"];
   const terminalManifest = allManifests.find((manifest) => manifest.id === "addon.terminal");
   const terminalInstallation = state.installations["addon.terminal"];
   const grantBrowserVisibleAccess = () => {
@@ -1557,6 +1561,72 @@ export function App() {
       return draft;
     });
   };
+  const grantHermesWorkspaceAccess = () => {
+    if (!hermesManifest) {
+      return;
+    }
+    updateRuntimeState((draft) => {
+      const installation = draft.installations[hermesManifest.id];
+      if (!installation) {
+        return draft;
+      }
+      installation.installed = true;
+      installation.enabled = true;
+      installation.status = "enabled";
+      const existingGrants = new Map(installation.grantedCapabilities.map((grant) => [grant.capability, grant]));
+      const missingRequestedGrants = hermesManifest.requestedCapabilities.filter((grant) => !existingGrants.has(grant.capability));
+      installation.grantedCapabilities = [...installation.grantedCapabilities, ...missingRequestedGrants].map((grant) =>
+        ["network", "shell", "ui-embedding", "archive-read", "archive-intake-write", "providers"].includes(grant.capability)
+          ? { ...grant, granted: true }
+          : grant,
+      );
+      installation.notes = ["Installed, enabled, and granted Hermes workspace, archive-read, and delegation preparation access."];
+      draft.uiPreferences.activeSection = "hermes";
+      return draft;
+    });
+  };
+  const updateHermesProfileHome = (profileHome: string) => {
+    if (!hermesManifest) {
+      return;
+    }
+    updateRuntimeState((draft) => {
+      const installation = draft.installations[hermesManifest.id];
+      if (!installation) {
+        return draft;
+      }
+      installation.config = {
+        ...(installation.config ?? {}),
+        profileHome,
+        lastProfileHomeUpdatedAt: new Date().toISOString(),
+      };
+      return draft;
+    });
+  };
+  const updateHermesModelMetadata = (model: string, availableModels: string[] = []) => {
+    if (!hermesManifest || !model.trim()) {
+      return;
+    }
+    const uniqueModels = Array.from(new Set([model.trim(), ...availableModels.map((item) => item.trim()).filter(Boolean)]));
+    updateRuntimeState((draft) => {
+      const installation = draft.installations[hermesManifest.id];
+      if (!installation) {
+        return draft;
+      }
+      installation.config = {
+        ...(installation.config ?? {}),
+        hermesModel: model.trim(),
+        hermesAvailableModels: uniqueModels,
+        lastHermesModelUpdatedAt: new Date().toISOString(),
+      };
+      return draft;
+    });
+  };
+  const handleChatModelChange = (model: string) => {
+    setSelectedChatModel(model);
+    if (activeThread?.owningAgentId === "hermes.agent") {
+      updateHermesModelMetadata(model, selectableChatModels);
+    }
+  };
   const grantTerminalWorkspaceAccess = () => {
     if (!terminalManifest) {
       return;
@@ -1591,6 +1661,7 @@ export function App() {
   const obsidianDockEnabled = Boolean(obsidianManifest && obsidianInstallation?.installed && obsidianInstallation.enabled);
   const opencodeDockEnabled = Boolean(opencodeManifest && opencodeInstallation?.installed && opencodeInstallation.enabled);
   const paperclipDockEnabled = Boolean(paperclipManifest && paperclipInstallation?.installed && paperclipInstallation.enabled);
+  const hermesDockEnabled = Boolean(hermesManifest && hermesInstallation?.installed && hermesInstallation.enabled);
   const terminalDockEnabled = Boolean(terminalManifest && terminalInstallation?.installed && terminalInstallation.enabled);
   const addOnNavItems = [
     ...(obsidianDockEnabled
@@ -1604,6 +1675,9 @@ export function App() {
       : []),
     ...(paperclipDockEnabled
       ? [{ id: "paperclip" as Section, label: paperclipManifest?.name ?? "Paperclip", eyebrow: "org", icon: "paperclip" as DockIconId, pinned: true }]
+      : []),
+    ...(hermesDockEnabled
+      ? [{ id: "hermes" as Section, label: hermesManifest?.name ?? "Hermes", eyebrow: "agent", icon: "hermes" as DockIconId, pinned: true }]
       : []),
     ...(terminalDockEnabled
       ? [
@@ -1734,6 +1808,8 @@ export function App() {
             !recoveryModeActive && currentSection === "opencode" ? "opencode-active" : ""
           } ${
             !recoveryModeActive && currentSection === "paperclip" ? "paperclip-active" : ""
+          } ${
+            !recoveryModeActive && currentSection === "hermes" ? "hermes-active" : ""
           } ${
             !recoveryModeActive && currentSection === "obsidian" ? "notes-active" : ""
           }`}
@@ -1966,6 +2042,11 @@ export function App() {
                     ? state.installations["addon.hermes"]?.config?.profileHome
                     : undefined
                 }
+                hermesModel={
+                  typeof state.installations["addon.hermes"]?.config?.hermesModel === "string"
+                    ? state.installations["addon.hermes"]?.config?.hermesModel
+                    : undefined
+                }
                 onStartWorkspace={async (workspaceId) => {
                   await sendStrategistMessage(`start engineer task ${workspaceId}`);
                 }}
@@ -2028,6 +2109,22 @@ export function App() {
               }}
               onGrantWorkspaceAccess={grantPaperclipWorkspaceAccess}
               onEndpointChange={updatePaperclipEndpoint}
+            />
+          )}
+
+          {!recoveryModeActive && (
+            <HermesWorkspace
+              active={currentSection === "hermes"}
+              manifest={hermesManifest}
+              installation={hermesInstallation}
+              onConfigureAddon={() => {
+                setSelectedAddonId("addon.hermes");
+                setSection("addons");
+              }}
+              onGrantWorkspaceAccess={grantHermesWorkspaceAccess}
+              onProfileHomeChange={updateHermesProfileHome}
+              onModelMetadataChange={updateHermesModelMetadata}
+              onAskAugmentor={sendStrategistMessage}
             />
           )}
 
@@ -2412,7 +2509,7 @@ export function App() {
             errorMessageOf,
           })
         }
-        onModelChange={setSelectedChatModel}
+        onModelChange={handleChatModelChange}
         onThinkingDepthChange={setThinkingDepth}
         onFileAttach={(files) => void attachComposerFiles(files, setAttachments, fileInputRef)}
         onRemoveAttachment={(attachmentId) => removeComposerAttachment(attachmentId, setAttachments)}
@@ -2521,6 +2618,14 @@ function DockIcon(props: { icon: DockIconId }) {
       <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M8.2 12.6 13.8 7a3.2 3.2 0 0 1 4.5 4.5l-7.1 7.1a4.8 4.8 0 0 1-6.8-6.8l7.7-7.7a6.2 6.2 0 0 1 8.8 8.8l-7.8 7.8" />
       </svg>
+    );
+  }
+
+  if (props.icon === "hermes") {
+    return (
+      <span className="hermes-dock-icon" aria-hidden="true">
+        <img src="/icons/custom/hermes-agent.png" alt="" />
+      </span>
     );
   }
 

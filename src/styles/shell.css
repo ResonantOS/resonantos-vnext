@@ -412,6 +412,24 @@
   height: 22px;
 }
 
+.hermes-dock-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: #f8f8f3;
+  box-shadow: 0 0 0 1px rgba(248, 248, 243, 0.22), 0 8px 18px rgba(0, 0, 0, 0.28);
+  overflow: hidden;
+}
+
+.hermes-dock-icon img {
+  width: 84%;
+  height: 84%;
+  object-fit: contain;
+  display: block;
+}
+
 .nav-item small {
   display: none;
   color: var(--text-muted);

@@ -103,23 +103,46 @@ const cloneState = (state: ResonantShellState): ResonantShellState =>
 
 const yieldForPaint = (): Promise<void> =>
   new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (!settled) {
+        settled = true;
+        resolve();
+      }
+    };
     if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
       window.requestAnimationFrame(() => {
-        window.requestAnimationFrame(() => resolve());
+        window.requestAnimationFrame(finish);
       });
+      setTimeout(finish, 80);
       return;
     }
-    setTimeout(resolve, 0);
+    setTimeout(finish, 0);
   });
 
-const hermesPromptFromThread = (thread: ConversationThread): string =>
+const hermesArchiveReadGranted = (state: ResonantShellState): boolean =>
+  Boolean(
+    state.installations["addon.hermes"]?.enabled &&
+      state.installations["addon.hermes"]?.grantedCapabilities.some(
+        (grant) => grant.capability === "archive-read" && grant.granted,
+      ),
+  );
+
+const hermesPromptFromThread = (
+  thread: ConversationThread,
+  archiveContext: Awaited<ReturnType<typeof buildArchiveContextBundle>> | null,
+): string =>
   [
     "ResonantOS is handing this conversation to the user's existing local Hermes profile.",
     "Stay within Hermes' own identity, skills, and memory boundaries.",
     "Do not claim to write to the Living Archive directly. Ask for approval before public or external sends.",
+    "Living Archive context, when present, is host-mediated and read-only. It is evidence for this turn only, not permission to mutate the archive.",
+    archiveContext ? formatArchiveContextForPrompt(archiveContext) : "",
     "",
     `User: ${[...thread.messages].reverse().find((message) => message.role === "user")?.content.trim() ?? ""}`,
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 
 export const executeChatTurn = async ({
   snapshot,
@@ -345,19 +368,45 @@ export const executeChatTurn = async ({
         typeof nextState.installations["addon.hermes"]?.config?.profileHome === "string"
           ? nextState.installations["addon.hermes"]?.config?.profileHome
           : undefined;
+      const memoryProvider = resolveMemoryProviderBroker(nextState, [...snapshot.bundled, ...snapshot.sideloaded]);
+      const archiveContext = hermesArchiveReadGranted(nextState)
+        ? await buildArchiveContextBundle(trimmed, memoryProvider).catch(() => null)
+        : null;
+      if (!isRunCurrent(runToken)) {
+        return;
+      }
+      if (archiveContext) {
+        markProgress(
+          "retrieving",
+          archiveContext.pages.length
+            ? `Retrieved ${archiveContext.pages.length} Living Archive page${archiveContext.pages.length === 1 ? "" : "s"} for Hermes.`
+            : "Checked the Living Archive for Hermes; no directly relevant page was found.",
+        );
+      }
       const result = await requestHermesChatCompletion({
-        prompt: hermesPromptFromThread(thread),
+        prompt: hermesPromptFromThread(thread, archiveContext),
         profileHome,
+        model: activeChatModel || undefined,
       });
       if (!isRunCurrent(runToken)) {
         return;
       }
+      const providerUsage: ProviderUsageTelemetry = {
+        providerId: "addon.hermes",
+        model: result.model || activeChatModel || "Hermes profile default",
+        source: "provider",
+      };
       const withAssistant = placeholderMessageId
         ? updateConversationMessage(cloneState(withHermesPlaceholder), activeThread.id, placeholderMessageId, (message) => ({
             ...message,
             content: result.reply,
+            archiveCitations: archiveCitationsFromBundle(archiveContext),
+            providerUsage,
           }))
-        : appendAssistantMessage(cloneState(nextState), activeThread.id, result.reply);
+        : appendAssistantMessage(cloneState(nextState), activeThread.id, result.reply, {
+            archiveCitations: archiveCitationsFromBundle(archiveContext),
+            providerUsage,
+          });
       commitReadyState(withAssistant);
       markProgress("completed", "Hermes reply ready from the local profile.");
       return;

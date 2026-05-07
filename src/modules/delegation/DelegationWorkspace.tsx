@@ -20,6 +20,7 @@ import { MessageContent } from "../chat/MessageContent";
 type DelegationWorkspaceProps = {
   chatBusy: boolean;
   hermesProfileHome?: string;
+  hermesModel?: string;
   onStartWorkspace: (workspaceId: string) => Promise<void>;
   onAskAugmentor: (message: string) => Promise<void>;
 };
@@ -27,7 +28,7 @@ type DelegationWorkspaceProps = {
 const errorMessageOf = (error: unknown): string =>
   typeof error === "string" ? error : error instanceof Error ? error.message : "Unable to load delegation workspaces.";
 
-export function DelegationWorkspace({ chatBusy, hermesProfileHome, onStartWorkspace, onAskAugmentor }: DelegationWorkspaceProps) {
+export function DelegationWorkspace({ chatBusy, hermesProfileHome, hermesModel, onStartWorkspace, onAskAugmentor }: DelegationWorkspaceProps) {
   const [workspaces, setWorkspaces] = useState<TaskWorkspace[]>([]);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
   const [selectedPayload, setSelectedPayload] = useState<TaskWorkspacePayload | null>(null);
@@ -95,6 +96,7 @@ export function DelegationWorkspace({ chatBusy, hermesProfileHome, onStartWorksp
         const result = await requestHermesChatCompletion({
           prompt: hermesTaskPromptFromWorkspace(payload),
           profileHome: hermesProfileHome,
+          model: hermesModel,
         });
         await requestFinishTaskWorkspace({
           workspaceId: payload.workspace.id,

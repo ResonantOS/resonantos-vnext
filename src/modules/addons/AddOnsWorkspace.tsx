@@ -62,7 +62,7 @@ const isBrowserVisibleReady = (installation: AddOnInstallation | null): boolean 
 const isTerminalVisibleReady = (installation: AddOnInstallation | null): boolean =>
   Boolean(installation?.enabled && hasGrant(installation, "shell") && hasGrant(installation, "ui-embedding"));
 const isHermesBridgeReady = (installation: AddOnInstallation | null): boolean =>
-  Boolean(installation?.enabled && hasGrant(installation, "shell"));
+  Boolean(installation?.enabled && hasGrant(installation, "shell") && hasGrant(installation, "ui-embedding"));
 
 const addonPrimaryActionLabel = (manifest: AddOnManifest, installation: AddOnInstallation | null): string => {
   if (manifest.id === "addon.browser" && !isBrowserVisibleReady(installation)) {
@@ -158,7 +158,7 @@ export function AddOnsWorkspace(props: AddOnsWorkspaceProps) {
                       props.onSelectManifest(manifest.id);
                       props.onGrantCapabilities(
                         manifest.id,
-                        ["shell", "providers", "archive-read", "archive-intake-write"],
+                        ["network", "shell", "ui-embedding", "providers", "archive-read", "archive-intake-write"],
                         manifest.requestedCapabilities,
                       );
                       return;

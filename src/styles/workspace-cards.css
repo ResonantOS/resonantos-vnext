@@ -379,6 +379,37 @@
   align-items: center;
 }
 
+.hermes-install-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.9rem;
+  padding: 0.8rem;
+  border: 1px solid rgba(251, 191, 36, 0.24);
+  border-radius: 12px;
+  background: rgba(251, 191, 36, 0.06);
+}
+
+.hermes-install-card p {
+  margin: 0.25rem 0 0;
+  color: var(--text-secondary);
+}
+
+.hermes-install-log {
+  border: 1px solid rgba(138, 128, 112, 0.14);
+  border-radius: 12px;
+  padding: 0.7rem;
+  background: rgba(10, 14, 18, 0.2);
+}
+
+.hermes-install-log pre {
+  max-height: 18rem;
+  overflow: auto;
+  margin: 0.55rem 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .hermes-audit-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));

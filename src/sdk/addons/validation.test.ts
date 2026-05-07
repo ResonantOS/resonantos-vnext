@@ -96,8 +96,9 @@ describe("add-on SDK manifest validation", () => {
   it("accepts a Browser-style local-service manifest with audited tools", () => {
     const result = validateAddOnManifest(validManifest());
 
+    expect(result.issues.filter((issue) => issue.severity === "error")).toEqual([]);
+    expect(result.issues.filter((issue) => issue.severity === "error")).toEqual([]);
     expect(result.valid).toBe(true);
-    expect(result.issues.filter((issue) => issue.severity === "error")).toHaveLength(0);
   });
 
   it("rejects add-ons that claim Living Archive knowledge-page write authority", () => {
@@ -346,5 +347,162 @@ describe("add-on SDK manifest validation", () => {
 
     expect(result.valid).toBe(true);
     expect(result.issues.some((issue) => issue.code === "local-service-entrypoint-missing")).toBe(true);
+  });
+
+  it("accepts agent add-on operating contracts learned from Hermes", () => {
+    const baseManifest = validManifest();
+    const result = validateAddOnManifest(
+      validManifest({
+        id: "addon.hermes",
+        name: "Hermes",
+        category: "agent",
+        runtimeType: "agent-addon",
+        requestedCapabilities: [
+          ...baseManifest.requestedCapabilities,
+          { capability: "shell", granted: false, scope: "self", revocationBehavior: "degrade" },
+          { capability: "providers", granted: false, scope: "shared", revocationBehavior: "degrade" },
+          { capability: "archive-read", granted: false, scope: "shared", revocationBehavior: "degrade" },
+          { capability: "agent-delegation", granted: false, scope: "workspace", revocationBehavior: "degrade" },
+        ],
+        tools: [
+          ...(baseManifest.tools ?? []),
+          {
+            name: "hermes.audit",
+            description: "Audit Hermes.",
+            requiredCapabilities: ["shell"],
+            inputSchema: {},
+            outputSchema: {},
+            audit: { logRequest: true, logResult: true, artifactTypes: ["diagnostic-report"] },
+          },
+          {
+            name: "hermes.install",
+            description: "Install Hermes.",
+            requiredCapabilities: ["network", "shell"],
+            inputSchema: {},
+            outputSchema: {},
+            audit: { logRequest: true, logResult: true, artifactTypes: ["diagnostic-report", "log"] },
+          },
+          {
+            name: "hermes.chat",
+            description: "Chat with Hermes.",
+            requiredCapabilities: ["shell", "providers"],
+            inputSchema: {},
+            outputSchema: {},
+            audit: { logRequest: true, logResult: true, artifactTypes: ["summary", "log"] },
+          },
+          {
+            name: "hermes.dashboard",
+            description: "Control the Hermes dashboard.",
+            requiredCapabilities: ["shell", "ui-embedding"],
+            inputSchema: {},
+            outputSchema: {},
+            audit: { logRequest: true, logResult: true, artifactTypes: ["diagnostic-report", "log"] },
+          },
+        ],
+        install: {
+          mode: "detect-existing-or-install",
+          detectionTool: "hermes.audit",
+          installTool: "hermes.install",
+          requiredCapabilities: ["network", "shell"],
+          requiresHumanApprovalBeforeInstall: true,
+          preservesExistingUserConfig: true,
+          credentialSetup: "user-guided",
+          auditLogRequired: true,
+          expectedArtifacts: ["diagnostic-report", "log"],
+        },
+        audit: {
+          tool: "hermes.audit",
+          checks: ["version", "identity", "skills", "memory", "model"],
+          requiredCapabilities: ["shell"],
+          remediationPolicy: "approval-gated",
+          auditLogRequired: true,
+        },
+        embeddedWorkspace: {
+          surfaceId: "browser-workspace",
+          mode: "hosted-dashboard",
+          autoStart: true,
+          settingsVisibility: "hidden-collapsible",
+          healthTool: "hermes.dashboard",
+          requiredCapabilities: ["shell", "ui-embedding"],
+        },
+        memoryAccess: {
+          archiveReadMode: "retrieval-with-citations",
+          archiveWriteMode: "intake-only",
+          citationRequired: true,
+          directKnowledgeWriteAllowed: false,
+        },
+        agentRuntime: {
+          invocationTool: "hermes.chat",
+          chatAuthorLabel: "Hermes",
+          displayNameSource: "runtime-profile",
+          supportsStreaming: false,
+          supportsCancellation: true,
+          supportsModelSelection: true,
+          outputFiltering: "assistant-reply-only",
+          requiredCapabilities: ["shell", "providers"],
+          modelSelection: {
+            source: "runtime-audit",
+            currentModelField: "currentModel",
+            selectable: true,
+            changeTool: "hermes.chat",
+            requiredCapabilities: ["providers"],
+          },
+        },
+        smokeTests: [
+          {
+            id: "direct-chat",
+            tool: "hermes.chat",
+            input: { prompt: "Say exactly: HERMES_ONBOARDING_CHECK" },
+            expectedOutputPattern: "^HERMES_ONBOARDING_CHECK$",
+            timeoutMs: 120000,
+            requiredCapabilities: ["shell", "providers"],
+          },
+        ],
+      }),
+    );
+
+    expect(result.issues.filter((issue) => issue.severity === "error")).toEqual([]);
+    expect(result.valid).toBe(true);
+  });
+
+  it("rejects unsafe agent add-on contracts that would erase existing config or bypass archive boundaries", () => {
+    const result = validateAddOnManifest(
+      validManifest({
+        install: {
+          mode: "detect-existing-or-install",
+          detectionTool: "browser.open_url",
+          installTool: "browser.open_url",
+          requiredCapabilities: ["shell"],
+          requiresHumanApprovalBeforeInstall: false,
+          preservesExistingUserConfig: false,
+          credentialSetup: "user-guided",
+          auditLogRequired: true,
+          expectedArtifacts: ["log"],
+        },
+        memoryAccess: {
+          archiveReadMode: "retrieval-with-citations",
+          archiveWriteMode: "intake-only",
+          citationRequired: true,
+          directKnowledgeWriteAllowed: true as never,
+        },
+        smokeTests: [
+          {
+            id: "bad",
+            tool: "browser.open_url",
+            input: {},
+            expectedOutputPattern: "ok",
+            timeoutMs: 1000,
+            requiredCapabilities: ["shell"],
+          },
+        ],
+      }),
+    );
+
+    expect(result.valid).toBe(false);
+    expect(result.issues.some((issue) => issue.code === "install-must-preserve-existing-config")).toBe(true);
+    expect(result.issues.some((issue) => issue.code === "install-requires-human-approval")).toBe(true);
+    expect(result.issues.some((issue) => issue.code === "install-unrequested-capability")).toBe(true);
+    expect(result.issues.some((issue) => issue.code === "memory-access-knowledge-write-forbidden")).toBe(true);
+    expect(result.issues.some((issue) => issue.code === "smoke-test-unrequested-capability")).toBe(true);
   });
 });

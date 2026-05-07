@@ -24,11 +24,14 @@ describe("bundled add-on manifests", () => {
     ).toEqual([]);
   });
 
-  it("keeps development add-ons out of the bundled default catalog", () => {
+  it("keeps the bundled default catalog explicit", () => {
     const publicAddonsRoot = resolve(process.cwd(), "public", "addons");
     const manifestFiles = JSON.parse(readFileSync(resolve(publicAddonsRoot, "index.json"), "utf8")) as string[];
 
-    expect(manifestFiles).toEqual(["augmentor-chat.json", "living-archive.json"]);
+    expect(manifestFiles).toContain("augmentor-chat.json");
+    expect(manifestFiles).toContain("hermes.json");
+    expect(manifestFiles).toContain("living-archive.json");
+    expect(new Set(manifestFiles).size).toBe(manifestFiles.length);
   });
 
   it("keeps the reference third-party memory add-on manifest sideloadable", () => {

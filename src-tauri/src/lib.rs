@@ -84,8 +84,10 @@ use crate::delegation_service::{
     ReadTaskWorkspaceRequest, TaskWorkspacePayload, TaskWorkspaceRecord,
 };
 use crate::hermes_service::{
-    execute_hermes_chat, query_hermes_status, HermesChatRequest, HermesChatResult,
-    HermesInstallStatus,
+    execute_hermes_chat, install_hermes, query_hermes_dashboard_status, query_hermes_status,
+    query_hermes_workspace_snapshot, start_hermes_dashboard, stop_hermes_dashboard,
+    HermesChatRequest, HermesChatResult, HermesDashboardRequest, HermesDashboardStatus,
+    HermesInstallRequest, HermesInstallResult, HermesInstallStatus, HermesWorkspaceSnapshot,
 };
 use crate::host_state::{
     addons_dir, assert_addon_capabilities, assert_living_archive_host_access,
@@ -672,6 +674,45 @@ fn hermes_status(profile_home: Option<String>) -> HermesInstallStatus {
 }
 
 #[tauri::command]
+async fn hermes_install(
+    app: AppHandle,
+    request: HermesInstallRequest,
+) -> Result<HermesInstallResult, String> {
+    assert_addon_capabilities(&app, "addon.hermes", &["network", "shell"])?;
+    tauri::async_runtime::spawn_blocking(move || install_hermes(request))
+        .await
+        .map_err(|error| format!("Hermes installer task failed: {error}"))?
+}
+
+#[tauri::command]
+fn hermes_workspace_snapshot(profile_home: Option<String>) -> HermesWorkspaceSnapshot {
+    query_hermes_workspace_snapshot(profile_home)
+}
+
+#[tauri::command]
+fn hermes_dashboard_status(profile_home: Option<String>) -> HermesDashboardStatus {
+    query_hermes_dashboard_status(profile_home, None, None)
+}
+
+#[tauri::command]
+fn hermes_dashboard_start(
+    app: AppHandle,
+    request: HermesDashboardRequest,
+) -> Result<HermesDashboardStatus, String> {
+    assert_addon_capabilities(&app, "addon.hermes", &["shell", "ui-embedding"])?;
+    start_hermes_dashboard(request)
+}
+
+#[tauri::command]
+fn hermes_dashboard_stop(
+    app: AppHandle,
+    profile_home: Option<String>,
+) -> Result<HermesDashboardStatus, String> {
+    assert_addon_capabilities(&app, "addon.hermes", &["shell", "ui-embedding"])?;
+    stop_hermes_dashboard(profile_home)
+}
+
+#[tauri::command]
 async fn hermes_chat(
     app: AppHandle,
     request: HermesChatRequest,
@@ -1223,6 +1264,11 @@ pub fn run() {
             browser_native_attach_smoke,
             browser_native_bridge_probe,
             hermes_status,
+            hermes_install,
+            hermes_workspace_snapshot,
+            hermes_dashboard_status,
+            hermes_dashboard_start,
+            hermes_dashboard_stop,
             hermes_chat,
             living_archive_memory_service_status,
             living_archive_memory_service_start,

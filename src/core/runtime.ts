@@ -57,7 +57,10 @@ import type {
   EngineerRecoveryTurnResult,
   FinishTaskWorkspaceResult,
   HermesChatResult,
+  HermesDashboardStatus,
+  HermesInstallResult,
   HermesInstallStatus,
+  HermesWorkspaceSnapshot,
   LocalRuntimeStatus,
   LivingArchiveMemoryServiceResult,
   LivingArchiveMemoryServiceStatus,
@@ -99,13 +102,28 @@ const STORAGE_KEY = "resonantos-vnext.runtime-state";
 const hasTauri = (): boolean => typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
 export const bundledManifestIndex = "/addons/index.json";
+const devBundledManifestIndex = "/addons/dev-index.json";
 
-export const loadBundledManifests = async (): Promise<AddOnManifest[]> => {
-  const response = await fetch(bundledManifestIndex);
+const isLocalDevelopmentMode = (): boolean => import.meta.env.MODE === "development";
+
+const loadBundledManifestIndex = async (): Promise<string[]> => {
+  const indexPath = isLocalDevelopmentMode() ? devBundledManifestIndex : bundledManifestIndex;
+  const response = await fetch(indexPath);
   if (!response.ok) {
+    if (isLocalDevelopmentMode()) {
+      const productionResponse = await fetch(bundledManifestIndex);
+      if (!productionResponse.ok) {
+        throw new Error(`Failed to load add-on index: ${productionResponse.status}`);
+      }
+      return (await productionResponse.json()) as string[];
+    }
     throw new Error(`Failed to load add-on index: ${response.status}`);
   }
-  const files = (await response.json()) as string[];
+  return (await response.json()) as string[];
+};
+
+export const loadBundledManifests = async (): Promise<AddOnManifest[]> => {
+  const files = await loadBundledManifestIndex();
   const manifests = await Promise.all(
     files.map(async (file) => {
       const manifestResponse = await fetch(`/addons/${file}`);
@@ -256,15 +274,65 @@ export const requestHermesStatus = async (profileHome?: string): Promise<HermesI
   throw new Error("Hermes compatibility audit is available only in the desktop shell.");
 };
 
+export const requestHermesInstall = async (input: {
+  profileHome?: string;
+  branch?: string;
+} = {}): Promise<HermesInstallResult> => {
+  if (hasTauri()) {
+    return (await invoke("hermes_install", {
+      request: {
+        profileHome: input.profileHome,
+        branch: input.branch,
+      },
+    })) as HermesInstallResult;
+  }
+  throw new Error("Hermes installation is available only in the desktop shell.");
+};
+
+export const requestHermesWorkspaceSnapshot = async (profileHome?: string): Promise<HermesWorkspaceSnapshot> => {
+  if (hasTauri()) {
+    return (await invoke("hermes_workspace_snapshot", { profileHome })) as HermesWorkspaceSnapshot;
+  }
+  throw new Error("Hermes workspace snapshot is available only in the desktop shell.");
+};
+
+export const requestHermesDashboardStart = async (input: {
+  profileHome?: string;
+  host?: string;
+  port?: number;
+  includeTui?: boolean;
+}): Promise<HermesDashboardStatus> => {
+  if (hasTauri()) {
+    return (await invoke("hermes_dashboard_start", {
+      request: {
+        profileHome: input.profileHome,
+        host: input.host,
+        port: input.port,
+        includeTui: input.includeTui,
+      },
+    })) as HermesDashboardStatus;
+  }
+  throw new Error("Hermes dashboard launch is available only in the desktop shell.");
+};
+
+export const requestHermesDashboardStop = async (profileHome?: string): Promise<HermesDashboardStatus> => {
+  if (hasTauri()) {
+    return (await invoke("hermes_dashboard_stop", { profileHome })) as HermesDashboardStatus;
+  }
+  throw new Error("Hermes dashboard stop is available only in the desktop shell.");
+};
+
 export const requestHermesChatCompletion = async (input: {
   prompt: string;
   profileHome?: string;
+  model?: string;
 }): Promise<HermesChatResult> => {
   if (hasTauri()) {
     return (await invoke("hermes_chat", {
       request: {
         prompt: input.prompt,
         profileHome: input.profileHome,
+        model: input.model,
       },
     })) as HermesChatResult;
   }
@@ -1372,14 +1440,55 @@ export const hydrateState = async (bundled: AddOnManifest[], sideloaded: AddOnMa
   const persisted = await readPersistedState();
 
   if (!persisted) {
-    const next = rebaseStateOnManifests(base, manifests, sideloaded.map((manifest) => manifest.id));
+    const next = enableBundledAddonsForLocalDevelopment(
+      rebaseStateOnManifests(base, manifests, sideloaded.map((manifest) => manifest.id)),
+      bundled,
+    );
     await persistState(next);
     return next;
   }
 
-  const next = rebaseStateOnManifests(normalizeState(persisted, base), manifests, sideloaded.map((manifest) => manifest.id));
+  const next = enableBundledAddonsForLocalDevelopment(
+    rebaseStateOnManifests(normalizeState(persisted, base), manifests, sideloaded.map((manifest) => manifest.id)),
+    bundled,
+  );
   await persistState(next);
   return next;
+};
+
+const enableBundledAddonsForLocalDevelopment = (
+  state: ResonantShellState,
+  bundled: AddOnManifest[],
+): ResonantShellState => {
+  if (!isLocalDevelopmentMode()) {
+    return state;
+  }
+
+  const installations = { ...state.installations };
+  for (const manifest of bundled) {
+    const current = installations[manifest.id];
+    if (!current) {
+      continue;
+    }
+
+    installations[manifest.id] = {
+      ...current,
+      installed: true,
+      enabled: true,
+      status: "enabled",
+      grantedCapabilities: current.grantedCapabilities.map((grant) => ({ ...grant, granted: true })),
+      notes: ["Local development catalog mode: installed and enabled for full add-on testing."],
+    };
+  }
+
+  return {
+    ...state,
+    installations,
+    uiPreferences: {
+      ...state.uiPreferences,
+      recommendedAddOnsReviewed: true,
+    },
+  };
 };
 
 export const rebaseStateOnManifests = (
