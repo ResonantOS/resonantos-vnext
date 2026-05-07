@@ -126,6 +126,60 @@ export const providerProfiles: ProviderProfile[] = [
     credentialStatus: "missing",
   },
   {
+    id: "shared-lmstudio",
+    label: "LM Studio (LiteLLM)",
+    providerType: "openai-compatible",
+    authSource: "shared-vault",
+    authMethod: "api-key",
+    authTier: "supported",
+    apiBaseUrl: "http://100.118.125.26:4042/v1",
+    allowedModels: [
+      "local/gemma4-26b-opus-brain",
+      "local/qwen35-27b-brain",
+      "local/devstral-24b-chat",
+      "local/qwen3-4b-utility",
+      "local/hermes-70b-brain",
+    ],
+    primaryModel: "local/gemma4-26b-opus-brain",
+    fallbackModel: "local/qwen3-4b-utility",
+    modelContext: [
+      {
+        model: "local/gemma4-26b-opus-brain",
+        maxContextTokens: 32_000,
+        tokenEstimateMethod: "provider-metadata",
+        source: "runtime-node",
+      },
+      {
+        model: "local/qwen35-27b-brain",
+        maxContextTokens: 32_000,
+        tokenEstimateMethod: "provider-metadata",
+        source: "runtime-node",
+      },
+      {
+        model: "local/devstral-24b-chat",
+        maxContextTokens: 32_000,
+        tokenEstimateMethod: "provider-metadata",
+        source: "runtime-node",
+      },
+      {
+        model: "local/qwen3-4b-utility",
+        maxContextTokens: 32_000,
+        tokenEstimateMethod: "provider-metadata",
+        source: "runtime-node",
+      },
+      {
+        model: "local/hermes-70b-brain",
+        maxContextTokens: 32_000,
+        tokenEstimateMethod: "provider-metadata",
+        source: "runtime-node",
+      },
+    ],
+    consumerScopes: ["strategist", "setup", "archive-ingest", "telegram-channel"],
+    shared: true,
+    status: "fallback",
+    credentialStatus: "missing",
+  },
+  {
     id: "shared-local",
     label: "Shared Local Runtime",
     providerType: "local",
@@ -187,6 +241,25 @@ export const runtimeNodes: ProviderRuntimeNode[] = [
     healthState: "ready",
     deployableOnDemand: false,
     notes: ["Cloud route available when the provider profile is configured and healthy."],
+  },
+  {
+    id: "node-lmstudio-lan",
+    label: "LM Studio via LiteLLM (Maclovin)",
+    providerProfileId: "shared-lmstudio",
+    kind: "cloud",
+    locality: "lan-remote",
+    endpoint: "http://100.118.125.26:4042/v1",
+    supportedModels: [
+      "local/gemma4-26b-opus-brain",
+      "local/qwen35-27b-brain",
+      "local/devstral-24b-chat",
+      "local/qwen3-4b-utility",
+      "local/hermes-70b-brain",
+    ],
+    authTier: "supported",
+    healthState: "ready",
+    deployableOnDemand: false,
+    notes: ["LAN-local LM Studio models proxied through LiteLLM on Maclovin. Credential managed via LiteLLM token."],
   },
   {
     id: "node-local-resurrect",
@@ -264,8 +337,8 @@ export const providerRouting: ProviderRoutingState = {
     {
       id: "core-default",
       label: "Core Default Fallback",
-      orderedProviderProfileIds: ["shared-minimax", "shared-openai", "shared-local"],
-      orderedRuntimeNodeIds: ["node-minimax-cloud", "node-openai-cloud", "node-local-resurrect"],
+      orderedProviderProfileIds: ["shared-minimax", "shared-openai", "shared-lmstudio", "shared-local"],
+      orderedRuntimeNodeIds: ["node-minimax-cloud", "node-openai-cloud", "node-lmstudio-lan", "node-local-resurrect"],
       allowExperimentalAuth: true,
       allowResurrection: true,
       onFailure: "degrade",
@@ -310,6 +383,7 @@ export const modelStrategy: ModelStrategyState = {
       orderedRoutes: [
         { providerProfileId: "shared-minimax", runtimeNodeId: "node-minimax-cloud", model: "MiniMax-M2.7", note: "Default fast route for Augmentor and the Engineer Agent." },
         { providerProfileId: "shared-openai", runtimeNodeId: "node-openai-cloud", model: "gpt-5.4", note: "Premium fallback for demanding moments." },
+        { providerProfileId: "shared-lmstudio", runtimeNodeId: "node-lmstudio-lan", model: "local/gemma4-26b-opus-brain", note: "LAN-local LM Studio fallback via LiteLLM when cloud providers lack credentials." },
         { providerProfileId: "shared-local", runtimeNodeId: "node-gx10-qwen", model: "qwen-3.5", note: "Remote user-owned runtime when available." },
       ],
       lastResortRoute: {
@@ -325,6 +399,7 @@ export const modelStrategy: ModelStrategyState = {
       rule: "Prefer economical or sunk-cost routes for routine work before escalating.",
       orderedRoutes: [
         { providerProfileId: "shared-minimax", runtimeNodeId: "node-minimax-cloud", model: "MiniMax-M2.7-highspeed", note: "Routine and cron-style work." },
+        { providerProfileId: "shared-lmstudio", runtimeNodeId: "node-lmstudio-lan", model: "local/qwen3-4b-utility", note: "LAN-local LM Studio for routine work when cloud is unconfigured." },
         { providerProfileId: "shared-local", runtimeNodeId: "node-gx10-qwen", model: "qwen-3.5", note: "Remote local route for non-urgent background work." },
       ],
       lastResortRoute: {
@@ -341,6 +416,7 @@ export const modelStrategy: ModelStrategyState = {
       orderedRoutes: [
         { providerProfileId: "shared-openai", runtimeNodeId: "node-openai-cloud", model: "gpt-5.4", note: "Preferred ingest quality route." },
         { providerProfileId: "shared-minimax", runtimeNodeId: "node-minimax-cloud", model: "MiniMax-M2.7", note: "Temporary fallback if premium route is unavailable." },
+        { providerProfileId: "shared-lmstudio", runtimeNodeId: "node-lmstudio-lan", model: "local/gemma4-26b-opus-brain", note: "LAN-local LM Studio fallback for archive ingest when cloud providers are unavailable." },
       ],
     },
   ],
@@ -362,10 +438,10 @@ export const modelStrategy: ModelStrategyState = {
       workloadClass: "recovery",
       ownerType: "agent",
       ownerId: "setup.core",
-      primaryRoute: { providerProfileId: "shared-local", runtimeNodeId: "node-local-resurrect", model: "batiai/gemma4-e2b:q4" },
+      primaryRoute: { providerProfileId: "shared-lmstudio", runtimeNodeId: "node-lmstudio-lan", model: "local/gemma4-26b-opus-brain" },
       fallbackChainId: "chain-core-fast",
       hardStopWhenNoFallback: false,
-      notes: ["Recovery starts at the local floor, then promotes to the best validated stronger route."],
+      notes: ["Recovery routes to LM Studio via LiteLLM on LAN, then promotes through the fallback chain."],
     },
     {
       id: "strategy-archive-ingest",
@@ -395,6 +471,7 @@ export const modelStrategy: ModelStrategyState = {
     orderedPromotionTargets: [
       { providerProfileId: "shared-minimax", runtimeNodeId: "node-minimax-cloud", model: "MiniMax-M2.7", note: "Promote to the fast cloud route first." },
       { providerProfileId: "shared-openai", runtimeNodeId: "node-openai-cloud", model: "gpt-5.4", note: "Premium fallback when the fast route is unavailable." },
+      { providerProfileId: "shared-lmstudio", runtimeNodeId: "node-lmstudio-lan", model: "local/gemma4-26b-opus-brain", note: "LAN-local LM Studio via LiteLLM." },
       { providerProfileId: "shared-local", runtimeNodeId: "node-gx10-qwen", model: "qwen-3.5", note: "User-owned remote runtime." },
     ],
     hardFloorRoute: {
@@ -425,8 +502,8 @@ export const agents: AgentDefinition[] = [
     displayName: "Resonant Engineer Agent",
     trustTier: "core",
     workspaceBehavior: "delegated",
-    providerProfileId: "shared-local",
-    fallbackProviderProfileId: "shared-minimax",
+    providerProfileId: "shared-lmstudio",
+    fallbackProviderProfileId: "shared-local",
     archiveReadScopes: ["configuration", "constitution", "protocols", "living-archive", "review"],
     archiveIntakeWriteScopes: [],
     canWriteKnowledgePages: false,

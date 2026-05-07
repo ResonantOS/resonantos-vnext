@@ -1095,10 +1095,14 @@ async fn execute_cloud_provider_service_chat_with_usage(
                 "model": request.model,
                 "messages": request_messages
             }),
-            _ => json!({
+            "openai" => json!({
                 "model": request.model,
                 "messages": request_messages,
                 "reasoning_effort": request.reasoning_effort
+            }),
+            _ => json!({
+                "model": request.model,
+                "messages": request_messages
             }),
         })
         .send()
@@ -1211,10 +1215,18 @@ async fn execute_cloud_provider_service_chat_stream(
                 "include_usage": true
             }
         }),
-        _ => json!({
+        "openai" => json!({
             "model": request.model,
             "messages": request_messages,
             "reasoning_effort": request.reasoning_effort,
+            "stream": true,
+            "stream_options": {
+                "include_usage": true
+            }
+        }),
+        _ => json!({
+            "model": request.model,
+            "messages": request_messages,
             "stream": true,
             "stream_options": {
                 "include_usage": true
@@ -1749,4 +1761,5 @@ mod tests {
         assert_eq!(usage.duration_ms, Some(2200));
         assert_eq!(usage.tokens_per_second, Some(5.0));
     }
+
 }

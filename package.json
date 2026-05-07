@@ -30,6 +30,7 @@
     "@tauri-apps/plugin-dialog": "^2.7.0",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
+    "cargo": "^0.8.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",

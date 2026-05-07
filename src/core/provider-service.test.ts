@@ -4,7 +4,13 @@ import { resolveArchiveIngestRoute, resolveRoutineRoute, resolveStrategistChatRo
 
 describe("strategist provider service routing", () => {
   it("prefers the cloud route while it is healthy", () => {
-    const state = buildDefaultState([]);
+    const base = buildDefaultState([]);
+    const state = {
+      ...base,
+      providers: base.providers.map((p) =>
+        p.providerType !== "local" ? { ...p, credentialStatus: "configured" as const } : p,
+      ),
+    };
     const resolved = resolveStrategistChatRoute(state);
 
     expect(resolved.provider?.id).toBe("shared-minimax");
@@ -58,7 +64,13 @@ describe("strategist provider service routing", () => {
 
 describe("workload strategy routing", () => {
   it("routes archive ingest through the premium cloud strategy first", () => {
-    const state = buildDefaultState([]);
+    const base = buildDefaultState([]);
+    const state = {
+      ...base,
+      providers: base.providers.map((p) =>
+        p.providerType !== "local" ? { ...p, credentialStatus: "configured" as const } : p,
+      ),
+    };
     const resolved = resolveArchiveIngestRoute(state);
 
     expect(resolved.provider?.id).toBe("shared-openai");
@@ -87,7 +99,13 @@ describe("workload strategy routing", () => {
   });
 
   it("routes routine work through the economical strategy chain", () => {
-    const state = buildDefaultState([]);
+    const base = buildDefaultState([]);
+    const state = {
+      ...base,
+      providers: base.providers.map((p) =>
+        p.providerType !== "local" ? { ...p, credentialStatus: "configured" as const } : p,
+      ),
+    };
     const resolved = resolveRoutineRoute(state);
 
     expect(resolved.provider?.id).toBe("shared-minimax");
