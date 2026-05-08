@@ -1,0 +1,166 @@
+{
+  "id": "addon.lia-verifier",
+  "name": "LIA Verification Stack",
+  "version": "0.1.0",
+  "author": "Resonant Alpha",
+  "category": "security",
+  "description": "Five-gate verification stack that runs after every agent response. Posts the prompt and response to a local verification service which evaluates structural integrity, hallucination likelihood, logical consistency, consensus alignment, and adversarial robustness. Logs failures to a JSONL violation ledger. Fails open when the verification stack is unreachable.",
+  "runtimeType": "local-service",
+  "surfaces": [
+    {
+      "id": "lia-verifier-monitor",
+      "type": "background-task-monitor",
+      "label": "LIA Verification Monitor",
+      "description": "Background monitor showing verification pass/fail status, gate scores, and recent violation history."
+    }
+  ],
+  "requestedCapabilities": [
+    {
+      "capability": "network",
+      "granted": false,
+      "scope": "self",
+      "revocationBehavior": "degrade"
+    },
+    {
+      "capability": "chat-interface",
+      "granted": false,
+      "scope": "shared",
+      "revocationBehavior": "hard-stop"
+    },
+    {
+      "capability": "filesystem",
+      "granted": false,
+      "scope": "workspace",
+      "revocationBehavior": "degrade"
+    },
+    {
+      "capability": "notifications",
+      "granted": false,
+      "scope": "shared",
+      "revocationBehavior": "degrade"
+    }
+  ],
+  "provenance": {
+    "tier": "curated-signed",
+    "verificationState": "verified",
+    "signed": true,
+    "signer": "ResonantOS bundled catalog"
+  },
+  "runtimeIsolation": {
+    "boundary": "host-mediated-service",
+    "supportsDegradedMode": true,
+    "requiresReviewedGrant": false
+  },
+  "grantPresets": [
+    {
+      "id": "recommended-lia-verification",
+      "label": "Recommended LIA verification",
+      "description": "Enable 5-gate verification with network access to the local verification stack, chat observation for response content, filesystem for violation logs, and notifications for failures.",
+      "grants": [
+        {
+          "capability": "network",
+          "granted": true,
+          "scope": "self",
+          "revocationBehavior": "degrade"
+        },
+        {
+          "capability": "chat-interface",
+          "granted": true,
+          "scope": "shared",
+          "revocationBehavior": "hard-stop"
+        },
+        {
+          "capability": "filesystem",
+          "granted": true,
+          "scope": "workspace",
+          "revocationBehavior": "degrade"
+        },
+        {
+          "capability": "notifications",
+          "granted": true,
+          "scope": "shared",
+          "revocationBehavior": "degrade"
+        }
+      ]
+    }
+  ],
+  "providerRequirements": {
+    "sharedProfiles": [],
+    "supportsPrivateCredentials": false
+  },
+  "archiveIntegration": {
+    "readScopes": [],
+    "intakeWriteScopes": [],
+    "canRequestIngest": false,
+    "canWriteKnowledgePages": false
+  },
+  "health": {
+    "strategy": "http-health",
+    "endpoint": "http://localhost:8095/health"
+  },
+  "tools": [
+    {
+      "name": "lia_verifier.verify",
+      "description": "Manually verify a prompt-response pair against the 5-gate LIA verification stack. Returns gate-level pass/fail results and an overall score.",
+      "requiredCapabilities": ["network"],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "The user prompt to verify against."
+          },
+          "response": {
+            "type": "string",
+            "description": "The agent response to verify."
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "passed": { "type": "boolean" },
+          "score": { "type": "number" },
+          "gates": {
+            "type": "object",
+            "description": "Per-gate pass/fail results."
+          }
+        }
+      },
+      "audit": {
+        "logRequest": true,
+        "logResult": true,
+        "artifactTypes": ["log", "verification-report"]
+      }
+    }
+  ],
+  "audit": {
+    "tool": "lia_verifier.verify",
+    "checks": [
+      "structural-integrity",
+      "hallucination-detection",
+      "logical-consistency",
+      "consensus-alignment",
+      "adversarial-robustness"
+    ],
+    "requiredCapabilities": ["network"],
+    "remediationPolicy": "suggest-only",
+    "auditLogRequired": true
+  },
+  "installHooks": {
+    "onEnable": "start-lia-verifier"
+  },
+  "install": {
+    "mode": "bundled",
+    "requiredCapabilities": [],
+    "requiresHumanApprovalBeforeInstall": false,
+    "preservesExistingUserConfig": true,
+    "credentialSetup": "none",
+    "auditLogRequired": true,
+    "expectedArtifacts": ["log"]
+  },
+  "compatibility": {
+    "shellVersion": "^0.1.0",
+    "platforms": ["macOS", "linux"]
+  }
+}
