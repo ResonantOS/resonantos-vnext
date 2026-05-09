@@ -4439,7 +4439,8 @@ describe("App boot flow", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Rename" }));
-    fireEvent.change(screen.getByLabelText("Rename note path"), {
+    const renameInput = await screen.findByLabelText("Rename note path");
+    fireEvent.change(renameInput, {
       target: { value: "_MANOLO_NOTES/Renamed Architecture.md" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Apply rename" }));
