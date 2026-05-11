@@ -249,6 +249,73 @@ export interface AddOnAugmentorSkill {
   auditLogRequired: boolean;
 }
 
+export type AddOnWorkflowRepeatability = "one-off" | "repeatable" | "workflow-package";
+export type AddOnWorkflowOwner = "human" | "augmentor" | "engineer" | "addon-agent" | "external-system";
+export type AddOnConnectorType = "mcp-server" | "app-connector" | "api" | "local-runtime" | "filesystem";
+export type AddOnConnectorConfigScope = "host-vault" | "addon-private" | "user-config" | "none";
+export type AddOnScriptRunPolicy = "manual" | "preflight" | "postflight" | "scheduled" | "on-demand";
+export type AddOnHookEvent =
+  | "before-install"
+  | "after-install"
+  | "before-enable"
+  | "after-enable"
+  | "before-disable"
+  | "health-check"
+  | "before-task-complete"
+  | "before-archive-ingest"
+  | "after-archive-intake";
+export type AddOnHookFailurePolicy = "block" | "degrade" | "warn";
+export type AddOnSkillInvocation = "manual" | "agent-suggested" | "automatic";
+
+export interface AddOnWorkflowBoundary {
+  id: string;
+  label: string;
+  jobToBeDone: string;
+  userValue: string;
+  repeatability: AddOnWorkflowRepeatability;
+  owner: AddOnWorkflowOwner;
+  nonGoals: string[];
+}
+
+export interface AddOnSkillDefinition {
+  id: string;
+  name: string;
+  description: string;
+  documentPath: string;
+  invocation: AddOnSkillInvocation;
+  requiredCapabilities: Capability[];
+  requiredTools?: string[];
+}
+
+export interface AddOnConnectorDefinition {
+  id: string;
+  name: string;
+  type: AddOnConnectorType;
+  description: string;
+  requiredCapabilities: Capability[];
+  configScope: AddOnConnectorConfigScope;
+}
+
+export interface AddOnScriptDefinition {
+  id: string;
+  name: string;
+  description: string;
+  commandRef: string;
+  runPolicy: AddOnScriptRunPolicy;
+  deterministic: boolean;
+  requiredCapabilities: Capability[];
+  producesArtifacts: DelegationArtifactType[];
+  requiresHumanApproval: boolean;
+}
+
+export interface AddOnHookDefinition {
+  id: string;
+  event: AddOnHookEvent;
+  handlerRef: string;
+  requiredCapabilities: Capability[];
+  failurePolicy: AddOnHookFailurePolicy;
+}
+
 export type AddOnInstallMode = "detect-existing-only" | "detect-existing-or-install" | "bundled" | "manual";
 export type AddOnCredentialSetupMode = "none" | "user-guided" | "host-vault" | "external";
 export type AddOnAuditRemediationPolicy = "suggest-only" | "approval-gated" | "automatic-safe";
@@ -372,6 +439,11 @@ export interface AddOnManifest {
     onEnable?: string;
     onUpgrade?: string;
   };
+  workflowBoundaries?: AddOnWorkflowBoundary[];
+  skills?: AddOnSkillDefinition[];
+  connectors?: AddOnConnectorDefinition[];
+  scripts?: AddOnScriptDefinition[];
+  hooks?: AddOnHookDefinition[];
   engineerSetup?: AddOnEngineerSetupRunbook;
   augmentorSkills?: AddOnAugmentorSkill[];
   install?: AddOnInstallContract;

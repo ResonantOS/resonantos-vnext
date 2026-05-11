@@ -46,10 +46,18 @@ export function HermesAddonPanel({
   const intakeGranted = hasGrant(installation, "archive-intake-write");
 
   const runAudit = async (overrideProfileHome = profileHome) => {
+    if (!shellGranted) {
+      setStatus(null);
+      setError("Grant shell access before auditing a Hermes profile.");
+      return;
+    }
     setBusy(true);
     setError("");
     try {
-      const nextStatus = await requestHermesStatus(overrideProfileHome.trim() || undefined);
+      const nextStatus = await requestHermesStatus({
+        profileHome: overrideProfileHome.trim() || undefined,
+        executable: true,
+      });
       setStatus(nextStatus);
     } catch (auditError) {
       setError(auditError instanceof Error ? auditError.message : "Could not audit Hermes.");
@@ -87,8 +95,12 @@ export function HermesAddonPanel({
   };
 
   useEffect(() => {
-    void runAudit(configuredProfileHome);
-  }, [configuredProfileHome]);
+    if (shellGranted) {
+      void runAudit(configuredProfileHome);
+    } else {
+      setStatus(null);
+    }
+  }, [configuredProfileHome, shellGranted]);
 
   return (
     <div className="hermes-addon-panel">
@@ -119,9 +131,9 @@ export function HermesAddonPanel({
             onConfigChange({ profileHome: profileHome.trim() });
             void runAudit(profileHome);
           }}
-          disabled={busy}
+          disabled={busy || !shellGranted}
         >
-          {busy ? "Auditing..." : "Run audit"}
+          {busy ? "Auditing..." : shellGranted ? "Run audit" : "Grant shell to audit"}
         </button>
       </div>
 
@@ -145,12 +157,34 @@ export function HermesAddonPanel({
         <button
           type="button"
           className="button-primary touch-action"
-          onClick={() => onGrantCapabilities(["network", "shell", "ui-embedding", "providers", "archive-read", "archive-intake-write"], requestedCapabilities)}
-          disabled={networkGranted && shellGranted && embeddingGranted && providersGranted && archiveReadGranted && intakeGranted}
+          onClick={() => onGrantCapabilities(["shell", "ui-embedding"], requestedCapabilities)}
+          disabled={shellGranted && embeddingGranted}
         >
-          {networkGranted && shellGranted && embeddingGranted && providersGranted && archiveReadGranted && intakeGranted
-            ? "Hermes access granted"
-            : "Grant Hermes bridge access"}
+          {shellGranted && embeddingGranted ? "Workspace access granted" : "Grant workspace access"}
+        </button>
+        <button
+          type="button"
+          className="button-secondary touch-action"
+          onClick={() => onGrantCapabilities(["network", "shell"], requestedCapabilities)}
+          disabled={networkGranted && shellGranted}
+        >
+          {networkGranted && shellGranted ? "Install access granted" : "Grant install access"}
+        </button>
+        <button
+          type="button"
+          className="button-secondary touch-action"
+          onClick={() => onGrantCapabilities(["providers"], requestedCapabilities)}
+          disabled={providersGranted}
+        >
+          {providersGranted ? "Provider access granted" : "Grant provider access"}
+        </button>
+        <button
+          type="button"
+          className="button-secondary touch-action"
+          onClick={() => onGrantCapabilities(["archive-read", "archive-intake-write"], requestedCapabilities)}
+          disabled={archiveReadGranted && intakeGranted}
+        >
+          {archiveReadGranted && intakeGranted ? "Archive access granted" : "Grant archive access"}
         </button>
       </div>
 

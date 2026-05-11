@@ -12,6 +12,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 const DEFAULT_HERMES_HOME: &str = ".hermes";
+const DEFAULT_HERMES_DASHBOARD_HOST: &str = "127.0.0.1";
+const DEFAULT_HERMES_DASHBOARD_PORT: u16 = 9119;
 const HERMES_INSTALLER_URL: &str =
     "https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh";
 #[derive(Debug, Serialize)]
@@ -77,6 +79,13 @@ pub(crate) struct HermesInstallStatus {
 pub(crate) struct HermesInstallRequest {
     pub(crate) profile_home: Option<String>,
     pub(crate) branch: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct HermesStatusRequest {
+    pub(crate) profile_home: Option<String>,
+    pub(crate) executable: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
@@ -176,32 +185,54 @@ pub(crate) struct HermesWorkspaceSnapshot {
     pub(crate) archivist_recommendation: String,
 }
 
-pub(crate) fn query_hermes_status(profile_home: Option<String>) -> HermesInstallStatus {
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub(crate) enum HermesStatusMode {
+    Passive,
+    Executable,
+}
+
+pub(crate) fn query_hermes_status(
+    profile_home: Option<String>,
+    mode: HermesStatusMode,
+) -> HermesInstallStatus {
     let home = resolve_hermes_home(profile_home);
-    let command = resolve_hermes_command(&home);
+    let executable = mode == HermesStatusMode::Executable;
+    let command = if executable {
+        resolve_hermes_command(&home)
+    } else {
+        resolve_profile_hermes_command(&home)
+    };
     let detected = home.exists();
-    let version = command
-        .as_deref()
-        .and_then(|binary| {
+    let version = if executable {
+        command.as_deref().and_then(|binary| {
             let mut command = hermes_command(binary);
             command.arg("--version");
             command_output(&mut command).ok()
         })
-        .map(clean_output)
-        .filter(|value| !value.is_empty());
+    } else {
+        None
+    }
+    .map(clean_output)
+    .filter(|value| !value.is_empty());
     let agent_source_path = find_agent_source_path(&home);
-    let agent_git_branch = agent_source_path
-        .as_deref()
+    let agent_git_branch = executable
+        .then_some(agent_source_path.as_deref())
+        .flatten()
         .and_then(|path| git_output(path, &["branch", "--show-current"]));
-    let agent_git_commit = agent_source_path
-        .as_deref()
+    let agent_git_commit = executable
+        .then_some(agent_source_path.as_deref())
+        .flatten()
         .and_then(|path| git_output(path, &["rev-parse", "--short", "HEAD"]));
-    let agent_git_dirty = agent_source_path
-        .as_deref()
-        .and_then(|path| git_output(path, &["status", "--porcelain"]))
-        .map(|value| !value.trim().is_empty())
-        .unwrap_or(false);
-    let gateway = inspect_gateway(&home);
+    let agent_git_dirty = if executable {
+        agent_source_path
+            .as_deref()
+            .and_then(|path| git_output(path, &["status", "--porcelain"]))
+            .map(|value| !value.trim().is_empty())
+            .unwrap_or(false)
+    } else {
+        false
+    };
+    let gateway = inspect_gateway(&home, executable);
     let inventory = inspect_inventory(&home);
     let current_model = inspect_current_model(&home);
     let available_models = inspect_available_models(&home, current_model.as_deref());
@@ -213,6 +244,7 @@ pub(crate) fn query_hermes_status(profile_home: Option<String>) -> HermesInstall
         &gateway,
         &inventory,
         agent_git_dirty,
+        executable,
     );
     let compatibility = compatibility_from_findings(&findings);
 
@@ -299,7 +331,10 @@ pub(crate) fn execute_hermes_chat(request: HermesChatRequest) -> Result<HermesCh
 
 pub(crate) fn install_hermes(request: HermesInstallRequest) -> Result<HermesInstallResult, String> {
     let home = resolve_hermes_home(request.profile_home);
-    let existing_status = query_hermes_status(Some(home.display().to_string()));
+    let existing_status = query_hermes_status(
+        Some(home.display().to_string()),
+        HermesStatusMode::Executable,
+    );
     if existing_status.detected && existing_status.command.is_some() {
         return Ok(HermesInstallResult {
             success: true,
@@ -370,7 +405,10 @@ pub(crate) fn install_hermes(request: HermesInstallRequest) -> Result<HermesInst
         ]
         .join("\n"),
     );
-    let status = query_hermes_status(Some(home.display().to_string()));
+    let status = query_hermes_status(
+        Some(home.display().to_string()),
+        HermesStatusMode::Executable,
+    );
     let success = output.status.success() && status.detected && status.command.is_some();
     if !success {
         return Err(if log.is_empty() {
@@ -397,7 +435,7 @@ pub(crate) fn install_hermes(request: HermesInstallRequest) -> Result<HermesInst
 pub(crate) fn query_hermes_workspace_snapshot(
     profile_home: Option<String>,
 ) -> HermesWorkspaceSnapshot {
-    let install = query_hermes_status(profile_home.clone());
+    let install = query_hermes_status(profile_home.clone(), HermesStatusMode::Executable);
     HermesWorkspaceSnapshot {
         dashboard: query_hermes_dashboard_status(profile_home.clone(), None, None),
         profiles: query_hermes_profiles(profile_home.clone()),
@@ -421,8 +459,12 @@ pub(crate) fn query_hermes_dashboard_status(
     port: Option<u16>,
 ) -> HermesDashboardStatus {
     let home = resolve_hermes_home(profile_home);
-    let host = host.unwrap_or_else(|| "127.0.0.1".to_string());
-    let port = port.unwrap_or(9119);
+    let (host, port) = dashboard_target(host, port).unwrap_or_else(|_| {
+        (
+            DEFAULT_HERMES_DASHBOARD_HOST.to_string(),
+            DEFAULT_HERMES_DASHBOARD_PORT,
+        )
+    });
     let url = format!("http://{host}:{port}");
     let raw_status = resolve_hermes_command(&home)
         .as_deref()
@@ -459,14 +501,13 @@ pub(crate) fn start_hermes_dashboard(
     request: HermesDashboardRequest,
 ) -> Result<HermesDashboardStatus, String> {
     let home = resolve_hermes_home(request.profile_home.clone());
+    let (host, port) = dashboard_target(request.host.clone(), request.port)?;
     let Some(binary) = resolve_hermes_command(&home) else {
         return Err(
             "Hermes CLI was not found. Install or update Hermes before launching the dashboard."
                 .to_string(),
         );
     };
-    let host = request.host.unwrap_or_else(|| "127.0.0.1".to_string());
-    let port = request.port.unwrap_or(9119);
     let mut process = hermes_command(&binary);
     process
         .arg("dashboard")
@@ -624,7 +665,24 @@ fn expand_home(value: &str) -> PathBuf {
     PathBuf::from(value)
 }
 
-fn resolve_hermes_command(home: &Path) -> Option<String> {
+fn dashboard_target(host: Option<String>, port: Option<u16>) -> Result<(String, u16), String> {
+    let host = host
+        .unwrap_or_else(|| DEFAULT_HERMES_DASHBOARD_HOST.to_string())
+        .trim()
+        .to_ascii_lowercase();
+    if host != DEFAULT_HERMES_DASHBOARD_HOST && host != "localhost" {
+        return Err(
+            "Hermes dashboard can only bind to localhost or 127.0.0.1 from ResonantOS.".to_string(),
+        );
+    }
+    let port = port.unwrap_or(DEFAULT_HERMES_DASHBOARD_PORT);
+    if port == 0 {
+        return Err("Hermes dashboard port must be between 1 and 65535.".to_string());
+    }
+    Ok((DEFAULT_HERMES_DASHBOARD_HOST.to_string(), port))
+}
+
+fn resolve_profile_hermes_command(home: &Path) -> Option<String> {
     let candidates = [
         home.join("hermes-agent")
             .join("venv")
@@ -638,20 +696,26 @@ fn resolve_hermes_command(home: &Path) -> Option<String> {
             return Some(candidate.display().to_string());
         }
     }
-    command_output(Command::new("sh").arg("-lc").arg("command -v hermes"))
-        .ok()
-        .map(clean_output)
-        .filter(|value| !value.is_empty())
-        .or_else(|| {
-            Command::new("hermes")
-                .arg("--version")
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .status()
-                .ok()
-                .filter(|status| status.success())
-                .map(|_| "hermes".to_string())
-        })
+    None
+}
+
+fn resolve_hermes_command(home: &Path) -> Option<String> {
+    resolve_profile_hermes_command(home).or_else(|| {
+        command_output(Command::new("sh").arg("-lc").arg("command -v hermes"))
+            .ok()
+            .map(clean_output)
+            .filter(|value| !value.is_empty())
+            .or_else(|| {
+                Command::new("hermes")
+                    .arg("--version")
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .status()
+                    .ok()
+                    .filter(|status| status.success())
+                    .map(|_| "hermes".to_string())
+            })
+    })
 }
 
 fn hermes_command(binary: &str) -> Command {
@@ -834,7 +898,7 @@ fn git_output(path: &Path, args: &[&str]) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
-fn inspect_gateway(home: &Path) -> HermesGatewayStatus {
+fn inspect_gateway(home: &Path, executable: bool) -> HermesGatewayStatus {
     let gateway_state_path = home.join("gateway_state.json");
     let pid_path = home.join("gateway.pid");
     let mut present = gateway_state_path.exists() || pid_path.exists();
@@ -866,11 +930,14 @@ fn inspect_gateway(home: &Path) -> HermesGatewayStatus {
         }
     }
 
-    let running = pid.map(process_running).unwrap_or(false);
+    let running = executable && pid.map(process_running).unwrap_or(false);
     let detail = if !present {
         "No Hermes gateway state file was found.".to_string()
     } else if running {
         "Hermes gateway process appears to be running.".to_string()
+    } else if !executable {
+        "Hermes gateway state exists; process liveness was not checked in passive audit mode."
+            .to_string()
     } else {
         "Hermes gateway state exists, but the recorded process is not running.".to_string()
     };
@@ -1175,6 +1242,7 @@ fn build_findings(
     gateway: &HermesGatewayStatus,
     inventory: &HermesInventory,
     agent_git_dirty: bool,
+    executable_audit: bool,
 ) -> Vec<HermesAuditFinding> {
     let mut findings = Vec::new();
     if !detected {
@@ -1196,13 +1264,21 @@ fn build_findings(
             "Expose `hermes` on PATH or keep `hermes-agent/hermes_cli/main.py` inside the profile.",
         ));
     }
-    if version.is_none() {
+    if version.is_none() && executable_audit {
         findings.push(finding(
             "hermes-version-unknown",
             "warning",
             "Hermes version could not be checked",
             "The CLI did not return a version string, so update compatibility cannot be confirmed.",
             "Check the Hermes CLI manually and consider adding a stable `--version` response.",
+        ));
+    } else if version.is_none() && command.is_some() {
+        findings.push(finding(
+            "hermes-executable-audit-skipped",
+            "info",
+            "Executable Hermes checks were skipped",
+            "ResonantOS inspected profile files without running the Hermes CLI.",
+            "Grant shell access and run the executable audit before enabling dashboard, chat, or delegation workflows.",
         ));
     }
     if !gateway.present {
@@ -1342,10 +1418,12 @@ fn chrono_like_now() -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        clean_hermes_chat_output, clean_hermes_failure_output, hermes_command, install_hermes,
-        parse_available_models_from_config, parse_current_model_from_config, parse_kanban_counts,
-        parse_kanban_tasks, parse_profile_list, resolve_hermes_command, validate_selected_model,
-        HermesInstallRequest,
+        clean_hermes_chat_output, clean_hermes_failure_output, dashboard_target, hermes_command,
+        install_hermes, parse_available_models_from_config, parse_current_model_from_config,
+        parse_kanban_counts, parse_kanban_tasks, parse_profile_list, query_hermes_status,
+        resolve_hermes_command, start_hermes_dashboard, validate_selected_model,
+        HermesDashboardRequest, HermesInstallRequest, HermesStatusMode,
+        DEFAULT_HERMES_DASHBOARD_PORT,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -1403,6 +1481,72 @@ mod tests {
         assert!(result.success);
         assert_eq!(result.command, "existing-install");
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn passive_status_does_not_execute_profile_local_hermes() {
+        let root = std::env::temp_dir().join(format!(
+            "resonantos-hermes-passive-status-test-{}",
+            std::process::id()
+        ));
+        let marker = root.join("executed.marker");
+        let _ = fs::remove_dir_all(&root);
+        let venv_bin = root.join("hermes-agent").join("venv").join("bin");
+        fs::create_dir_all(&venv_bin).expect("venv bin should be created");
+        let hermes_path = venv_bin.join("hermes");
+        fs::write(
+            &hermes_path,
+            format!(
+                "#!/bin/sh\ntouch '{}'\necho 'Hermes Agent test'\n",
+                marker.display()
+            ),
+        )
+        .expect("hermes should be written");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&hermes_path, fs::Permissions::from_mode(0o755))
+                .expect("hermes should be executable");
+        }
+
+        let status =
+            query_hermes_status(Some(root.display().to_string()), HermesStatusMode::Passive);
+
+        assert!(status.command.is_some());
+        assert!(status.version.is_none());
+        assert!(!marker.exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn dashboard_target_allows_only_local_loopback_hosts() {
+        assert_eq!(
+            dashboard_target(None, None).expect("default target should parse"),
+            ("127.0.0.1".to_string(), DEFAULT_HERMES_DASHBOARD_PORT)
+        );
+        assert_eq!(
+            dashboard_target(Some(" localhost ".to_string()), Some(9120))
+                .expect("localhost should normalize"),
+            ("127.0.0.1".to_string(), 9120)
+        );
+        assert!(dashboard_target(Some("0.0.0.0".to_string()), Some(9119)).is_err());
+        assert!(dashboard_target(Some("192.168.1.10".to_string()), Some(9119)).is_err());
+        assert!(dashboard_target(Some("127.0.0.1".to_string()), Some(0)).is_err());
+    }
+
+    #[test]
+    fn dashboard_start_rejects_non_loopback_host_before_command_lookup() {
+        let result = start_hermes_dashboard(HermesDashboardRequest {
+            profile_home: Some("/tmp/resonantos-missing-hermes-profile".to_string()),
+            host: Some("0.0.0.0".to_string()),
+            port: Some(9119),
+            include_tui: None,
+        });
+
+        assert_eq!(
+            result.expect_err("non-loopback host should be rejected"),
+            "Hermes dashboard can only bind to localhost or 127.0.0.1 from ResonantOS."
+        );
     }
 
     #[test]

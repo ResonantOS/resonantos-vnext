@@ -267,9 +267,17 @@ export const requestRecoveryRouteCandidates = async (): Promise<RecoveryRouteCan
   throw new Error("Recovery route probing is available only in the desktop shell.");
 };
 
-export const requestHermesStatus = async (profileHome?: string): Promise<HermesInstallStatus> => {
+export const requestHermesStatus = async (input: {
+  profileHome?: string;
+  executable?: boolean;
+} = {}): Promise<HermesInstallStatus> => {
   if (hasTauri()) {
-    return (await invoke("hermes_status", { profileHome })) as HermesInstallStatus;
+    return (await invoke("hermes_status", {
+      request: {
+        profileHome: input.profileHome,
+        executable: input.executable,
+      },
+    })) as HermesInstallStatus;
   }
   throw new Error("Hermes compatibility audit is available only in the desktop shell.");
 };

@@ -21,20 +21,38 @@ Use Hermes as a delegated communication, coordination, routine research, follow-
 
 ## Installation And Audit
 
-1. Audit the local Hermes profile first.
-2. If Hermes is missing, explain that ResonantOS can install the official Nous Research Hermes Agent after network and shell grants.
-3. Install only after explicit user approval.
-4. The installer skips provider credential setup. Tell the user to run `hermes setup` or configure credentials intentionally.
-5. Re-run the audit after installation.
-6. Treat audit findings as remediation suggestions, not permission to change Hermes automatically.
+1. Use passive profile inspection until shell access is granted. Passive inspection may read profile files and config metadata, but must not run the Hermes CLI.
+2. Run executable audit only after the Hermes add-on has explicit shell access.
+3. If Hermes is missing, explain that ResonantOS can install the official Nous Research Hermes Agent after separate network and shell grants.
+4. Install only after explicit user approval.
+5. The installer skips provider credential setup. Tell the user to run `hermes setup` or configure credentials intentionally.
+6. Re-run executable audit after installation.
+7. Treat audit findings as remediation suggestions, not permission to change Hermes automatically.
+
+## Capability Grants
+
+- Workspace access grants only `shell` and `ui-embedding`.
+- Install access requires `network` and `shell`.
+- Direct chat requires `shell` and `providers`.
+- Dashboard status, start, and stop require `shell` and `ui-embedding`.
+- Living Archive context requires `archive-read`.
+- Archive intake requires `archive-intake-write` and remains review-gated.
+- Do not bundle provider, archive, network, or install grants into workspace quick actions.
 
 ## Direct Chat Flow
 
-1. Use the Hermes chat bridge only when the Hermes add-on is enabled and shell access is granted.
+1. Use the Hermes chat bridge only when the Hermes add-on is enabled and shell plus provider access are granted.
 2. Pass the selected Hermes model from ResonantOS to the local Hermes CLI.
 3. If archive-read is granted, include Living Archive context as read-only evidence.
 4. Return only Hermes' final reply to the user-facing chat.
 5. Attach archive citations in ResonantOS when archive context was used.
+
+## Dashboard Flow
+
+1. Launch the embedded dashboard only through the Hermes workspace after `shell` and `ui-embedding` grants.
+2. Bind and probe the dashboard on loopback only.
+3. Treat the selected Hermes profile path as user-controlled; executable discovery inside that path is allowed only after shell access.
+4. Keep provider, archive, install, and workspace controls visibly separate.
 
 ## Delegation Flow
 
