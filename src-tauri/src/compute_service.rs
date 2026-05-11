@@ -430,6 +430,7 @@ mod tests {
         assert!(result.checked_at.starts_with("unix:"));
     }
 
+    #[cfg(unix)]
     #[test]
     fn safe_command_allows_only_uname_without_shell() {
         let result = execute_local_safe_command(ComputeSafeCommandRequest {

@@ -3993,11 +3993,10 @@ mod tests {
         assert_eq!(result.skipped_missing, 0);
         assert_eq!(result.request_files.len(), 2);
         for record in &enqueued {
-            assert!(record
-                .source_path
+            let normalized_source_path = record.source_path.replace('\\', "/");
+            assert!(normalized_source_path
                 .contains("/Memory/INTAKE/imports/mixed/sources/resonant-os-base/"));
-            assert!(!record
-                .source_path
+            assert!(!normalized_source_path
                 .contains("/Documents/ResonantOS_User/Memory/INTAKE/imports/"));
         }
         let _ = fs::remove_dir_all(root);
