@@ -8,10 +8,10 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 
-use crate::host_state::{PortableUserStateStatus, ensure_portable_user_state};
+use crate::host_state::{ensure_portable_user_state, PortableUserStateStatus};
 
 use super::{
-    ArchiveActivityEntry, ArchiveStats, load_archive_stats, load_recent_activity, open_archive_db,
+    load_archive_stats, load_recent_activity, open_archive_db, ArchiveActivityEntry, ArchiveStats,
 };
 
 #[derive(Deserialize, Serialize)]
@@ -478,7 +478,7 @@ pub(crate) fn query_archive_runtime_status(
 
 #[cfg(test)]
 mod tests {
-    use super::{ArchiveConfigFile, normalize_portable_archive_config, portable_archive_config};
+    use super::{normalize_portable_archive_config, portable_archive_config, ArchiveConfigFile};
     use crate::host_state::PortableUserStateStatus;
     use std::fs;
     use std::path::PathBuf;

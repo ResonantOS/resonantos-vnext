@@ -618,8 +618,8 @@ mod tests {
     use std::path::PathBuf;
 
     use super::{
-        OpenCodeLaunchMode, TrustKernelAdvisory, build_trust_hook_event_args,
-        resolve_trust_kernel_root_from, service_result, validate_workspace_path,
+        build_trust_hook_event_args, resolve_trust_kernel_root_from, service_result,
+        validate_workspace_path, OpenCodeLaunchMode, TrustKernelAdvisory,
     };
 
     #[test]
@@ -697,10 +697,9 @@ mod tests {
         .expect("tool_call event should be supported");
 
         assert!(args.windows(2).any(|pair| pair == ["-m", "trust_kernel"]));
-        assert!(
-            args.windows(2)
-                .any(|pair| pair == ["trust_kernel", "hook-event"])
-        );
+        assert!(args
+            .windows(2)
+            .any(|pair| pair == ["trust_kernel", "hook-event"]));
         let payload_arg = args
             .windows(2)
             .find_map(|pair| (pair[0] == "--payload").then_some(pair[1].as_str()))

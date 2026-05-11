@@ -416,8 +416,8 @@ pub(crate) fn query_nas_backup_status() -> Result<NasBackupStatusResult, String>
 #[cfg(test)]
 mod tests {
     use super::{
-        ComputeSafeCommandRequest, Gx10LlamaSwitchRequest, execute_local_safe_command,
-        gx10_model_spec, query_local_passive_diagnostics, switch_gx10_llama_model,
+        execute_local_safe_command, gx10_model_spec, query_local_passive_diagnostics,
+        switch_gx10_llama_model, ComputeSafeCommandRequest, Gx10LlamaSwitchRequest,
     };
 
     #[test]

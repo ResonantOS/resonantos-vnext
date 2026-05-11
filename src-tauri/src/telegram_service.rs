@@ -8,7 +8,7 @@ use std::time::Duration;
 use chrono::Utc;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter};
 use tokio::time::sleep;
 
@@ -17,7 +17,7 @@ use crate::host_state::{
     resolve_provider_secret, state_file, write_provider_secrets,
 };
 use crate::provider_service::{
-    ChatMessageInput, ProviderServiceChatRequest, execute_provider_service_chat,
+    execute_provider_service_chat, ChatMessageInput, ProviderServiceChatRequest,
 };
 
 const TELEGRAM_ADDON_ID: &str = "addon.telegram-channel";

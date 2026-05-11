@@ -7,14 +7,14 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use tauri::AppHandle;
 
 use crate::provider_service::{
-    ChatMessageInput, ProviderServiceChatRequest, execute_provider_service_chat,
+    execute_provider_service_chat, ChatMessageInput, ProviderServiceChatRequest,
 };
 
 #[derive(Serialize)]
@@ -1019,18 +1019,18 @@ fn relative_to_vault(runtime: &ArchiveRuntime, path: &PathBuf) -> String {
 }
 
 mod archive_runtime;
-use archive_runtime::{ArchiveRuntime, VaultMappingFile, dedupe_paths};
-pub(crate) use archive_runtime::{ArchiveRuntimeStatus, query_archive_runtime_status};
+use archive_runtime::{dedupe_paths, ArchiveRuntime, VaultMappingFile};
+pub(crate) use archive_runtime::{query_archive_runtime_status, ArchiveRuntimeStatus};
 
 mod archive_review;
-#[cfg(test)]
-use archive_review::{
-    PromotedPageIndexInput, evaluate_approval_tier, merge_promoted_page_body, render_promoted_page,
-    upsert_promoted_page_index, wiki_page_subdir,
-};
 pub(crate) use archive_review::{
     decide_archive_review_artifact, list_archive_review_artifacts, process_archive_ingest_request,
     promote_archive_review_artifact, run_archive_maintenance_cycle,
+};
+#[cfg(test)]
+use archive_review::{
+    evaluate_approval_tier, merge_promoted_page_body, render_promoted_page,
+    upsert_promoted_page_index, wiki_page_subdir, PromotedPageIndexInput,
 };
 
 mod archive_source_library;
@@ -1069,8 +1069,8 @@ mod archive_system_memory;
 #[cfg(test)]
 use archive_system_memory::SYSTEM_MEMORY_SOURCE_SPECS;
 use archive_system_memory::{
-    SYSTEM_MEMORY_GENERATOR_VERSION, collect_system_memory_sources, render_system_memory_pages,
-    resolve_system_memory_project_root, system_memory_status_from_runtime,
+    collect_system_memory_sources, render_system_memory_pages, resolve_system_memory_project_root,
+    system_memory_status_from_runtime, SYSTEM_MEMORY_GENERATOR_VERSION,
 };
 
 mod archive_tol_bundles;
@@ -2946,7 +2946,11 @@ fn resolve_imported_record_canonical_path(
     };
 
     let migrated = domain_root.join("sources").join(library_id).join(relative);
-    if migrated.exists() { migrated } else { direct }
+    if migrated.exists() {
+        migrated
+    } else {
+        direct
+    }
 }
 
 pub(crate) fn queue_imported_library_for_ingest(
@@ -3513,18 +3517,18 @@ pub(crate) async fn run_archive_ai_memory_build_job(
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        ArchiveImportedLibrarySummary, queue_imported_library_records_for_ingest,
-        read_archive_ai_memory_build_job_summary, unix_timestamp,
-    };
-    use super::{ArchiveWikiNavigationLogEntry, ArchiveWikiNavigationPage};
-    use super::{PromotedPageIndexInput, upsert_promoted_page_index};
     use super::{evaluate_approval_tier, render_promoted_page, slugify, wiki_page_subdir};
     use super::{
         parse_semantic_lint_findings, render_archive_index_markdown, render_archive_log_markdown,
     };
-    use rusqlite::{Connection, params};
-    use serde_json::{Value, json};
+    use super::{
+        queue_imported_library_records_for_ingest, read_archive_ai_memory_build_job_summary,
+        unix_timestamp, ArchiveImportedLibrarySummary,
+    };
+    use super::{upsert_promoted_page_index, PromotedPageIndexInput};
+    use super::{ArchiveWikiNavigationLogEntry, ArchiveWikiNavigationPage};
+    use rusqlite::{params, Connection};
+    use serde_json::{json, Value};
     use std::collections::HashSet;
     use std::fs;
     use std::path::Path;
@@ -3989,16 +3993,12 @@ mod tests {
         assert_eq!(result.skipped_missing, 0);
         assert_eq!(result.request_files.len(), 2);
         for record in &enqueued {
-            assert!(
-                record
-                    .source_path
-                    .contains("/Memory/INTAKE/imports/mixed/sources/resonant-os-base/")
-            );
-            assert!(
-                !record
-                    .source_path
-                    .contains("/Documents/ResonantOS_User/Memory/INTAKE/imports/")
-            );
+            assert!(record
+                .source_path
+                .contains("/Memory/INTAKE/imports/mixed/sources/resonant-os-base/"));
+            assert!(!record
+                .source_path
+                .contains("/Documents/ResonantOS_User/Memory/INTAKE/imports/"));
         }
         let _ = fs::remove_dir_all(root);
     }
@@ -4466,18 +4466,14 @@ mod tests {
             "needs-ai-assisted-classification"
         );
         assert_eq!(result.classification_proposals.len(), 2);
-        assert!(
-            result
-                .classification_proposals
-                .iter()
-                .any(|proposal| proposal.proposed_target == "human-knowledge")
-        );
-        assert!(
-            result
-                .classification_proposals
-                .iter()
-                .any(|proposal| proposal.proposed_target == "external-knowledge")
-        );
+        assert!(result
+            .classification_proposals
+            .iter()
+            .any(|proposal| proposal.proposed_target == "human-knowledge"));
+        assert!(result
+            .classification_proposals
+            .iter()
+            .any(|proposal| proposal.proposed_target == "external-knowledge"));
         let classification_manifest = result
             .classification_manifest_path
             .as_ref()
@@ -4610,20 +4606,16 @@ mod tests {
 
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].title, "Play_047_The_Mixtape_Constraint");
-        assert!(
-            hits[0]
-                .snippet
-                .as_deref()
-                .unwrap_or_default()
-                .contains("Protocol of Mixtape")
-        );
-        assert!(
-            hits[0]
-                .snippet
-                .as_deref()
-                .unwrap_or_default()
-                .contains("deliberate curation and friction")
-        );
+        assert!(hits[0]
+            .snippet
+            .as_deref()
+            .unwrap_or_default()
+            .contains("Protocol of Mixtape"));
+        assert!(hits[0]
+            .snippet
+            .as_deref()
+            .unwrap_or_default()
+            .contains("deliberate curation and friction"));
 
         let _ = fs::remove_dir_all(root);
     }
@@ -4644,18 +4636,14 @@ mod tests {
             .expect("system memory pages should render");
 
         assert_eq!(pages.len(), 4);
-        assert!(
-            runtime
-                .system_memory_root()
-                .join("resonantos-system-index.md")
-                .exists()
-        );
-        assert!(
-            runtime
-                .system_memory_root()
-                .join("resonantos-architecture-contract.md")
-                .exists()
-        );
+        assert!(runtime
+            .system_memory_root()
+            .join("resonantos-system-index.md")
+            .exists());
+        assert!(runtime
+            .system_memory_root()
+            .join("resonantos-architecture-contract.md")
+            .exists());
         let index = fs::read_to_string(
             runtime
                 .system_memory_root()

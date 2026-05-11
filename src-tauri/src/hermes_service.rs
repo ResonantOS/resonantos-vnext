@@ -1418,12 +1418,12 @@ fn chrono_like_now() -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        DEFAULT_HERMES_DASHBOARD_PORT, HermesDashboardRequest, HermesInstallRequest,
-        HermesStatusMode, clean_hermes_chat_output, clean_hermes_failure_output, dashboard_target,
-        hermes_command, install_hermes, parse_available_models_from_config,
-        parse_current_model_from_config, parse_kanban_counts, parse_kanban_tasks,
-        parse_profile_list, query_hermes_status, resolve_hermes_command, start_hermes_dashboard,
-        validate_selected_model,
+        clean_hermes_chat_output, clean_hermes_failure_output, dashboard_target, hermes_command,
+        install_hermes, parse_available_models_from_config, parse_current_model_from_config,
+        parse_kanban_counts, parse_kanban_tasks, parse_profile_list, query_hermes_status,
+        resolve_hermes_command, start_hermes_dashboard, validate_selected_model,
+        HermesDashboardRequest, HermesInstallRequest, HermesStatusMode,
+        DEFAULT_HERMES_DASHBOARD_PORT,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -1444,14 +1444,12 @@ mod tests {
 
         let command = resolve_hermes_command(&root).expect("command should resolve");
 
-        assert!(
-            PathBuf::from(command).ends_with(
-                PathBuf::from("hermes-agent")
-                    .join("venv")
-                    .join("bin")
-                    .join("hermes")
-            )
-        );
+        assert!(PathBuf::from(command).ends_with(
+            PathBuf::from("hermes-agent")
+                .join("venv")
+                .join("bin")
+                .join("hermes")
+        ));
         let _ = fs::remove_dir_all(root);
     }
 

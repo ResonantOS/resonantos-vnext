@@ -4,8 +4,8 @@ use std::fs;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use serde_json::json;
+use serde_json::Value;
 use tauri::{AppHandle, Manager};
 
 const PORTABLE_USER_STATE_FOLDER: &str = "ResonantOS_User";
@@ -431,14 +431,12 @@ mod tests {
             }
         });
 
-        assert!(
-            assert_addon_capabilities_from_state(
-                &state,
-                "addon.browser",
-                &["network", "browser-control"]
-            )
-            .is_ok()
-        );
+        assert!(assert_addon_capabilities_from_state(
+            &state,
+            "addon.browser",
+            &["network", "browser-control"]
+        )
+        .is_ok());
         assert!(
             assert_addon_capabilities_from_state(&state, "addon.browser", &["ui-embedding"])
                 .is_err()

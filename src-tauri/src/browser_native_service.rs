@@ -1,7 +1,7 @@
 // Intent citation: docs/architecture/ADR-025-native-embedded-browser-host.md
 
 use std::env;
-use std::ffi::{CStr, CString, c_char, c_int, c_void};
+use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -617,8 +617,8 @@ impl NativeBrowserBridgeLibrary {
     }
 }
 
-fn load_native_browser_bridge()
--> Result<std::sync::MutexGuard<'static, Option<NativeBrowserBridgeLibrary>>, String> {
+fn load_native_browser_bridge(
+) -> Result<std::sync::MutexGuard<'static, Option<NativeBrowserBridgeLibrary>>, String> {
     let lock = NATIVE_BROWSER_BRIDGE.get_or_init(|| Mutex::new(None));
     let mut guard = lock
         .lock()
@@ -819,10 +819,11 @@ fn json_status_is_allowed_progress(json: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
+        build_bridge_probe_result, query_native_browser_attach_smoke,
+        query_native_browser_bridge_probe, query_native_browser_probe,
         NativeBrowserAttachSmokeRequest, NativeBrowserAttachSmokeStatus,
         NativeBrowserBridgeProbeRequest, NativeBrowserBridgeProbeStatus, NativeBrowserProbeRequest,
-        NativeBrowserProbeStatus, build_bridge_probe_result, query_native_browser_attach_smoke,
-        query_native_browser_bridge_probe, query_native_browser_probe,
+        NativeBrowserProbeStatus,
     };
 
     #[test]
@@ -837,18 +838,14 @@ mod tests {
 
         assert_eq!(result.status, NativeBrowserProbeStatus::Blocked);
         assert_eq!(result.engine_candidate, "cef-chrome-runtime");
-        assert!(
-            result
-                .blockers
-                .iter()
-                .any(|blocker| blocker.contains("No product native Browser host"))
-        );
-        assert!(
-            result
-                .blockers
-                .iter()
-                .any(|blocker| blocker.contains("Phantom Wallet and Bitwarden"))
-        );
+        assert!(result
+            .blockers
+            .iter()
+            .any(|blocker| blocker.contains("No product native Browser host")));
+        assert!(result
+            .blockers
+            .iter()
+            .any(|blocker| blocker.contains("Phantom Wallet and Bitwarden")));
         std::env::remove_var("RESONANTOS_DISABLE_NATIVE_BROWSER_BINARY_DISCOVERY");
     }
 
@@ -866,12 +863,10 @@ mod tests {
         });
 
         assert_eq!(result.status, NativeBrowserProbeStatus::Partial);
-        assert!(
-            result
-                .blockers
-                .iter()
-                .all(|blocker| !blocker.contains("No product native Browser host"))
-        );
+        assert!(result
+            .blockers
+            .iter()
+            .all(|blocker| !blocker.contains("No product native Browser host")));
 
         std::env::remove_var("RESONANTOS_NATIVE_BROWSER_HOST");
         let _ = std::fs::remove_file(binary);
@@ -891,19 +886,15 @@ mod tests {
         assert_eq!(result.status, NativeBrowserAttachSmokeStatus::Blocked);
         assert_eq!(result.parent_handle_kind, "macos-ns-view");
         assert!(result.parent_handle_present);
-        assert!(
-            result
-                .blocker
-                .as_deref()
-                .unwrap_or_default()
-                .contains("External CEF executables cannot safely attach")
-        );
-        assert!(
-            result
-                .next_actions
-                .iter()
-                .any(|action| action.contains("in-process Rust-owned"))
-        );
+        assert!(result
+            .blocker
+            .as_deref()
+            .unwrap_or_default()
+            .contains("External CEF executables cannot safely attach"));
+        assert!(result
+            .next_actions
+            .iter()
+            .any(|action| action.contains("in-process Rust-owned")));
     }
 
     #[test]
@@ -943,12 +934,10 @@ mod tests {
         });
 
         assert_eq!(result.status, NativeBrowserBridgeProbeStatus::Missing);
-        assert!(
-            result
-                .blockers
-                .iter()
-                .any(|blocker| blocker.contains("bridge library was not found"))
-        );
+        assert!(result
+            .blockers
+            .iter()
+            .any(|blocker| blocker.contains("bridge library was not found")));
 
         std::env::remove_var("RESONANTOS_DISABLE_NATIVE_BROWSER_BRIDGE_DISCOVERY");
     }

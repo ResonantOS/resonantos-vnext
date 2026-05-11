@@ -4,23 +4,22 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use rusqlite::{Connection, OptionalExtension, params};
-use serde_json::{Value, json};
+use rusqlite::{params, Connection, OptionalExtension};
+use serde_json::{json, Value};
 use tauri::AppHandle;
 
 use crate::provider_service::{
-    ChatMessageInput, ProviderServiceChatRequest, execute_provider_service_chat,
+    execute_provider_service_chat, ChatMessageInput, ProviderServiceChatRequest,
 };
 
 use super::{
-    ArchiveMaintenanceCycleRequest, ArchiveMaintenanceCycleResult, ArchiveProcessIngestRequest,
-    ArchiveProcessIngestResult, ArchivePromoteReviewArtifactRequest,
-    ArchivePromoteReviewArtifactResult, ArchivePromotedPage, ArchiveReviewArtifact,
-    ArchiveReviewDecision, ArchiveReviewDecisionRequest, ArchiveReviewDecisionResult,
-    ArchiveRuntime, ArchiveSkippedPage, lint_archive, list_archive_ingest_requests,
-    open_archive_db, parse_frontmatter, refresh_archive_wiki_navigation,
-    resolve_allowed_source_path, resolve_document_path, slugify, source_id_from_path, string_field,
-    unix_timestamp,
+    lint_archive, list_archive_ingest_requests, open_archive_db, parse_frontmatter,
+    refresh_archive_wiki_navigation, resolve_allowed_source_path, resolve_document_path, slugify,
+    source_id_from_path, string_field, unix_timestamp, ArchiveMaintenanceCycleRequest,
+    ArchiveMaintenanceCycleResult, ArchiveProcessIngestRequest, ArchiveProcessIngestResult,
+    ArchivePromoteReviewArtifactRequest, ArchivePromoteReviewArtifactResult, ArchivePromotedPage,
+    ArchiveReviewArtifact, ArchiveReviewDecision, ArchiveReviewDecisionRequest,
+    ArchiveReviewDecisionResult, ArchiveRuntime, ArchiveSkippedPage,
 };
 
 struct IngestSourceContent {
@@ -2183,12 +2182,10 @@ mod tests {
 
         assert_eq!(pages[0]["type"], "summary");
         assert_eq!(pages[0]["title"], "source-note");
-        assert!(
-            pages[0]["content"]
-                .as_str()
-                .unwrap()
-                .contains("## Review Boundary")
-        );
+        assert!(pages[0]["content"]
+            .as_str()
+            .unwrap()
+            .contains("## Review Boundary"));
         assert_eq!(pages[1]["type"], "concept");
         assert_eq!(pages[1]["stage"], "stub");
     }

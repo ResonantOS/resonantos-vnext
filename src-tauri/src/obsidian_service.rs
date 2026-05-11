@@ -1239,21 +1239,18 @@ mod tests {
             moved.note_path.as_deref(),
             Some("Projects/Nested/Renamed Note.md")
         );
-        assert!(
-            moved
-                .version_path
-                .as_ref()
-                .map(PathBuf::from)
-                .unwrap()
-                .exists()
-        );
+        assert!(moved
+            .version_path
+            .as_ref()
+            .map(PathBuf::from)
+            .unwrap()
+            .exists());
         assert!(!root.join("Projects").join("New Note.md").exists());
-        assert!(
-            root.join("Projects")
-                .join("Nested")
-                .join("Renamed Note.md")
-                .exists()
-        );
+        assert!(root
+            .join("Projects")
+            .join("Nested")
+            .join("Renamed Note.md")
+            .exists());
 
         let before_archive = read_obsidian_note(ObsidianReadNoteRequest {
             vault_path: root.display().to_string(),
@@ -1271,21 +1268,17 @@ mod tests {
             archived.previous_note_path.as_deref(),
             Some("Projects/Nested/Renamed Note.md")
         );
-        assert!(
-            archived
-                .archived_path
-                .as_ref()
-                .map(PathBuf::from)
-                .unwrap()
-                .exists()
-        );
-        assert!(
-            !root
-                .join("Projects")
-                .join("Nested")
-                .join("Renamed Note.md")
-                .exists()
-        );
+        assert!(archived
+            .archived_path
+            .as_ref()
+            .map(PathBuf::from)
+            .unwrap()
+            .exists());
+        assert!(!root
+            .join("Projects")
+            .join("Nested")
+            .join("Renamed Note.md")
+            .exists());
 
         fs::remove_dir_all(root).ok();
     }
@@ -1294,42 +1287,34 @@ mod tests {
     fn rejects_create_move_and_archive_paths_outside_safe_vault_area() {
         let root = temp_vault();
 
-        assert!(
-            create_obsidian_note(ObsidianCreateNoteRequest {
-                vault_path: root.display().to_string(),
-                note_path: "../Escaped.md".to_string(),
-                content: None,
-                actor_id: None,
-            })
-            .is_err()
-        );
-        assert!(
-            create_obsidian_folder(ObsidianCreateFolderRequest {
-                vault_path: root.display().to_string(),
-                folder_path: ".obsidian/generated".to_string(),
-                actor_id: None,
-            })
-            .is_err()
-        );
-        assert!(
-            move_obsidian_note(ObsidianMoveNoteRequest {
-                vault_path: root.display().to_string(),
-                from_note_path: "Folder/Note One.md".to_string(),
-                to_note_path: ".resonantos/Note One.md".to_string(),
-                expected_modified_at: None,
-                actor_id: None,
-            })
-            .is_err()
-        );
-        assert!(
-            archive_obsidian_note(ObsidianArchiveNoteRequest {
-                vault_path: root.display().to_string(),
-                note_path: "../Escaped.md".to_string(),
-                expected_modified_at: None,
-                actor_id: None,
-            })
-            .is_err()
-        );
+        assert!(create_obsidian_note(ObsidianCreateNoteRequest {
+            vault_path: root.display().to_string(),
+            note_path: "../Escaped.md".to_string(),
+            content: None,
+            actor_id: None,
+        })
+        .is_err());
+        assert!(create_obsidian_folder(ObsidianCreateFolderRequest {
+            vault_path: root.display().to_string(),
+            folder_path: ".obsidian/generated".to_string(),
+            actor_id: None,
+        })
+        .is_err());
+        assert!(move_obsidian_note(ObsidianMoveNoteRequest {
+            vault_path: root.display().to_string(),
+            from_note_path: "Folder/Note One.md".to_string(),
+            to_note_path: ".resonantos/Note One.md".to_string(),
+            expected_modified_at: None,
+            actor_id: None,
+        })
+        .is_err());
+        assert!(archive_obsidian_note(ObsidianArchiveNoteRequest {
+            vault_path: root.display().to_string(),
+            note_path: "../Escaped.md".to_string(),
+            expected_modified_at: None,
+            actor_id: None,
+        })
+        .is_err());
 
         fs::remove_dir_all(root).ok();
     }

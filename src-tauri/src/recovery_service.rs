@@ -4,17 +4,17 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use tauri::AppHandle;
 
 use crate::compute_service::{
-    ComputeRemoteProbeRequest, Gx10LlamaSwitchRequest, execute_remote_probe,
-    query_gx10_llama_status, query_nas_backup_status, switch_gx10_llama_model,
+    execute_remote_probe, query_gx10_llama_status, query_nas_backup_status,
+    switch_gx10_llama_model, ComputeRemoteProbeRequest, Gx10LlamaSwitchRequest,
 };
 use crate::host_state::{app_state_dir, read_runtime_state_value, resolve_provider_secret};
 use crate::provider_service::{
-    ChatMessageInput, ProviderServiceChatRequest, execute_provider_service_chat,
-    probe_http_endpoint, query_local_runtime_status,
+    execute_provider_service_chat, probe_http_endpoint, query_local_runtime_status,
+    ChatMessageInput, ProviderServiceChatRequest,
 };
 
 #[derive(Deserialize)]

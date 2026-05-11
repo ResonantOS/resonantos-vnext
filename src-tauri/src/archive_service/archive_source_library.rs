@@ -6,21 +6,22 @@ use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use rusqlite::{Connection, params};
-use serde_json::{Value, json};
+use rusqlite::{params, Connection};
+use serde_json::{json, Value};
 use tauri::AppHandle;
 
 use super::{
-    ArchiveClassificationProposal, ArchiveImportedLibrarySummary,
-    ArchiveLibraryClassificationReview, ArchiveLibraryClassificationReviewRequest,
-    ArchiveLibraryImportRequest, ArchiveLibraryImportResult, ArchiveLibraryImportSourceRecord,
-    ArchiveLibraryPreflightCount, ArchiveLibraryPreflightRequest, ArchiveLibraryPreflightResult,
-    ArchiveLibraryPreflightSample, ArchiveLibraryPreflightWarning,
-    ArchiveLibraryRecommendedImportPlan, ArchiveLibraryReorganisationMove,
-    ArchiveLibraryReorganisationPlan, ArchiveLibraryReorganisationPlanRequest, ArchiveRuntime,
-    ArchiveSourceFolderScanRequest, ArchiveSourceFolderScanResult, ArchiveSourceWatchIndexRecord,
-    ArchiveSourceWatchRecord, VaultMappingFile, open_archive_db, relative_to_vault, slugify,
-    source_hash, source_id_from_path, system_time_label, unix_timestamp,
+    open_archive_db, relative_to_vault, slugify, source_hash, source_id_from_path,
+    system_time_label, unix_timestamp, ArchiveClassificationProposal,
+    ArchiveImportedLibrarySummary, ArchiveLibraryClassificationReview,
+    ArchiveLibraryClassificationReviewRequest, ArchiveLibraryImportRequest,
+    ArchiveLibraryImportResult, ArchiveLibraryImportSourceRecord, ArchiveLibraryPreflightCount,
+    ArchiveLibraryPreflightRequest, ArchiveLibraryPreflightResult, ArchiveLibraryPreflightSample,
+    ArchiveLibraryPreflightWarning, ArchiveLibraryRecommendedImportPlan,
+    ArchiveLibraryReorganisationMove, ArchiveLibraryReorganisationPlan,
+    ArchiveLibraryReorganisationPlanRequest, ArchiveRuntime, ArchiveSourceFolderScanRequest,
+    ArchiveSourceFolderScanResult, ArchiveSourceWatchIndexRecord, ArchiveSourceWatchRecord,
+    VaultMappingFile,
 };
 
 fn source_watch_roots(runtime: &ArchiveRuntime) -> Vec<&VaultMappingFile> {
@@ -1706,21 +1707,15 @@ mod tests {
         assert_eq!(accumulator.supported_files, 2);
         assert_eq!(accumulator.skipped_files, 2);
         assert_eq!(accumulator.hidden_entries_skipped, 1);
-        assert!(
-            recommended_plan
-                .auto_excluded_top_folders
-                .contains(&"venv".to_string())
-        );
-        assert!(
-            skipped_by_top_folder
-                .iter()
-                .any(|entry| entry.label == "venv")
-        );
-        assert!(
-            warnings
-                .iter()
-                .any(|warning| warning.title.contains("Noisy technical folder"))
-        );
+        assert!(recommended_plan
+            .auto_excluded_top_folders
+            .contains(&"venv".to_string()));
+        assert!(skipped_by_top_folder
+            .iter()
+            .any(|entry| entry.label == "venv"));
+        assert!(warnings
+            .iter()
+            .any(|warning| warning.title.contains("Noisy technical folder")));
         assert!(
             !source_root.join("Memory").exists(),
             "preflight must not create managed archive data"
@@ -1764,18 +1759,14 @@ mod tests {
         assert_eq!(result.files_seen, 1);
         assert_eq!(result.files_imported, 1);
         assert_eq!(result.skipped_files, 1);
-        assert!(
-            Path::new(&result.canonical_root)
-                .join("notes")
-                .join("identity.md")
-                .exists()
-        );
-        assert!(
-            !Path::new(&result.canonical_root)
-                .join("venv")
-                .join("README.txt")
-                .exists()
-        );
+        assert!(Path::new(&result.canonical_root)
+            .join("notes")
+            .join("identity.md")
+            .exists());
+        assert!(!Path::new(&result.canonical_root)
+            .join("venv")
+            .join("README.txt")
+            .exists());
         let manifest_raw =
             fs::read_to_string(&result.manifest_path).expect("manifest should be readable");
         assert!(manifest_raw.contains("\"excludedTopFolders\": [\n      \"venv\"\n    ]"));

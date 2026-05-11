@@ -24,10 +24,22 @@ use serde_json::Value;
 use tauri::{AppHandle, Emitter, Window};
 
 use crate::archive_service::{
-    ArchiveAiMemoryBuildJobSummary, ArchiveAiMemoryBuildRequest, ArchiveAiMemoryBuildResult,
-    ArchiveBackgroundCycleRequest, ArchiveBackgroundCycleResult, ArchiveDocumentPayload,
-    ArchiveImportedLibrarySummary, ArchiveIngestRequestRecord, ArchiveIngestRequestResult,
-    ArchiveIntakeWriteRequest, ArchiveIntakeWriteResult, ArchiveLibraryClassificationReview,
+    archive_system_memory_status, build_archive_tol_bundle, decide_archive_review_artifact,
+    import_archive_library, lint_archive, list_archive_ai_memory_build_jobs,
+    list_archive_ingest_requests, list_archive_review_artifacts,
+    list_archive_tol_bundle_candidates, list_imported_archive_libraries,
+    preflight_archive_library_import, process_archive_ingest_request,
+    promote_archive_review_artifact, query_archive_runtime_status, queue_archive_ingest_request,
+    queue_imported_library_for_ingest, read_archive_document,
+    read_archive_library_classification_review, refresh_archive_system_memory,
+    refresh_archive_wiki_navigation, run_archive_ai_memory_build_job, run_archive_background_cycle,
+    run_archive_maintenance_cycle, scan_archive_source_folders, search_archive,
+    semantic_lint_archive, write_archive_intake_artifact,
+    write_archive_library_reorganisation_plan, ArchiveAiMemoryBuildJobSummary,
+    ArchiveAiMemoryBuildRequest, ArchiveAiMemoryBuildResult, ArchiveBackgroundCycleRequest,
+    ArchiveBackgroundCycleResult, ArchiveDocumentPayload, ArchiveImportedLibrarySummary,
+    ArchiveIngestRequestRecord, ArchiveIngestRequestResult, ArchiveIntakeWriteRequest,
+    ArchiveIntakeWriteResult, ArchiveLibraryClassificationReview,
     ArchiveLibraryClassificationReviewRequest, ArchiveLibraryImportRequest,
     ArchiveLibraryImportResult, ArchiveLibraryPreflightRequest, ArchiveLibraryPreflightResult,
     ArchiveLibraryReorganisationPlan, ArchiveLibraryReorganisationPlanRequest, ArchiveLintResult,
@@ -40,40 +52,28 @@ use crate::archive_service::{
     ArchiveSemanticLintResult, ArchiveSourceFolderScanRequest, ArchiveSourceFolderScanResult,
     ArchiveSystemMemoryRefreshResult, ArchiveSystemMemoryStatus, ArchiveTolBundleBuildRequest,
     ArchiveTolBundleBuildResult, ArchiveTolBundleCandidate, ArchiveWikiNavigationRefreshResult,
-    archive_system_memory_status, build_archive_tol_bundle, decide_archive_review_artifact,
-    import_archive_library, lint_archive, list_archive_ai_memory_build_jobs,
-    list_archive_ingest_requests, list_archive_review_artifacts,
-    list_archive_tol_bundle_candidates, list_imported_archive_libraries,
-    preflight_archive_library_import, process_archive_ingest_request,
-    promote_archive_review_artifact, query_archive_runtime_status, queue_archive_ingest_request,
-    queue_imported_library_for_ingest, read_archive_document,
-    read_archive_library_classification_review, refresh_archive_system_memory,
-    refresh_archive_wiki_navigation, run_archive_ai_memory_build_job, run_archive_background_cycle,
-    run_archive_maintenance_cycle, scan_archive_source_folders, search_archive,
-    semantic_lint_archive, write_archive_intake_artifact,
-    write_archive_library_reorganisation_plan,
 };
 use crate::browser_host_service::{
-    BrowserHostCommandRequest, browser_host_required_capabilities, execute_browser_host_command,
-    execute_browser_visible_host_command,
+    browser_host_required_capabilities, execute_browser_host_command,
+    execute_browser_visible_host_command, BrowserHostCommandRequest,
 };
 use crate::browser_native_service::{
-    NativeBrowserAttachSmokeRequest, NativeBrowserAttachSmokeResult,
+    execute_native_browser_embedded_hide, execute_native_browser_embedded_resize,
+    execute_native_browser_embedded_show, prepare_native_browser_application_if_available,
+    query_native_browser_attach_smoke, query_native_browser_bridge_probe,
+    query_native_browser_probe, NativeBrowserAttachSmokeRequest, NativeBrowserAttachSmokeResult,
     NativeBrowserBridgeProbeRequest, NativeBrowserBridgeProbeResult, NativeBrowserProbeRequest,
-    NativeBrowserProbeResult, execute_native_browser_embedded_hide,
-    execute_native_browser_embedded_resize, execute_native_browser_embedded_show,
-    prepare_native_browser_application_if_available, query_native_browser_attach_smoke,
-    query_native_browser_bridge_probe, query_native_browser_probe,
+    NativeBrowserProbeResult,
 };
 use crate::browser_service::{
-    BrowserCloseSessionResult, BrowserEngineInstallResult, BrowserEngineStatus,
-    BrowserInteractionRequest, BrowserInteractionResult, BrowserNativeWebviewBoundsRequest,
-    BrowserNativeWebviewRequest, BrowserNativeWebviewResult, BrowserOpenUrlRequest,
-    BrowserOpenUrlResult, BrowserReadPageResult, BrowserSessionIdRequest, BrowserSessionRequest,
     execute_browser_close_session, execute_browser_open_url, execute_browser_session_click,
     execute_browser_session_open_url, execute_browser_session_read_page,
     execute_browser_session_screenshot, execute_browser_session_scroll,
     execute_browser_start_session, install_browser_engine, query_browser_engine_status,
+    BrowserCloseSessionResult, BrowserEngineInstallResult, BrowserEngineStatus,
+    BrowserInteractionRequest, BrowserInteractionResult, BrowserNativeWebviewBoundsRequest,
+    BrowserNativeWebviewRequest, BrowserNativeWebviewResult, BrowserOpenUrlRequest,
+    BrowserOpenUrlResult, BrowserReadPageResult, BrowserSessionIdRequest, BrowserSessionRequest,
 };
 #[cfg(not(target_os = "macos"))]
 use crate::browser_service::{
@@ -81,23 +81,23 @@ use crate::browser_service::{
     execute_browser_native_webview_show,
 };
 use crate::compute_service::{
+    execute_local_safe_command, execute_remote_probe, query_gx10_llama_status,
+    query_local_passive_diagnostics, query_nas_backup_status, switch_gx10_llama_model,
     ComputePassiveDiagnosticsResult, ComputeRemoteProbeRequest, ComputeRemoteProbeResult,
     ComputeSafeCommandRequest, ComputeSafeCommandResult, Gx10LlamaStatusResult,
     Gx10LlamaSwitchRequest, Gx10LlamaSwitchResult, NasBackupStatusResult,
-    execute_local_safe_command, execute_remote_probe, query_gx10_llama_status,
-    query_local_passive_diagnostics, query_nas_backup_status, switch_gx10_llama_model,
 };
 use crate::delegation_service::{
+    create_task_workspace, finish_task_workspace, list_task_workspaces, read_task_workspace,
     CreateTaskWorkspaceRequest, FinishTaskWorkspaceRequest, FinishTaskWorkspaceResult,
-    ReadTaskWorkspaceRequest, TaskWorkspacePayload, TaskWorkspaceRecord, create_task_workspace,
-    finish_task_workspace, list_task_workspaces, read_task_workspace,
+    ReadTaskWorkspaceRequest, TaskWorkspacePayload, TaskWorkspaceRecord,
 };
 use crate::hermes_service::{
+    execute_hermes_chat, install_hermes, query_hermes_dashboard_status, query_hermes_status,
+    query_hermes_workspace_snapshot, start_hermes_dashboard, stop_hermes_dashboard,
     HermesChatRequest, HermesChatResult, HermesDashboardRequest, HermesDashboardStatus,
     HermesInstallRequest, HermesInstallResult, HermesInstallStatus, HermesStatusMode,
-    HermesStatusRequest, HermesWorkspaceSnapshot, execute_hermes_chat, install_hermes,
-    query_hermes_dashboard_status, query_hermes_status, query_hermes_workspace_snapshot,
-    start_hermes_dashboard, stop_hermes_dashboard,
+    HermesStatusRequest, HermesWorkspaceSnapshot,
 };
 use crate::host_state::{
     addons_dir, assert_addon_capabilities, assert_living_archive_host_access,
@@ -105,53 +105,53 @@ use crate::host_state::{
     write_provider_secrets,
 };
 use crate::memory_service::{
-    MemoryServiceResult, MemoryServiceStartRequest, MemoryServiceStatus,
-    MemoryServiceStatusRequest, MemoryServiceStopRequest, query_memory_service_status,
-    start_memory_service, stop_memory_service,
+    query_memory_service_status, start_memory_service, stop_memory_service, MemoryServiceResult,
+    MemoryServiceStartRequest, MemoryServiceStatus, MemoryServiceStatusRequest,
+    MemoryServiceStopRequest,
 };
 use crate::obsidian_service::{
-    ObsidianArchiveNoteRequest, ObsidianCreateFolderRequest, ObsidianCreateNoteRequest,
-    ObsidianListNotesRequest, ObsidianMoveNoteRequest, ObsidianNoteOperationResult,
-    ObsidianNotePayload, ObsidianNoteSummary, ObsidianOpenNoteRequest, ObsidianOpenNoteResult,
-    ObsidianReadNoteRequest, ObsidianVaultIndex, ObsidianVaultIndexRequest, ObsidianVaultRequest,
-    ObsidianVaultStatus, ObsidianWriteNoteRequest, ObsidianWriteNoteResult, archive_obsidian_note,
-    create_obsidian_folder, create_obsidian_note, index_obsidian_vault, list_obsidian_notes,
-    move_obsidian_note, open_obsidian_note, query_obsidian_vault_status, read_obsidian_note,
-    write_obsidian_note,
+    archive_obsidian_note, create_obsidian_folder, create_obsidian_note, index_obsidian_vault,
+    list_obsidian_notes, move_obsidian_note, open_obsidian_note, query_obsidian_vault_status,
+    read_obsidian_note, write_obsidian_note, ObsidianArchiveNoteRequest,
+    ObsidianCreateFolderRequest, ObsidianCreateNoteRequest, ObsidianListNotesRequest,
+    ObsidianMoveNoteRequest, ObsidianNoteOperationResult, ObsidianNotePayload, ObsidianNoteSummary,
+    ObsidianOpenNoteRequest, ObsidianOpenNoteResult, ObsidianReadNoteRequest, ObsidianVaultIndex,
+    ObsidianVaultIndexRequest, ObsidianVaultRequest, ObsidianVaultStatus, ObsidianWriteNoteRequest,
+    ObsidianWriteNoteResult,
 };
 use crate::opencode_service::{
-    OpenCodeServiceResult, OpenCodeStartRequest, OpenCodeStatus, OpenCodeStopRequest,
-    OpenCodeTrustEventRequest, TrustKernelAdvisory, query_opencode_status,
-    record_opencode_trust_event, start_opencode_service, stop_opencode_service,
+    query_opencode_status, record_opencode_trust_event, start_opencode_service,
+    stop_opencode_service, OpenCodeServiceResult, OpenCodeStartRequest, OpenCodeStatus,
+    OpenCodeStopRequest, OpenCodeTrustEventRequest, TrustKernelAdvisory,
 };
 use crate::paperclip_service::{
+    create_paperclip_issue_from_delegation, query_paperclip_dashboard_snapshot,
+    query_paperclip_status, start_paperclip_service, stop_paperclip_service,
     PaperclipCreateIssueRequest, PaperclipCreateIssueResult, PaperclipDashboardRequest,
     PaperclipDashboardSnapshot, PaperclipServiceResult, PaperclipStartRequest, PaperclipStatus,
-    PaperclipStatusRequest, PaperclipStopRequest, create_paperclip_issue_from_delegation,
-    query_paperclip_dashboard_snapshot, query_paperclip_status, start_paperclip_service,
-    stop_paperclip_service,
+    PaperclipStatusRequest, PaperclipStopRequest,
 };
 use crate::provider_service::{
-    ArchiveIngestProbeRequest, ArchiveIngestProbeResult, ChatMessageInput, LocalRuntimeStatus,
-    ProviderDiagnosticReport, ProviderServiceChatRequest, ProviderServiceChatStreamRequest,
-    ProviderSetupProbeRequest, ProviderSetupProbeResult, ProviderSmokeTestResult,
-    RecoveryRouteCandidate, abort_provider_service_chat_stream, execute_archive_ingest_probe,
+    abort_provider_service_chat_stream, execute_archive_ingest_probe,
     execute_provider_service_chat, execute_provider_service_chat_stream,
     execute_provider_setup_probe, execute_provider_smoke_test, query_local_runtime_status,
-    query_provider_diagnostics, query_recovery_route_candidates,
+    query_provider_diagnostics, query_recovery_route_candidates, ArchiveIngestProbeRequest,
+    ArchiveIngestProbeResult, ChatMessageInput, LocalRuntimeStatus, ProviderDiagnosticReport,
+    ProviderServiceChatRequest, ProviderServiceChatStreamRequest, ProviderSetupProbeRequest,
+    ProviderSetupProbeResult, ProviderSmokeTestResult, RecoveryRouteCandidate,
 };
 use crate::recovery_service::{
-    EngineerRecoveryTurnRequest, EngineerRecoveryTurnResult, execute_engineer_recovery_turn,
+    execute_engineer_recovery_turn, EngineerRecoveryTurnRequest, EngineerRecoveryTurnResult,
 };
 use crate::telegram_service::{
-    TelegramServiceStartRequest, TelegramServiceStatus, save_telegram_bot_token,
-    start_telegram_service, stop_telegram_service, telegram_status,
+    save_telegram_bot_token, start_telegram_service, stop_telegram_service, telegram_status,
+    TelegramServiceStartRequest, TelegramServiceStatus,
 };
 use crate::terminal_service::{
-    TerminalPtySessionResult, TerminalResizePtyRequest, TerminalRunCommandRequest,
-    TerminalRunCommandResult, TerminalStartPtyRequest, TerminalWritePtyRequest,
     resize_terminal_pty, run_terminal_command, start_terminal_pty, stop_terminal_pty,
-    write_terminal_pty,
+    write_terminal_pty, TerminalPtySessionResult, TerminalResizePtyRequest,
+    TerminalRunCommandRequest, TerminalRunCommandResult, TerminalStartPtyRequest,
+    TerminalWritePtyRequest,
 };
 
 #[tauri::command]

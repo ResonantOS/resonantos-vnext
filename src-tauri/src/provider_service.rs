@@ -9,9 +9,9 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use chrono::Utc;
-use futures_util::{StreamExt, stream};
+use futures_util::{stream, StreamExt};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Window};
 
 use crate::host_state::{
@@ -2575,7 +2575,6 @@ pub(crate) async fn execute_archive_ingest_probe(
 #[cfg(test)]
 mod tests {
     use super::{
-        ChatMessageInput, ProviderExecutionAdapter, ProviderServiceChatRequest,
         append_provider_request_audit_to_logs_root, audit_error_summary, endpoint_host,
         ensure_runtime_kind_supported, extract_assistant_content, extract_cloud_usage,
         extract_local_assistant_content, extract_local_usage, extract_ollama_tag_model_ids,
@@ -2583,12 +2582,13 @@ mod tests {
         models_endpoint_for_openai_compatible, ollama_tags_endpoint, parse_ollama_model_names,
         request_messages_with_system_prompt, resolve_local_runtime_model,
         resolve_provider_base_url, resolve_provider_execution_adapter, sanitize_assistant_content,
-        sanitize_stream_delta, strip_think_blocks,
+        sanitize_stream_delta, strip_think_blocks, ChatMessageInput, ProviderExecutionAdapter,
+        ProviderServiceChatRequest,
     };
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use serde_json::{Value, json};
+    use serde_json::{json, Value};
 
     #[test]
     fn strips_minimax_thinking_blocks() {
