@@ -222,7 +222,7 @@ export const executeChatTurn = async ({
         return;
       }
       recordRunEvent("tool-running", "Read delegated workspace packet.", payload.workspace.id);
-      const engineerRoute = resolveAgentChatRoute(nextState, nextState.recoverySession.engineerAgentId, activeChatModel);
+      const engineerRoute = resolveAgentChatRoute(nextState, nextState.recoverySession.engineerAgentId);
       const engineerProvider = engineerRoute.provider;
       const engineerRuntimeNode = engineerRoute.runtimeNode;
       if (!engineerProvider || !engineerRuntimeNode || !engineerRoute.model) {
@@ -425,11 +425,13 @@ export const executeChatTurn = async ({
       routedState = nextState;
     }
 
+    const recoveryAgentActive = activeThread.owningAgentId === routedState.recoverySession.engineerAgentId;
+    const selectedModelForRoute = recoveryAgentActive ? "" : activeChatModel;
     let routeRequest = buildProviderChatRouteRequest({
       state: routedState,
       threadId: activeThread.id,
       agentId: activeThread.owningAgentId,
-      selectedModel: activeChatModel,
+      selectedModel: selectedModelForRoute,
     });
     let { route, provider, runtimeNode, routedModel, compactState, providerMessages } = routeRequest;
     if (!providerCredentialReady(provider)) {
@@ -445,7 +447,7 @@ export const executeChatTurn = async ({
         state: routedState,
         threadId: activeThread.id,
         agentId: activeThread.owningAgentId,
-        selectedModel: activeChatModel,
+        selectedModel: selectedModelForRoute,
       });
       ({ route, provider, runtimeNode, routedModel, compactState, providerMessages } = routeRequest);
       if (shouldHardStopContext(routeRequest.contextBudget)) {
@@ -485,7 +487,6 @@ export const executeChatTurn = async ({
             activeRuntimeKind: runtimeNode.kind,
           });
 
-    const recoveryAgentActive = activeThread.owningAgentId === routedState.recoverySession.engineerAgentId;
     const memoryProvider = resolveMemoryProviderBroker(routedState, [...snapshot.bundled, ...snapshot.sideloaded]);
     if (recoveryAgentActive) {
       markProgress("tool-running", "Probing stronger routes, reading state, and preparing the next recovery step.");
