@@ -1,0 +1,123 @@
+{
+  "id": "addon.usage-tracker",
+  "name": "Usage Tracker",
+  "version": "0.1.0",
+  "author": "Resonant Alpha",
+  "category": "integration",
+  "description": "Persistent token and cost tracking across all agents. Listens for LLM output events and appends per-call usage entries (input tokens, output tokens, cache read/write, model, provider) to a JSONL ledger file for analysis and budgeting.",
+  "runtimeType": "local-service",
+  "surfaces": [
+    {
+      "id": "usage-tracker-monitor",
+      "type": "background-task-monitor",
+      "label": "Usage Tracker Monitor",
+      "description": "Background monitor showing cumulative token usage, per-model breakdowns, and recent usage entries."
+    }
+  ],
+  "requestedCapabilities": [
+    {
+      "capability": "filesystem",
+      "granted": false,
+      "scope": "workspace",
+      "revocationBehavior": "degrade"
+    }
+  ],
+  "provenance": {
+    "tier": "curated-signed",
+    "verificationState": "verified",
+    "signed": true,
+    "signer": "ResonantOS bundled catalog"
+  },
+  "runtimeIsolation": {
+    "boundary": "host-mediated-service",
+    "supportsDegradedMode": true,
+    "requiresReviewedGrant": false
+  },
+  "grantPresets": [
+    {
+      "id": "recommended-usage-tracking",
+      "label": "Recommended usage tracking",
+      "description": "Enable token usage logging with workspace filesystem access for the JSONL ledger file.",
+      "grants": [
+        {
+          "capability": "filesystem",
+          "granted": true,
+          "scope": "workspace",
+          "revocationBehavior": "degrade"
+        }
+      ]
+    }
+  ],
+  "providerRequirements": {
+    "sharedProfiles": [],
+    "supportsPrivateCredentials": false
+  },
+  "archiveIntegration": {
+    "readScopes": [],
+    "intakeWriteScopes": [],
+    "canRequestIngest": false,
+    "canWriteKnowledgePages": false
+  },
+  "health": {
+    "strategy": "local-daemon"
+  },
+  "tools": [
+    {
+      "name": "usage_tracker.summary",
+      "description": "Read the usage JSONL ledger and return aggregate token counts grouped by model and provider, with optional date range filtering.",
+      "requiredCapabilities": ["filesystem"],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "since": {
+            "type": "string",
+            "description": "ISO-8601 date to start aggregation from. Defaults to all time."
+          },
+          "groupBy": {
+            "type": "string",
+            "description": "Grouping dimension: model, provider, or agent. Defaults to model."
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "totalInput": { "type": "number" },
+          "totalOutput": { "type": "number" },
+          "totalCacheRead": { "type": "number" },
+          "totalCacheWrite": { "type": "number" },
+          "groups": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": { "type": "string" },
+                "input": { "type": "number" },
+                "output": { "type": "number" }
+              }
+            }
+          }
+        }
+      },
+      "audit": {
+        "logRequest": true,
+        "logResult": true,
+        "artifactTypes": ["log"]
+      }
+    }
+  ],
+  "installHooks": {},
+  "install": {
+    "mode": "bundled",
+    "requiredCapabilities": [],
+    "requiresHumanApprovalBeforeInstall": false,
+    "preservesExistingUserConfig": true,
+    "credentialSetup": "none",
+    "auditLogRequired": false,
+    "expectedArtifacts": ["log"]
+  },
+  "compatibility": {
+    "shellVersion": "^0.1.0",
+    "platforms": ["macOS", "linux", "windows"]
+  }
+}
