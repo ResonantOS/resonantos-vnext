@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tauri::AppHandle;
 
 use crate::host_state::app_state_dir;
@@ -361,9 +361,9 @@ pub(crate) fn finish_task_workspace(
 #[cfg(test)]
 mod tests {
     use super::{
+        CreateTaskWorkspaceRequest, FinishTaskWorkspaceRequest, ReadTaskWorkspaceRequest,
         create_task_workspace_with_root, finish_task_workspace_with_root,
-        list_task_workspaces_with_root, read_task_workspace_with_root, CreateTaskWorkspaceRequest,
-        FinishTaskWorkspaceRequest, ReadTaskWorkspaceRequest,
+        list_task_workspaces_with_root, read_task_workspace_with_root,
     };
     use serde_json::json;
     use std::fs;
@@ -389,21 +389,24 @@ mod tests {
         .expect("workspace should be created");
 
         assert_eq!(result.packet_id, "delegation-1");
-        assert!(root
-            .join("workspace-engineer-1")
-            .join("delegation.packet.json")
-            .exists());
+        assert!(
+            root.join("workspace-engineer-1")
+                .join("delegation.packet.json")
+                .exists()
+        );
         assert!(root.join("workspace-engineer-1").join("TASK.md").exists());
         assert!(root.join("workspace-engineer-1").join("artifacts").is_dir());
-        assert!(root
-            .join("workspace-engineer-1")
-            .join("logs")
-            .join("audit.jsonl")
-            .exists());
-        assert!(root
-            .join("workspace-engineer-1")
-            .join("verification.json")
-            .exists());
+        assert!(
+            root.join("workspace-engineer-1")
+                .join("logs")
+                .join("audit.jsonl")
+                .exists()
+        );
+        assert!(
+            root.join("workspace-engineer-1")
+                .join("verification.json")
+                .exists()
+        );
 
         let _ = fs::remove_dir_all(root);
     }

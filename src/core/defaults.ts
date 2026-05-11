@@ -5,10 +5,12 @@ import type {
   AddOnInstallation,
   AddOnManifest,
   AgentDefinition,
+  ArchiveAutomationPolicy,
   ArchivePolicy,
   CapabilityGrant,
   ChannelDefinition,
   ChatProject,
+  ComputeFabricState,
   ConversationThread,
   CoreService,
   ModelStrategyState,
@@ -73,8 +75,8 @@ export const providerProfiles: ProviderProfile[] = [
     authTier: "experimental",
     apiBaseUrl: "https://api.minimax.io/v1",
     allowedModels: ["MiniMax-M2.7", "MiniMax-M2.7-highspeed"],
-    primaryModel: "MiniMax-M2.7",
-    fallbackModel: "MiniMax-M2.7-highspeed",
+    primaryModel: "MiniMax-M2.7-highspeed",
+    fallbackModel: "MiniMax-M2.7",
     modelContext: [
       {
         model: "MiniMax-M2.7",
@@ -101,12 +103,12 @@ export const providerProfiles: ProviderProfile[] = [
     authSource: "shared-vault",
     authMethod: "subscription",
     authTier: "experimental",
-    allowedModels: ["gpt-5.4", "gpt-5.4-mini"],
-    primaryModel: "gpt-5.4",
+    allowedModels: ["gpt-5.5", "gpt-5.4-mini"],
+    primaryModel: "gpt-5.5",
     fallbackModel: "gpt-5.4-mini",
     modelContext: [
       {
-        model: "gpt-5.4",
+        model: "gpt-5.5",
         maxContextTokens: 128_000,
         tokenEstimateMethod: "provider-metadata",
         reservedReasoningTokens: 6_400,
@@ -132,24 +134,12 @@ export const providerProfiles: ProviderProfile[] = [
     authSource: "manual",
     authMethod: "local-runtime",
     authTier: "supported",
-    allowedModels: ["batiai/gemma4-e2b:q4", "qwen3:4b", "llama3.2:1b"],
+    allowedModels: ["batiai/gemma4-e2b:q4"],
     primaryModel: "batiai/gemma4-e2b:q4",
-    fallbackModel: "qwen3:4b",
+    fallbackModel: undefined,
     modelContext: [
       {
         model: "batiai/gemma4-e2b:q4",
-        maxContextTokens: 8_192,
-        tokenEstimateMethod: "provider-metadata",
-        source: "runtime-node",
-      },
-      {
-        model: "qwen3:4b",
-        maxContextTokens: 32_000,
-        tokenEstimateMethod: "provider-metadata",
-        source: "runtime-node",
-      },
-      {
-        model: "llama3.2:1b",
         maxContextTokens: 8_192,
         tokenEstimateMethod: "provider-metadata",
         source: "runtime-node",
@@ -158,6 +148,36 @@ export const providerProfiles: ProviderProfile[] = [
     consumerScopes: ["audio2tol", "obsidian", "setup", "recovery"],
     shared: true,
     status: "fallback",
+    credentialStatus: "configured",
+  },
+  {
+    id: "gx10-local-llama",
+    label: "GX10 llama.cpp Runtime",
+    providerType: "openai-compatible",
+    authSource: "manual",
+    authMethod: "local-runtime",
+    authTier: "supported",
+    apiBaseUrl: "http://192.168.1.77:30000/v1",
+    allowedModels: ["gemma-4-26B-A4B-it-UD-Q4_K_M.gguf", "Qwen3.6-27B-Q4_K_M.gguf"],
+    primaryModel: "gemma-4-26B-A4B-it-UD-Q4_K_M.gguf",
+    fallbackModel: "Qwen3.6-27B-Q4_K_M.gguf",
+    modelContext: [
+      {
+        model: "gemma-4-26B-A4B-it-UD-Q4_K_M.gguf",
+        maxContextTokens: 262_144,
+        tokenEstimateMethod: "provider-metadata",
+        source: "runtime-node",
+      },
+      {
+        model: "Qwen3.6-27B-Q4_K_M.gguf",
+        maxContextTokens: 262_144,
+        tokenEstimateMethod: "provider-metadata",
+        source: "runtime-node",
+      },
+    ],
+    consumerScopes: ["strategist", "setup", "archive-ingest", "audio2tol", "recovery"],
+    shared: true,
+    status: "ready",
     credentialStatus: "configured",
   },
 ];
@@ -182,7 +202,7 @@ export const runtimeNodes: ProviderRuntimeNode[] = [
     providerProfileId: "shared-openai",
     kind: "cloud",
     locality: "cloud",
-    supportedModels: ["gpt-5.4", "gpt-5.4-mini"],
+    supportedModels: ["gpt-5.5", "gpt-5.4-mini"],
     authTier: "experimental",
     healthState: "ready",
     deployableOnDemand: false,
@@ -194,7 +214,7 @@ export const runtimeNodes: ProviderRuntimeNode[] = [
     providerProfileId: "shared-local",
     kind: "local",
     locality: "desktop-local",
-    supportedModels: ["batiai/gemma4-e2b:q4", "qwen3:4b", "llama3.2:1b"],
+    supportedModels: ["batiai/gemma4-e2b:q4"],
     authTier: "supported",
     healthState: "deployable",
     deployableOnDemand: true,
@@ -202,16 +222,33 @@ export const runtimeNodes: ProviderRuntimeNode[] = [
   },
   {
     id: "node-gx10-qwen",
-    label: "GX10 Remote Runtime",
-    providerProfileId: "shared-local",
+    label: "GX10 Qwen llama.cpp Runtime",
+    providerProfileId: "gx10-local-llama",
     kind: "remote-user-owned",
     locality: "lan-remote",
-    endpoint: "gx10://primary-runtime",
-    supportedModels: [],
+    endpoint: "http://192.168.1.77:30001/v1",
+    supportedModels: ["Qwen3.6-27B-Q4_K_M.gguf"],
     authTier: "supported",
-    healthState: "unavailable",
+    healthState: "ready",
     deployableOnDemand: false,
-    notes: ["User-owned remote runtime node managed through the provider fabric; setup probe must discover a real HTTP endpoint and model list before routing."],
+    notes: [
+      "Verified on 2026-05-10 through /health and /v1/models. Served by llama.cpp on GX10.",
+    ],
+  },
+  {
+    id: "node-gx10-gemma",
+    label: "GX10 Gemma llama.cpp Runtime",
+    providerProfileId: "gx10-local-llama",
+    kind: "remote-user-owned",
+    locality: "lan-remote",
+    endpoint: "http://192.168.1.77:30000/v1",
+    supportedModels: ["gemma-4-26B-A4B-it-UD-Q4_K_M.gguf"],
+    authTier: "supported",
+    healthState: "ready",
+    deployableOnDemand: false,
+    notes: [
+      "Verified on 2026-05-10 through /health and /v1/models. Primary local-owned remote inference route.",
+    ],
   },
 ];
 
@@ -264,8 +301,8 @@ export const providerRouting: ProviderRoutingState = {
     {
       id: "core-default",
       label: "Core Default Fallback",
-      orderedProviderProfileIds: ["shared-minimax", "shared-openai", "shared-local"],
-      orderedRuntimeNodeIds: ["node-minimax-cloud", "node-openai-cloud", "node-gx10-qwen", "node-local-resurrect"],
+      orderedProviderProfileIds: ["shared-minimax", "gx10-local-llama", "shared-openai", "shared-local"],
+      orderedRuntimeNodeIds: ["node-minimax-cloud", "node-gx10-gemma", "node-gx10-qwen", "node-openai-cloud", "node-local-resurrect"],
       allowExperimentalAuth: true,
       allowResurrection: true,
       onFailure: "degrade",
@@ -273,8 +310,8 @@ export const providerRouting: ProviderRoutingState = {
     {
       id: "strict-supported-only",
       label: "Strict Supported Routes",
-      orderedProviderProfileIds: ["shared-local"],
-      orderedRuntimeNodeIds: ["node-local-resurrect", "node-gx10-qwen"],
+      orderedProviderProfileIds: ["gx10-local-llama", "shared-local"],
+      orderedRuntimeNodeIds: ["node-gx10-gemma", "node-gx10-qwen", "node-local-resurrect"],
       allowExperimentalAuth: false,
       allowResurrection: true,
       onFailure: "hard-stop",
@@ -297,6 +334,81 @@ export const providerRouting: ProviderRoutingState = {
   },
 };
 
+export const computeFabric: ComputeFabricState = {
+  policyEngineId: "compute-fabric.core",
+  nodes: [
+    {
+      id: "compute-desktop-local",
+      label: "Desktop Local Host",
+      kind: "desktop-local",
+      trustTier: "local-owned",
+      enrollmentState: "enrolled",
+      endpoint: "local://desktop",
+      identityFingerprint: "local-host",
+      supportedTransports: ["local-host-command"],
+      roles: ["safe-command-runner", "artifact-store"],
+      healthState: "unknown",
+      notes: [
+        "Default passive local node record. Executable capabilities are enabled only through host-mediated policy.",
+      ],
+    },
+    {
+      id: "compute-gx10",
+      label: "GX10 Inference Server",
+      kind: "ssh-remote",
+      trustTier: "user-owned-remote",
+      enrollmentState: "enrolled",
+      endpoint: "ssh://rlab@gx10-23bd.local",
+      identityFingerprint: "gx10-23bd.local",
+      supportedTransports: ["ssh"],
+      roles: ["safe-command-runner", "service-host", "artifact-store", "model-host"],
+      healthState: "ready",
+      lastVerifiedAt: "2026-05-10",
+      probe: {
+        os: "Ubuntu 24.04.4 LTS",
+        arch: "aarch64",
+        cpuCores: 20,
+        ramGb: 121,
+        gpu: ["NVIDIA GB10 CC 12.1"],
+        modelEndpoints: ["http://192.168.1.77:30000/v1", "http://192.168.1.77:30001/v1"],
+        checkedAt: "2026-05-10",
+      },
+      notes: [
+        "SSH and llama.cpp model endpoints verified on 2026-05-10.",
+        "Credentials are intentionally not stored in repository defaults; use local SSH agent, keychain, or host vault.",
+        "Use NGC containers for GPU workloads on GB10 CC 12.1.",
+      ],
+    },
+    {
+      id: "compute-nas-backup",
+      label: "NAS Backup Storage",
+      kind: "ssh-remote",
+      trustTier: "user-owned-remote",
+      enrollmentState: "enrolled",
+      endpoint: "ssh://nas",
+      identityFingerprint: "nas",
+      supportedTransports: ["ssh"],
+      roles: ["artifact-store"],
+      healthState: "ready",
+      lastVerifiedAt: "2026-05-10",
+      probe: {
+        os: "Synology DSM-compatible Linux",
+        arch: "x86_64",
+        toolchains: ["ssh"],
+        checkedAt: "2026-05-10",
+      },
+      notes: [
+        "NAS SSH alias verified on 2026-05-10.",
+        "Backup root is currently /volume1/Reosnant Backup/; the directory name is misspelled on disk.",
+        "Credentials are intentionally not stored in repository defaults; use SSH config, SSH agent, keychain, or host vault.",
+      ],
+    },
+  ],
+  jobs: [],
+  artifacts: [],
+  audit: [],
+};
+
 export const modelStrategy: ModelStrategyState = {
   profileId: "personal-studio-default",
   label: "Personal Studio Strategy",
@@ -308,8 +420,10 @@ export const modelStrategy: ModelStrategyState = {
       label: "Core Fast Chain",
       rule: "Try the main fast route first, then premium cloud, then remote or local fallback.",
       orderedRoutes: [
-        { providerProfileId: "shared-minimax", runtimeNodeId: "node-minimax-cloud", model: "MiniMax-M2.7", costPosture: "subscription", note: "Default fast route for Augmentor and the Engineer Agent." },
-        { providerProfileId: "shared-openai", runtimeNodeId: "node-openai-cloud", model: "gpt-5.4", costPosture: "subscription", note: "Premium fallback for demanding moments." },
+        { providerProfileId: "shared-minimax", runtimeNodeId: "node-minimax-cloud", model: "MiniMax-M2.7-highspeed", costPosture: "subscription", note: "Default fast route for Augmentor and the Engineer Agent." },
+        { providerProfileId: "gx10-local-llama", runtimeNodeId: "node-gx10-gemma", model: "gemma-4-26B-A4B-it-UD-Q4_K_M.gguf", costPosture: "free-local", note: "Verified local-owned GX10 route for private LAN inference." },
+        { providerProfileId: "gx10-local-llama", runtimeNodeId: "node-gx10-qwen", model: "Qwen3.6-27B-Q4_K_M.gguf", costPosture: "free-local", note: "Secondary verified GX10 route." },
+        { providerProfileId: "shared-openai", runtimeNodeId: "node-openai-cloud", model: "gpt-5.5", costPosture: "subscription", note: "Premium fallback for demanding moments." },
       ],
       lastResortRoute: {
         providerProfileId: "shared-local",
@@ -329,7 +443,7 @@ export const modelStrategy: ModelStrategyState = {
       lastResortRoute: {
         providerProfileId: "shared-local",
         runtimeNodeId: "node-local-resurrect",
-        model: "qwen3:4b",
+        model: "batiai/gemma4-e2b:q4",
         costPosture: "emergency-only",
         note: "Desktop-local economical fallback.",
       },
@@ -339,7 +453,7 @@ export const modelStrategy: ModelStrategyState = {
       label: "Archive Premium Chain",
       rule: "Archive interpretation should stay premium-first and hard-stop before dropping below acceptable quality.",
       orderedRoutes: [
-        { providerProfileId: "shared-openai", runtimeNodeId: "node-openai-cloud", model: "gpt-5.4", costPosture: "subscription", note: "Preferred ingest quality route." },
+        { providerProfileId: "shared-openai", runtimeNodeId: "node-openai-cloud", model: "gpt-5.5", costPosture: "subscription", note: "Preferred ingest quality route." },
         { providerProfileId: "shared-minimax", runtimeNodeId: "node-minimax-cloud", model: "MiniMax-M2.7", costPosture: "subscription", note: "Temporary fallback if premium route is unavailable." },
       ],
     },
@@ -351,7 +465,7 @@ export const modelStrategy: ModelStrategyState = {
       workloadClass: "primary-chat",
       ownerType: "agent",
       ownerId: "strategist.core",
-      primaryRoute: { providerProfileId: "shared-minimax", runtimeNodeId: "node-minimax-cloud", model: "MiniMax-M2.7", costPosture: "subscription" },
+      primaryRoute: { providerProfileId: "shared-minimax", runtimeNodeId: "node-minimax-cloud", model: "MiniMax-M2.7-highspeed", costPosture: "subscription" },
       fallbackChainId: "chain-core-fast",
       hardStopWhenNoFallback: false,
       notes: ["Primary trusted conversation should stay on the fast subscription route when possible."],
@@ -373,7 +487,7 @@ export const modelStrategy: ModelStrategyState = {
       workloadClass: "archive-ingest",
       ownerType: "workload",
       ownerId: "archive-ingest",
-      primaryRoute: { providerProfileId: "shared-openai", runtimeNodeId: "node-openai-cloud", model: "gpt-5.4", costPosture: "subscription" },
+      primaryRoute: { providerProfileId: "shared-openai", runtimeNodeId: "node-openai-cloud", model: "gpt-5.5", costPosture: "subscription" },
       fallbackChainId: "chain-archive-premium",
       hardStopWhenNoFallback: true,
       notes: ["Archive interpretation should not silently degrade below premium quality without explicit approval."],
@@ -393,8 +507,8 @@ export const modelStrategy: ModelStrategyState = {
   emergencyPolicy: {
     preferBestAvailable: true,
     orderedPromotionTargets: [
-      { providerProfileId: "shared-minimax", runtimeNodeId: "node-minimax-cloud", model: "MiniMax-M2.7", costPosture: "subscription", note: "Promote to the fast cloud route first." },
-      { providerProfileId: "shared-openai", runtimeNodeId: "node-openai-cloud", model: "gpt-5.4", costPosture: "subscription", note: "Premium fallback when the fast route is unavailable." },
+      { providerProfileId: "shared-minimax", runtimeNodeId: "node-minimax-cloud", model: "MiniMax-M2.7-highspeed", costPosture: "subscription", note: "Promote to the high-speed cloud route first." },
+      { providerProfileId: "shared-openai", runtimeNodeId: "node-openai-cloud", model: "gpt-5.5", costPosture: "subscription", note: "Premium fallback when the fast route is unavailable." },
     ],
     hardFloorRoute: {
       providerProfileId: "shared-local",
@@ -746,6 +860,11 @@ export const archivePolicy: ArchivePolicy = {
   ],
 };
 
+export const archiveAutomationPolicy: ArchiveAutomationPolicy = {
+  autoSyncEnabled: false,
+  aiMemoryBuilds: "off",
+};
+
 const defaultProvenanceTier = (manifest: AddOnManifest, source: AddOnInstallation["source"]): AddOnInstallation["provenanceTier"] =>
   source === "sideload" ? "sideloaded-unverified" : (manifest.provenance?.tier ?? "curated-signed");
 
@@ -786,11 +905,13 @@ export const buildDefaultState = (manifests: AddOnManifest[]): ResonantShellStat
     providers: providerProfiles,
     runtimeNodes,
     providerRouting,
+    computeFabric,
     modelStrategy,
     agents,
     channels,
     workspaces,
     archivePolicy,
+    archiveAutomationPolicy,
     chatProjects,
     conversationThreads,
     transcriptLedger: [],

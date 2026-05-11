@@ -1,16 +1,22 @@
 use std::collections::HashSet;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
 use std::net::{Ipv4Addr, UdpSocket};
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{LazyLock, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use futures_util::{stream, StreamExt};
+use chrono::Utc;
+use futures_util::{StreamExt, stream};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tauri::{AppHandle, Emitter, Window};
 
-use crate::host_state::{read_runtime_state_value, resolve_provider_secret};
+use crate::host_state::{
+    ensure_portable_user_state, read_runtime_state_value, resolve_provider_secret,
+};
 
 static ABORTED_CHAT_RUNS: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
@@ -74,21 +80,169 @@ fn sanitize_stream_delta(provider_type: &str, delta: &str, inside_think: &mut bo
     }
 }
 
+fn codex_reasoning_effort(value: &str) -> &str {
+    match value {
+        "minimal" => "low",
+        "medium" => "medium",
+        "high" => "high",
+        _ => "medium",
+    }
+}
+
+fn codex_command() -> &'static str {
+    if Path::new("/opt/homebrew/bin/codex").exists() {
+        "/opt/homebrew/bin/codex"
+    } else {
+        "codex"
+    }
+}
+
+fn codex_subscription_available() -> bool {
+    Command::new(codex_command())
+        .arg("--version")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+fn codex_output_path() -> PathBuf {
+    let mut path = std::env::temp_dir();
+    path.push(format!(
+        "resonantos-codex-provider-{}-{}.txt",
+        std::process::id(),
+        Utc::now().timestamp_nanos_opt().unwrap_or_default()
+    ));
+    path
+}
+
+fn trim_command_output(value: &[u8]) -> String {
+    let mut output = String::from_utf8_lossy(value).to_string();
+    const LIMIT: usize = 2_000;
+    if output.len() > LIMIT {
+        output.truncate(LIMIT);
+        output.push_str("\n[truncated]");
+    }
+    output
+}
+
+fn prompt_for_codex_subscription(
+    system_prompt: &str,
+    messages: &[ChatMessageInput],
+) -> Result<String, String> {
+    let mut sections = vec![
+        "You are answering a ResonantOS chat request through the user's Codex subscription."
+            .to_string(),
+        "Return only the assistant reply content. Do not mention this routing instruction."
+            .to_string(),
+        format!("System context:\n{system_prompt}"),
+    ];
+    for message in messages {
+        let content = message.content.trim();
+        if content.is_empty() {
+            continue;
+        }
+        sections.push(format!("{}:\n{}", message.role, content));
+    }
+    if sections.len() <= 3 {
+        return Err("Codex subscription request has no non-empty chat messages.".to_string());
+    }
+    Ok(sections.join("\n\n"))
+}
+
+fn execute_codex_subscription_chat_with_usage(
+    request: &ProviderServiceChatRequest,
+) -> Result<ProviderServiceChatResponse, String> {
+    let output_path = codex_output_path();
+    let prompt = prompt_for_codex_subscription(&request.system_prompt, &request.messages)?;
+    let output = Command::new(codex_command())
+        .args([
+            "exec",
+            "--dangerously-bypass-approvals-and-sandbox",
+            "--skip-git-repo-check",
+            "-m",
+            &request.model,
+            "-c",
+            &format!(
+                "model_reasoning_effort={}",
+                codex_reasoning_effort(&request.reasoning_effort)
+            ),
+            "-o",
+        ])
+        .arg(&output_path)
+        .arg(prompt)
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|error| format!("Failed to run Codex subscription provider: {error}"))?;
+    let content = fs::read_to_string(&output_path).unwrap_or_default();
+    let _ = fs::remove_file(&output_path);
+    if !output.status.success() {
+        let stderr = trim_command_output(&output.stderr);
+        return Err(format!(
+            "Codex subscription provider failed{}.",
+            if stderr.trim().is_empty() {
+                "".to_string()
+            } else {
+                format!(": {}", stderr.trim())
+            }
+        ));
+    }
+    if content.trim().is_empty() {
+        return Err("Codex subscription provider returned an empty reply.".to_string());
+    }
+    Ok(ProviderServiceChatResponse {
+        content: content.trim().to_string(),
+        usage: Some(ProviderUsageTelemetry {
+            provider_id: request.provider_id.clone(),
+            model: request.model.clone(),
+            source: "provider".to_string(),
+            prompt_tokens: None,
+            completion_tokens: None,
+            total_tokens: None,
+            duration_ms: None,
+            tokens_per_second: None,
+        }),
+    })
+}
+
+fn provider_wire_model(provider_type: &str, model: &str) -> String {
+    match (provider_type, model) {
+        ("minimax", "MiniMax-M2.7-highspeed") => "MiniMax-M2.7".to_string(),
+        _ => model.to_string(),
+    }
+}
+
 fn request_messages_with_system_prompt(
     system_prompt: &str,
     messages: Vec<ChatMessageInput>,
-) -> Vec<Value> {
-    std::iter::once(json!({
-        "role": "system",
-        "content": system_prompt,
-    }))
-    .chain(messages.into_iter().map(|message| {
-        json!({
-            "role": message.role,
-            "content": message.content,
-        })
-    }))
-    .collect()
+) -> Result<Vec<Value>, String> {
+    let mut request_messages = Vec::new();
+    let trimmed_system_prompt = system_prompt.trim();
+    if !trimmed_system_prompt.is_empty() {
+        request_messages.push(json!({
+            "role": "system",
+            "content": trimmed_system_prompt,
+        }));
+    }
+    let mut non_system_count = 0;
+    for message in messages {
+        let role = message.role.trim();
+        let content = message.content.trim();
+        if role.is_empty() || content.is_empty() {
+            continue;
+        }
+        non_system_count += 1;
+        request_messages.push(json!({
+            "role": role,
+            "content": content,
+        }));
+    }
+    if non_system_count == 0 {
+        return Err("Provider chat request has no non-empty user or assistant messages. The local chat context is stale; start a new chat or compact the current thread again.".to_string());
+    }
+    Ok(request_messages)
 }
 
 fn extract_assistant_content(payload: &Value) -> Result<String, String> {
@@ -276,6 +430,14 @@ pub(crate) struct ChatMessageInput {
 
 #[derive(Deserialize)]
 pub(crate) struct ProviderServiceChatRequest {
+    #[serde(default)]
+    pub(crate) request_id: Option<String>,
+    #[serde(default)]
+    pub(crate) thread_id: Option<String>,
+    #[serde(default)]
+    pub(crate) agent_id: Option<String>,
+    #[serde(default)]
+    pub(crate) channel_id: Option<String>,
     pub(crate) provider_id: String,
     pub(crate) provider_type: String,
     pub(crate) api_base_url: Option<String>,
@@ -292,6 +454,12 @@ pub(crate) struct ProviderServiceChatRequest {
 #[derive(Deserialize)]
 pub(crate) struct ProviderServiceChatStreamRequest {
     pub(crate) run_id: String,
+    #[serde(default)]
+    pub(crate) thread_id: Option<String>,
+    #[serde(default)]
+    pub(crate) agent_id: Option<String>,
+    #[serde(default)]
+    pub(crate) channel_id: Option<String>,
     pub(crate) provider_id: String,
     pub(crate) provider_type: String,
     pub(crate) api_base_url: Option<String>,
@@ -308,6 +476,10 @@ pub(crate) struct ProviderServiceChatStreamRequest {
 impl ProviderServiceChatStreamRequest {
     fn as_chat_request(&self) -> ProviderServiceChatRequest {
         ProviderServiceChatRequest {
+            request_id: Some(self.run_id.clone()),
+            thread_id: self.thread_id.clone(),
+            agent_id: self.agent_id.clone(),
+            channel_id: self.channel_id.clone(),
             provider_id: self.provider_id.clone(),
             provider_type: self.provider_type.clone(),
             api_base_url: self.api_base_url.clone(),
@@ -353,6 +525,28 @@ pub(crate) struct ProviderUsageTelemetry {
 struct ProviderServiceChatResponse {
     content: String,
     usage: Option<ProviderUsageTelemetry>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProviderRequestAuditRecord<'a> {
+    schema_version: u8,
+    recorded_at: String,
+    request_id: Option<&'a str>,
+    thread_id: Option<&'a str>,
+    agent_id: Option<&'a str>,
+    channel_id: Option<&'a str>,
+    provider_id: &'a str,
+    provider_type: &'a str,
+    runtime_node_id: Option<&'a str>,
+    runtime_node_kind: Option<&'a str>,
+    endpoint_host: Option<String>,
+    auth_tier: Option<&'a str>,
+    model: &'a str,
+    status: &'a str,
+    duration_ms: u128,
+    usage: Option<&'a ProviderUsageTelemetry>,
+    error_summary: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -570,6 +764,101 @@ fn resolve_local_runtime_model(model: &str) -> &str {
 
 fn local_runtime_base_url(runtime_node_endpoint: Option<String>) -> String {
     runtime_node_endpoint.unwrap_or_else(|| "http://127.0.0.1:11434".to_string())
+}
+
+fn endpoint_host(endpoint: Option<&str>) -> Option<String> {
+    let value = endpoint?.trim();
+    if value.is_empty() {
+        return None;
+    }
+    let without_scheme = value
+        .split_once("://")
+        .map(|(_, remainder)| remainder)
+        .unwrap_or(value);
+    without_scheme
+        .split('/')
+        .next()
+        .map(str::trim)
+        .filter(|host| !host.is_empty())
+        .map(ToString::to_string)
+}
+
+fn audit_error_summary(error: &str) -> String {
+    const MAX_CHARS: usize = 240;
+    let mut summary = error.trim().replace('\n', " ");
+    if summary.chars().count() > MAX_CHARS {
+        summary = summary.chars().take(MAX_CHARS).collect::<String>();
+        summary.push('…');
+    }
+    summary
+}
+
+fn append_provider_request_audit(
+    app: &AppHandle,
+    request: &ProviderServiceChatRequest,
+    status: &str,
+    duration_ms: u128,
+    usage: Option<&ProviderUsageTelemetry>,
+    error: Option<&str>,
+) -> Result<(), String> {
+    // Intent citation: docs/architecture/ADR-005-provider-fabric-routing.md
+    // Provider audit records deliberately exclude prompts, messages, and secrets.
+    let portable_state = ensure_portable_user_state(app)?;
+    let logs_root = std::path::PathBuf::from(portable_state.logs_root);
+    append_provider_request_audit_to_logs_root(
+        &logs_root,
+        request,
+        status,
+        duration_ms,
+        usage,
+        error,
+    )
+}
+
+fn append_provider_request_audit_to_logs_root(
+    logs_root: &Path,
+    request: &ProviderServiceChatRequest,
+    status: &str,
+    duration_ms: u128,
+    usage: Option<&ProviderUsageTelemetry>,
+    error: Option<&str>,
+) -> Result<(), String> {
+    fs::create_dir_all(&logs_root)
+        .map_err(|error| format!("Failed to create provider audit log directory: {error}"))?;
+    let record = ProviderRequestAuditRecord {
+        schema_version: 1,
+        recorded_at: Utc::now().to_rfc3339(),
+        request_id: request.request_id.as_deref(),
+        thread_id: request.thread_id.as_deref(),
+        agent_id: request.agent_id.as_deref(),
+        channel_id: request.channel_id.as_deref(),
+        provider_id: &request.provider_id,
+        provider_type: &request.provider_type,
+        runtime_node_id: request.runtime_node_id.as_deref(),
+        runtime_node_kind: request.runtime_node_kind.as_deref(),
+        endpoint_host: endpoint_host(
+            request
+                .runtime_node_endpoint
+                .as_deref()
+                .or(request.api_base_url.as_deref()),
+        ),
+        auth_tier: request.auth_tier.as_deref(),
+        model: &request.model,
+        status,
+        duration_ms,
+        usage,
+        error_summary: error.map(audit_error_summary),
+    };
+    let payload = serde_json::to_string(&record)
+        .map_err(|error| format!("Failed to encode provider audit record: {error}"))?;
+    let path = logs_root.join("provider-requests.jsonl");
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .map_err(|error| format!("Failed to open provider audit log: {error}"))?;
+    writeln!(file, "{payload}")
+        .map_err(|error| format!("Failed to write provider audit log: {error}"))
 }
 
 fn models_endpoint_for_openai_compatible(base_url: &str) -> String {
@@ -1215,7 +1504,9 @@ pub(crate) async fn query_provider_diagnostics(
             .and_then(Value::as_str)
             .map(ToString::to_string);
 
-        let credential_configured = if provider_type == "local" {
+        let credential_configured = if provider_type == "local"
+            || (provider_id == "shared-openai" && auth_method == "subscription")
+        {
             true
         } else {
             resolve_provider_secret(app, provider_id)?.is_some()
@@ -1280,6 +1571,23 @@ pub(crate) async fn query_provider_diagnostics(
                             "{} is not installed on the local runtime.",
                             local_status.target_model
                         ),
+                    )
+                }
+            } else if provider_id == "shared-openai"
+                && auth_method == "subscription"
+                && runtime_kind == "cloud"
+            {
+                if codex_subscription_available() {
+                    any_healthy = true;
+                    (
+                        "healthy".to_string(),
+                        "Codex subscription CLI is available for GPT routing.".to_string(),
+                    )
+                } else {
+                    any_attention = true;
+                    (
+                        "attention".to_string(),
+                        "Codex subscription CLI is not available on this host.".to_string(),
                     )
                 }
             } else if !credential_configured {
@@ -1415,6 +1723,9 @@ async fn execute_cloud_provider_service_chat_with_usage(
     app: &AppHandle,
     request: &ProviderServiceChatRequest,
 ) -> Result<ProviderServiceChatResponse, String> {
+    if request.provider_id == "shared-openai" && request.provider_type == "openai" {
+        return execute_codex_subscription_chat_with_usage(request);
+    }
     let api_key = resolve_provider_secret(app, &request.provider_id)?;
     if api_key.is_none() && request.runtime_node_kind.as_deref() == Some("cloud") {
         return Err("No provider secret is configured for this Strategist profile.".to_string());
@@ -1427,7 +1738,8 @@ async fn execute_cloud_provider_service_chat_with_usage(
     )?;
 
     let request_messages =
-        request_messages_with_system_prompt(&request.system_prompt, request.messages.clone());
+        request_messages_with_system_prompt(&request.system_prompt, request.messages.clone())?;
+    let wire_model = provider_wire_model(&request.provider_type, &request.model);
 
     let client = reqwest::Client::new();
     let mut builder = client
@@ -1442,16 +1754,16 @@ async fn execute_cloud_provider_service_chat_with_usage(
     let response = builder
         .json(&match request.provider_type.as_str() {
             "minimax" => json!({
-                "model": request.model,
+                "model": wire_model,
                 "messages": request_messages
             }),
             "openai" => json!({
-                "model": request.model,
+                "model": wire_model,
                 "messages": request_messages,
                 "reasoning_effort": request.reasoning_effort
             }),
             _ => json!({
-                "model": request.model,
+                "model": wire_model,
                 "messages": request_messages
             }),
         })
@@ -1471,7 +1783,11 @@ async fn execute_cloud_provider_service_chat_with_usage(
             .and_then(|error| error.get("message"))
             .and_then(Value::as_str)
             .unwrap_or("Model provider request failed.");
-        return Err(api_error.to_string());
+        return Err(provider_api_error_message(
+            status.as_u16(),
+            request.runtime_node_kind.as_deref(),
+            api_error,
+        ));
     }
 
     let content = extract_assistant_content(&payload)?;
@@ -1481,15 +1797,6 @@ async fn execute_cloud_provider_service_chat_with_usage(
     })
 }
 
-async fn execute_cloud_provider_service_chat(
-    app: &AppHandle,
-    request: &ProviderServiceChatRequest,
-) -> Result<String, String> {
-    execute_cloud_provider_service_chat_with_usage(app, request)
-        .await
-        .map(|response| response.content)
-}
-
 async fn execute_local_provider_service_chat_with_usage(
     request: &ProviderServiceChatRequest,
 ) -> Result<ProviderServiceChatResponse, String> {
@@ -1497,7 +1804,7 @@ async fn execute_local_provider_service_chat_with_usage(
     ensure_local_runtime_ready(&base_url).await?;
 
     let request_messages =
-        request_messages_with_system_prompt(&request.system_prompt, request.messages.clone());
+        request_messages_with_system_prompt(&request.system_prompt, request.messages.clone())?;
 
     let client = reqwest::Client::new();
     let response = client
@@ -1533,19 +1840,20 @@ async fn execute_local_provider_service_chat_with_usage(
     })
 }
 
-async fn execute_local_provider_service_chat(
-    request: &ProviderServiceChatRequest,
-) -> Result<String, String> {
-    execute_local_provider_service_chat_with_usage(request)
-        .await
-        .map(|response| response.content)
-}
-
 async fn execute_cloud_provider_service_chat_stream(
     app: &AppHandle,
     window: &Window,
     request: &ProviderServiceChatStreamRequest,
-) -> Result<String, String> {
+) -> Result<ProviderServiceChatResponse, String> {
+    if request.provider_id == "shared-openai" && request.provider_type == "openai" {
+        let response = execute_codex_subscription_chat_with_usage(&request.as_chat_request())?;
+        emit_chat_stream_event(window, &request.run_id, "chunk", &response.content)?;
+        if let Some(usage) = response.usage.as_ref() {
+            emit_chat_usage_event(window, &request.run_id, usage)?;
+        }
+        emit_chat_stream_event(window, &request.run_id, "completed", "")?;
+        return Ok(response);
+    }
     let api_key = resolve_provider_secret(app, &request.provider_id)?;
     if api_key.is_none() && request.runtime_node_kind.as_deref() == Some("cloud") {
         return Err("No provider secret is configured for this Strategist profile.".to_string());
@@ -1556,10 +1864,11 @@ async fn execute_cloud_provider_service_chat_stream(
         request.runtime_node_endpoint.clone(),
     )?;
     let request_messages =
-        request_messages_with_system_prompt(&request.system_prompt, request.messages.clone());
+        request_messages_with_system_prompt(&request.system_prompt, request.messages.clone())?;
+    let wire_model = provider_wire_model(&request.provider_type, &request.model);
     let body = match request.provider_type.as_str() {
         "minimax" => json!({
-            "model": request.model,
+            "model": wire_model,
             "messages": request_messages,
             "stream": true,
             "stream_options": {
@@ -1567,7 +1876,7 @@ async fn execute_cloud_provider_service_chat_stream(
             }
         }),
         "openai" => json!({
-            "model": request.model,
+            "model": wire_model,
             "messages": request_messages,
             "reasoning_effort": request.reasoning_effort,
             "stream": true,
@@ -1576,7 +1885,7 @@ async fn execute_cloud_provider_service_chat_stream(
             }
         }),
         _ => json!({
-            "model": request.model,
+            "model": wire_model,
             "messages": request_messages,
             "stream": true,
             "stream_options": {
@@ -1611,7 +1920,11 @@ async fn execute_cloud_provider_service_chat_stream(
             .and_then(|error| error.get("message"))
             .and_then(Value::as_str)
             .unwrap_or("Model provider request failed.");
-        return Err(api_error.to_string());
+        return Err(provider_api_error_message(
+            status.as_u16(),
+            request.runtime_node_kind.as_deref(),
+            api_error,
+        ));
     }
 
     let mut full = String::new();
@@ -1622,7 +1935,10 @@ async fn execute_cloud_provider_service_chat_stream(
     while let Some(chunk) = stream.next().await {
         if chat_run_aborted(&request.run_id) {
             emit_chat_stream_event(window, &request.run_id, "interrupted", "")?;
-            return Ok(full);
+            return Ok(ProviderServiceChatResponse {
+                content: full,
+                usage,
+            });
         }
         let chunk = chunk.map_err(|error| format!("Provider stream failed: {error}"))?;
         pending.push_str(&String::from_utf8_lossy(&chunk));
@@ -1638,7 +1954,10 @@ async fn execute_cloud_provider_service_chat_stream(
                     emit_chat_usage_event(window, &request.run_id, usage)?;
                 }
                 emit_chat_stream_event(window, &request.run_id, "completed", "")?;
-                return Ok(sanitize_assistant_content(&request.provider_type, &full));
+                return Ok(ProviderServiceChatResponse {
+                    content: sanitize_assistant_content(&request.provider_type, &full),
+                    usage,
+                });
             }
             if let Ok(payload) = serde_json::from_str::<Value>(data) {
                 if let Some(next_usage) =
@@ -1662,17 +1981,20 @@ async fn execute_cloud_provider_service_chat_stream(
         emit_chat_usage_event(window, &request.run_id, usage)?;
     }
     emit_chat_stream_event(window, &request.run_id, "completed", "")?;
-    Ok(sanitize_assistant_content(&request.provider_type, &full))
+    Ok(ProviderServiceChatResponse {
+        content: sanitize_assistant_content(&request.provider_type, &full),
+        usage,
+    })
 }
 
 async fn execute_local_provider_service_chat_stream(
     window: &Window,
     request: &ProviderServiceChatStreamRequest,
-) -> Result<String, String> {
+) -> Result<ProviderServiceChatResponse, String> {
     let base_url = local_runtime_base_url(request.runtime_node_endpoint.clone());
     ensure_local_runtime_ready(&base_url).await?;
     let request_messages =
-        request_messages_with_system_prompt(&request.system_prompt, request.messages.clone());
+        request_messages_with_system_prompt(&request.system_prompt, request.messages.clone())?;
 
     let response = reqwest::Client::new()
         .post(format!("{}/api/chat", base_url.trim_end_matches('/')))
@@ -1706,7 +2028,10 @@ async fn execute_local_provider_service_chat_stream(
     while let Some(chunk) = stream.next().await {
         if chat_run_aborted(&request.run_id) {
             emit_chat_stream_event(window, &request.run_id, "interrupted", "")?;
-            return Ok(full);
+            return Ok(ProviderServiceChatResponse {
+                content: full,
+                usage,
+            });
         }
         let chunk = chunk.map_err(|error| format!("Local runtime stream failed: {error}"))?;
         pending.push_str(&String::from_utf8_lossy(&chunk));
@@ -1733,7 +2058,10 @@ async fn execute_local_provider_service_chat_stream(
                         emit_chat_usage_event(window, &request.run_id, usage)?;
                     }
                     emit_chat_stream_event(window, &request.run_id, "completed", "")?;
-                    return Ok(sanitize_assistant_content("local", &full));
+                    return Ok(ProviderServiceChatResponse {
+                        content: sanitize_assistant_content("local", &full),
+                        usage,
+                    });
                 }
             }
         }
@@ -1743,7 +2071,23 @@ async fn execute_local_provider_service_chat_stream(
         emit_chat_usage_event(window, &request.run_id, usage)?;
     }
     emit_chat_stream_event(window, &request.run_id, "completed", "")?;
-    Ok(sanitize_assistant_content("local", &full))
+    Ok(ProviderServiceChatResponse {
+        content: sanitize_assistant_content("local", &full),
+        usage,
+    })
+}
+
+fn provider_api_error_message(
+    status_code: u16,
+    runtime_node_kind: Option<&str>,
+    api_error: &str,
+) -> String {
+    if status_code == 401 && runtime_node_kind != Some("cloud") {
+        return format!(
+            "{api_error}. The selected local or LAN runtime rejected the chat request as unauthorized. Add that runtime API key in Settings > Provider Profiles, or restart the runtime without API-key enforcement."
+        );
+    }
+    api_error.to_string()
 }
 
 pub(crate) fn abort_provider_service_chat_stream(run_id: &str) {
@@ -1755,6 +2099,7 @@ pub(crate) async fn execute_provider_service_chat_stream(
     window: &Window,
     request: ProviderServiceChatStreamRequest,
 ) -> Result<String, String> {
+    let started = Instant::now();
     clear_chat_run_abort(&request.run_id);
     let chat_request = request.as_chat_request();
     ensure_runtime_kind_supported(
@@ -1767,7 +2112,7 @@ pub(crate) async fn execute_provider_service_chat_stream(
         chat_request.runtime_node_kind.as_deref(),
     )?;
 
-    let result = match adapter {
+    let result: Result<ProviderServiceChatResponse, String> = match adapter {
         ProviderExecutionAdapter::LocalOllama => {
             execute_local_provider_service_chat_stream(window, &request).await
         }
@@ -1778,13 +2123,38 @@ pub(crate) async fn execute_provider_service_chat_stream(
     };
 
     clear_chat_run_abort(&request.run_id);
-    result
+    let duration_ms = started.elapsed().as_millis();
+    match result {
+        Ok(response) => {
+            let _ = append_provider_request_audit(
+                app,
+                &chat_request,
+                "ok",
+                duration_ms,
+                response.usage.as_ref(),
+                None,
+            );
+            Ok(response.content)
+        }
+        Err(error) => {
+            let _ = append_provider_request_audit(
+                app,
+                &chat_request,
+                "error",
+                duration_ms,
+                None,
+                Some(&error),
+            );
+            Err(error)
+        }
+    }
 }
 
 pub(crate) async fn execute_provider_service_chat(
     app: &AppHandle,
     request: ProviderServiceChatRequest,
 ) -> Result<String, String> {
+    let started = Instant::now();
     ensure_runtime_kind_supported(
         request.runtime_node_id.as_deref(),
         request.runtime_node_kind.as_deref(),
@@ -1795,13 +2165,38 @@ pub(crate) async fn execute_provider_service_chat(
         request.runtime_node_kind.as_deref(),
     )?;
 
-    match adapter {
+    let result = match adapter {
         ProviderExecutionAdapter::LocalOllama => {
-            execute_local_provider_service_chat(&request).await
+            execute_local_provider_service_chat_with_usage(&request).await
         }
         ProviderExecutionAdapter::CloudOpenAiCompatible
         | ProviderExecutionAdapter::CloudMiniMaxCompatible => {
-            execute_cloud_provider_service_chat(app, &request).await
+            execute_cloud_provider_service_chat_with_usage(app, &request).await
+        }
+    };
+    let duration_ms = started.elapsed().as_millis();
+    match result {
+        Ok(response) => {
+            let _ = append_provider_request_audit(
+                app,
+                &request,
+                "ok",
+                duration_ms,
+                response.usage.as_ref(),
+                None,
+            );
+            Ok(response.content)
+        }
+        Err(error) => {
+            let _ = append_provider_request_audit(
+                app,
+                &request,
+                "error",
+                duration_ms,
+                None,
+                Some(&error),
+            );
+            Err(error)
         }
     }
 }
@@ -2146,6 +2541,10 @@ pub(crate) async fn execute_archive_ingest_probe(
     .join(" ");
 
     let probe_request = ProviderServiceChatRequest {
+        request_id: Some("archive-ingest-probe".to_string()),
+        thread_id: None,
+        agent_id: Some("archive-ingest.core".to_string()),
+        channel_id: None,
         provider_id: request.provider_id,
         provider_type: request.provider_type,
         api_base_url: request.api_base_url,
@@ -2176,15 +2575,20 @@ pub(crate) async fn execute_archive_ingest_probe(
 #[cfg(test)]
 mod tests {
     use super::{
+        ChatMessageInput, ProviderExecutionAdapter, ProviderServiceChatRequest,
+        append_provider_request_audit_to_logs_root, audit_error_summary, endpoint_host,
         ensure_runtime_kind_supported, extract_assistant_content, extract_cloud_usage,
         extract_local_assistant_content, extract_local_usage, extract_ollama_tag_model_ids,
         extract_openai_compatible_model_ids, filter_think_stream_delta, http_probe_outcome,
         models_endpoint_for_openai_compatible, ollama_tags_endpoint, parse_ollama_model_names,
-        resolve_local_runtime_model, resolve_provider_base_url, resolve_provider_execution_adapter,
-        sanitize_assistant_content, sanitize_stream_delta, strip_think_blocks,
-        ProviderExecutionAdapter,
+        request_messages_with_system_prompt, resolve_local_runtime_model,
+        resolve_provider_base_url, resolve_provider_execution_adapter, sanitize_assistant_content,
+        sanitize_stream_delta, strip_think_blocks,
     };
-    use serde_json::json;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use serde_json::{Value, json};
 
     #[test]
     fn strips_minimax_thinking_blocks() {
@@ -2341,6 +2745,104 @@ mod tests {
             extract_ollama_tag_model_ids(&ollama_tags),
             vec!["gemma3:4b".to_string(), "qwen3:4b".to_string()]
         );
+    }
+
+    #[test]
+    fn provider_audit_endpoint_host_excludes_paths_and_secrets() {
+        assert_eq!(
+            endpoint_host(Some("http://192.168.1.77:30000/v1/chat/completions")),
+            Some("192.168.1.77:30000".to_string())
+        );
+        assert_eq!(
+            endpoint_host(Some("https://api.minimax.io/v1")),
+            Some("api.minimax.io".to_string())
+        );
+        assert_eq!(endpoint_host(Some("")), None);
+    }
+
+    #[test]
+    fn provider_audit_error_summary_is_bounded_single_line() {
+        let summary = audit_error_summary(&format!("{}\n{}", "x".repeat(300), "secret-free"));
+        assert!(summary.chars().count() <= 241);
+        assert!(!summary.contains('\n'));
+    }
+
+    #[test]
+    fn provider_audit_writer_excludes_prompt_messages_and_secret_values() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock should be valid")
+            .as_nanos();
+        let logs_root = std::env::temp_dir().join(format!("resonantos-provider-audit-{unique}"));
+        let request = ProviderServiceChatRequest {
+            request_id: Some("test-run".to_string()),
+            thread_id: Some("thread-test".to_string()),
+            agent_id: Some("strategist.core".to_string()),
+            channel_id: Some("desktop-main".to_string()),
+            provider_id: "provider-asus-gx10-live".to_string(),
+            provider_type: "openai-compatible".to_string(),
+            api_base_url: Some("http://192.168.1.77:30000/v1".to_string()),
+            runtime_node_id: Some("node-provider-asus-gx10-live".to_string()),
+            runtime_node_kind: Some("remote-user-owned".to_string()),
+            runtime_node_endpoint: Some("http://192.168.1.77:30000/v1".to_string()),
+            auth_tier: Some("supported".to_string()),
+            model: "gemma-4-26b-a4b-q4_k_m.gguf".to_string(),
+            reasoning_effort: "medium".to_string(),
+            system_prompt: "secret prompt should not be logged".to_string(),
+            messages: vec![ChatMessageInput {
+                role: "user".to_string(),
+                content: "user message should not be logged sk-llama-headless".to_string(),
+            }],
+        };
+        append_provider_request_audit_to_logs_root(&logs_root, &request, "ok", 123, None, None)
+            .expect("audit record should write");
+        let payload = fs::read_to_string(logs_root.join("provider-requests.jsonl"))
+            .expect("audit log should be readable");
+        assert!(payload.contains("\"providerId\":\"provider-asus-gx10-live\""));
+        assert!(payload.contains("\"endpointHost\":\"192.168.1.77:30000\""));
+        assert!(!payload.contains("secret prompt"));
+        assert!(!payload.contains("user message"));
+        assert!(!payload.contains("sk-llama-headless"));
+        let _ = fs::remove_dir_all(logs_root);
+    }
+
+    #[test]
+    fn provider_request_messages_drop_empty_content_and_require_a_real_turn() {
+        let payload = request_messages_with_system_prompt(
+            "  system prompt  ",
+            vec![
+                ChatMessageInput {
+                    role: "assistant".to_string(),
+                    content: "   ".to_string(),
+                },
+                ChatMessageInput {
+                    role: "user".to_string(),
+                    content: "  hello  ".to_string(),
+                },
+            ],
+        )
+        .expect("request should keep non-empty user content");
+
+        assert_eq!(payload.len(), 2);
+        assert_eq!(
+            payload[0].get("content").and_then(Value::as_str),
+            Some("system prompt")
+        );
+        assert_eq!(payload[1].get("role").and_then(Value::as_str), Some("user"));
+        assert_eq!(
+            payload[1].get("content").and_then(Value::as_str),
+            Some("hello")
+        );
+
+        let error = request_messages_with_system_prompt(
+            "system",
+            vec![ChatMessageInput {
+                role: "user".to_string(),
+                content: " ".to_string(),
+            }],
+        )
+        .expect_err("empty chat history should fail before reaching a provider");
+        assert!(error.contains("no non-empty user or assistant messages"));
     }
 
     #[test]

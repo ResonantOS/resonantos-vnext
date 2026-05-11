@@ -101,6 +101,172 @@ describe("add-on SDK manifest validation", () => {
     expect(result.valid).toBe(true);
   });
 
+  it("accepts explicit workflow scaffolding contracts for packaged add-on work", () => {
+    const result = validateAddOnManifest(
+      validManifest({
+        workflowBoundaries: [
+          {
+            id: "visible-browser-research",
+            label: "Visible browser research",
+            jobToBeDone: "Open, inspect, and capture web pages through a host-mediated browser.",
+            userValue: "The human avoids copy/paste browser work while keeping the session visible and auditable.",
+            repeatability: "workflow-package",
+            owner: "augmentor",
+            nonGoals: ["Bypass user approval for sensitive websites"],
+          },
+        ],
+        skills: [
+          {
+            id: "research-session",
+            name: "Research session",
+            description: "Guide Augmentor through a repeatable browser-backed research flow.",
+            documentPath: "skills/research-session.md",
+            invocation: "agent-suggested",
+            requiredCapabilities: ["network", "browser-control"],
+            requiredTools: ["browser.open_url"],
+          },
+        ],
+        connectors: [
+          {
+            id: "chromium-host",
+            name: "Chromium host",
+            type: "local-runtime",
+            description: "Connects ResonantOS to the local controlled Chromium runtime.",
+            requiredCapabilities: ["network", "browser-control"],
+            configScope: "user-config",
+          },
+        ],
+        scripts: [
+          {
+            id: "browser-smoke-check",
+            name: "Browser smoke check",
+            description: "Verify the controlled browser can open a URL and return a page title.",
+            commandRef: "browser.open_url",
+            runPolicy: "preflight",
+            deterministic: true,
+            requiredCapabilities: ["network", "browser-control"],
+            producesArtifacts: ["verification-report"],
+            requiresHumanApproval: false,
+          },
+        ],
+        hooks: [
+          {
+            id: "before-browser-task-complete",
+            event: "before-task-complete",
+            handlerRef: "browser-smoke-check",
+            requiredCapabilities: ["network", "browser-control"],
+            failurePolicy: "block",
+          },
+        ],
+      }),
+    );
+
+    expect(result.issues.filter((issue) => issue.severity === "error")).toEqual([]);
+    expect(result.valid).toBe(true);
+  });
+
+  it("rejects workflow scaffolding contracts that bypass declared capabilities or declared tools", () => {
+    const result = validateAddOnManifest(
+      validManifest({
+        skills: [
+          {
+            id: "bad-skill",
+            name: "Bad skill",
+            description: "References undeclared authority.",
+            documentPath: "skills/bad.md",
+            invocation: "automatic",
+            requiredCapabilities: ["shell"],
+            requiredTools: ["browser.shell_escape"],
+          },
+        ],
+        connectors: [
+          {
+            id: "bad-connector",
+            name: "Bad connector",
+            type: "mcp-server",
+            description: "References undeclared shell access.",
+            requiredCapabilities: ["shell"],
+            configScope: "host-vault",
+          },
+        ],
+        scripts: [
+          {
+            id: "bad-script",
+            name: "Bad script",
+            description: "References undeclared shell access.",
+            commandRef: "npm run anything",
+            runPolicy: "preflight",
+            deterministic: true,
+            requiredCapabilities: ["shell"],
+            producesArtifacts: ["verification-report"],
+            requiresHumanApproval: false,
+          },
+        ],
+        hooks: [
+          {
+            id: "bad-hook",
+            event: "before-task-complete",
+            handlerRef: "bad-script",
+            requiredCapabilities: ["shell"],
+            failurePolicy: "block",
+          },
+        ],
+      }),
+    );
+
+    expect(result.valid).toBe(false);
+    expect(result.issues.some((issue) => issue.code === "skill-unrequested-capability")).toBe(true);
+    expect(result.issues.some((issue) => issue.code === "skill-unknown-tool")).toBe(true);
+    expect(result.issues.some((issue) => issue.code === "connector-unrequested-capability")).toBe(true);
+    expect(result.issues.some((issue) => issue.code === "script-unrequested-capability")).toBe(true);
+    expect(result.issues.some((issue) => issue.code === "hook-unrequested-capability")).toBe(true);
+  });
+
+  it("rejects hooks that do not explicitly activate their handler script contract", () => {
+    const result = validateAddOnManifest(
+      validManifest({
+        requestedCapabilities: [
+          { capability: "network", granted: false, scope: "shared", revocationBehavior: "hard-stop" },
+          { capability: "browser-control", granted: false, scope: "system", revocationBehavior: "hard-stop" },
+        ],
+        scripts: [
+          {
+            id: "browser-smoke-check",
+            name: "Browser smoke check",
+            description: "Verify controlled browser readiness.",
+            commandRef: "browser.health",
+            runPolicy: "preflight",
+            deterministic: true,
+            requiredCapabilities: ["network", "browser-control"],
+            producesArtifacts: ["verification-report"],
+            requiresHumanApproval: true,
+          },
+        ],
+        hooks: [
+          {
+            id: "before-browser-task-complete",
+            event: "before-task-complete",
+            handlerRef: "browser-smoke-check",
+            requiredCapabilities: ["browser-control"],
+            failurePolicy: "block",
+          },
+          {
+            id: "unknown-handler",
+            event: "health-check",
+            handlerRef: "missing-script",
+            requiredCapabilities: ["browser-control"],
+            failurePolicy: "warn",
+          },
+        ],
+      }),
+    );
+
+    expect(result.valid).toBe(false);
+    expect(result.issues.some((issue) => issue.code === "hook-omits-handler-capability")).toBe(true);
+    expect(result.issues.some((issue) => issue.code === "hook-handler-requires-human-approval")).toBe(true);
+    expect(result.issues.some((issue) => issue.code === "hook-unknown-handler")).toBe(true);
+  });
+
   it("rejects add-ons that claim Living Archive knowledge-page write authority", () => {
     const result = validateAddOnManifest(
       validManifest({

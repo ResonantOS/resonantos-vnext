@@ -5,14 +5,14 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use tauri::AppHandle;
 
 use super::{
-    parse_frontmatter, queue_archive_ingest_request, relative_to_vault, resolve_source_path,
-    slugify, system_time_to_unix, unix_timestamp, write_archive_intake_artifact,
     ArchiveIngestRequestRecord, ArchiveIntakeWriteRequest, ArchiveRuntime,
     ArchiveTolBundleBuildRequest, ArchiveTolBundleBuildResult, ArchiveTolBundleCandidate,
+    parse_frontmatter, queue_archive_ingest_request, relative_to_vault, resolve_source_path,
+    slugify, system_time_to_unix, unix_timestamp, write_archive_intake_artifact,
 };
 
 fn tol_mapping_root(runtime: &ArchiveRuntime, role: &str, subtype: &str) -> Option<PathBuf> {

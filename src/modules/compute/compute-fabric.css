@@ -1,0 +1,245 @@
+.compute-workspace {
+  display: grid;
+  gap: 18px;
+  padding: 22px;
+}
+
+.compute-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.75fr);
+  gap: 18px;
+  align-items: stretch;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 18px;
+}
+
+.compute-hero h1,
+.compute-section h2,
+.compute-node-card h3,
+.compute-policy-panel h3 {
+  margin: 0;
+}
+
+.compute-hero p,
+.compute-section-heading p,
+.compute-node-main p,
+.compute-empty-state p {
+  color: rgba(230, 236, 242, 0.72);
+  margin: 8px 0 0;
+}
+
+.compute-hero-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.compute-error {
+  color: #ffb4b4;
+  font-size: 0.86rem;
+}
+
+.compute-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.compute-summary-tile,
+.compute-node-card,
+.compute-policy-panel,
+.compute-empty-state,
+.compute-job-row,
+.compute-artifact-row {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.045);
+  border-radius: 8px;
+}
+
+.compute-summary-tile {
+  min-height: 92px;
+  padding: 14px;
+}
+
+.compute-summary-tile span,
+.compute-summary-tile small,
+.compute-node-meta dt {
+  color: rgba(230, 236, 242, 0.62);
+  font-size: 0.76rem;
+}
+
+.compute-summary-tile strong {
+  display: block;
+  font-size: 2rem;
+  line-height: 1.1;
+  margin: 8px 0 4px;
+}
+
+.compute-section {
+  display: grid;
+  gap: 12px;
+}
+
+.compute-section-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.compute-node-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.compute-node-card {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.compute-node-main {
+  display: grid;
+  gap: 8px;
+}
+
+.compute-status-pill {
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  color: rgba(242, 247, 252, 0.8);
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 700;
+  justify-self: start;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  padding: 6px 9px;
+  text-transform: uppercase;
+}
+
+.compute-status-pill.enrolled.ready {
+  background: rgba(93, 214, 146, 0.14);
+  border-color: rgba(93, 214, 146, 0.32);
+  color: #aaf0c6;
+}
+
+.compute-status-pill.pending,
+.compute-status-pill.unknown {
+  background: rgba(234, 187, 88, 0.13);
+  border-color: rgba(234, 187, 88, 0.28);
+  color: #f0d18c;
+}
+
+.compute-status-pill.quarantined,
+.compute-status-pill.revoked,
+.compute-status-pill.unavailable {
+  background: rgba(241, 105, 105, 0.12);
+  border-color: rgba(241, 105, 105, 0.3);
+  color: #ffb4b4;
+}
+
+.compute-node-meta {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+.compute-node-meta div {
+  min-width: 0;
+}
+
+.compute-node-meta dd {
+  margin: 3px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.compute-role-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.compute-role-list span {
+  background: rgba(112, 180, 255, 0.12);
+  border: 1px solid rgba(112, 180, 255, 0.24);
+  border-radius: 999px;
+  color: rgba(211, 230, 255, 0.92);
+  font-size: 0.75rem;
+  padding: 5px 8px;
+}
+
+.compute-node-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.compute-node-actions span {
+  color: rgba(230, 236, 242, 0.62);
+  font-size: 0.78rem;
+}
+
+.compute-warning-list {
+  color: #ffb4b4;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.compute-policy-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.compute-policy-panel {
+  padding: 16px;
+}
+
+.compute-policy-panel ul {
+  color: rgba(230, 236, 242, 0.76);
+  margin: 10px 0 0;
+  padding-left: 18px;
+}
+
+.compute-policy-panel li + li {
+  margin-top: 6px;
+}
+
+.compute-empty-state {
+  padding: 18px;
+}
+
+.compute-job-list,
+.compute-artifact-list {
+  display: grid;
+  gap: 8px;
+}
+
+.compute-job-row,
+.compute-artifact-row {
+  align-items: center;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) repeat(3, max-content);
+  padding: 12px 14px;
+}
+
+.compute-artifact-row strong {
+  overflow-wrap: anywhere;
+}
+
+.compute-artifact-row code {
+  color: rgba(211, 230, 255, 0.92);
+  font-size: 0.78rem;
+}
+
+@media (max-width: 900px) {
+  .compute-hero,
+  .compute-policy-grid {
+    grid-template-columns: 1fr;
+  }
+}

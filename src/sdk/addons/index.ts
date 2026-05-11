@@ -3,12 +3,17 @@
 export type {
   AddOnAugmentorSkill,
   AddOnArtifactReference,
+  AddOnConnectorDefinition,
+  AddOnHookDefinition,
   AddOnEngineerSetupRunbook,
   AddOnRegistryEntry,
   AddOnRegistryReviewState,
   AddOnRegistrySource,
   AddOnManifest,
+  AddOnScriptDefinition,
+  AddOnSkillDefinition,
   AddOnToolDefinition,
+  AddOnWorkflowBoundary,
   Capability,
   CapabilityGrant,
 } from "../../core/contracts";

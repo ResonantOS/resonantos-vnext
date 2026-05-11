@@ -255,10 +255,11 @@ export const resolveProviderRoute = (
       if (allowedAdapterIds?.length && !allowedAdapterIds.includes(adapterPolicy.id)) {
         continue;
       }
-      const model =
-        preferredModels.find((candidate) => candidate && node.supportedModels.includes(candidate)) ??
-        node.supportedModels[0] ??
-        provider.primaryModel;
+      const matchedPreferredModel = preferredModels.find((candidate) => candidate && node.supportedModels.includes(candidate));
+      if (input.preferredModels?.length && !matchedPreferredModel) {
+        continue;
+      }
+      const model = matchedPreferredModel ?? node.supportedModels[0] ?? provider.primaryModel;
       if (!model) {
         continue;
       }

@@ -211,6 +211,10 @@ export function ArchiveSourceRegistry({
                         {archiveAiMemoryBuildResult.queuedThisRun} queued · {archiveAiMemoryBuildResult.processedThisRun} processed ·{" "}
                         {archiveAiMemoryBuildResult.promotedThisRun} promoted · {archiveAiMemoryBuildResult.queueRemaining} remaining
                       </p>
+                      <p>
+                        {archiveAiMemoryBuildResult.recordsSeen} seen · {archiveAiMemoryBuildResult.skippedProcessed} already processed ·{" "}
+                        {archiveAiMemoryBuildResult.skippedUnsupported} unsupported · {archiveAiMemoryBuildResult.skippedMissing} missing
+                      </p>
                       <p>{archiveAiMemoryBuildResult.nextAction}</p>
                     </div>
                   ) : null}

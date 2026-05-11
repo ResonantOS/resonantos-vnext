@@ -7,12 +7,17 @@ import type {
   AddOnManifest,
   AddOnAgentRuntimeContract,
   AddOnAuditContract,
+  AddOnConnectorDefinition,
   AddOnEmbeddedWorkspaceContract,
+  AddOnHookDefinition,
   AddOnInstallContract,
   AddOnMemoryAccessContract,
+  AddOnScriptDefinition,
   AddOnServiceProtocol,
+  AddOnSkillDefinition,
   AddOnDeterministicSmokeTest,
   AddOnToolDefinition,
+  AddOnWorkflowBoundary,
   Capability,
 } from "../../core/contracts";
 
@@ -22,6 +27,11 @@ export type AddOnSdkManifest = AddOnManifest & {
   sdkVersion: string;
   service?: AddOnLocalServiceDefinition;
   tools?: AddOnToolDefinition[];
+  workflowBoundaries?: AddOnWorkflowBoundary[];
+  skills?: AddOnSkillDefinition[];
+  connectors?: AddOnConnectorDefinition[];
+  scripts?: AddOnScriptDefinition[];
+  hooks?: AddOnHookDefinition[];
   engineerSetup?: AddOnEngineerSetupRunbook;
   augmentorSkills?: AddOnAugmentorSkill[];
   install?: AddOnInstallContract;

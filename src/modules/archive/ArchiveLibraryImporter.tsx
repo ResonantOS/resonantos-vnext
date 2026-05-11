@@ -56,24 +56,9 @@ export function ArchiveLibraryImporter({
   return (
     <Panel
       className="library-importer-panel"
-      title="Library Importer"
-      subtitle="Bring a folder or Obsidian vault into the managed ResonantOS memory system."
+      title="Add Knowledge"
+      subtitle="Choose a folder or Obsidian vault. The AI handles the rest."
     >
-      <div className="library-importer-intro">
-        <div>
-          <span className="eyebrow">Why this matters</span>
-          <h3>Keep the human voice separate from outside knowledge.</h3>
-          <p>
-            Import mixed folders safely first. ResonantOS copies the structure, then helps classify personal knowledge,
-            external material, tags, and wikilinks before anything becomes trusted AI memory.
-          </p>
-        </div>
-        <ol className="library-importer-steps" aria-label="Library import workflow">
-          <li>Choose the folder</li>
-          <li>Select how to store it</li>
-          <li>Review classification</li>
-        </ol>
-      </div>
       <form
         className="library-import-form"
         onSubmit={(event) => {
@@ -91,8 +76,8 @@ export function ArchiveLibraryImporter({
           <div className="library-step-head">
             <span>1</span>
             <div>
-              <strong>Choose source folder</strong>
-              <p>Select a normal folder or an Obsidian vault. Long paths are contained here and will not affect the rest of the page.</p>
+              <strong>Choose the folder or vault</strong>
+              <p>This is the only required choice. Analysis starts automatically after selection.</p>
             </div>
           </div>
           <button
@@ -104,17 +89,25 @@ export function ArchiveLibraryImporter({
             <span>{libraryPath || "Click to choose a folder or Obsidian vault"}</span>
             <strong>Browse...</strong>
           </button>
-          <div className="library-preflight-actions">
-            <button
-              type="button"
-              className="button-secondary touch-action"
-              disabled={archiveSourceScanBusy || !libraryPath.trim()}
-              onClick={() => onPreflightLibrary(libraryPath)}
-            >
-              {archiveSourceScanBusy ? "Analyzing..." : "Analyze Before Import"}
-            </button>
-            <p>Preflight checks what will be copied, skipped, and warned before the archive writes anything.</p>
-          </div>
+          {libraryPath ? (
+            <div className="library-preflight-actions">
+              <button
+                type="button"
+                className="button-secondary touch-action"
+                disabled={archiveSourceScanBusy || !libraryPath.trim()}
+                onClick={() => onPreflightLibrary(libraryPath)}
+              >
+                {archiveSourceScanBusy ? "Analyzing..." : "Analyze Again"}
+              </button>
+              <p>
+                {archiveSourceScanBusy
+                  ? "The Living Archive Agent is checking what can be imported."
+                  : preflightMatchesPath
+                    ? "Analysis complete. If the summary looks right, let the AI import it."
+                    : "Run analysis again if this path changed."}
+              </p>
+            </div>
+          ) : null}
           <details className="library-manual-path">
             <summary>Advanced: type path manually</summary>
             <input
@@ -133,64 +126,67 @@ export function ArchiveLibraryImporter({
           ) : null}
         </section>
 
-        <section className="library-step-card">
-          <div className="library-step-head">
-            <span>2</span>
-            <div>
-              <strong>Choose memory handling</strong>
-              <p>Use Mixed Library when the folder contains both personal and external material.</p>
+        <details className="library-advanced-options">
+          <summary>Advanced import options</summary>
+          <section className="library-step-card">
+            <div className="library-step-head">
+              <span>2</span>
+              <div>
+                <strong>Optional handling</strong>
+                <p>The recommended default is Mixed Library + Copy. Change this only if you know the source type.</p>
+              </div>
             </div>
-          </div>
-          <div className="library-field-grid">
-            <label>
-              <span>Library name</span>
-              <input
-                value={libraryName}
-                onChange={(event) => setLibraryName(event.target.value)}
-                placeholder="Optional, inferred from folder"
-              />
-            </label>
-            <label>
-              <span>Memory domain</span>
-              <select value={libraryDomain} onChange={(event) => setLibraryDomain(event.target.value as ArchiveMemoryDomain)}>
-                <option value="mixed-library">Mixed Library - classify with AI help</option>
-                <option value="human-knowledge">Human Knowledge</option>
-                <option value="external-knowledge">External Knowledge</option>
-              </select>
-            </label>
-            <label>
-              <span>Import mode</span>
-              <select value={libraryImportMode} onChange={(event) => setLibraryImportMode(event.target.value as ArchiveLibraryImportMode)}>
-                <option value="copy">Copy into Living Archive (recommended)</option>
-                <option value="move" disabled>
-                  Move into Living Archive (disabled until audited execution)
-                </option>
-                <option value="reference">Reference in place (advanced)</option>
-              </select>
-            </label>
-          </div>
-          <div className={`inline-notice ${libraryImportMode === "move" ? "warning" : ""}`}>
-            {libraryImportMode === "copy"
-              ? "Copy mode preserves the original and makes the managed ResonantOS copy the active knowledge base."
-              : libraryImportMode === "move"
-                ? "Move mode is disabled until explicit confirmation, audit, and rollback execution exist."
-                : "Reference mode leaves files where they are. Use only when you cannot copy the source yet."}
-          </div>
-        </section>
+            <div className="library-field-grid">
+              <label>
+                <span>Library name</span>
+                <input
+                  value={libraryName}
+                  onChange={(event) => setLibraryName(event.target.value)}
+                  placeholder="Optional, inferred from folder"
+                />
+              </label>
+              <label>
+                <span>Memory domain</span>
+                <select value={libraryDomain} onChange={(event) => setLibraryDomain(event.target.value as ArchiveMemoryDomain)}>
+                  <option value="mixed-library">Mixed Library - let AI classify</option>
+                  <option value="human-knowledge">Human Knowledge</option>
+                  <option value="external-knowledge">External Knowledge</option>
+                </select>
+              </label>
+              <label>
+                <span>Import mode</span>
+                <select value={libraryImportMode} onChange={(event) => setLibraryImportMode(event.target.value as ArchiveLibraryImportMode)}>
+                  <option value="copy">Copy into Living Archive (recommended)</option>
+                  <option value="move" disabled>
+                    Move into Living Archive (disabled until audited execution)
+                  </option>
+                  <option value="reference">Reference in place (advanced)</option>
+                </select>
+              </label>
+            </div>
+            <div className={`inline-notice ${libraryImportMode === "move" ? "warning" : ""}`}>
+              {libraryImportMode === "copy"
+                ? "Copy mode preserves the original and makes the managed ResonantOS copy the active knowledge base."
+                : libraryImportMode === "move"
+                  ? "Move mode is disabled until explicit confirmation, audit, and rollback execution exist."
+                  : "Reference mode leaves files where they are. Use only when you cannot copy the source yet."}
+            </div>
+          </section>
+        </details>
 
         <section className="library-step-card library-import-action-card">
           <div className="library-step-head">
-            <span>3</span>
+            <span>2</span>
             <div>
-              <strong>Import and review</strong>
-              <p>Non-Obsidian folders use Obsidian-compatible frontmatter, tags, and wikilinks by default.</p>
+              <strong>Let the AI import it</strong>
+              <p>The agent will use safe defaults, preserve the original, and continue curation after import.</p>
             </div>
           </div>
-          <button type="submit" className="button-secondary touch-action" disabled={archiveSourceScanBusy || !canImport}>
-            {archiveSourceScanBusy ? "Importing..." : "Import Recommended Plan"}
+          <button type="submit" className="button-primary touch-action" disabled={archiveSourceScanBusy || !canImport}>
+            {archiveSourceScanBusy ? "Working..." : "Let AI Import This"}
           </button>
           {!archiveLibraryPreflightResult ? (
-            <div className="inline-notice">Run preflight before importing so skipped files and storage cost are visible.</div>
+            <div className="inline-notice">Choose a folder first. The agent will analyze it before import.</div>
           ) : !preflightMatchesPath ? (
             <div className="inline-notice warning">The folder path changed after preflight. Analyze again before importing.</div>
           ) : !canImport ? (
@@ -218,7 +214,7 @@ export function ArchiveLibraryImporter({
           </div>
           {archiveLibraryImportResult.classificationManifestPath ? (
             <div className="inline-notice">
-              Classification review artifact created. Open it from the Source Registry to continue through the host-owned review flow.
+              The import is ready for AI memory building. The agent can continue from the main Living Archive panel.
             </div>
           ) : null}
         </article>
@@ -275,12 +271,13 @@ function LibraryPreflightReport({
   return (
     <article className="library-preflight-report">
       {isStale ? <div className="inline-notice warning">This preflight belongs to a previous path. Analyze again.</div> : null}
-      <div className="archive-result-metrics">
-        <span>{report.supportedFiles} supported</span>
-        <span>{report.skippedFiles} skipped</span>
-        <span>{formatBytes(report.estimatedImportBytes)} source</span>
-        <span>{formatBytes(report.estimatedManagedStorageBytes)} managed estimate</span>
-        {report.obsidianVaultDetected ? <span>Obsidian vault detected</span> : null}
+      <div className="library-preflight-simple">
+        <strong>{report.supportedFiles.toLocaleString()} files can be imported</strong>
+        <p>
+          {report.skippedFiles.toLocaleString()} unsupported or technical file(s) will be skipped. Managed copy estimate:{" "}
+          {formatBytes(report.estimatedManagedStorageBytes)}.
+        </p>
+        {report.obsidianVaultDetected ? <span className="tone tone-active">Obsidian vault detected</span> : null}
       </div>
       {report.warnings.length ? (
         <div className="library-preflight-warnings">
@@ -294,25 +291,29 @@ function LibraryPreflightReport({
       ) : null}
       <div className="library-recommended-plan">
         <div>
-          <span className="eyebrow">Recommended plan</span>
+          <span className="eyebrow">AI recommendation</span>
           <strong>{report.recommendedPlan.summary}</strong>
           <p>{report.recommendedPlan.approvalNote}</p>
-          <div className="archive-result-metrics">
-            <span>{report.recommendedPlan.includedTopFolders.length} top folder(s) included</span>
-            <span>{report.recommendedPlan.autoExcludedTopFolders.length} technical folder(s) auto-excluded</span>
-            <span>{report.recommendedPlan.ambiguousTopFolders.length} ambiguous folder(s) flagged</span>
-          </div>
         </div>
         <button type="button" className="button-secondary touch-action" disabled={isStale} onClick={() => onAskAugmentor(report)}>
-          Ask Augmentor about this plan
+          Ask Augmentor
         </button>
       </div>
-      <div className="library-preflight-grid">
-        <CountList title="Will import by folder" counts={report.supportedByTopFolder} />
-        <CountList title="Will skip by folder" counts={report.skippedByTopFolder} />
-        <CountList title="Will import by type" counts={report.supportedByExtension} />
-        <CountList title="Will skip by type" counts={report.skippedByExtension} />
-      </div>
+      <details className="library-preflight-details">
+        <summary>Technical details</summary>
+        <div className="archive-result-metrics">
+          <span>{report.recommendedPlan.includedTopFolders.length} top folder(s) included</span>
+          <span>{report.recommendedPlan.autoExcludedTopFolders.length} technical folder(s) auto-excluded</span>
+          <span>{report.recommendedPlan.ambiguousTopFolders.length} ambiguous folder(s) flagged</span>
+          <span>{formatBytes(report.estimatedImportBytes)} source size</span>
+        </div>
+        <div className="library-preflight-grid">
+          <CountList title="Will import by folder" counts={report.supportedByTopFolder} />
+          <CountList title="Will skip by folder" counts={report.skippedByTopFolder} />
+          <CountList title="Will import by type" counts={report.supportedByExtension} />
+          <CountList title="Will skip by type" counts={report.skippedByExtension} />
+        </div>
+      </details>
       {report.samples.length ? (
         <details className="library-manual-path">
           <summary>Skipped examples</summary>

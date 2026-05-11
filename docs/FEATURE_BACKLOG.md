@@ -51,7 +51,7 @@ Last updated: 2026-05-05
 - Real context accounting instead of shell-side character estimate.
 - Conversation compaction and summary checkpoints.
 - Multiple Strategist identities/channels beyond the current desktop baseline.
-- Telegram channel integration.
+- Telegram speech transcription provider hook, so downloaded voice/audio messages become text before Augmentor acts on them.
 
 ## Paperclip Add-on
 
@@ -145,6 +145,19 @@ Last updated: 2026-05-05
   - the Review Desk now reloads durable AI Memory build job summaries after restart, so users can see prior build status, queue pressure, promotion counts, errors, and next action
   - persisted AI Memory jobs now expose a user-triggered `Continue Build` action that reruns the controlled provider-routed batch from the stored manifest path
   - Archive auto-sync now continues safe persisted AI Memory jobs while the app is open, but blocks jobs with errors, escalated artifacts, or human-review status
+  - Archive auto-sync and AI Memory auto-build cost posture are now persisted in shell state; unattended AI Memory batches are blocked unless the saved policy allows the archive ingest route cost tier
+  - imported-library AI Memory queues now use source-specific durable request filenames, preventing same-second batch overwrites when hundreds or thousands of sources are queued
+  - AI Memory build summaries now reclassify legacy false-complete or queue-loss jobs as `attention`, so the user can repair/rebuild instead of seeing a misleading complete state
+  - live AI Memory build results now run the same queue-integrity check before status is reported, so missing durable request files cannot be hidden by escalated artifacts
+  - review execution now enforces backend path scope: only `REVIEW/requests` files can be processed, and only `REVIEW/artifacts` files can receive decisions or promotion
+  - intake artifact writes now allocate unique filenames instead of overwriting same-named raw evidence
+  - review artifacts now return promotion state, and the Review Desk exposes a bulk `Promote Approved` action while marking already-promoted artifacts as in the wiki
+  - the Start tab now has an AI Memory Curator action center that surfaces one recommended next action and frames human review as exception handling
+  - Archive maintenance now repairs and reverifies safe malformed/empty-page escalations before making the human review them
+  - the default Living Archive UI is now agent-led: the user chooses a folder/vault, accepts the AI recommendation, and advanced queues/reviews/source/search/diagnostics stay hidden unless explicitly opened
+
+- Still needed:
+  - add a host-mediated file picker and intake path for direct single-document upload; current Add Knowledge flow supports folder/vault import only
 
 - Completed on 2026-04-23:
   - added a real host-mediated archive service in `src-tauri/src/archive_service.rs`
@@ -230,7 +243,6 @@ Last updated: 2026-05-05
   - kept Tauri command behavior unchanged while reducing the main archive service surface
 - Continue Living Archive hardening:
   - run real-data validation against the full ResonantOS Base folder and configured MiniMax/OpenAI routes
-  - persist Archive auto-sync policy across app restarts and expose provider-cost controls before unattended AI Memory batches run
   - add a dedicated audited execution flow before move-on-import or source reorganisation can move files
   - upgrade the JSONL source-version ledger into local Git-style source history where appropriate
   - expose imported libraries as first-class cards with rescan/sync controls using the host registry
@@ -453,3 +465,12 @@ Last updated: 2026-05-05
 - Update strategy.
 - Crash reporting and diagnostics.
 - Accessibility review.
+
+## Living Archive Hardening
+
+- Completed on 2026-05-10:
+  - escalated review artifacts now have explicit human approve/reject controls before trusted wiki promotion
+  - the host rejects non-human attempts to resolve escalated review artifacts
+  - the review desk separates queued, pending, needs-human, approved-to-promote, and already-promoted states
+  - malformed ingest outputs with useful structured fields but invalid `proposed_pages` now get a conservative source-summary page instead of dead-ending as empty review artifacts
+  - maintenance cycles now attempt AI repair/reverification of repairable escalated artifacts before surfacing them as human exceptions

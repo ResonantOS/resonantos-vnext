@@ -238,6 +238,17 @@ type ArchivePromoteReviewArtifactControllerInput = {
   errorMessageOf: (error: unknown, fallback: string) => string;
 };
 
+type ArchivePromoteApprovedArtifactsControllerInput = {
+  artifacts: ArchiveReviewArtifact[];
+  actorId: string;
+  memoryProvider?: MemoryProviderBroker;
+  setChatNotice: Dispatch<SetStateAction<string | null>>;
+  setArchiveQueueBusy: Dispatch<SetStateAction<boolean>>;
+  setArchiveReviewArtifacts: Dispatch<SetStateAction<ArchiveReviewArtifact[]>>;
+  setArchivePromotionResult: Dispatch<SetStateAction<ArchivePromoteReviewArtifactResult | null>>;
+  errorMessageOf: (error: unknown, fallback: string) => string;
+};
+
 type ArchiveMaintenanceCycleControllerInput = {
   snapshot: ReadyShellSnapshot;
   memoryProvider?: MemoryProviderBroker;
@@ -834,6 +845,48 @@ export const promoteArchiveReviewArtifact = async ({
   }
 };
 
+export const promoteApprovedArchiveReviewArtifacts = async ({
+  artifacts,
+  actorId,
+  memoryProvider = livingArchiveMemoryProvider(),
+  setChatNotice,
+  setArchiveQueueBusy,
+  setArchiveReviewArtifacts,
+  setArchivePromotionResult,
+  errorMessageOf,
+}: ArchivePromoteApprovedArtifactsControllerInput): Promise<void> => {
+  const promotableArtifacts = artifacts.filter(
+    (artifact) =>
+      artifact.decision.status === "approved" &&
+      artifact.promotion?.status !== "promoted" &&
+      artifact.proposedPages.length > 0,
+  );
+
+  if (!promotableArtifacts.length) {
+    setChatNotice("No approved, unpromoted archive review artifacts are ready for trusted wiki promotion.");
+    return;
+  }
+
+  setArchiveQueueBusy(true);
+  setChatNotice(`Promoting ${promotableArtifacts.length} approved archive artifact(s) to the trusted wiki.`);
+  try {
+    const promoted: ArchivePromoteReviewArtifactResult[] = [];
+    for (const artifact of promotableArtifacts) {
+      promoted.push(await memoryProvider.promoteReviewArtifact({ artifactFile: artifact.artifactFile, actorId }));
+    }
+    const refreshedArtifacts = await memoryProvider.reviewArtifacts();
+    setArchiveReviewArtifacts(refreshedArtifacts);
+    setArchivePromotionResult(promoted.at(-1) ?? null);
+    const pagesWritten = promoted.reduce((total, result) => total + result.pagesWritten.length, 0);
+    const pagesSkipped = promoted.reduce((total, result) => total + result.skippedPages.length, 0);
+    setChatNotice(`Promoted ${pagesWritten} trusted wiki page(s) from ${promoted.length} approved artifact(s). ${pagesSkipped} skipped.`);
+  } catch (error) {
+    setChatNotice(errorMessageOf(error, "Failed to promote approved archive review artifacts."));
+  } finally {
+    setArchiveQueueBusy(false);
+  }
+};
+
 export const runArchiveMaintenanceCycle = async ({
   snapshot,
   memoryProvider = livingArchiveMemoryProvider(),
@@ -983,7 +1036,7 @@ export const runArchiveAiMemoryBuildJob = async ({
     setArchiveAiMemoryBuildResult(result);
     setArchiveAiMemoryBuildJobs(await requestArchiveAiMemoryBuildJobs());
     setChatNotice(
-      `AI Memory build ${result.status}: ${result.queuedThisRun} queued, ${result.processedThisRun} processed, ${result.promotedThisRun} promoted, ${result.queueRemaining} remaining.`,
+      `AI Memory build ${result.status}: ${result.recordsSeen} seen, ${result.queuedThisRun} queued, ${result.processedThisRun} processed, ${result.promotedThisRun} promoted, ${result.queueRemaining} remaining. Skipped: ${result.skippedProcessed} already processed, ${result.skippedUnsupported} unsupported, ${result.skippedMissing} missing.`,
     );
   } catch (error) {
     setChatNotice(errorMessageOf(error, "Failed to run the AI Memory build job."));

@@ -515,13 +515,35 @@ export const promptMessagesForThread = (
   thread: ConversationThread,
   compactState: ContextMemoryState | null,
 ): ConversationMessage[] => {
+  const usableProviderMessage = (message: ConversationMessage): boolean => {
+    if (!message.content.trim()) {
+      return false;
+    }
+    if (message.role === "assistant" && (message.status === "failed" || message.status === "interrupted")) {
+      return false;
+    }
+    return true;
+  };
+  const dropMessagesBeforeFirstUser = (messages: ConversationMessage[]): ConversationMessage[] => {
+    const firstUserIndex = messages.findIndex((message) => message.role === "user");
+    return firstUserIndex >= 0 ? messages.slice(firstUserIndex) : [];
+  };
+
   if (!compactState) {
-    return thread.messages;
+    return dropMessagesBeforeFirstUser(thread.messages.filter(usableProviderMessage));
   }
 
   const preserved = new Set(compactState.preservedRecentMessageIds);
   const compactEndIndex = thread.messages.findIndex((message) => message.id === compactState.sourceRange.toMessageId);
-  return thread.messages.filter((message, index) => preserved.has(message.id) || (compactEndIndex >= 0 && index > compactEndIndex));
+  if (compactEndIndex < 0) {
+    return dropMessagesBeforeFirstUser(thread.messages.filter(usableProviderMessage));
+  }
+  return dropMessagesBeforeFirstUser(thread.messages.filter((message, index) => {
+    if (!usableProviderMessage(message)) {
+      return false;
+    }
+    return preserved.has(message.id) || index > compactEndIndex;
+  }));
 };
 
 export const formatCompactStateForPrompt = (compactState: ContextMemoryState | null): string => {

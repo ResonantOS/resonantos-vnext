@@ -105,6 +105,19 @@ describe("runtime state migration", () => {
     expect(normalized.uiPreferences.pinnedChatThreadIds).toContain("thread-fork-custom");
   });
 
+  it("adds the default archive automation policy to older persisted state", () => {
+    const base = buildDefaultState([]);
+    const legacy = { ...base } as Partial<ResonantShellState>;
+    delete legacy.archiveAutomationPolicy;
+
+    const normalized = normalizeState(legacy as ResonantShellState, base);
+
+    expect(normalized.archiveAutomationPolicy).toEqual({
+      autoSyncEnabled: false,
+      aiMemoryBuilds: "off",
+    });
+  });
+
   it("preserves user-created provider profiles and runtime nodes during normalization", () => {
     const base = buildDefaultState([]);
     const gx10Provider = {
@@ -189,7 +202,7 @@ describe("runtime state migration", () => {
     expect(updated.providers.find((item) => item.id === provider.id)?.credentialStatus).toBe("configured");
   });
 
-  it("does not keep stale placeholder GX10 runtime health from older persisted state", () => {
+  it("rebases stale placeholder GX10 runtime state onto the verified default runtime", () => {
     const base = buildDefaultState([]);
     const persisted = {
       ...base,
@@ -208,8 +221,9 @@ describe("runtime state migration", () => {
     const normalized = normalizeState(persisted, base);
     const gx10 = normalized.runtimeNodes.find((node) => node.id === "node-gx10-qwen");
 
-    expect(gx10?.healthState).toBe("unavailable");
-    expect(gx10?.supportedModels).toEqual([]);
+    expect(gx10?.endpoint).toBe("http://192.168.1.77:30001/v1");
+    expect(gx10?.healthState).toBe("ready");
+    expect(gx10?.supportedModels).toEqual(["Qwen3.6-27B-Q4_K_M.gguf"]);
   });
 
   it("adds the default workspace layout to older persisted UI preferences", () => {

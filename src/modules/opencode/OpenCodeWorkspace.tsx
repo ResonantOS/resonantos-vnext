@@ -275,12 +275,24 @@ export function OpenCodeWorkspace({
 
       <section className="opencode-embed-shell" aria-label="OpenCode embedded workspace">
         {service ? (
-          <iframe
-            title="OpenCode workspace"
-            src={service.webUrl}
-            className="opencode-embed-frame"
-            sandbox="allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts"
-          />
+          <>
+            <div className={`opencode-trust-kernel ${service.trustKernelWarning ? "attention" : "ready"}`}>
+              <strong>{service.trustKernelWarning ? "Trust Kernel advisory unavailable" : "Trust Kernel advisory active"}</strong>
+              <span>
+                {service.trustKernelWarning
+                  ? service.trustKernelWarning
+                  : service.trustKernelPacketPath
+                    ? `Protocol packet: ${service.trustKernelPacketPath}`
+                    : "Protocol packet recorded for this OpenCode session."}
+              </span>
+            </div>
+            <iframe
+              title="OpenCode workspace"
+              src={service.webUrl}
+              className="opencode-embed-frame"
+              sandbox="allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts"
+            />
+          </>
         ) : (
           <div className="opencode-embed-placeholder">
             <strong>OpenCode UI will appear here after launch.</strong>

@@ -2,6 +2,7 @@ mod archive_service;
 mod browser_host_service;
 mod browser_native_service;
 mod browser_service;
+mod compute_service;
 mod delegation_service;
 mod hermes_service;
 mod host_state;
@@ -11,6 +12,7 @@ mod opencode_service;
 mod paperclip_service;
 mod provider_service;
 mod recovery_service;
+mod telegram_service;
 mod terminal_service;
 
 use std::collections::HashMap;
@@ -22,22 +24,10 @@ use serde_json::Value;
 use tauri::{AppHandle, Emitter, Window};
 
 use crate::archive_service::{
-    archive_system_memory_status, build_archive_tol_bundle, decide_archive_review_artifact,
-    import_archive_library, lint_archive, list_archive_ai_memory_build_jobs,
-    list_archive_ingest_requests, list_archive_review_artifacts,
-    list_archive_tol_bundle_candidates, list_imported_archive_libraries,
-    preflight_archive_library_import, process_archive_ingest_request,
-    promote_archive_review_artifact, query_archive_runtime_status, queue_archive_ingest_request,
-    queue_imported_library_for_ingest, read_archive_document,
-    read_archive_library_classification_review, refresh_archive_system_memory,
-    refresh_archive_wiki_navigation, run_archive_ai_memory_build_job, run_archive_background_cycle,
-    run_archive_maintenance_cycle, scan_archive_source_folders, search_archive,
-    semantic_lint_archive, write_archive_intake_artifact,
-    write_archive_library_reorganisation_plan, ArchiveAiMemoryBuildJobSummary,
-    ArchiveAiMemoryBuildRequest, ArchiveAiMemoryBuildResult, ArchiveBackgroundCycleRequest,
-    ArchiveBackgroundCycleResult, ArchiveDocumentPayload, ArchiveImportedLibrarySummary,
-    ArchiveIngestRequestRecord, ArchiveIngestRequestResult, ArchiveIntakeWriteRequest,
-    ArchiveIntakeWriteResult, ArchiveLibraryClassificationReview,
+    ArchiveAiMemoryBuildJobSummary, ArchiveAiMemoryBuildRequest, ArchiveAiMemoryBuildResult,
+    ArchiveBackgroundCycleRequest, ArchiveBackgroundCycleResult, ArchiveDocumentPayload,
+    ArchiveImportedLibrarySummary, ArchiveIngestRequestRecord, ArchiveIngestRequestResult,
+    ArchiveIntakeWriteRequest, ArchiveIntakeWriteResult, ArchiveLibraryClassificationReview,
     ArchiveLibraryClassificationReviewRequest, ArchiveLibraryImportRequest,
     ArchiveLibraryImportResult, ArchiveLibraryPreflightRequest, ArchiveLibraryPreflightResult,
     ArchiveLibraryReorganisationPlan, ArchiveLibraryReorganisationPlanRequest, ArchiveLintResult,
@@ -50,44 +40,64 @@ use crate::archive_service::{
     ArchiveSemanticLintResult, ArchiveSourceFolderScanRequest, ArchiveSourceFolderScanResult,
     ArchiveSystemMemoryRefreshResult, ArchiveSystemMemoryStatus, ArchiveTolBundleBuildRequest,
     ArchiveTolBundleBuildResult, ArchiveTolBundleCandidate, ArchiveWikiNavigationRefreshResult,
+    archive_system_memory_status, build_archive_tol_bundle, decide_archive_review_artifact,
+    import_archive_library, lint_archive, list_archive_ai_memory_build_jobs,
+    list_archive_ingest_requests, list_archive_review_artifacts,
+    list_archive_tol_bundle_candidates, list_imported_archive_libraries,
+    preflight_archive_library_import, process_archive_ingest_request,
+    promote_archive_review_artifact, query_archive_runtime_status, queue_archive_ingest_request,
+    queue_imported_library_for_ingest, read_archive_document,
+    read_archive_library_classification_review, refresh_archive_system_memory,
+    refresh_archive_wiki_navigation, run_archive_ai_memory_build_job, run_archive_background_cycle,
+    run_archive_maintenance_cycle, scan_archive_source_folders, search_archive,
+    semantic_lint_archive, write_archive_intake_artifact,
+    write_archive_library_reorganisation_plan,
 };
 use crate::browser_host_service::{
-    browser_host_required_capabilities, execute_browser_host_command,
-    execute_browser_visible_host_command, BrowserHostCommandRequest,
+    BrowserHostCommandRequest, browser_host_required_capabilities, execute_browser_host_command,
+    execute_browser_visible_host_command,
 };
 use crate::browser_native_service::{
-    execute_native_browser_embedded_hide, execute_native_browser_embedded_resize,
-    execute_native_browser_embedded_show, prepare_native_browser_application_if_available,
-    query_native_browser_attach_smoke, query_native_browser_bridge_probe,
-    query_native_browser_probe, NativeBrowserAttachSmokeRequest, NativeBrowserAttachSmokeResult,
+    NativeBrowserAttachSmokeRequest, NativeBrowserAttachSmokeResult,
     NativeBrowserBridgeProbeRequest, NativeBrowserBridgeProbeResult, NativeBrowserProbeRequest,
-    NativeBrowserProbeResult,
+    NativeBrowserProbeResult, execute_native_browser_embedded_hide,
+    execute_native_browser_embedded_resize, execute_native_browser_embedded_show,
+    prepare_native_browser_application_if_available, query_native_browser_attach_smoke,
+    query_native_browser_bridge_probe, query_native_browser_probe,
 };
 use crate::browser_service::{
-    execute_browser_close_session, execute_browser_open_url, execute_browser_session_click,
-    execute_browser_session_open_url, execute_browser_session_read_page,
-    execute_browser_session_screenshot, execute_browser_session_scroll,
-    execute_browser_start_session, install_browser_engine, query_browser_engine_status,
     BrowserCloseSessionResult, BrowserEngineInstallResult, BrowserEngineStatus,
     BrowserInteractionRequest, BrowserInteractionResult, BrowserNativeWebviewBoundsRequest,
     BrowserNativeWebviewRequest, BrowserNativeWebviewResult, BrowserOpenUrlRequest,
     BrowserOpenUrlResult, BrowserReadPageResult, BrowserSessionIdRequest, BrowserSessionRequest,
+    execute_browser_close_session, execute_browser_open_url, execute_browser_session_click,
+    execute_browser_session_open_url, execute_browser_session_read_page,
+    execute_browser_session_screenshot, execute_browser_session_scroll,
+    execute_browser_start_session, install_browser_engine, query_browser_engine_status,
 };
 #[cfg(not(target_os = "macos"))]
 use crate::browser_service::{
     execute_browser_native_webview_hide, execute_browser_native_webview_resize,
     execute_browser_native_webview_show,
 };
+use crate::compute_service::{
+    ComputePassiveDiagnosticsResult, ComputeRemoteProbeRequest, ComputeRemoteProbeResult,
+    ComputeSafeCommandRequest, ComputeSafeCommandResult, Gx10LlamaStatusResult,
+    Gx10LlamaSwitchRequest, Gx10LlamaSwitchResult, NasBackupStatusResult,
+    execute_local_safe_command, execute_remote_probe, query_gx10_llama_status,
+    query_local_passive_diagnostics, query_nas_backup_status, switch_gx10_llama_model,
+};
 use crate::delegation_service::{
-    create_task_workspace, finish_task_workspace, list_task_workspaces, read_task_workspace,
     CreateTaskWorkspaceRequest, FinishTaskWorkspaceRequest, FinishTaskWorkspaceResult,
-    ReadTaskWorkspaceRequest, TaskWorkspacePayload, TaskWorkspaceRecord,
+    ReadTaskWorkspaceRequest, TaskWorkspacePayload, TaskWorkspaceRecord, create_task_workspace,
+    finish_task_workspace, list_task_workspaces, read_task_workspace,
 };
 use crate::hermes_service::{
-    execute_hermes_chat, install_hermes, query_hermes_dashboard_status, query_hermes_status,
-    query_hermes_workspace_snapshot, start_hermes_dashboard, stop_hermes_dashboard,
     HermesChatRequest, HermesChatResult, HermesDashboardRequest, HermesDashboardStatus,
-    HermesInstallRequest, HermesInstallResult, HermesInstallStatus, HermesWorkspaceSnapshot,
+    HermesInstallRequest, HermesInstallResult, HermesInstallStatus, HermesStatusMode,
+    HermesStatusRequest, HermesWorkspaceSnapshot, execute_hermes_chat, install_hermes,
+    query_hermes_dashboard_status, query_hermes_status, query_hermes_workspace_snapshot,
+    start_hermes_dashboard, stop_hermes_dashboard,
 };
 use crate::host_state::{
     addons_dir, assert_addon_capabilities, assert_living_archive_host_access,
@@ -95,48 +105,53 @@ use crate::host_state::{
     write_provider_secrets,
 };
 use crate::memory_service::{
-    query_memory_service_status, start_memory_service, stop_memory_service, MemoryServiceResult,
-    MemoryServiceStartRequest, MemoryServiceStatus, MemoryServiceStatusRequest,
-    MemoryServiceStopRequest,
+    MemoryServiceResult, MemoryServiceStartRequest, MemoryServiceStatus,
+    MemoryServiceStatusRequest, MemoryServiceStopRequest, query_memory_service_status,
+    start_memory_service, stop_memory_service,
 };
 use crate::obsidian_service::{
-    archive_obsidian_note, create_obsidian_folder, create_obsidian_note, index_obsidian_vault,
-    list_obsidian_notes, move_obsidian_note, open_obsidian_note, query_obsidian_vault_status,
-    read_obsidian_note, write_obsidian_note, ObsidianArchiveNoteRequest,
-    ObsidianCreateFolderRequest, ObsidianCreateNoteRequest, ObsidianListNotesRequest,
-    ObsidianMoveNoteRequest, ObsidianNoteOperationResult, ObsidianNotePayload, ObsidianNoteSummary,
-    ObsidianOpenNoteRequest, ObsidianOpenNoteResult, ObsidianReadNoteRequest, ObsidianVaultIndex,
-    ObsidianVaultIndexRequest, ObsidianVaultRequest, ObsidianVaultStatus, ObsidianWriteNoteRequest,
-    ObsidianWriteNoteResult,
+    ObsidianArchiveNoteRequest, ObsidianCreateFolderRequest, ObsidianCreateNoteRequest,
+    ObsidianListNotesRequest, ObsidianMoveNoteRequest, ObsidianNoteOperationResult,
+    ObsidianNotePayload, ObsidianNoteSummary, ObsidianOpenNoteRequest, ObsidianOpenNoteResult,
+    ObsidianReadNoteRequest, ObsidianVaultIndex, ObsidianVaultIndexRequest, ObsidianVaultRequest,
+    ObsidianVaultStatus, ObsidianWriteNoteRequest, ObsidianWriteNoteResult, archive_obsidian_note,
+    create_obsidian_folder, create_obsidian_note, index_obsidian_vault, list_obsidian_notes,
+    move_obsidian_note, open_obsidian_note, query_obsidian_vault_status, read_obsidian_note,
+    write_obsidian_note,
 };
 use crate::opencode_service::{
-    query_opencode_status, start_opencode_service, stop_opencode_service, OpenCodeServiceResult,
-    OpenCodeStartRequest, OpenCodeStatus, OpenCodeStopRequest,
+    OpenCodeServiceResult, OpenCodeStartRequest, OpenCodeStatus, OpenCodeStopRequest,
+    OpenCodeTrustEventRequest, TrustKernelAdvisory, query_opencode_status,
+    record_opencode_trust_event, start_opencode_service, stop_opencode_service,
 };
 use crate::paperclip_service::{
-    create_paperclip_issue_from_delegation, query_paperclip_dashboard_snapshot,
-    query_paperclip_status, start_paperclip_service, stop_paperclip_service,
     PaperclipCreateIssueRequest, PaperclipCreateIssueResult, PaperclipDashboardRequest,
     PaperclipDashboardSnapshot, PaperclipServiceResult, PaperclipStartRequest, PaperclipStatus,
-    PaperclipStatusRequest, PaperclipStopRequest,
+    PaperclipStatusRequest, PaperclipStopRequest, create_paperclip_issue_from_delegation,
+    query_paperclip_dashboard_snapshot, query_paperclip_status, start_paperclip_service,
+    stop_paperclip_service,
 };
 use crate::provider_service::{
-    abort_provider_service_chat_stream, execute_archive_ingest_probe,
+    ArchiveIngestProbeRequest, ArchiveIngestProbeResult, ChatMessageInput, LocalRuntimeStatus,
+    ProviderDiagnosticReport, ProviderServiceChatRequest, ProviderServiceChatStreamRequest,
+    ProviderSetupProbeRequest, ProviderSetupProbeResult, ProviderSmokeTestResult,
+    RecoveryRouteCandidate, abort_provider_service_chat_stream, execute_archive_ingest_probe,
     execute_provider_service_chat, execute_provider_service_chat_stream,
     execute_provider_setup_probe, execute_provider_smoke_test, query_local_runtime_status,
-    query_provider_diagnostics, query_recovery_route_candidates, ArchiveIngestProbeRequest,
-    ArchiveIngestProbeResult, ChatMessageInput, LocalRuntimeStatus, ProviderDiagnosticReport,
-    ProviderServiceChatRequest, ProviderServiceChatStreamRequest, ProviderSetupProbeRequest,
-    ProviderSetupProbeResult, ProviderSmokeTestResult, RecoveryRouteCandidate,
+    query_provider_diagnostics, query_recovery_route_candidates,
 };
 use crate::recovery_service::{
-    execute_engineer_recovery_turn, EngineerRecoveryTurnRequest, EngineerRecoveryTurnResult,
+    EngineerRecoveryTurnRequest, EngineerRecoveryTurnResult, execute_engineer_recovery_turn,
+};
+use crate::telegram_service::{
+    TelegramServiceStartRequest, TelegramServiceStatus, save_telegram_bot_token,
+    start_telegram_service, stop_telegram_service, telegram_status,
 };
 use crate::terminal_service::{
+    TerminalPtySessionResult, TerminalResizePtyRequest, TerminalRunCommandRequest,
+    TerminalRunCommandResult, TerminalStartPtyRequest, TerminalWritePtyRequest,
     resize_terminal_pty, run_terminal_command, start_terminal_pty, stop_terminal_pty,
-    write_terminal_pty, TerminalPtySessionResult, TerminalResizePtyRequest,
-    TerminalRunCommandRequest, TerminalRunCommandResult, TerminalStartPtyRequest,
-    TerminalWritePtyRequest,
+    write_terminal_pty,
 };
 
 #[tauri::command]
@@ -182,6 +197,42 @@ fn delegation_finish_task_workspace(
     request: FinishTaskWorkspaceRequest,
 ) -> Result<FinishTaskWorkspaceResult, String> {
     finish_task_workspace(&app, request)
+}
+
+#[tauri::command]
+fn compute_local_passive_diagnostics() -> ComputePassiveDiagnosticsResult {
+    query_local_passive_diagnostics()
+}
+
+#[tauri::command]
+fn compute_local_safe_command(
+    request: ComputeSafeCommandRequest,
+) -> Result<ComputeSafeCommandResult, String> {
+    execute_local_safe_command(request)
+}
+
+#[tauri::command]
+fn compute_remote_probe(
+    request: ComputeRemoteProbeRequest,
+) -> Result<ComputeRemoteProbeResult, String> {
+    execute_remote_probe(request)
+}
+
+#[tauri::command]
+fn compute_gx10_llama_status() -> Result<Gx10LlamaStatusResult, String> {
+    query_gx10_llama_status()
+}
+
+#[tauri::command]
+fn compute_gx10_llama_switch(
+    request: Gx10LlamaSwitchRequest,
+) -> Result<Gx10LlamaSwitchResult, String> {
+    switch_gx10_llama_model(request)
+}
+
+#[tauri::command]
+fn compute_nas_backup_status() -> Result<NasBackupStatusResult, String> {
+    query_nas_backup_status()
 }
 
 #[tauri::command]
@@ -258,6 +309,35 @@ fn save_provider_secret(
         secrets.insert(provider_id, trimmed);
     }
     write_provider_secrets(&app, &secrets)
+}
+
+#[tauri::command]
+fn telegram_save_bot_token(app: AppHandle, bot_token: String) -> Result<(), String> {
+    save_telegram_bot_token(&app, bot_token)
+}
+
+#[tauri::command]
+fn telegram_service_status(
+    app: AppHandle,
+    channel_id: Option<String>,
+) -> Result<TelegramServiceStatus, String> {
+    telegram_status(&app, channel_id)
+}
+
+#[tauri::command]
+async fn telegram_service_start(
+    app: AppHandle,
+    request: TelegramServiceStartRequest,
+) -> Result<TelegramServiceStatus, String> {
+    start_telegram_service(app, request).await
+}
+
+#[tauri::command]
+fn telegram_service_stop(
+    app: AppHandle,
+    channel_id: Option<String>,
+) -> Result<TelegramServiceStatus, String> {
+    stop_telegram_service(&app, channel_id)
 }
 
 #[tauri::command]
@@ -669,8 +749,17 @@ fn paperclip_status(request: PaperclipStatusRequest) -> PaperclipStatus {
 }
 
 #[tauri::command]
-fn hermes_status(profile_home: Option<String>) -> HermesInstallStatus {
-    query_hermes_status(profile_home)
+fn hermes_status(
+    app: AppHandle,
+    request: HermesStatusRequest,
+) -> Result<HermesInstallStatus, String> {
+    let mode = if request.executable.unwrap_or(false) {
+        assert_addon_capabilities(&app, "addon.hermes", &["shell"])?;
+        HermesStatusMode::Executable
+    } else {
+        HermesStatusMode::Passive
+    };
+    Ok(query_hermes_status(request.profile_home, mode))
 }
 
 #[tauri::command]
@@ -685,13 +774,21 @@ async fn hermes_install(
 }
 
 #[tauri::command]
-fn hermes_workspace_snapshot(profile_home: Option<String>) -> HermesWorkspaceSnapshot {
-    query_hermes_workspace_snapshot(profile_home)
+fn hermes_workspace_snapshot(
+    app: AppHandle,
+    profile_home: Option<String>,
+) -> Result<HermesWorkspaceSnapshot, String> {
+    assert_addon_capabilities(&app, "addon.hermes", &["shell", "ui-embedding"])?;
+    Ok(query_hermes_workspace_snapshot(profile_home))
 }
 
 #[tauri::command]
-fn hermes_dashboard_status(profile_home: Option<String>) -> HermesDashboardStatus {
-    query_hermes_dashboard_status(profile_home, None, None)
+fn hermes_dashboard_status(
+    app: AppHandle,
+    profile_home: Option<String>,
+) -> Result<HermesDashboardStatus, String> {
+    assert_addon_capabilities(&app, "addon.hermes", &["shell", "ui-embedding"])?;
+    Ok(query_hermes_dashboard_status(profile_home, None, None))
 }
 
 #[tauri::command]
@@ -717,7 +814,7 @@ async fn hermes_chat(
     app: AppHandle,
     request: HermesChatRequest,
 ) -> Result<HermesChatResult, String> {
-    assert_addon_capabilities(&app, "addon.hermes", &["shell"])?;
+    assert_addon_capabilities(&app, "addon.hermes", &["shell", "providers"])?;
     tauri::async_runtime::spawn_blocking(move || execute_hermes_chat(request))
         .await
         .map_err(|error| format!("Hermes bridge task failed: {error}"))?
@@ -770,6 +867,15 @@ fn opencode_stop_service(
 ) -> Result<OpenCodeServiceResult, String> {
     assert_addon_capabilities(&app, "addon.opencode", &["shell"])?;
     stop_opencode_service(request)
+}
+
+#[tauri::command]
+fn opencode_record_trust_event(
+    app: AppHandle,
+    request: OpenCodeTrustEventRequest,
+) -> Result<TrustKernelAdvisory, String> {
+    assert_addon_capabilities(&app, "addon.opencode", &["shell"])?;
+    record_opencode_trust_event(request)
 }
 
 #[tauri::command]
@@ -910,7 +1016,7 @@ async fn archive_process_ingest_request(
     app: AppHandle,
     request: ArchiveProcessIngestRequest,
 ) -> Result<ArchiveProcessIngestResult, String> {
-    assert_living_archive_host_access(&app, &["archive-read", "providers"])?;
+    assert_living_archive_host_access(&app, &["archive-read", "providers", "filesystem"])?;
     process_archive_ingest_request(&app, request).await
 }
 
@@ -962,7 +1068,7 @@ fn archive_review_decision(
     app: AppHandle,
     request: ArchiveReviewDecisionRequest,
 ) -> Result<ArchiveReviewDecisionResult, String> {
-    assert_living_archive_host_access(&app, &["archive-read"])?;
+    assert_living_archive_host_access(&app, &["archive-read", "filesystem"])?;
     decide_archive_review_artifact(&app, request)
 }
 
@@ -1046,6 +1152,10 @@ async fn provider_diagnostics(
 #[tauri::command]
 async fn provider_service_chat_completion(
     app: AppHandle,
+    request_id: Option<String>,
+    thread_id: Option<String>,
+    agent_id: Option<String>,
+    channel_id: Option<String>,
     provider_id: String,
     provider_type: String,
     api_base_url: Option<String>,
@@ -1061,6 +1171,10 @@ async fn provider_service_chat_completion(
     execute_provider_service_chat(
         &app,
         ProviderServiceChatRequest {
+            request_id,
+            thread_id,
+            agent_id,
+            channel_id,
             provider_id,
             provider_type,
             api_base_url,
@@ -1082,6 +1196,9 @@ async fn provider_service_chat_completion_stream(
     app: AppHandle,
     window: Window,
     run_id: String,
+    thread_id: Option<String>,
+    agent_id: Option<String>,
+    channel_id: Option<String>,
     provider_id: String,
     provider_type: String,
     api_base_url: Option<String>,
@@ -1099,6 +1216,9 @@ async fn provider_service_chat_completion_stream(
         &window,
         ProviderServiceChatStreamRequest {
             run_id,
+            thread_id,
+            agent_id,
+            channel_id,
             provider_id,
             provider_type,
             api_base_url,
@@ -1130,6 +1250,10 @@ async fn provider_smoke_test(
     execute_provider_smoke_test(
         &app,
         ProviderServiceChatRequest {
+            request_id: Some("provider-smoke-test".to_string()),
+            thread_id: None,
+            agent_id: None,
+            channel_id: None,
             provider_id,
             provider_type,
             api_base_url,
@@ -1221,8 +1345,18 @@ pub fn run() {
             delegation_finish_task_workspace,
             list_sideloaded_addons,
             sideload_addon_manifest,
+            compute_local_passive_diagnostics,
+            compute_local_safe_command,
+            compute_remote_probe,
+            compute_gx10_llama_status,
+            compute_gx10_llama_switch,
+            compute_nas_backup_status,
             load_provider_secret_statuses,
             save_provider_secret,
+            telegram_save_bot_token,
+            telegram_service_status,
+            telegram_service_start,
+            telegram_service_stop,
             local_runtime_status,
             archive_runtime_status,
             archive_scan_source_folders,
@@ -1276,6 +1410,7 @@ pub fn run() {
             opencode_status,
             opencode_start_service,
             opencode_stop_service,
+            opencode_record_trust_event,
             paperclip_status,
             paperclip_start_service,
             paperclip_stop_service,

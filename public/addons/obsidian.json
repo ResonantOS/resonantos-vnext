@@ -98,6 +98,64 @@
       "Delegated organization proposals must not move or rewrite vault content without user approval."
     ]
   },
+  "workflowBoundaries": [
+    {
+      "id": "vault-as-human-workspace",
+      "label": "Vault as human workspace",
+      "jobToBeDone": "Expose an Obsidian-compatible markdown vault as a user-managed knowledge workspace connected to Living Archive intake.",
+      "userValue": "The human can keep editing notes in a familiar markdown/vault structure while ResonantOS tracks changes for memory intake.",
+      "repeatability": "workflow-package",
+      "owner": "human",
+      "nonGoals": [
+        "Force Obsidian as a core dependency",
+        "Rewrite vault notes without approval",
+        "Promote vault notes directly into trusted AI Memory pages"
+      ]
+    }
+  ],
+  "skills": [
+    {
+      "id": "vault-organization-assist",
+      "name": "Vault organization assist",
+      "description": "Help the human organize markdown notes with tags, wikilinks, and source boundaries while preserving review gates.",
+      "documentPath": "docs/architecture/addon-skills/obsidian/VAULT_ORGANIZATION_ASSIST.md",
+      "invocation": "agent-suggested",
+      "requiredCapabilities": ["filesystem", "archive-read", "archive-intake-write"],
+      "requiredTools": ["obsidian.vault_index", "obsidian.write_note"]
+    }
+  ],
+  "connectors": [
+    {
+      "id": "markdown-vault",
+      "name": "Markdown vault",
+      "type": "filesystem",
+      "description": "Connects a user-selected markdown or Obsidian vault to ResonantOS through audited filesystem operations.",
+      "requiredCapabilities": ["filesystem"],
+      "configScope": "user-config"
+    }
+  ],
+  "scripts": [
+    {
+      "id": "vault-index-preflight",
+      "name": "Vault index preflight",
+      "description": "Index markdown notes, tags, wikilinks, and backlinks before organization or intake work.",
+      "commandRef": "obsidian.vault_index",
+      "runPolicy": "preflight",
+      "deterministic": true,
+      "requiredCapabilities": ["filesystem"],
+      "producesArtifacts": ["file-list", "diagnostic-report"],
+      "requiresHumanApproval": false
+    }
+  ],
+  "hooks": [
+    {
+      "id": "after-vault-intake-index",
+      "event": "after-archive-intake",
+      "handlerRef": "vault-index-preflight",
+      "requiredCapabilities": ["filesystem"],
+      "failurePolicy": "warn"
+    }
+  ],
   "installHooks": {
     "onInstall": "bind-vault"
   },

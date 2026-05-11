@@ -178,9 +178,41 @@
 
 .opencode-embed-shell {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   grid-row: 5;
   min-height: 0;
   overflow: hidden;
+}
+
+.opencode-trust-kernel {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  padding: 0.32rem 0.55rem;
+  border-bottom: 1px solid rgba(138, 128, 112, 0.12);
+  font-size: 0.68rem;
+}
+
+.opencode-trust-kernel strong {
+  flex: 0 0 auto;
+  color: var(--text-primary);
+}
+
+.opencode-trust-kernel span {
+  min-width: 0;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.opencode-trust-kernel.ready {
+  background: rgba(16, 185, 129, 0.06);
+}
+
+.opencode-trust-kernel.attention {
+  background: rgba(251, 191, 36, 0.08);
 }
 
 .opencode-embed-frame {

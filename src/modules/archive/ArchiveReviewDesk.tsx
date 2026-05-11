@@ -2,14 +2,17 @@
 // Intent citation: docs/architecture/ADR-011-living-archive-host-service.md
 
 import type {
+  ArchiveAiMemoryAutomationCostPolicy,
   ArchiveAiMemoryBuildJobSummary,
   ArchiveAiMemoryBuildResult,
+  ArchiveAutomationPolicy,
   ArchiveMaintenanceCycleResult,
   ArchivePromoteReviewArtifactResult,
   ArchiveProcessIngestResult,
   ArchiveQueuedIngestRequest,
   ArchiveReviewArtifact,
   ArchiveReviewDecisionResult,
+  ProviderCostPosture,
 } from "../../core/contracts";
 import { Panel } from "../../components/Panel";
 
@@ -23,14 +26,18 @@ type ArchiveReviewDeskProps = {
   archiveMaintenanceResult: ArchiveMaintenanceCycleResult | null;
   archiveAiMemoryBuildResult: ArchiveAiMemoryBuildResult | null;
   archiveAiMemoryBuildJobs: ArchiveAiMemoryBuildJobSummary[];
-  autoMaintenanceEnabled: boolean;
+  archiveAutomationPolicy: ArchiveAutomationPolicy;
+  archiveAiMemoryRouteCostPosture?: ProviderCostPosture;
   onRefreshArchiveQueue: () => void;
   onProcessArchiveRequest: (requestFile: string) => void;
   onApproveReviewArtifact: (artifactFile: string) => void;
+  onHumanApproveReviewArtifact: (artifactFile: string) => void;
   onEscalateReviewArtifact: (artifactFile: string) => void;
   onRejectReviewArtifact: (artifactFile: string) => void;
+  onHumanRejectReviewArtifact: (artifactFile: string) => void;
   onPromoteReviewArtifact: (artifactFile: string) => void;
-  onToggleAutoMaintenance: () => void;
+  onPromoteApprovedArtifacts: () => void;
+  onUpdateArchiveAutomationPolicy: (patch: Partial<ArchiveAutomationPolicy>) => void;
   onRunArchiveMaintenance: () => void;
   onContinueAiMemoryBuild: (manifestPath: string) => void;
 };
@@ -69,19 +76,30 @@ export function ArchiveReviewDesk({
   archiveMaintenanceResult,
   archiveAiMemoryBuildResult,
   archiveAiMemoryBuildJobs,
-  autoMaintenanceEnabled,
+  archiveAutomationPolicy,
+  archiveAiMemoryRouteCostPosture,
   onRefreshArchiveQueue,
   onProcessArchiveRequest,
   onApproveReviewArtifact,
+  onHumanApproveReviewArtifact,
   onEscalateReviewArtifact,
   onRejectReviewArtifact,
+  onHumanRejectReviewArtifact,
   onPromoteReviewArtifact,
-  onToggleAutoMaintenance,
+  onPromoteApprovedArtifacts,
+  onUpdateArchiveAutomationPolicy,
   onRunArchiveMaintenance,
   onContinueAiMemoryBuild,
 }: ArchiveReviewDeskProps) {
   const pendingArtifacts = archiveReviewArtifacts.filter((artifact) => artifact.decision.status === "pending").length;
-  const approvedArtifacts = archiveReviewArtifacts.filter((artifact) => artifact.decision.status === "approved").length;
+  const escalatedArtifacts = archiveReviewArtifacts.filter((artifact) => artifact.decision.status === "escalated").length;
+  const approvedUnpromotedArtifacts = archiveReviewArtifacts.filter(
+    (artifact) =>
+      artifact.decision.status === "approved" &&
+      artifact.promotion?.status !== "promoted" &&
+      artifact.proposedPages.length > 0,
+  ).length;
+  const promotedArtifacts = archiveReviewArtifacts.filter((artifact) => artifact.promotion?.status === "promoted").length;
 
   return (
     <section className="archive-review-desk" aria-label="Living Archive review desk">
@@ -94,8 +112,20 @@ export function ArchiveReviewDesk({
             <button type="button" className="button-primary touch-action" onClick={onRunArchiveMaintenance} disabled={archiveQueueBusy}>
               {archiveQueueBusy ? "Synchronising..." : "Run Full Archive Sync"}
             </button>
-            <button type="button" className="button-secondary touch-action" onClick={onToggleAutoMaintenance}>
-              {autoMaintenanceEnabled ? "Auto On" : "Auto Off"}
+            <button
+              type="button"
+              className="button-secondary touch-action"
+              onClick={onPromoteApprovedArtifacts}
+              disabled={archiveQueueBusy || approvedUnpromotedArtifacts === 0}
+            >
+              Promote Approved
+            </button>
+            <button
+              type="button"
+              className="button-secondary touch-action"
+              onClick={() => onUpdateArchiveAutomationPolicy({ autoSyncEnabled: !archiveAutomationPolicy.autoSyncEnabled })}
+            >
+              {archiveAutomationPolicy.autoSyncEnabled ? "Auto On" : "Auto Off"}
             </button>
             <button type="button" className="button-secondary touch-action" onClick={onRefreshArchiveQueue} disabled={archiveQueueBusy}>
               {archiveQueueBusy ? "Refreshing..." : "Refresh Queue"}
@@ -106,7 +136,9 @@ export function ArchiveReviewDesk({
         <div className="archive-review-stats" aria-label="Archive review status">
           <ReviewStat label="Queued" value={archiveQueue.length} />
           <ReviewStat label="Pending Review" value={pendingArtifacts} />
-          <ReviewStat label="Approved" value={approvedArtifacts} />
+          <ReviewStat label="Needs Human" value={escalatedArtifacts} />
+          <ReviewStat label="Approved To Promote" value={approvedUnpromotedArtifacts} />
+          <ReviewStat label="Already In Wiki" value={promotedArtifacts} />
         </div>
         <ol className="archive-review-steps">
           <li>Queue source</li>
@@ -115,11 +147,17 @@ export function ArchiveReviewDesk({
           <li>Promote approved pages to the trusted wiki</li>
           <li>Regenerate wiki index.md and log.md</li>
         </ol>
+        <ArchiveAutomationControls
+          policy={archiveAutomationPolicy}
+          routeCostPosture={archiveAiMemoryRouteCostPosture}
+          onUpdatePolicy={onUpdateArchiveAutomationPolicy}
+        />
         {archiveMaintenanceResult ? (
           <div className="archive-maintenance-summary" role="status">
             <strong>Last maintenance cycle</strong>
             <p>
-              {archiveMaintenanceResult.processed.length} processed · {archiveMaintenanceResult.promoted.length} promoted ·{" "}
+              {archiveMaintenanceResult.processed.length} processed · {archiveMaintenanceResult.repaired.length} repaired ·{" "}
+              {archiveMaintenanceResult.promoted.length} promoted ·{" "}
               {archiveMaintenanceResult.navigation.pagesIndexed} indexed ·{" "}
               {archiveMaintenanceResult.navigation.activityEntries} log entries
             </p>
@@ -132,6 +170,10 @@ export function ArchiveReviewDesk({
             <p>
               {archiveAiMemoryBuildResult.queuedThisRun} queued · {archiveAiMemoryBuildResult.processedThisRun} processed ·{" "}
               {archiveAiMemoryBuildResult.promotedThisRun} promoted · {archiveAiMemoryBuildResult.queueRemaining} remaining
+            </p>
+            <p>
+              {archiveAiMemoryBuildResult.recordsSeen} seen · {archiveAiMemoryBuildResult.skippedProcessed} already processed ·{" "}
+              {archiveAiMemoryBuildResult.skippedUnsupported} unsupported · {archiveAiMemoryBuildResult.skippedMissing} missing
             </p>
             <p>{archiveAiMemoryBuildResult.nextAction}</p>
             <p className="mono-inline">{archiveAiMemoryBuildResult.jobFile}</p>
@@ -177,8 +219,8 @@ export function ArchiveReviewDesk({
           </div>
         ) : null}
         <div className="inline-notice">
-          Auto sync is opt-in because provider usage can cost money. When enabled, ResonantOS periodically runs archive
-          maintenance, refreshes wiki navigation, and continues non-blocked AI Memory builds while the app is open.
+          Auto sync is opt-in and persisted. AI Memory build continuation uses the policy above before any unattended
+          provider-routed batch runs.
         </div>
       </Panel>
 
@@ -241,8 +283,10 @@ export function ArchiveReviewDesk({
                 artifact={artifact}
                 archiveQueueBusy={archiveQueueBusy}
                 onApproveReviewArtifact={onApproveReviewArtifact}
+                onHumanApproveReviewArtifact={onHumanApproveReviewArtifact}
                 onEscalateReviewArtifact={onEscalateReviewArtifact}
                 onRejectReviewArtifact={onRejectReviewArtifact}
+                onHumanRejectReviewArtifact={onHumanRejectReviewArtifact}
                 onPromoteReviewArtifact={onPromoteReviewArtifact}
               />
             ))}
@@ -296,6 +340,58 @@ export function ArchiveReviewDesk({
   );
 }
 
+function ArchiveAutomationControls({
+  policy,
+  routeCostPosture,
+  onUpdatePolicy,
+}: {
+  policy: ArchiveAutomationPolicy;
+  routeCostPosture?: ProviderCostPosture;
+  onUpdatePolicy: (patch: Partial<ArchiveAutomationPolicy>) => void;
+}) {
+  const options: Array<{ value: ArchiveAiMemoryAutomationCostPolicy; label: string; helper: string }> = [
+    {
+      value: "off",
+      label: "Manual only",
+      helper: "Auto sync can refresh maintenance, but AI Memory build batches wait for the user.",
+    },
+    {
+      value: "local-and-subscription",
+      label: "Local/subscription routes",
+      helper: "Allows unattended continuation only on local, emergency-local, or subscription routes.",
+    },
+    {
+      value: "any-configured-route",
+      label: "Any configured route",
+      helper: "Allows paid API routes too. Use only when the user accepts provider cost risk.",
+    },
+  ];
+
+  return (
+    <div className="archive-maintenance-summary" aria-label="Archive automation policy">
+      <strong>Automation policy</strong>
+      <p>
+        Archive route cost: <span className="provider-scope">{routeCostPosture ?? "unknown"}</span>
+      </p>
+      <div className="segmented-control" role="group" aria-label="AI Memory automation cost policy">
+        {options.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            className={policy.aiMemoryBuilds === option.value ? "active" : ""}
+            onClick={() => onUpdatePolicy({ aiMemoryBuilds: option.value })}
+            title={option.helper}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+      <p>{options.find((option) => option.value === policy.aiMemoryBuilds)?.helper}</p>
+      {policy.updatedAt ? <p className="provider-scope">Saved {policy.updatedAt}</p> : null}
+    </div>
+  );
+}
+
 function ReviewStat({ label, value }: { label: string; value: number }) {
   return (
     <div className="archive-review-stat">
@@ -309,20 +405,26 @@ function ArchiveReviewArtifactCard({
   artifact,
   archiveQueueBusy,
   onApproveReviewArtifact,
+  onHumanApproveReviewArtifact,
   onEscalateReviewArtifact,
   onRejectReviewArtifact,
+  onHumanRejectReviewArtifact,
   onPromoteReviewArtifact,
 }: {
   artifact: ArchiveReviewArtifact;
   archiveQueueBusy: boolean;
   onApproveReviewArtifact: (artifactFile: string) => void;
+  onHumanApproveReviewArtifact: (artifactFile: string) => void;
   onEscalateReviewArtifact: (artifactFile: string) => void;
   onRejectReviewArtifact: (artifactFile: string) => void;
+  onHumanRejectReviewArtifact: (artifactFile: string) => void;
   onPromoteReviewArtifact: (artifactFile: string) => void;
 }) {
   const strategistCanApprove = artifact.recommendedTier !== "human-review";
   const isPending = artifact.decision.status === "pending";
+  const isEscalated = artifact.decision.status === "escalated";
   const isApproved = artifact.decision.status === "approved";
+  const isPromoted = artifact.promotion?.status === "promoted";
   const proposedPages = artifact.proposedPages.map(proposedPageOf);
 
   return (
@@ -335,7 +437,9 @@ function ArchiveReviewArtifactCard({
             {artifact.sourceType} · {artifact.intent} · {artifact.model} via {artifact.providerId}
           </p>
         </div>
-        <span className={statusToneClass(artifact.decision.status)}>{artifact.decision.status}</span>
+        <span className={isPromoted ? "tone tone-active" : statusToneClass(artifact.decision.status)}>
+          {isPromoted ? "in wiki" : artifact.decision.status}
+        </span>
       </div>
 
       <p>{artifact.summary}</p>
@@ -405,7 +509,35 @@ function ArchiveReviewArtifactCard({
             {artifact.decision.actorId ?? "policy"} · {artifact.decision.tierApplied ?? artifact.recommendedTier} ·{" "}
             {artifact.decision.decidedAt ?? artifact.checkedAt}
           </div>
-          {isApproved ? (
+          {isEscalated ? (
+            <>
+              <div className="inline-notice">
+                Human review required. Approve only after checking that the proposed pages are accurate, useful, and safe
+                to enter trusted wiki memory.
+              </div>
+              <button
+                type="button"
+                className="button-secondary touch-action"
+                onClick={() => onHumanApproveReviewArtifact(artifact.artifactFile)}
+                disabled={archiveQueueBusy || proposedPages.length === 0}
+              >
+                Human Approve
+              </button>
+              <button
+                type="button"
+                className="button-secondary touch-action"
+                onClick={() => onHumanRejectReviewArtifact(artifact.artifactFile)}
+                disabled={archiveQueueBusy}
+              >
+                Human Reject
+              </button>
+            </>
+          ) : isPromoted ? (
+            <div className="inline-notice">
+              Promoted {artifact.promotion?.pagesWritten ?? 0} page(s) to the trusted wiki ·{" "}
+              {artifact.promotion?.actorId ?? "archive-ingest.core"} · {artifact.promotion?.promotedAt ?? "time unavailable"}
+            </div>
+          ) : isApproved ? (
             <button
               type="button"
               className="button-secondary touch-action"

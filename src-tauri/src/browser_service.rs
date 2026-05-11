@@ -8,11 +8,11 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tauri::{AppHandle, Manager};
 #[cfg(not(target_os = "macos"))]
 use tauri::{LogicalPosition, LogicalSize, WebviewBuilder, WebviewUrl};
-use tungstenite::{connect, Message};
+use tungstenite::{Message, connect};
 
 type CdpSocket = tungstenite::WebSocket<tungstenite::stream::MaybeTlsStream<std::net::TcpStream>>;
 

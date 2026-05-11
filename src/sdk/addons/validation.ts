@@ -70,6 +70,24 @@ const modelMetadataSources = ["runtime-audit", "provider-profile", "manifest-def
 const outputFilteringModes = ["assistant-reply-only", "structured-events", "raw-log"] as const;
 const archiveReadModes = ["none", "read-only-context", "retrieval-with-citations"] as const;
 const archiveWriteModes = ["none", "intake-only"] as const;
+const workflowRepeatabilityModes = ["one-off", "repeatable", "workflow-package"] as const;
+const workflowOwners = ["human", "augmentor", "engineer", "addon-agent", "external-system"] as const;
+const skillInvocationModes = ["manual", "agent-suggested", "automatic"] as const;
+const connectorTypes = ["mcp-server", "app-connector", "api", "local-runtime", "filesystem"] as const;
+const connectorConfigScopes = ["host-vault", "addon-private", "user-config", "none"] as const;
+const scriptRunPolicies = ["manual", "preflight", "postflight", "scheduled", "on-demand"] as const;
+const hookEvents = [
+  "before-install",
+  "after-install",
+  "before-enable",
+  "after-enable",
+  "before-disable",
+  "health-check",
+  "before-task-complete",
+  "before-archive-ingest",
+  "after-archive-intake",
+] as const;
+const hookFailurePolicies = ["block", "degrade", "warn"] as const;
 
 const addonIdPattern = /^addon\.[a-z0-9][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*)*$/;
 const semanticVersionPattern = /^\d+\.\d+\.\d+(?:[-+][a-z0-9.-]+)?$/i;
@@ -158,6 +176,24 @@ const validateRequiredToolReference = (
 ) => {
   validateStringValue(issues, value, path);
   validateToolReference(issues, value, path, declaredToolNames);
+};
+
+const validateUniqueStringId = (
+  issues: AddOnValidationIssue[],
+  value: unknown,
+  path: string,
+  seen: Set<string>,
+  duplicateCode: string,
+  label: string,
+) => {
+  validateStringValue(issues, value, path);
+  if (!isString(value)) {
+    return;
+  }
+  if (seen.has(value)) {
+    pushIssue(issues, "error", duplicateCode, path, `${label} ids must be unique inside a manifest.`);
+  }
+  seen.add(value);
 };
 
 const validateEnum = <T extends string>(
@@ -593,6 +629,191 @@ export const validateAddOnManifest = (
           "augmentor-skill-audit-boolean",
           `${path}.auditLogRequired`,
           "Augmentor skill auditLogRequired must be boolean.",
+        );
+      }
+    });
+  }
+
+  if (Array.isArray(candidate.workflowBoundaries)) {
+    const boundaryIds = new Set<string>();
+    candidate.workflowBoundaries.forEach((boundary, index) => {
+      const path = `workflowBoundaries[${index}]`;
+      if (!isRecord(boundary)) {
+        pushIssue(issues, "error", "workflow-boundary-object", path, "Workflow boundary must be an object.");
+        return;
+      }
+      validateUniqueStringId(issues, boundary.id, `${path}.id`, boundaryIds, "duplicate-workflow-boundary", "Workflow boundary");
+      validateStringValue(issues, boundary.label, `${path}.label`);
+      validateStringValue(issues, boundary.jobToBeDone, `${path}.jobToBeDone`);
+      validateStringValue(issues, boundary.userValue, `${path}.userValue`);
+      validateEnum(issues, boundary.repeatability, workflowRepeatabilityModes, `${path}.repeatability`);
+      validateEnum(issues, boundary.owner, workflowOwners, `${path}.owner`);
+      validateStringArray(issues, boundary.nonGoals, `${path}.nonGoals`);
+    });
+  }
+
+  if (Array.isArray(candidate.skills)) {
+    const skillIds = new Set<string>();
+    candidate.skills.forEach((skill, index) => {
+      const path = `skills[${index}]`;
+      if (!isRecord(skill)) {
+        pushIssue(issues, "error", "skill-object", path, "Skill definition must be an object.");
+        return;
+      }
+      validateUniqueStringId(issues, skill.id, `${path}.id`, skillIds, "duplicate-skill", "Skill");
+      validateStringValue(issues, skill.name, `${path}.name`);
+      validateStringValue(issues, skill.description, `${path}.description`);
+      validateStringValue(issues, skill.documentPath, `${path}.documentPath`);
+      validateEnum(issues, skill.invocation, skillInvocationModes, `${path}.invocation`);
+      validateCapabilityReferences(
+        issues,
+        skill.requiredCapabilities,
+        `${path}.requiredCapabilities`,
+        requestedCapabilitySet,
+        "skill-unrequested-capability",
+        "Skill definitions may only require capabilities requested by the manifest.",
+      );
+      if (Array.isArray(skill.requiredTools)) {
+        skill.requiredTools.forEach((toolName, toolIndex) => {
+          if (isString(toolName) && !declaredToolNames.has(toolName)) {
+            pushIssue(
+              issues,
+              "error",
+              "skill-unknown-tool",
+              `${path}.requiredTools[${toolIndex}]`,
+              "Skill definitions may only require tools declared by the manifest.",
+            );
+          }
+        });
+      } else if (skill.requiredTools !== undefined) {
+        validateStringArray(issues, skill.requiredTools, `${path}.requiredTools`);
+      }
+    });
+  }
+
+  if (Array.isArray(candidate.connectors)) {
+    const connectorIds = new Set<string>();
+    candidate.connectors.forEach((connector, index) => {
+      const path = `connectors[${index}]`;
+      if (!isRecord(connector)) {
+        pushIssue(issues, "error", "connector-object", path, "Connector definition must be an object.");
+        return;
+      }
+      validateUniqueStringId(issues, connector.id, `${path}.id`, connectorIds, "duplicate-connector", "Connector");
+      validateStringValue(issues, connector.name, `${path}.name`);
+      validateStringValue(issues, connector.description, `${path}.description`);
+      validateEnum(issues, connector.type, connectorTypes, `${path}.type`);
+      validateEnum(issues, connector.configScope, connectorConfigScopes, `${path}.configScope`);
+      validateCapabilityReferences(
+        issues,
+        connector.requiredCapabilities,
+        `${path}.requiredCapabilities`,
+        requestedCapabilitySet,
+        "connector-unrequested-capability",
+        "Connector definitions may only require capabilities requested by the manifest.",
+      );
+    });
+  }
+
+  const scriptIds = new Set<string>();
+  const scriptsById = new Map<string, Record<string, unknown>>();
+  if (Array.isArray(candidate.scripts)) {
+    candidate.scripts.forEach((script, index) => {
+      const path = `scripts[${index}]`;
+      if (!isRecord(script)) {
+        pushIssue(issues, "error", "script-object", path, "Script definition must be an object.");
+        return;
+      }
+      validateUniqueStringId(issues, script.id, `${path}.id`, scriptIds, "duplicate-script", "Script");
+      if (isString(script.id)) {
+        scriptsById.set(script.id, script);
+      }
+      validateStringValue(issues, script.name, `${path}.name`);
+      validateStringValue(issues, script.description, `${path}.description`);
+      validateStringValue(issues, script.commandRef, `${path}.commandRef`);
+      validateEnum(issues, script.runPolicy, scriptRunPolicies, `${path}.runPolicy`);
+      if (typeof script.deterministic !== "boolean") {
+        pushIssue(issues, "error", "script-deterministic-boolean", `${path}.deterministic`, "Script deterministic must be boolean.");
+      }
+      if (typeof script.requiresHumanApproval !== "boolean") {
+        pushIssue(
+          issues,
+          "error",
+          "script-human-approval-boolean",
+          `${path}.requiresHumanApproval`,
+          "Script requiresHumanApproval must be boolean.",
+        );
+      }
+      validateCapabilityReferences(
+        issues,
+        script.requiredCapabilities,
+        `${path}.requiredCapabilities`,
+        requestedCapabilitySet,
+        "script-unrequested-capability",
+        "Script definitions may only require capabilities requested by the manifest.",
+      );
+      if (Array.isArray(script.producesArtifacts)) {
+        script.producesArtifacts.forEach((artifactType, artifactIndex) => {
+          validateEnum(issues, artifactType, artifactTypes, `${path}.producesArtifacts[${artifactIndex}]`);
+        });
+      } else {
+        pushIssue(issues, "error", "script-artifacts-array", `${path}.producesArtifacts`, "Script producesArtifacts must be an array.");
+      }
+    });
+  }
+
+  if (Array.isArray(candidate.hooks)) {
+    const hookIds = new Set<string>();
+    candidate.hooks.forEach((hook, index) => {
+      const path = `hooks[${index}]`;
+      if (!isRecord(hook)) {
+        pushIssue(issues, "error", "hook-object", path, "Hook definition must be an object.");
+        return;
+      }
+      validateUniqueStringId(issues, hook.id, `${path}.id`, hookIds, "duplicate-hook", "Hook");
+      validateEnum(issues, hook.event, hookEvents, `${path}.event`);
+      validateStringValue(issues, hook.handlerRef, `${path}.handlerRef`);
+      const handlerScript = isString(hook.handlerRef) ? scriptsById.get(hook.handlerRef) : undefined;
+      if (isString(hook.handlerRef) && !handlerScript) {
+        pushIssue(
+          issues,
+          "error",
+          "hook-unknown-handler",
+          `${path}.handlerRef`,
+          "Hook handlerRef must reference a script declared by the manifest.",
+        );
+      }
+      validateEnum(issues, hook.failurePolicy, hookFailurePolicies, `${path}.failurePolicy`);
+      validateCapabilityReferences(
+        issues,
+        hook.requiredCapabilities,
+        `${path}.requiredCapabilities`,
+        requestedCapabilitySet,
+        "hook-unrequested-capability",
+        "Hook definitions may only require capabilities requested by the manifest.",
+      );
+      if (handlerScript && Array.isArray(handlerScript.requiredCapabilities) && Array.isArray(hook.requiredCapabilities)) {
+        const hookCapabilities = new Set(hook.requiredCapabilities);
+        handlerScript.requiredCapabilities.forEach((capability, capabilityIndex) => {
+          if (ADDON_CAPABILITIES.includes(capability as Capability) && !hookCapabilities.has(capability)) {
+            pushIssue(
+              issues,
+              "error",
+              "hook-omits-handler-capability",
+              `${path}.requiredCapabilities`,
+              `Hook must explicitly require handler script capability ${String(capability)} from ${path}.handlerRef.`,
+            );
+          }
+          validateEnum(issues, capability, ADDON_CAPABILITIES, `scripts.${String(hook.handlerRef)}.requiredCapabilities[${capabilityIndex}]`);
+        });
+      }
+      if (handlerScript?.requiresHumanApproval === true) {
+        pushIssue(
+          issues,
+          "error",
+          "hook-handler-requires-human-approval",
+          `${path}.handlerRef`,
+          "Automatic hooks may not reference scripts that require human approval.",
         );
       }
     });

@@ -40,12 +40,12 @@ The shell direction is a three-zone app:
 
 The latest deterministic check completed with:
 
-- `npm test -- --run`: 163 passed
+- `npm test -- --run`: 168 passed
 - `npm run test:living-archive-mcp`: passed
 - `npm run test:living-archive-memory-service`: passed
 - `npm run build`: passed
 - `cargo fmt --check`: passed
-- `cargo test`: 98 passed, 3 ignored
+- `cargo test --lib`: 100 passed, 3 ignored
 - `git diff --check`: passed
 - `npm run tauri:build`: passed on macOS aarch64 and produced `ResonantOS.app` plus `ResonantOS_0.1.0_aarch64.dmg`
 
@@ -85,7 +85,7 @@ Release scope:
 Known limits for reviewers:
 
 - Living Archive import is safe-copy oriented; move/reorganisation execution is intentionally blocked
-- Living Archive AI Memory builds now persist job summaries, restore them in the Review Desk, support user-triggered `Continue Build`, and auto-continue safe jobs while Archive auto-sync is enabled; persisted auto-sync policy and provider-cost controls are not complete yet
+- Living Archive AI Memory builds now persist job summaries, restore them in the Review Desk, support user-triggered `Continue Build`, and can auto-continue safe jobs only when the persisted Archive automation policy and provider-cost gate allow it
 - add-ons are catalog entries and are not installed or trusted by default; the basic default catalog now exposes only recommended Augmentor Chat and Living Archive contracts
 - Browser, Obsidian, OpenCode, and Terminal add-ons are early foundations, not complete production integrations
 - Paperclip is now specified in `ADR-028` as a future optional organizational runtime add-on; development connector code exists, but it is excluded from the public default catalog until explicitly released
@@ -108,6 +108,8 @@ Known limits for reviewers:
 - Persistent right-side chat rail exists.
 - Chat supports agent selection between Augmentor and Resonant Engineer without automatically entering recovery mode.
 - Augmentor Chat can detach into a native floating Tauri window using the `floating-window` add-on surface contract.
+- Telegram Channel now has a host-mediated service path: the add-on stores its bot token in the portable secret vault, long-polls Telegram through the Rust host, routes inbound text to Augmentor through the provider fabric, sends the reply back to Telegram, and mirrors both sides into local ResonantOS chat history.
+- Telegram voice/audio files are downloaded into local app state and mirrored as protected message metadata; full audio understanding still needs a configured transcription provider hook before the content can be treated as understood speech.
 - Runtime-state updates are broadcast across windows so the main shell and floating chat can stay in sync after persisted state changes.
 - Chat history supports multiple conversations, pinning, deletion, branching/forking, and per-message actions.
 - Assistant replies render Markdown.
@@ -177,7 +179,15 @@ Known limits for reviewers:
 - `ADR-027` now defines Living Archive LLM Wiki compliance as the binding implementation standard.
 - The V1 LLM Wiki loop is implemented: source scan, queue, ingest, verifier approval, promotion, index/log refresh, deterministic lint, semantic lint, and semantic repair queueing.
 - `background-cycle` scans watched source roots, queues new/changed files, runs provider-backed maintenance, refreshes navigation, and returns a transparent summary of queued, skipped, processed, and promoted work.
-- Auto sync remains opt-in because provider usage can cost money.
+- Auto sync remains opt-in because provider usage can cost money; the user policy is persisted and AI Memory auto-builds can be limited to manual-only, local/subscription routes, or any configured route.
+- Imported-library AI Memory queues are now durable per source: request filenames include source identity/path hash, and persisted job summaries detect stale path failures or queue-loss mismatches as `attention` instead of silently presenting false completion.
+- Live AI Memory build results now apply the same queue-integrity check as restored job summaries, so queue-loss cannot be masked by escalated review artifacts during the current run.
+- Escalated artifacts no longer stop unrelated source processing; they stay visible for review while the remaining durable queue can continue under the saved automation/cost policy.
+- Review execution is now backend-scoped to the expected review subdirectories, so request processing cannot be pointed at arbitrary archive JSON and decision/promotion cannot be pointed outside `Memory/REVIEW/artifacts`.
+- Intake artifact writes are collision-safe and preserve existing raw evidence by allocating a unique filename instead of overwriting same-named artifacts.
+- Review artifacts now expose promotion state back to the UI. Already-promoted artifacts are marked as in-wiki work, and the Review Desk has a single `Promote Approved` action for approved, unpromoted artifacts.
+- Ingest outputs that return useful structured fields but malformed `proposed_pages` are repaired into conservative source-summary pages, preventing the AI Memory build from dead-ending on model formatting drift.
+- Archive maintenance now attempts AI repair/reverification for repairable escalated artifacts before asking the human to review exceptions. Safe repaired artifacts can be approved and promoted through the normal trusted-wiki path.
 - Routine archive approval can be completed by a Strategist-owned AI verifier; human review is reserved for high-risk, doctrine-sensitive, low-confidence, destructive, or ambiguous cases.
 - Ingest writer and verifier routes can use separate provider/model fields, allowing premium ingest and cheaper/local verification when configured.
 - Semantic lint never mutates trusted memory directly; findings become repair-source artifacts that re-enter the normal ingest/review/promote path.
@@ -211,12 +221,15 @@ Current Living Archive status:
 - Mixed-library classification review is host-owned.
 - Classification review artifacts must be inside imported-library metadata roots and linked from known import manifests.
 - Library import preflight is implemented and non-destructive: it reports supported/skipped files, noisy folders, skipped examples, Obsidian detection, estimated managed storage, and a recommended import plan before copy.
-- The recommended import plan keeps friction low: ResonantOS auto-excludes obvious technical folders, flags ambiguous folders, and exposes one primary `Import Recommended Plan` action instead of forcing manual file curation.
+- The recommended import plan keeps friction low: ResonantOS auto-excludes obvious technical folders, flags ambiguous folders, and exposes one primary `Let AI Import This` action instead of forcing manual file curation.
 - The preflight UI can open a new Augmentor session with a structured prompt containing the current preflight and recommended-plan context, so the user can ask why files were skipped or what to do next from inside ResonantOS.
-- The Living Archive workspace is now guided by default: the first screen is a short import-oriented start page, with Review, Sources, Search, Help, and Advanced panels behind tabs instead of rendering every subsystem at once.
+- The Living Archive workspace is now agent-led by default: the first screen shows the Living Archive Agent, one recommended next action, and a simple Add Knowledge flow. Review, Sources, Search, Help, and Diagnostics are hidden behind Advanced tools instead of rendering every subsystem at once.
 - The Help tab owns explanatory copy; the default Start tab should stay action-oriented and avoid long reading blocks.
-- The Start tab now shows a persistent Current Memory overview when imported libraries already exist, including managed memory location, domain map, imported/skipped counts, and the latest canonical library path. The importer stays hidden until the user imports another folder.
+- The Start tab now shows a compact memory status when imported libraries already exist, including managed memory location, managed file count, AI task count, and the latest canonical library path. The importer stays hidden until the user adds another folder.
+- The Start tab now includes an AI Memory Curator action center that chooses the next best archive action for the user: import, build, repair, continue, promote, process maintenance, or review exceptions. Human review is presented as exception handling, not the normal path.
+- Current limitation: single-file document upload is not implemented yet; the visible safe path is folder or Obsidian-vault import through the host folder picker.
 - Imported-library cards now expose `Build AI Memory`, which starts a durable AI Memory build job. The job queues eligible managed text sources, runs a bounded provider-routed maintenance batch, promotes approved artifacts, persists job state, and reports progress/status back to the user. Imported sources remain raw evidence until processed, approved, and promoted; this keeps the LLM Wiki trust boundary intact while making the promotion path visible and usable.
+- The Start tab now reloads the latest persisted AI Memory job for the current library after restart and exposes `Repair AI Memory Build` when a prior job needs attention.
 - Reorganisation plans can be generated as preview-only artifacts.
 - Reorganisation plans are explicitly marked `eligibleForExecution = false`.
 - Actual file moves are not implemented and should not be added without audit, rollback, approval, and tests.
@@ -416,6 +429,7 @@ Treat this as active current state. If committing, review the full diff first be
 - Do not treat reorganisation plans as executable; they are preview artifacts only.
 - Do not place privileged filesystem, provider secrets, wallet signing, or process orchestration in TypeScript UI code.
 - Do not scatter user private data across source folders or app internals; new memory, config, secrets, wallet, logs, and backup work must target the Portable User State Root from `ADR-022`.
+- Escalated Living Archive review artifacts require explicit human approve/reject actions before trusted wiki promotion; do not let verifier or Strategist actors resolve human-review work.
 - Keep `App.tsx` as shell composition; move feature orchestration into module controllers/hooks.
 - Keep archive UI modules split when they cross meaningful ownership boundaries.
 - Every architecture change should update the relevant ADR, `MODULE_MAP.md`, and `FEATURE_BACKLOG.md`.

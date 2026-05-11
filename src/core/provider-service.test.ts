@@ -15,17 +15,32 @@ describe("strategist provider service routing", () => {
     expect(resolved.provider?.id).toBe("shared-minimax");
     expect(resolved.runtimeNode?.id).toBe("node-minimax-cloud");
     expect(resolved.decision.executionAdapterId).toBe("cloud-minimax-compatible");
+    expect(resolved.model).toBe("MiniMax-M2.7-highspeed");
     expect(resolved.executionAdapter?.supportsStreaming).toBe(true);
     expect(resolved.executionAdapter?.supportsAbort).toBe(true);
     expect(resolved.decision.resolutionReason).toBe("primary-healthy");
   });
 
-  it("does not use the built-in GX10 placeholder as a fallback route", () => {
+  it("shows only canonical verified chat models in a stable order", () => {
+    const state = buildDefaultState([]);
+
+    expect(selectableAgentChatModels(state, "strategist.core")).toEqual([
+      "MiniMax-M2.7-highspeed",
+      "MiniMax-M2.7",
+      "gpt-5.5",
+      "gpt-5.4-mini",
+      "batiai/gemma4-e2b:q4",
+      "gemma-4-26B-A4B-it-UD-Q4_K_M.gguf",
+      "Qwen3.6-27B-Q4_K_M.gguf",
+    ]);
+  });
+
+  it("uses the verified GX10 runtime as a supported fallback route", () => {
     const state = buildDefaultState([]);
     const degradedState = {
       ...state,
       providers: state.providers.map((provider) =>
-        provider.providerType === "local" ? provider : { ...provider, status: "missing" as const },
+        provider.id === "gx10-local-llama" || provider.providerType === "local" ? provider : { ...provider, status: "missing" as const },
       ),
       runtimeNodes: state.runtimeNodes.map((node) =>
         node.kind === "cloud"
@@ -36,10 +51,10 @@ describe("strategist provider service routing", () => {
 
     const resolved = resolveStrategistChatRoute(degradedState);
 
-    expect(resolved.provider?.id).toBe("shared-local");
-    expect(resolved.runtimeNode?.id).toBe("node-local-resurrect");
-    expect(resolved.decision.executionAdapterId).toBe("local-ollama");
-    expect(resolved.model).toBe("batiai/gemma4-e2b:q4");
+    expect(resolved.provider?.id).toBe("gx10-local-llama");
+    expect(resolved.runtimeNode?.id).toBe("node-gx10-gemma");
+    expect(resolved.decision.executionAdapterId).toBe("cloud-openai-compatible");
+    expect(resolved.model).toBe("gemma-4-26B-A4B-it-UD-Q4_K_M.gguf");
     expect(resolved.decision.resolutionReason).toBe("fallback-in-policy");
   });
 
@@ -64,11 +79,11 @@ describe("strategist provider service routing", () => {
     expect(resolved.decision.resolutionReason).toBe("fallback-in-policy");
   });
 
-  it("does not expose placeholder GX10 models before a real HTTP runtime is discovered", () => {
+  it("exposes verified GX10 models from the default LAN runtime", () => {
     const state = {
       ...buildDefaultState([]),
       providers: buildDefaultState([]).providers.map((provider) =>
-        provider.providerType === "local" ? provider : { ...provider, status: "missing" as const },
+        provider.id === "gx10-local-llama" || provider.providerType === "local" ? provider : { ...provider, status: "missing" as const },
       ),
       runtimeNodes: buildDefaultState([]).runtimeNodes.map((node) =>
         node.kind === "cloud" ? { ...node, healthState: "unavailable" as const } : node,
@@ -76,15 +91,15 @@ describe("strategist provider service routing", () => {
     };
 
     const selectable = selectableAgentChatModels(state, "strategist.core");
-    const resolved = resolveStrategistChatRoute(state, "qwen-3.5");
+    const resolved = resolveStrategistChatRoute(state, "gemma-4-26B-A4B-it-UD-Q4_K_M.gguf");
 
-    expect(selectable).not.toContain("qwen-3.5");
-    expect(selectable).not.toContain("gemma-4");
-    expect(resolved.runtimeNode?.id).toBe("node-local-resurrect");
-    expect(resolved.model).toBe("batiai/gemma4-e2b:q4");
+    expect(selectable).toContain("gemma-4-26B-A4B-it-UD-Q4_K_M.gguf");
+    expect(selectable).toContain("Qwen3.6-27B-Q4_K_M.gguf");
+    expect(resolved.runtimeNode?.id).toBe("node-gx10-gemma");
+    expect(resolved.model).toBe("gemma-4-26B-A4B-it-UD-Q4_K_M.gguf");
   });
 
-  it("allows an explicitly selected verified LAN model to route from Augmentor chat", () => {
+  it("keeps custom LAN routes out of the chat picker unless they use canonical verified chat models", () => {
     const state = buildDefaultState([]);
     const gx10Provider = {
       ...state.providers.find((provider) => provider.id === "shared-local")!,
@@ -92,8 +107,8 @@ describe("strategist provider service routing", () => {
       label: "ASUS GX10",
       providerType: "openai-compatible" as const,
       apiBaseUrl: "http://192.168.1.42:30000/v1",
-      allowedModels: ["gemma-4-26b-a4b-q4_k_m.gguf"],
-      primaryModel: "gemma-4-26b-a4b-q4_k_m.gguf",
+      allowedModels: ["gemma-4-26B-A4B-it-UD-Q4_K_M.gguf"],
+      primaryModel: "gemma-4-26B-A4B-it-UD-Q4_K_M.gguf",
       fallbackModel: undefined,
       status: "ready" as const,
       credentialStatus: "configured" as const,
@@ -104,7 +119,7 @@ describe("strategist provider service routing", () => {
       label: "ASUS GX10 Runtime",
       providerProfileId: gx10Provider.id,
       endpoint: "http://192.168.1.42:30000/v1",
-      supportedModels: ["gemma-4-26b-a4b-q4_k_m.gguf"],
+      supportedModels: ["gemma-4-26B-A4B-it-UD-Q4_K_M.gguf"],
       healthState: "ready" as const,
     };
     const updatedState = {
@@ -113,13 +128,14 @@ describe("strategist provider service routing", () => {
       runtimeNodes: [...state.runtimeNodes, gx10Node],
     };
 
-    expect(selectableAgentChatModels(updatedState, "strategist.core")).toContain("gemma-4-26b-a4b-q4_k_m.gguf");
+    expect(selectableAgentChatModels(updatedState, "strategist.core")).toContain("gemma-4-26B-A4B-it-UD-Q4_K_M.gguf");
+    expect(selectableAgentChatModels(updatedState, "strategist.core")).not.toContain("gemma-4-26b-a4b-q4_k_m.gguf");
 
-    const resolved = resolveStrategistChatRoute(updatedState, "gemma-4-26b-a4b-q4_k_m.gguf");
+    const resolved = resolveStrategistChatRoute(updatedState, "gemma-4-26B-A4B-it-UD-Q4_K_M.gguf");
 
-    expect(resolved.provider?.id).toBe("provider-asus-gx10-test");
-    expect(resolved.runtimeNode?.id).toBe("node-provider-asus-gx10-test");
-    expect(resolved.model).toBe("gemma-4-26b-a4b-q4_k_m.gguf");
+    expect(resolved.provider?.id).toBe("gx10-local-llama");
+    expect(resolved.runtimeNode?.id).toBe("node-gx10-gemma");
+    expect(resolved.model).toBe("gemma-4-26B-A4B-it-UD-Q4_K_M.gguf");
   });
 
   it("stays pinned to the local resurrect runtime when recovery mode is enabled", () => {
@@ -150,7 +166,7 @@ describe("workload strategy routing", () => {
     expect(resolved.provider?.id).toBe("shared-openai");
     expect(resolved.runtimeNode?.id).toBe("node-openai-cloud");
     expect(resolved.decision.executionAdapterId).toBe("cloud-openai-compatible");
-    expect(resolved.model).toBe("gpt-5.4");
+    expect(resolved.model).toBe("gpt-5.5");
   });
 
   it("hard-stops archive ingest when strategy-approved cloud routes are unavailable", () => {

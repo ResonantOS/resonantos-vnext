@@ -6,6 +6,8 @@ import type {
   ArchiveDocumentPayload,
   ArchiveAiMemoryBuildJobSummary,
   ArchiveAiMemoryBuildResult,
+  ArchiveAutomationPolicy,
+  ChatRunPhase,
   ArchiveImportedLibrarySummary,
   ArchiveLibraryClassificationReview,
   ArchiveLibraryReorganisationPlan,
@@ -18,6 +20,7 @@ import type {
   ArchiveLintResult,
   ArchiveMaintenanceCycleResult,
   ArchiveMemoryDomain,
+  ConversationThread,
   ArchiveQueuedIngestRequest,
   ArchiveReviewArtifact,
   ArchiveReviewDecisionResult,
@@ -29,6 +32,7 @@ import type {
   ArchiveSourceWatchRecord,
   ArchiveTolBundleBuildResult,
   ArchiveTolBundleCandidate,
+  ProviderCostPosture,
   ResonantShellState,
 } from "../../core/contracts";
 import { Panel } from "../../components/Panel";
@@ -95,7 +99,7 @@ type ArchiveWorkspaceProps = {
   onAskAugmentorAboutPreflight: (report: ArchiveLibraryPreflightResult) => void;
   onOpenClassificationReview: (classificationManifestPath: string) => void;
   onGenerateReorganisationPlan: (classificationManifestPath: string) => void;
-  onQueueImportedLibraryForIngest: (manifestPath: string) => void;
+  onQueueImportedLibraryForIngest: (manifestPath: string) => Promise<void>;
   onImportLibrary: (input: {
     sourcePath: string;
     domain: ArchiveMemoryDomain;
@@ -106,15 +110,24 @@ type ArchiveWorkspaceProps = {
   onQueueWatchedSource: (source: ArchiveSourceWatchRecord) => void;
   onProcessArchiveRequest: (requestFile: string) => void;
   onApproveReviewArtifact: (artifactFile: string) => void;
+  onHumanApproveReviewArtifact: (artifactFile: string) => void;
   onEscalateReviewArtifact: (artifactFile: string) => void;
   onRejectReviewArtifact: (artifactFile: string) => void;
+  onHumanRejectReviewArtifact: (artifactFile: string) => void;
   onPromoteReviewArtifact: (artifactFile: string) => void;
-  onRunArchiveMaintenance: () => void;
+  onPromoteApprovedArtifacts: () => Promise<void>;
+  onRunArchiveMaintenance: () => Promise<void>;
   onRunArchiveLint: () => void;
   onRunArchiveSemanticLint: () => void;
   onRefreshTolBundles: () => void;
   onBuildTolBundle: (sessionId: string) => void;
   onRunIngestProbe: () => void;
+  onUpdateArchiveAutomationPolicy: (policy: ArchiveAutomationPolicy) => void;
+  onAskAugmentor: (message: string) => Promise<void>;
+  archiveAgentThread: ConversationThread | null;
+  archiveAgentBusy: boolean;
+  archiveAgentRunPhase: ChatRunPhase;
+  archiveAgentActivityLabel: string;
 };
 
 export function ArchiveWorkspace({
@@ -165,15 +178,24 @@ export function ArchiveWorkspace({
   onQueueWatchedSource,
   onProcessArchiveRequest,
   onApproveReviewArtifact,
+  onHumanApproveReviewArtifact,
   onEscalateReviewArtifact,
   onRejectReviewArtifact,
+  onHumanRejectReviewArtifact,
   onPromoteReviewArtifact,
+  onPromoteApprovedArtifacts,
   onRunArchiveMaintenance,
   onRunArchiveLint,
   onRunArchiveSemanticLint,
   onRefreshTolBundles,
   onBuildTolBundle,
   onRunIngestProbe,
+  onUpdateArchiveAutomationPolicy,
+  onAskAugmentor,
+  archiveAgentThread,
+  archiveAgentBusy,
+  archiveAgentRunPhase,
+  archiveAgentActivityLabel,
 }: ArchiveWorkspaceProps) {
   const archiveReady = archiveStatus?.status === "ready";
   const reviewDeskRef = useRef<HTMLDivElement | null>(null);
@@ -181,7 +203,6 @@ export function ArchiveWorkspace({
   const runMaintenanceRef = useRef(onRunArchiveMaintenance);
   const continueAiMemoryBuildRef = useRef(onQueueImportedLibraryForIngest);
   const [activeTab, setActiveTab] = useState<ArchiveWorkspaceTab>("start");
-  const [autoMaintenanceEnabled, setAutoMaintenanceEnabled] = useState(false);
   const [importerOpen, setImporterOpen] = useState(false);
 
   useEffect(() => {
@@ -200,6 +221,7 @@ export function ArchiveWorkspace({
   const audio2TolEnabled = Boolean(audio2TolInstallation?.installed && audio2TolInstallation.enabled);
   const needsWork = archiveQueue.length + pendingArtifacts + unprocessedSources;
   const hasImportedLibraries = archiveImportedLibraries.length > 0;
+  const archiveRouteCostPosture = archiveIngestRouteCostPosture(state);
   const importerVisible =
     importerOpen || !hasImportedLibraries || Boolean(archiveLibraryPreflightResult) || Boolean(archiveLibraryImportResult);
 
@@ -212,7 +234,7 @@ export function ArchiveWorkspace({
   }, [onQueueImportedLibraryForIngest]);
 
   useEffect(() => {
-    if (!autoMaintenanceEnabled) {
+    if (!state.archiveAutomationPolicy.autoSyncEnabled) {
       return;
     }
 
@@ -220,7 +242,11 @@ export function ArchiveWorkspace({
       if (archiveQueueBusy) {
         return;
       }
-      const resumableJob = selectAutoContinuableAiMemoryJob(archiveAiMemoryBuildJobs);
+      const resumableJob = selectAutoContinuableAiMemoryJob(
+        archiveAiMemoryBuildJobs,
+        state.archiveAutomationPolicy.aiMemoryBuilds,
+        archiveRouteCostPosture,
+      );
       if (resumableJob) {
         // Intent citation: docs/architecture/ADR-011-living-archive-host-service.md
         continueAiMemoryBuildRef.current(resumableJob.manifestPath);
@@ -232,7 +258,15 @@ export function ArchiveWorkspace({
 
     const intervalId = window.setInterval(runIfWorkExists, 120_000);
     return () => window.clearInterval(intervalId);
-  }, [archiveAiMemoryBuildJobs, archiveQueueBusy, autoMaintenanceEnabled]);
+  }, [archiveAiMemoryBuildJobs, archiveQueueBusy, archiveRouteCostPosture, state.archiveAutomationPolicy]);
+
+  const updateArchiveAutomationPolicy = (patch: Partial<ArchiveAutomationPolicy>) => {
+    onUpdateArchiveAutomationPolicy({
+      ...state.archiveAutomationPolicy,
+      ...patch,
+      updatedAt: new Date().toISOString(),
+    });
+  };
 
   const scrollToImporter = () => {
     setActiveTab("start");
@@ -244,66 +278,41 @@ export function ArchiveWorkspace({
 
   return (
     <>
-      <Panel className="archive-start-panel">
-        <div className="archive-start-hero">
-          <div className="archive-start-copy">
-            <span className={`archive-status-dot ${archiveReady ? "ready" : "warning"}`} />
-            <span className="eyebrow">Living Archive</span>
-            <h2>{hasImportedLibraries ? "Your memory is persistent." : "Turn folders into AI-readable memory."}</h2>
-            <p>
-              {hasImportedLibraries
-                ? "Imported libraries stay in ResonantOS memory. Open the structure, review queue, or add another source."
-                : "Choose a folder once. ResonantOS keeps the managed copy and shows where memory is stored."}
-            </p>
-          </div>
-          <div className="archive-start-actions">
-            <button type="button" className="button-primary touch-action" onClick={scrollToImporter}>
-              {hasImportedLibraries ? "Import Another Folder" : "Start Memory Import"}
-            </button>
-            <button type="button" className="button-secondary touch-action" onClick={onRefreshArchiveStatus} disabled={archiveStatusBusy}>
-              {archiveStatusBusy ? "Checking..." : archiveReady ? "Archive Online" : "Check Archive"}
-            </button>
-          </div>
-        </div>
-
-        <div className="archive-start-summary" aria-label="Archive status summary">
-          <span className={archiveReady ? "ready" : "warning"}>{archiveReady ? "Archive online" : "Archive needs check"}</span>
-          <span>{archiveImportedLibraries.length} imported librar{archiveImportedLibraries.length === 1 ? "y" : "ies"}</span>
-          <span>{needsWork} item(s) need attention</span>
-          <span>{pagesTotal} wiki page(s)</span>
-        </div>
-      </Panel>
-
-      <nav className="archive-tabs" aria-label="Living Archive sections">
-        {[
-          ["start", "Start"],
-          ["review", `Review${needsWork ? ` (${needsWork})` : ""}`],
-          ["sources", "Sources"],
-          ["search", "Search"],
-          ["help", "Help"],
-          ["advanced", "Advanced"],
-        ].map(([tab, label]) => (
-          <button
-            key={tab}
-            type="button"
-            aria-label={`Open ${label} section`}
-            className={activeTab === tab ? "active" : ""}
-            onClick={() => setActiveTab(tab as ArchiveWorkspaceTab)}
-          >
-            {label}
+      {activeTab !== "start" ? (
+        <Panel className="archive-subpage-bar">
+          <button type="button" className="button-secondary touch-action" onClick={() => setActiveTab("start")}>
+            Back to Living Archive Agent
           </button>
-        ))}
-      </nav>
+          {activeTab !== "review" && needsWork > 0 ? (
+            <button type="button" className="button-secondary touch-action" onClick={() => setActiveTab("review")}>
+              Open Review section
+            </button>
+          ) : null}
+          <span className={archiveReady ? "ready" : "warning"}>{archiveReady ? "Archive online" : "Archive needs check"}</span>
+          <span>{pagesTotal} trusted page(s)</span>
+        </Panel>
+      ) : null}
 
       {activeTab === "start" ? (
         <>
           <ArchiveMemoryOverview
-            archiveStatus={archiveStatus}
             archiveImportedLibraries={archiveImportedLibraries}
+            archiveAiMemoryBuildResult={archiveAiMemoryBuildResult}
+            archiveAiMemoryBuildJobs={archiveAiMemoryBuildJobs}
+            archiveQueue={archiveQueue}
+            archiveReviewArtifacts={archiveReviewArtifacts}
             needsWork={needsWork}
             onOpenSources={() => setActiveTab("sources")}
             onOpenReview={() => setActiveTab("review")}
             onImportAnother={scrollToImporter}
+            onBuildAiMemory={onQueueImportedLibraryForIngest}
+            onRunArchiveMaintenance={onRunArchiveMaintenance}
+            onPromoteApprovedArtifacts={onPromoteApprovedArtifacts}
+            onAskAugmentor={onAskAugmentor}
+            archiveAgentThread={archiveAgentThread}
+            archiveAgentBusy={archiveAgentBusy || archiveQueueBusy}
+            archiveAgentRunPhase={archiveAgentRunPhase}
+            archiveAgentActivityLabel={archiveAgentActivityLabel}
           />
           {importerVisible ? (
             <div ref={importerRef}>
@@ -318,6 +327,30 @@ export function ArchiveWorkspace({
               />
             </div>
           ) : null}
+          <details className="archive-advanced-tools">
+            <summary>Advanced tools</summary>
+            <div className="archive-tabs" aria-label="Advanced Living Archive sections">
+              {[
+                ["review", `Exceptions${needsWork ? ` (${needsWork})` : ""}`],
+                ["sources", "Sources"],
+                ["search", "Search"],
+                ["help", "Help"],
+                ["advanced", "Diagnostics"],
+              ].map(([tab, label]) => (
+                <button
+                  key={tab}
+                  type="button"
+                  aria-label={`Open ${label} section`}
+                  onClick={() => setActiveTab(tab as ArchiveWorkspaceTab)}
+                >
+                  {label}
+                </button>
+              ))}
+              <button type="button" className="button-secondary touch-action" onClick={onRefreshArchiveStatus} disabled={archiveStatusBusy}>
+                {archiveStatusBusy ? "Checking..." : archiveReady ? "Archive Online" : "Check Archive"}
+              </button>
+            </div>
+          </details>
         </>
       ) : null}
 
@@ -342,14 +375,18 @@ export function ArchiveWorkspace({
             archiveMaintenanceResult={archiveMaintenanceResult}
             archiveAiMemoryBuildResult={archiveAiMemoryBuildResult}
             archiveAiMemoryBuildJobs={archiveAiMemoryBuildJobs}
-            autoMaintenanceEnabled={autoMaintenanceEnabled}
+            archiveAutomationPolicy={state.archiveAutomationPolicy}
+            archiveAiMemoryRouteCostPosture={archiveRouteCostPosture}
             onRefreshArchiveQueue={onRefreshArchiveQueue}
             onProcessArchiveRequest={onProcessArchiveRequest}
             onApproveReviewArtifact={onApproveReviewArtifact}
+            onHumanApproveReviewArtifact={onHumanApproveReviewArtifact}
             onEscalateReviewArtifact={onEscalateReviewArtifact}
             onRejectReviewArtifact={onRejectReviewArtifact}
+            onHumanRejectReviewArtifact={onHumanRejectReviewArtifact}
             onPromoteReviewArtifact={onPromoteReviewArtifact}
-            onToggleAutoMaintenance={() => setAutoMaintenanceEnabled((current) => !current)}
+            onPromoteApprovedArtifacts={onPromoteApprovedArtifacts}
+            onUpdateArchiveAutomationPolicy={updateArchiveAutomationPolicy}
             onRunArchiveMaintenance={onRunArchiveMaintenance}
             onContinueAiMemoryBuild={onQueueImportedLibraryForIngest}
           />
@@ -445,6 +482,12 @@ export function ArchiveWorkspace({
       ) : null}
     </>
   );
+}
+
+function archiveIngestRouteCostPosture(state: ResonantShellState): ProviderCostPosture | undefined {
+  return state.modelStrategy.workloadStrategies.find(
+    (strategy) => strategy.ownerType === "workload" && strategy.ownerId === "archive-ingest",
+  )?.primaryRoute.costPosture;
 }
 
 function ArchiveHelpPanel() {

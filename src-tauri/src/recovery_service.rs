@@ -4,13 +4,17 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tauri::AppHandle;
 
+use crate::compute_service::{
+    ComputeRemoteProbeRequest, Gx10LlamaSwitchRequest, execute_remote_probe,
+    query_gx10_llama_status, query_nas_backup_status, switch_gx10_llama_model,
+};
 use crate::host_state::{app_state_dir, read_runtime_state_value, resolve_provider_secret};
 use crate::provider_service::{
-    execute_provider_service_chat, probe_http_endpoint, query_local_runtime_status,
-    ChatMessageInput, ProviderServiceChatRequest,
+    ChatMessageInput, ProviderServiceChatRequest, execute_provider_service_chat,
+    probe_http_endpoint, query_local_runtime_status,
 };
 
 #[derive(Deserialize)]
@@ -217,6 +221,10 @@ fn engineer_tool_protocol(app: &AppHandle) -> String {
         "local_runtime_status(targetModel?)",
         "network_probe(url)",
         "provider_probe(providerId)",
+        "remote_probe(nodeId) where nodeId is compute-gx10 or compute-nas-backup",
+        "gx10_llama_status()",
+        "gx10_llama_switch(modelId) where modelId is gemma-4-26B-A4B-it-UD-Q4_K_M.gguf or Qwen3.6-27B-Q4_K_M.gguf. Use only when the user explicitly asks to change or restart a GX10 llama model.",
+        "nas_backup_status()",
         "list_files(path, maxEntries?)",
         "search_codebase(query, path?, maxResults?)",
         "read_file(path, startLine?, endLine?)",
@@ -413,6 +421,68 @@ async fn execute_engineer_tool(
                     tool: tool.to_string(),
                     summary,
                     status: "completed".to_string(),
+                },
+            ))
+        }
+        "remote_probe" => {
+            let node_id = args
+                .as_ref()
+                .and_then(|value| value.get("nodeId"))
+                .and_then(Value::as_str)
+                .ok_or_else(|| "remote_probe requires `nodeId`.".to_string())?;
+            let result = execute_remote_probe(ComputeRemoteProbeRequest {
+                node_id: node_id.to_string(),
+            })?;
+            let summary = result.summary.clone();
+            Ok((
+                format!("{}\n{}", result.stdout, result.stderr),
+                EngineerToolEvent {
+                    tool: tool.to_string(),
+                    summary,
+                    status: result.status,
+                },
+            ))
+        }
+        "gx10_llama_status" => {
+            let result = query_gx10_llama_status()?;
+            let summary = result.summary.clone();
+            Ok((
+                format!("{}\n{}", result.stdout, result.stderr),
+                EngineerToolEvent {
+                    tool: tool.to_string(),
+                    summary,
+                    status: result.status,
+                },
+            ))
+        }
+        "gx10_llama_switch" => {
+            let model_id = args
+                .as_ref()
+                .and_then(|value| value.get("modelId"))
+                .and_then(Value::as_str)
+                .ok_or_else(|| "gx10_llama_switch requires `modelId`.".to_string())?;
+            let result = switch_gx10_llama_model(Gx10LlamaSwitchRequest {
+                model_id: model_id.to_string(),
+            })?;
+            let summary = result.summary.clone();
+            Ok((
+                format!("{}\n{}", result.stdout, result.stderr),
+                EngineerToolEvent {
+                    tool: tool.to_string(),
+                    summary,
+                    status: result.status,
+                },
+            ))
+        }
+        "nas_backup_status" => {
+            let result = query_nas_backup_status()?;
+            let summary = result.summary.clone();
+            Ok((
+                format!("{}\n{}", result.stdout, result.stderr),
+                EngineerToolEvent {
+                    tool: tool.to_string(),
+                    summary,
+                    status: result.status,
                 },
             ))
         }
@@ -688,6 +758,10 @@ pub(crate) async fn execute_engineer_recovery_turn(
 
     for _ in 0..6 {
         let provider_request = ProviderServiceChatRequest {
+            request_id: Some("engineer-recovery-turn".to_string()),
+            thread_id: Some("thread-recovery-engineer".to_string()),
+            agent_id: Some("setup.core".to_string()),
+            channel_id: Some("desktop-engineer".to_string()),
             provider_id: request.provider_id.clone(),
             provider_type: request.provider_type.clone(),
             api_base_url: request.api_base_url.clone(),

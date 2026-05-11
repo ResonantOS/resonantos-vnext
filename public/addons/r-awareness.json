@@ -44,6 +44,64 @@
     "canRequestIngest": false,
     "canWriteKnowledgePages": false
   },
+  "workflowBoundaries": [
+    {
+      "id": "doctrine-awareness-context",
+      "label": "Doctrine awareness context",
+      "jobToBeDone": "Expose approved SSoT, doctrine, and trigger-word context to agents without granting write authority.",
+      "userValue": "Agents can interpret work through the right context while the human keeps doctrine and memory boundaries protected.",
+      "repeatability": "workflow-package",
+      "owner": "addon-agent",
+      "nonGoals": [
+        "Rewrite doctrine or protocol sources",
+        "Grant archive intake or trusted memory writes",
+        "Replace Logician deterministic checks"
+      ]
+    }
+  ],
+  "skills": [
+    {
+      "id": "context-injection-policy",
+      "name": "Context injection policy",
+      "description": "Select and explain relevant doctrine/context snapshots for agent work without expanding authority.",
+      "documentPath": "docs/architecture/addon-skills/r-awareness/CONTEXT_INJECTION_POLICY.md",
+      "invocation": "automatic",
+      "requiredCapabilities": ["providers", "archive-read"],
+      "requiredTools": []
+    }
+  ],
+  "connectors": [
+    {
+      "id": "doctrine-context-view",
+      "name": "Doctrine context view",
+      "type": "app-connector",
+      "description": "Reads scoped constitution, protocol, and Living Archive context views.",
+      "requiredCapabilities": ["archive-read"],
+      "configScope": "none"
+    }
+  ],
+  "scripts": [
+    {
+      "id": "context-pack-check",
+      "name": "Context pack check",
+      "description": "Verify that required context packs and trigger mappings are present before injection.",
+      "commandRef": "r-awareness.context_pack_check",
+      "runPolicy": "preflight",
+      "deterministic": true,
+      "requiredCapabilities": ["archive-read"],
+      "producesArtifacts": ["verification-report"],
+      "requiresHumanApproval": false
+    }
+  ],
+  "hooks": [
+    {
+      "id": "context-health-check",
+      "event": "health-check",
+      "handlerRef": "context-pack-check",
+      "requiredCapabilities": ["archive-read"],
+      "failurePolicy": "warn"
+    }
+  ],
   "health": {
     "strategy": "keyword-pack"
   },

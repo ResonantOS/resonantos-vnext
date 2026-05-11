@@ -32,9 +32,6 @@ export const loadInitialShellState = async (): Promise<BootedShellState> => {
   const state = await hydrateState(bundled, sideloaded);
   const credentialStatuses = await loadProviderCredentialStatuses();
   const nextState = applyProviderCredentialStatuses(state, credentialStatuses);
-  if (!nextState.recoverySession.active) {
-    nextState.uiPreferences.activeSection = "overview";
-  }
 
   return {
     bundled,

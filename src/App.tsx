@@ -51,6 +51,8 @@ import {
   requestBrowserNativeWebviewHide,
   requestBrowserNativeWebviewResize,
   requestBrowserNativeWebviewShow,
+  requestComputeLocalPassiveDiagnostics,
+  requestComputeLocalSafeCommand,
   requestNativeBrowserAttachSmoke,
   requestNativeBrowserBridgeProbe,
   requestNativeBrowserProbe,
@@ -60,6 +62,8 @@ import {
 import {
   executeSideloadManifest,
   grantAddonCapabilities,
+  runAddonLogicianHook,
+  runAddonLogicianScript,
   toggleAddonCapabilityGrant,
   toggleAddonInstallation,
   updateAddonConfig,
@@ -81,6 +85,7 @@ import {
   pickArchiveLibraryFolder,
   preflightArchiveLibrary,
   processArchiveQueuedRequest,
+  promoteApprovedArchiveReviewArtifacts,
   promoteArchiveReviewArtifact,
   queueArchiveSourceForIngest,
   queueWatchedArchiveSourceForIngest,
@@ -102,6 +107,13 @@ import { executeChatTurn } from "./modules/chat/controller";
 import { claimChatRun, releaseChatRun } from "./modules/chat/run-guard";
 import { StrategistChatRail } from "./modules/chat/StrategistChatRail";
 import { appendTranscriptEvent } from "./core/context-memory";
+import {
+  applyComputePassiveDiagnostics,
+  applyComputeSafeCommandResult,
+  quarantineComputeNodeForReview,
+  revokeComputeNodeTrust,
+  submitLocalSafeCommandProbe,
+} from "./modules/compute/controller";
 import {
   branchChatFromMessageAction,
   branchChatProjectAction,
@@ -182,6 +194,9 @@ const SettingsWorkspace = lazy(() =>
 const DelegationWorkspace = lazy(() =>
   import("./modules/delegation/DelegationWorkspace").then((module) => ({ default: module.DelegationWorkspace })),
 );
+const ComputeFabricWorkspace = lazy(() =>
+  import("./modules/compute/ComputeFabricWorkspace").then((module) => ({ default: module.ComputeFabricWorkspace })),
+);
 const OverviewWorkspace = lazy(() =>
   import("./modules/overview/OverviewWorkspace").then((module) => ({ default: module.OverviewWorkspace })),
 );
@@ -208,6 +223,7 @@ type DockIconId =
   | "home"
   | "archive"
   | "delegation"
+  | "compute"
   | "addons"
   | "browser"
   | "obsidian"
@@ -221,6 +237,7 @@ type VendorIconId =
   | "apps"
   | "archive"
   | "database"
+  | "chart-bar"
   | "home"
   | "layout-sidebar-left-expand"
   | "layout-sidebar-right-collapse"
@@ -233,6 +250,7 @@ const dockIconMap: Record<Exclude<DockIconId, "obsidian" | "opencode" | "papercl
   home: "home",
   archive: "database",
   delegation: "route-alt-left",
+  compute: "chart-bar",
   addons: "apps",
   browser: "world",
   agent: "robot",
@@ -243,6 +261,7 @@ const navItems: Array<{ id: Section; label: string; eyebrow: string; icon: DockI
   { id: "overview", label: "Home", eyebrow: "apps", icon: "home", pinned: true },
   { id: "archive", label: "Living Archive", eyebrow: "memory", icon: "archive", pinned: true },
   { id: "delegation", label: "Delegation", eyebrow: "tasks", icon: "delegation", pinned: true },
+  { id: "compute", label: "Compute", eyebrow: "runners", icon: "compute", pinned: true },
   { id: "addons", label: "Add-ons", eyebrow: "catalog", icon: "addons", pinned: true },
   { id: "strategist", label: "Agent Identity", eyebrow: "identity", icon: "agent" },
   { id: "settings", label: "Settings", eyebrow: "system", icon: "settings", pinned: true },
@@ -645,11 +664,16 @@ export function App() {
   const livingArchiveMemoryActive =
     !memorySlotHasProviders || activeMemoryProvider?.manifest.id === "addon.living-archive";
   const memoryProviderBroker = resolveMemoryProviderBroker(state, allManifests);
+  const archiveAgentThread = state.conversationThreads.find((thread) => thread.id === "thread-living-archive-agent") ?? null;
   const recommendedAddOns = recommendedSystemSlotManifests(allManifests);
   const showFirstRunRecommendedAddOns =
     !isFloatingChatSurface && !state.uiPreferences.recommendedAddOnsReviewed && recommendedAddOns.length > 0;
   const firstRunSelectionFor = (manifestId: string): boolean => firstRunSelections[manifestId] ?? true;
-  const effectiveChatOpen = chatInterfaceAvailable && (isFloatingChatSurface || engineerSettingsConsoleActive || state.uiPreferences.chatSidebarOpen);
+  const centerWorkspaceOwnsAgentChat = !isFloatingChatSurface && currentSection === "archive";
+  const effectiveChatOpen =
+    chatInterfaceAvailable &&
+    !centerWorkspaceOwnsAgentChat &&
+    (isFloatingChatSurface || engineerSettingsConsoleActive || state.uiPreferences.chatSidebarOpen);
 
   const setSection = (section: Section) => {
     startTransition(() => {
@@ -789,6 +813,76 @@ export function App() {
       setProviderDiagnostics,
       setSettingsNotice,
       errorMessageOf,
+    });
+  };
+
+  const refreshComputeLocalDiagnostics = async () => {
+    const diagnostics = await requestComputeLocalPassiveDiagnostics();
+    updateRuntimeState((draft) => {
+      const result = applyComputePassiveDiagnostics(draft, diagnostics);
+      if (!result.validation.valid) {
+        throw new Error(result.validation.issues.map((issue) => issue.message).join(" "));
+      }
+      return result.state;
+    });
+  };
+
+  const runComputeLocalCommandProbe = async () => {
+    let commandRequest: Parameters<typeof requestComputeLocalSafeCommand>[0] | undefined;
+    updateRuntimeState((draft) => {
+      const result = submitLocalSafeCommandProbe(draft);
+      if (!result.validation.valid || !result.request) {
+        throw new Error(result.validation.issues.map((issue) => issue.message).join(" "));
+      }
+      commandRequest = result.request;
+      return result.state;
+    });
+
+    if (!commandRequest) {
+      throw new Error("Compute local command probe did not produce a command request.");
+    }
+
+    const request = commandRequest;
+    try {
+      const commandResult = await requestComputeLocalSafeCommand(request);
+      updateRuntimeState((draft) => applyComputeSafeCommandResult(draft, commandResult));
+    } catch (error) {
+      const now = new Date().toISOString();
+      updateRuntimeState((draft) =>
+        applyComputeSafeCommandResult(draft, {
+          nodeId: request.nodeId,
+          jobId: request.jobId,
+          command: request.command,
+          status: "failed",
+          exitCode: null,
+          stdout: "",
+          stderr: error instanceof Error ? error.message : "Compute local command probe failed.",
+          startedAt: now,
+          completedAt: now,
+          summary: "Compute safe command probe failed before completion.",
+        }),
+      );
+      throw error;
+    }
+  };
+
+  const quarantineComputeNode = (nodeId: string) => {
+    updateRuntimeState((draft) => {
+      const result = quarantineComputeNodeForReview(draft, nodeId, "Manual quarantine from the Compute Fabric workspace.");
+      if (!result.validation.valid) {
+        throw new Error(result.validation.issues.map((issue) => issue.message).join(" "));
+      }
+      return result.state;
+    });
+  };
+
+  const revokeComputeNode = (nodeId: string) => {
+    updateRuntimeState((draft) => {
+      const result = revokeComputeNodeTrust(draft, nodeId, "Manual trust revocation from the Compute Fabric workspace.");
+      if (!result.validation.valid) {
+        throw new Error(result.validation.issues.map((issue) => issue.message).join(" "));
+      }
+      return result.state;
     });
   };
 
@@ -1039,6 +1133,19 @@ export function App() {
     });
   };
 
+  const runApprovedArchivePromotion = async () => {
+    await promoteApprovedArchiveReviewArtifacts({
+      artifacts: archiveReviewArtifacts,
+      actorId: "archive-ingest.core",
+      memoryProvider: memoryProviderBroker,
+      setChatNotice,
+      setArchiveQueueBusy,
+      setArchiveReviewArtifacts,
+      setArchivePromotionResult,
+      errorMessageOf,
+    });
+  };
+
   const runArchiveMaintenance = async () => {
     await runArchiveBackgroundCycle({
       snapshot: { state, bundled, sideloaded },
@@ -1156,6 +1263,92 @@ export function App() {
       activeChatModel,
       thinkingDepth,
       overrideMessage,
+      commitReadyState,
+      setComposer,
+      setAttachments,
+      setChatNotice,
+      setChatBusy,
+      setChatRunPhase,
+      setChatRunEvents,
+      setAgentActivityLabel,
+      setProviderDiagnostics,
+      setRecoveryRuntimeStatus,
+      runToken,
+      isRunCurrent: (token) => activeChatRunTokenRef.current === token,
+      errorMessageOf,
+    });
+    if (releaseChatRun(activeChatRunTokenRef, runToken)) {
+      setChatRunPhase("idle");
+    }
+  };
+
+  const sendLivingArchiveAgentMessage = async (message: string) => {
+    if (!chatInterfaceAvailable) {
+      setChatNotice("No active chat-interface add-on is enabled for the Living Archive Agent.");
+      return;
+    }
+    if (chatBusy) {
+      setChatNotice("Stop the current response before asking the Living Archive Agent.");
+      return;
+    }
+
+    const baseState = currentReadyStateRef.current ?? state;
+    const channel =
+      baseState.channels.find((item) => item.id === "desktop-main" && item.enabled) ??
+      baseState.channels.find((item) => item.owningAgentId === "strategist.core" && item.enabled) ??
+      null;
+    if (!channel) {
+      setChatNotice("No enabled Augmentor desktop channel is available for the Living Archive Agent.");
+      return;
+    }
+
+    const threadId = "thread-living-archive-agent";
+    const existingThread = baseState.conversationThreads.find((thread) => thread.id === threadId);
+    const thread: ConversationThread =
+      existingThread ?? {
+        id: threadId,
+        title: "Living Archive Agent",
+        owningAgentId: "strategist.core",
+        workspaceId: channel.workspaceId,
+        channelId: channel.id,
+        summary: "Central Living Archive configuration and repair session.",
+        messages: [],
+      };
+    const stateWithThread = existingThread
+      ? baseState
+      : {
+          ...appendTranscriptEvent(baseState, {
+            action: "thread-created",
+            threadId,
+            channelId: channel.id,
+            agentId: "strategist.core",
+            payload: {
+              title: thread.title,
+              workspaceId: channel.workspaceId,
+              source: "living-archive-agent",
+            },
+          }),
+          conversationThreads: [thread, ...baseState.conversationThreads],
+        };
+
+    if (!existingThread) {
+      commitReadyState(stateWithThread);
+    }
+
+    const runToken = claimChatRun(activeChatRunTokenRef, thread.id);
+    if (!runToken) {
+      setChatNotice("Another agent turn is already running.");
+      return;
+    }
+
+    await executeChatTurn({
+      snapshot: { state: stateWithThread, bundled, sideloaded },
+      activeThread: thread,
+      composer: "",
+      attachments: [],
+      activeChatModel,
+      thinkingDepth,
+      overrideMessage: message,
       commitReadyState,
       setComposer,
       setAttachments,
@@ -1573,14 +1766,21 @@ export function App() {
       installation.installed = true;
       installation.enabled = true;
       installation.status = "enabled";
+      const workspaceCapabilities = ["shell", "ui-embedding"];
       const existingGrants = new Map(installation.grantedCapabilities.map((grant) => [grant.capability, grant]));
       const missingRequestedGrants = hermesManifest.requestedCapabilities.filter((grant) => !existingGrants.has(grant.capability));
       installation.grantedCapabilities = [...installation.grantedCapabilities, ...missingRequestedGrants].map((grant) =>
-        ["network", "shell", "ui-embedding", "archive-read", "archive-intake-write", "providers"].includes(grant.capability)
+        workspaceCapabilities.includes(grant.capability)
           ? { ...grant, granted: true }
           : grant,
       );
-      installation.notes = ["Installed, enabled, and granted Hermes workspace, archive-read, and delegation preparation access."];
+      installation.notes = [
+        "Installed, enabled, and granted scoped shell and UI embedding for the Hermes workspace. Provider, network, archive-read, and archive-intake-write remain separately approval-gated.",
+      ];
+      const hermesChannel = draft.channels.find((channel) => channel.id === "desktop-hermes");
+      if (hermesChannel) {
+        hermesChannel.enabled = true;
+      }
       draft.uiPreferences.activeSection = "hermes";
       return draft;
     });
@@ -2009,20 +2209,34 @@ export function App() {
                 onAskAugmentorAboutPreflight={(report) => void startArchivePreflightAugmentorSession(report)}
                 onOpenClassificationReview={(classificationManifestPath) => void openArchiveClassificationReview(classificationManifestPath)}
                 onGenerateReorganisationPlan={(classificationManifestPath) => void runArchiveReorganisationPlan(classificationManifestPath)}
-                onQueueImportedLibraryForIngest={(manifestPath) => void queueImportedLibraryIngest(manifestPath)}
+                onQueueImportedLibraryForIngest={queueImportedLibraryIngest}
                 onImportLibrary={(input) => void runArchiveLibraryImport(input)}
                 onQueueWatchedSource={(source) => void queueWatchedArchiveSource(source)}
                 onProcessArchiveRequest={(requestFile) => void runArchiveQueuedRequest(requestFile)}
                 onApproveReviewArtifact={(artifactFile) => void runArchiveReviewDecision(artifactFile, "approve", "strategist.core")}
+                onHumanApproveReviewArtifact={(artifactFile) => void runArchiveReviewDecision(artifactFile, "approve", "human.user")}
                 onEscalateReviewArtifact={(artifactFile) => void runArchiveReviewDecision(artifactFile, "escalate", "strategist.core")}
                 onRejectReviewArtifact={(artifactFile) => void runArchiveReviewDecision(artifactFile, "reject", "strategist.core")}
+                onHumanRejectReviewArtifact={(artifactFile) => void runArchiveReviewDecision(artifactFile, "reject", "human.user")}
                 onPromoteReviewArtifact={(artifactFile) => void runArchivePromotion(artifactFile)}
-                onRunArchiveMaintenance={() => void runArchiveMaintenance()}
+                onPromoteApprovedArtifacts={runApprovedArchivePromotion}
+                onRunArchiveMaintenance={runArchiveMaintenance}
                 onRunArchiveLint={() => void runArchiveHealthLint()}
                 onRunArchiveSemanticLint={() => void runArchiveSemanticHealthLint()}
                 onRefreshTolBundles={() => void refreshArchiveTolBundles()}
                 onBuildTolBundle={(sessionId) => void runArchiveTolBundleBuild(sessionId)}
                 onRunIngestProbe={() => void runArchiveIngestProbe()}
+                onAskAugmentor={sendLivingArchiveAgentMessage}
+                archiveAgentThread={archiveAgentThread}
+                archiveAgentBusy={chatBusy}
+                archiveAgentRunPhase={chatRunPhase}
+                archiveAgentActivityLabel={agentActivityLabel}
+                onUpdateArchiveAutomationPolicy={(policy) =>
+                  updateRuntimeState((draft) => {
+                    draft.archiveAutomationPolicy = policy;
+                    return draft;
+                  })
+                }
               />
             </Suspense>
           )}
@@ -2053,6 +2267,24 @@ export function App() {
                 onAskAugmentor={async (message) => {
                   await sendStrategistMessage(message);
                 }}
+              />
+            </Suspense>
+          )}
+
+          {!recoveryModeActive && currentSection === "compute" && (
+            <Suspense
+              fallback={
+                <Panel title="Loading Compute Fabric" subtitle="Runner registry">
+                  <p className="muted-copy">Preparing compute controls...</p>
+                </Panel>
+              }
+            >
+              <ComputeFabricWorkspace
+                state={state}
+                onRefreshLocalDiagnostics={refreshComputeLocalDiagnostics}
+                onRunLocalCommandProbe={runComputeLocalCommandProbe}
+                onQuarantineNode={quarantineComputeNode}
+                onRevokeNode={revokeComputeNode}
               />
             </Suspense>
           )}
@@ -2200,6 +2432,12 @@ export function App() {
                 }
                 onGrantTerminalWorkspaceAccess={grantAndOpenTerminalWorkspace}
                 onUpdateAddonConfig={(manifestId, config) => updateAddonConfig(manifestId, config, updateRuntimeState)}
+                onRunLogicianScript={(manifest, installation, script) =>
+                  runAddonLogicianScript(manifest, installation, script, updateRuntimeState)
+                }
+                onRunLogicianHook={(manifest, installation, hook) =>
+                  runAddonLogicianHook(manifest, installation, hook, updateRuntimeState)
+                }
                 onAskAugmentor={async (message) => {
                   await sendStrategistMessage(message);
                 }}

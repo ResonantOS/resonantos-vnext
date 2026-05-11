@@ -70,6 +70,64 @@
       "OpenClaw is high-power and should start degraded unless runtime health and grants are valid."
     ]
   },
+  "workflowBoundaries": [
+    {
+      "id": "external-agent-delegation",
+      "label": "External agent delegation",
+      "jobToBeDone": "Mount OpenClaw as a delegated external agent runtime under ResonantOS task, permission, and artifact-return rules.",
+      "userValue": "The human can use OpenClaw without making it the core shell or trusted memory authority.",
+      "repeatability": "workflow-package",
+      "owner": "addon-agent",
+      "nonGoals": [
+        "Give OpenClaw unrestricted Living Archive write access",
+        "Let OpenClaw replace the Strategist identity",
+        "Run high-power tasks without explicit delegation boundaries"
+      ]
+    }
+  ],
+  "skills": [
+    {
+      "id": "openclaw-task-handoff",
+      "name": "OpenClaw task handoff",
+      "description": "Prepare bounded task handoffs, required artifacts, and verification expectations for OpenClaw.",
+      "documentPath": "docs/architecture/addon-skills/openclaw/TASK_HANDOFF.md",
+      "invocation": "agent-suggested",
+      "requiredCapabilities": ["providers", "archive-read", "archive-intake-write", "agent-delegation"],
+      "requiredTools": []
+    }
+  ],
+  "connectors": [
+    {
+      "id": "openclaw-runtime-gateway",
+      "name": "OpenClaw runtime gateway",
+      "type": "local-runtime",
+      "description": "Connects ResonantOS to an OpenClaw runtime through scoped workspace and provider grants.",
+      "requiredCapabilities": ["shell", "agent-delegation"],
+      "configScope": "user-config"
+    }
+  ],
+  "scripts": [
+    {
+      "id": "openclaw-gateway-preflight",
+      "name": "OpenClaw gateway preflight",
+      "description": "Verify OpenClaw runtime reachability and task workspace configuration before delegation.",
+      "commandRef": "openclaw.gateway_preflight",
+      "runPolicy": "preflight",
+      "deterministic": true,
+      "requiredCapabilities": ["shell", "agent-delegation"],
+      "producesArtifacts": ["diagnostic-report"],
+      "requiresHumanApproval": false
+    }
+  ],
+  "hooks": [
+    {
+      "id": "openclaw-before-task-complete",
+      "event": "before-task-complete",
+      "handlerRef": "openclaw-gateway-preflight",
+      "requiredCapabilities": ["shell", "agent-delegation"],
+      "failurePolicy": "degrade"
+    }
+  ],
   "installHooks": {
     "onInstall": "register-external-agent"
   },

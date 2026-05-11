@@ -16,6 +16,11 @@ The Hermes integration exposed these recurring failure modes:
 - The add-on may need to reuse an existing local installation instead of owning a clean install directory.
 - Existing local profiles may be outdated, customized, partially broken, or configured with incompatible runtimes.
 - Installer behavior must preserve user identity, skills, memory, sessions, and provider configuration.
+- Compatibility audit can be passive or executable. Passive audit must not run profile-local binaries, shell commands, network calls, or provider checks.
+- UI gates are not security boundaries. Every host command must enforce the same capability grants declared by the manifest.
+- Workspace quick actions must grant only workspace launch capabilities. Provider, archive, network, install, and write grants need separate user-visible actions.
+- Local dashboards must bind to loopback unless a broader bind is explicitly approved and tested.
+- User-selected profile paths are untrusted roots. Running binaries discovered inside those roots is a shell-capability operation.
 - A successful terminal command is not the same as a successful chat integration; TUI banners, ANSI frames, setup logs, and resume trailers must not leak into the chat rail.
 - The chat rail needs immediate user-message append, busy state, duplicate-send protection, and moving activity feedback before the agent reply returns.
 - Agent identity must be visible to the human. Replies should say the add-on agent name, not the primary Augmentor name.
@@ -44,6 +49,10 @@ These fields are optional for non-agent add-ons and backward-compatible for olde
 - External installation requires explicit human approval.
 - Installation, audit, workspace, model, runtime, and smoke-test tools must be declared in `tools`.
 - Contract required capabilities must be a subset of `requestedCapabilities`.
+- Runtime host commands must enforce the capabilities of the manifest tool they implement.
+- Status or audit tools must declare whether they are passive or executable. Executable audit requires the relevant shell/process capability.
+- Workspace presets may grant only the capabilities required to open that workspace, not the complete requested capability list.
+- Dashboard/service tools must default to loopback bind/probe behavior.
 - Agent chat should use `outputFiltering: "assistant-reply-only"` unless the user explicitly opens a diagnostic log view.
 - Direct trusted Living Archive knowledge writes remain forbidden. Intake writes are allowed only through `archive-intake-write`.
 - Every agent add-on that can be invoked from chat should ship at least one deterministic smoke test.

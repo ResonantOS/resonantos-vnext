@@ -65,9 +65,9 @@
     }
   ],
   "providerRequirements": {
-    "sharedProfiles": ["shared-local", "shared-minimax"],
+    "sharedProfiles": ["gx10-local-llama", "shared-local", "shared-minimax"],
     "supportsPrivateCredentials": true,
-    "preferredRuntimeKinds": ["local", "cloud"],
+    "preferredRuntimeKinds": ["remote-user-owned", "local", "cloud"],
     "fallbackPolicyId": "routine-default"
   },
   "archiveIntegration": {
@@ -82,7 +82,7 @@
   "tools": [
     {
       "name": "hermes.audit",
-      "description": "Audit the local Hermes profile, command, config, identity, memory, skills, model metadata, and gateway state.",
+      "description": "Run an executable audit of the local Hermes profile, command, config, identity, memory, skills, model metadata, and gateway state after shell access is granted. Passive profile inspection must not execute this tool.",
       "requiredCapabilities": ["shell"],
       "inputSchema": { "type": "object" },
       "outputSchema": { "type": "object" },
@@ -142,7 +142,7 @@
     },
     {
       "name": "hermes.dashboard",
-      "description": "Start, stop, or inspect the embedded local Hermes dashboard workspace.",
+      "description": "Start, stop, or inspect the embedded local Hermes dashboard workspace on loopback only.",
       "requiredCapabilities": ["shell", "ui-embedding"],
       "inputSchema": { "type": "object" },
       "outputSchema": { "type": "object" },
@@ -164,6 +164,64 @@
       "Routine drafts and coordination plans may be prepared without sending."
     ]
   },
+  "workflowBoundaries": [
+    {
+      "id": "delegated-communication-agent",
+      "label": "Delegated communication agent",
+      "jobToBeDone": "Use Hermes for communication, coordination, follow-up, and routine research tasks under ResonantOS supervision.",
+      "userValue": "The human can delegate communication work without giving Hermes trusted Strategist identity or unrestricted memory authority.",
+      "repeatability": "workflow-package",
+      "owner": "addon-agent",
+      "nonGoals": [
+        "Send public or identity-sensitive messages without approval",
+        "Modify Hermes profile identity or memory without explicit approval",
+        "Write trusted Living Archive pages directly"
+      ]
+    }
+  ],
+  "skills": [
+    {
+      "id": "hermes-delegation-skill",
+      "name": "Hermes delegation",
+      "description": "Package the repeatable method for routing communication work to Hermes with approval gates and artifact return.",
+      "documentPath": "docs/architecture/addon-skills/hermes/AUGMENTOR_SKILL.md",
+      "invocation": "agent-suggested",
+      "requiredCapabilities": ["shell", "providers", "archive-read"],
+      "requiredTools": ["hermes.audit", "hermes.chat", "hermes.create_delegation_workspace", "hermes.start_delegation_task"]
+    }
+  ],
+  "connectors": [
+    {
+      "id": "hermes-local-profile",
+      "name": "Hermes local profile",
+      "type": "local-runtime",
+      "description": "Connects ResonantOS to a locally installed Hermes profile through host-mediated shell and dashboard commands.",
+      "requiredCapabilities": ["shell", "ui-embedding"],
+      "configScope": "user-config"
+    }
+  ],
+  "scripts": [
+    {
+      "id": "hermes-audit-preflight",
+      "name": "Hermes audit preflight",
+      "description": "Run the Hermes audit tool before delegated execution to verify profile, runtime, model, and dashboard state.",
+      "commandRef": "hermes.audit",
+      "runPolicy": "preflight",
+      "deterministic": true,
+      "requiredCapabilities": ["shell"],
+      "producesArtifacts": ["diagnostic-report", "log"],
+      "requiresHumanApproval": false
+    }
+  ],
+  "hooks": [
+    {
+      "id": "hermes-health-audit",
+      "event": "health-check",
+      "handlerRef": "hermes-audit-preflight",
+      "requiredCapabilities": ["shell"],
+      "failurePolicy": "degrade"
+    }
+  ],
   "installHooks": {
     "onInstall": "register-communication-agent"
   },
@@ -261,8 +319,10 @@
         "hermes.dashboard"
       ],
       "workflowPhases": [
-        "detect or install Hermes",
-        "audit local profile compatibility",
+        "inspect local profile passively until shell access is granted",
+        "grant workspace, install, provider, and archive capabilities separately",
+        "run executable audit only after shell access",
+        "detect or install Hermes after explicit network and shell grants",
         "choose direct chat or delegation workspace",
         "inject read-only Living Archive context when granted",
         "run Hermes through the local profile",
@@ -271,6 +331,9 @@
       ],
       "approvalGates": [
         "Ask before installing Hermes or modifying its profile, identity, skills, memory, or config.",
+        "Do not bundle provider, archive, network, or install access into workspace access.",
+        "Treat selected Hermes profile paths as untrusted roots; executing a profile-local binary requires shell access.",
+        "Bind and probe embedded Hermes dashboard surfaces on loopback only.",
         "Ask before any public, external, financial, or identity-sensitive send.",
         "Use Living Archive context as read-only evidence; trusted knowledge writes must go through reviewed ResonantOS intake."
       ],

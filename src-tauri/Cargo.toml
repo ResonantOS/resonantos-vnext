@@ -13,6 +13,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 futures-util = "0.3"
 libloading = "0.8"
 portable-pty = "0.8"
@@ -23,4 +24,5 @@ serde_json = "1"
 sha2 = "0.10"
 tauri = { version = "2", features = ["unstable"] }
 tauri-plugin-dialog = "2"
+tokio = { version = "1", features = ["time"] }
 tungstenite = "0.24"

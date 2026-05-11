@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "author": "Resonant Alpha",
   "category": "channel",
-  "description": "Connects one or more Telegram bots to the Strategist as trusted conversation channels.",
+  "description": "Connects one or more Telegram bots to Augmentor as trusted conversation channels with local transcript mirroring.",
   "runtimeType": "channel-addon",
   "surfaces": [
     {
@@ -47,10 +47,10 @@
     }
   ],
   "providerRequirements": {
-    "sharedProfiles": ["shared-openai"],
+    "sharedProfiles": ["shared-minimax", "gx10-local-llama", "shared-openai", "shared-local"],
     "supportsPrivateCredentials": false,
-    "recommendedPrimaryModel": "gpt-5.4",
-    "recommendedFallbackModel": "gpt-5.4-mini"
+    "recommendedPrimaryModel": "MiniMax-M2.7",
+    "recommendedFallbackModel": "gpt-5.5"
   },
   "archiveIntegration": {
     "readScopes": ["living-archive/context"],
@@ -58,6 +58,64 @@
     "canRequestIngest": false,
     "canWriteKnowledgePages": false
   },
+  "workflowBoundaries": [
+    {
+      "id": "telegram-strategist-channel",
+      "label": "Telegram Strategist channel",
+      "jobToBeDone": "Connect Telegram bot endpoints to Augmentor as conversation channels under the same Strategist identity.",
+      "userValue": "The human can talk to Augmentor away from the desktop while channel state and provider routing remain in ResonantOS.",
+      "repeatability": "workflow-package",
+      "owner": "augmentor",
+      "nonGoals": [
+        "Create a separate trusted agent identity",
+        "Expose raw provider credentials to Telegram",
+        "Write trusted archive pages from Telegram directly"
+      ]
+    }
+  ],
+  "skills": [
+    {
+      "id": "remote-channel-conversation",
+      "name": "Remote channel conversation",
+      "description": "Handle Telegram messages as channel sessions while preserving Strategist identity, memory scope, and provider policy.",
+      "documentPath": "docs/architecture/addon-skills/telegram/REMOTE_CHANNEL_CONVERSATION.md",
+      "invocation": "automatic",
+      "requiredCapabilities": ["network", "archive-read", "providers"],
+      "requiredTools": []
+    }
+  ],
+  "connectors": [
+    {
+      "id": "telegram-bot-api",
+      "name": "Telegram Bot API",
+      "type": "api",
+      "description": "Connects to Telegram through host-managed bot credentials and allowed chat/session mapping.",
+      "requiredCapabilities": ["network"],
+      "configScope": "host-vault"
+    }
+  ],
+  "scripts": [
+    {
+      "id": "telegram-connectivity-check",
+      "name": "Telegram connectivity check",
+      "description": "Verify bot token configuration and channel service state before enabling the Telegram channel.",
+      "commandRef": "telegram_service_status",
+      "runPolicy": "preflight",
+      "deterministic": true,
+      "requiredCapabilities": ["network"],
+      "producesArtifacts": ["diagnostic-report"],
+      "requiresHumanApproval": false
+    }
+  ],
+  "hooks": [
+    {
+      "id": "telegram-enable-check",
+      "event": "before-enable",
+      "handlerRef": "telegram-connectivity-check",
+      "requiredCapabilities": ["network"],
+      "failurePolicy": "block"
+    }
+  ],
   "health": {
     "strategy": "bot-connectivity"
   },
