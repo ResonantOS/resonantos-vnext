@@ -68,6 +68,11 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@1.94.1
 
+      - name: Cache Rust
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri -> target
+
       - name: Stabilize Rust command shims
         shell: bash
         run: |
@@ -79,11 +84,6 @@ jobs:
           chmod +x "$RUNNER_TEMP/rust-bin/cargo"
           echo "$RUNNER_TEMP/rust-bin" >> "$GITHUB_PATH"
           rustup run 1.94.1 cargo --version
-
-      - name: Cache Rust
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: ./src-tauri -> target
 
       - name: Install frontend dependencies
         run: npm ci
