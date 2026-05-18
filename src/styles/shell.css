@@ -1148,3 +1148,119 @@
   border-color: rgba(138, 128, 112, 0.1);
   background: rgba(9, 11, 12, 0.18);
 }
+
+/* ── Cloud/Web mode overrides ─────────────────────────────────────── */
+/* In the desktop Tauri shell, semi-transparent backgrounds blend with
+   the native window chrome. In a web browser there is no chrome behind,
+   so we need fully opaque backgrounds. The body class `web-mode` is
+   added by App.tsx when running in cloud mode. */
+
+.web-mode .shell {
+  background: #13110f;
+}
+
+.web-mode .sidebar {
+  background: #0f0d0b;
+}
+
+.web-mode .main-shell {
+  background: #151210;
+}
+
+.web-mode .system-topbar {
+  background: rgba(14, 12, 10, 1);
+}
+
+.web-mode .content-grid > section,
+.web-mode .content-grid > div {
+  background: #151210;
+}
+
+/* On small screens (mobile), force single-column layout */
+@media (max-width: 900px) {
+  .web-mode .shell,
+  .web-mode .shell.chat-open,
+  .web-mode .shell.chat-closed,
+  .web-mode .shell.layout-chat-main,
+  .web-mode .shell.layout-chat-main.chat-closed {
+    grid-template-columns: 56px minmax(0, 1fr) !important;
+    grid-template-rows: minmax(0, 1fr) !important;
+    grid-template-areas: "dock main" !important;
+  }
+
+  .web-mode .system-topbar {
+    display: none !important;
+  }
+
+  .web-mode .chat-sidebar {
+    display: none !important;
+  }
+
+  .web-mode .sidebar {
+    width: 56px;
+  }
+}
+
+/* ── Mobile viewport overflow fix ─────────────────────────────────── */
+@media (max-width: 900px) {
+  .web-mode .main-shell {
+    overflow-x: hidden;
+    max-width: calc(100vw - 56px);
+    box-sizing: border-box;
+    padding: 0.6rem 0.55rem;
+  }
+
+  .web-mode .content-grid {
+    overflow-x: hidden;
+    max-width: 100%;
+    padding-right: 0;
+    box-sizing: border-box;
+  }
+
+  .web-mode .content-grid > *,
+  .web-mode .content-grid > section,
+  .web-mode .content-grid > div {
+    max-width: 100%;
+    overflow-x: hidden;
+    box-sizing: border-box;
+  }
+
+  /* ── Home workspace: collapse multi-column grids ── */
+  .web-mode .home-hero-panel {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .web-mode .app-workbench-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .web-mode .topbar h1 {
+    font-size: clamp(1.1rem, 5vw, 1.5rem);
+  }
+
+  .web-mode .topbar {
+    flex-direction: column;
+    gap: 0.4rem;
+    align-items: flex-start;
+  }
+
+  .web-mode .topbar-pills {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    max-width: 100%;
+  }
+
+  .web-mode .hero-panel {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Scroll affordance — ensure last card isn't flush with viewport */
+  .web-mode .content-grid {
+    padding-bottom: 1.5rem;
+  }
+
+  /* ── Nav items: label tooltip stays within viewport ── */
+  .web-mode .nav-label {
+    display: none;
+  }
+}

@@ -383,3 +383,27 @@
 .setting-note strong {
   font-size: 0.92rem;
 }
+
+/* ── Mobile: collapse fixed-minimum grids ─────────────────────────── */
+@media (max-width: 900px) {
+  .settings-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-sidebar {
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+  }
+
+  .provider-row-main {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.55rem;
+  }
+
+  .provider-row-meta,
+  .provider-row-actions {
+    justify-content: flex-start;
+  }
+}

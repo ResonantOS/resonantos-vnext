@@ -1999,3 +1999,18 @@
     white-space: normal;
   }
 }
+
+/* ── Mobile: collapse fixed-minimum grids ─────────────────────────── */
+@media (max-width: 900px) {
+  .archive-help-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .archive-primary-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .archive-secondary-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

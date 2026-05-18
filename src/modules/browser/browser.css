@@ -696,3 +696,260 @@
     white-space: normal;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   CloudBrowserView — mobile-first cloud browser UI
+   --------------------------------------------------------------------------- */
+
+.cloud-browser {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: #101112;
+  border-radius: 24px;
+  overflow: hidden;
+}
+
+.cloud-browser-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  background: #1f2022;
+  border-bottom: 1px solid rgba(255, 248, 236, 0.08);
+  flex-shrink: 0;
+}
+
+.cloud-browser-url-form {
+  display: flex;
+  flex: 1;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.cloud-browser-url-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 0.9rem;
+  border: 1px solid rgba(255, 248, 236, 0.18);
+  border-radius: 999px;
+  background: rgba(5, 7, 8, 0.5);
+  color: var(--text-primary, #f9fafb);
+  font-size: 0.95rem;
+  -webkit-appearance: none;
+}
+
+.cloud-browser-url-input:focus {
+  border-color: rgba(96, 165, 250, 0.8);
+  outline: 3px solid rgba(96, 165, 250, 0.2);
+}
+
+.cloud-browser-go {
+  min-width: 56px;
+  min-height: 44px;
+  padding: 0 1rem;
+  border: 1px solid rgba(92, 211, 151, 0.64);
+  border-radius: 999px;
+  background: var(--accent, #22c55e);
+  color: #062016;
+  font-size: 0.9rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.cloud-browser-go:disabled {
+  opacity: 0.55;
+}
+
+.cloud-browser-refresh {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 1px solid rgba(255, 248, 236, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 248, 236, 0.06);
+  color: rgba(255, 248, 236, 0.76);
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+.cloud-browser-refresh:disabled {
+  opacity: 0.34;
+}
+
+.cloud-browser-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.28rem 0.9rem;
+  background: #050606;
+  border-bottom: 1px solid rgba(255, 248, 236, 0.06);
+  min-height: 28px;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.cloud-browser-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(255, 248, 236, 0.22);
+  flex-shrink: 0;
+}
+
+.cloud-browser-status-dot.ready {
+  background: #4ade80;
+}
+
+.cloud-browser-status-dot.loading {
+  background: #facc15;
+}
+
+.cloud-browser-status-dot.error {
+  background: #f87171;
+}
+
+.cloud-browser-status-text {
+  color: rgba(255, 248, 236, 0.52);
+  font-size: 0.72rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.cloud-browser-live-url {
+  color: rgba(255, 248, 236, 0.32);
+  font-size: 0.68rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.cloud-browser-viewport {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: #ffffff;
+  -webkit-overflow-scrolling: touch;
+}
+
+.cloud-browser-screenshot {
+  width: 100%;
+  height: auto;
+  display: block;
+  cursor: pointer;
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
+.cloud-browser-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 2rem;
+  background: #101112;
+  text-align: center;
+}
+
+.cloud-browser-empty p {
+  color: rgba(255, 248, 236, 0.6);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.cloud-browser-start-btn {
+  min-height: 48px;
+  padding: 0 1.5rem;
+  border: 1px solid rgba(96, 165, 250, 0.6);
+  border-radius: 999px;
+  background: rgba(14, 116, 144, 0.44);
+  color: #bfdbfe;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.cloud-browser-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgba(255, 248, 236, 0.12);
+  border-top-color: rgba(96, 165, 250, 0.8);
+  border-radius: 50%;
+  animation: cloud-browser-spin 0.7s linear infinite;
+}
+
+@keyframes cloud-browser-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Ensure cloud-browser fills the workspace cell on mobile */
+.browser-workspace .cloud-browser,
+.content-grid .cloud-browser {
+  border-radius: 16px;
+}
+
+/* ── Cloud browser mobile polish ──────────────────────────────────── */
+
+.cloud-browser-viewport {
+  background: #101112;
+}
+
+.cloud-browser-screenshot {
+  max-height: calc(100vh - 160px);
+  object-fit: contain;
+  background: #101112;
+}
+
+.cloud-browser-empty {
+  background: #101112;
+  color: rgba(255, 248, 236, 0.6);
+  min-height: 200px;
+}
+
+/* Fix header overlap on mobile */
+@media (max-width: 900px) {
+  .web-mode .system-topbar {
+    display: none;
+  }
+  
+  .web-mode .shell {
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-areas: "dock main" !important;
+  }
+  
+  .cloud-browser {
+    border-radius: 0;
+  }
+  
+  .cloud-browser-url-input {
+    font-size: 14px;
+  }
+}
+
+/* Cloud browser mobile width fix */
+@media (max-width: 900px) {
+  .cloud-browser {
+    max-width: calc(100vw - 56px);
+    overflow-x: hidden;
+    box-sizing: border-box;
+  }
+  
+  .cloud-browser-header {
+    padding: 0.5rem;
+  }
+  
+  .cloud-browser-url-form {
+    max-width: 100%;
+  }
+  
+  .cloud-browser-url-input {
+    min-width: 0;
+    flex: 1;
+  }
+}

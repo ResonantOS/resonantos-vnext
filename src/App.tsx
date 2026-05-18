@@ -1868,7 +1868,7 @@ export function App() {
       return draft;
     });
   };
-  const browserDockEnabled = Boolean(browserManifest && browserInstallation?.installed && browserInstallation.enabled);
+  const browserDockEnabled = Boolean(browserManifest && browserInstallation?.installed && browserInstallation.enabled) || isWebMode();
   const obsidianDockEnabled = Boolean(obsidianManifest && obsidianInstallation?.installed && obsidianInstallation.enabled);
   const opencodeDockEnabled = Boolean(opencodeManifest && opencodeInstallation?.installed && opencodeInstallation.enabled);
   const paperclipDockEnabled = Boolean(paperclipManifest && paperclipInstallation?.installed && paperclipInstallation.enabled);
@@ -1911,7 +1911,7 @@ export function App() {
     : navItems;
 
   return (
-    <div className="app-zoom-viewport" style={zoomStyle}>
+    <div className={`app-zoom-viewport ${isWebMode() ? "web-mode" : ""}`} style={zoomStyle}>
       <div className="app-zoom-stage">
         <div
           className={`shell ${effectiveChatOpen ? "chat-open" : "chat-closed"} ${chatInterfaceAvailable ? "" : "chat-unavailable"} ${isFloatingChatSurface ? "floating-chat-surface" : ""} layout-${state.uiPreferences.workspaceLayout}`}

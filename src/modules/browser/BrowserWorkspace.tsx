@@ -1,7 +1,8 @@
 // Intent citation: docs/architecture/ADR-006-addon-runtime-sdk.md
 // Intent citation: docs/architecture/ADR-017-resonant-browser-addon.md
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useRef, useState, MouseEvent as ReactMouseEvent } from "react";
+import { isWebMode, webInvoke } from "../../core/web-transport";
 import type {
   AddOnInstallation,
   AddOnManifest,
@@ -35,6 +36,173 @@ type BrowserWorkspaceProps = {
   onSetExtensionPinned?: (extensionId: string, pinned: boolean) => Promise<BrowserExtensionState[]>;
   onDisableExtension?: (extensionId: string) => Promise<BrowserExtensionState[]>;
 };
+
+// ---------------------------------------------------------------------------
+// CloudBrowserView — mobile-friendly cloud browser for isWebMode()
+// ---------------------------------------------------------------------------
+
+function normalizeCloudUrl(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return "https://resonantos.com";
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
+
+// API response shapes (server uses camelCase)
+type CloudSession = { sessionId: string; url?: string; status?: string };
+type CloudScreenshot = { imageDataBase64: string; mimeType?: string; status?: string };
+
+function CloudBrowserView() {
+  const [draftUrl, setDraftUrl] = useState("https://resonantos.com");
+  const [liveUrl, setLiveUrl] = useState("");
+  const [screenshot, setScreenshot] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [status, setStatus] = useState("Not connected");
+  const imgRef = useRef<HTMLImageElement>(null);
+
+  const captureScreenshot = async (sid: string) => {
+    try {
+      const res = await webInvoke<CloudScreenshot>("browser_session_screenshot", { sessionId: sid });
+      if (res.imageDataBase64) {
+        const mime = res.mimeType ?? "image/jpeg";
+        setScreenshot(`data:${mime};base64,${res.imageDataBase64}`);
+      }
+    } catch {
+      // screenshot may not be ready yet; silently ignore
+    }
+  };
+
+  const doNavigate = async (targetUrl: string, existingSession?: string) => {
+    const normalized = normalizeCloudUrl(targetUrl);
+    setLoading(true);
+    setError("");
+    setStatus("Connecting…");
+    try {
+      let sid = existingSession ?? sessionId;
+      if (!sid) {
+        const res = await webInvoke<CloudSession>("browser_start_session", { url: normalized });
+        sid = res.sessionId;
+        setSessionId(sid);
+        setStatus("Session started");
+      } else {
+        await webInvoke("browser_session_open_url", { sessionId: sid, url: normalized });
+        setStatus("Navigating…");
+      }
+      setLiveUrl(normalized);
+      setDraftUrl(normalized);
+      // Give the page a moment to render before screenshotting
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await captureScreenshot(sid!);
+      setStatus("Ready");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Browser error";
+      setError(msg);
+      setStatus("Error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    void doNavigate(draftUrl);
+  };
+
+  const handleRefresh = () => {
+    if (liveUrl) void doNavigate(liveUrl);
+  };
+
+  const handleImgClick = async (e: ReactMouseEvent<HTMLImageElement>) => {
+    if (!sessionId || !imgRef.current) return;
+    const rect = imgRef.current.getBoundingClientRect();
+    // Map touch/click coords to 1280×800 browser viewport
+    const x = Math.round(((e.clientX - rect.left) / rect.width) * 1280);
+    const y = Math.round(((e.clientY - rect.top) / rect.height) * 800);
+    try {
+      await webInvoke("browser_session_click", { sessionId, x, y });
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      await captureScreenshot(sessionId);
+    } catch {
+      // ignore click errors
+    }
+  };
+
+  return (
+    <div className="cloud-browser" data-testid="cloud-browser">
+      <div className="cloud-browser-header">
+        <form className="cloud-browser-url-form" onSubmit={handleSubmit}>
+          <input
+            className="cloud-browser-url-input"
+            type="url"
+            value={draftUrl}
+            onChange={(e) => setDraftUrl(e.target.value)}
+            placeholder="https://resonantos.com"
+            aria-label="Browser URL"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+          />
+          <button type="submit" className="cloud-browser-go" aria-label="Navigate" disabled={loading}>
+            {loading ? "…" : "Go"}
+          </button>
+        </form>
+        <button
+          type="button"
+          className="cloud-browser-refresh"
+          aria-label="Refresh"
+          onClick={handleRefresh}
+          disabled={loading || !liveUrl}
+        >
+          ↻
+        </button>
+      </div>
+
+      <div className="cloud-browser-status-bar">
+        <span className={`cloud-browser-status-dot ${error ? "error" : loading ? "loading" : sessionId ? "ready" : ""}`} />
+        <span className="cloud-browser-status-text">{error || status}</span>
+        {liveUrl ? <span className="cloud-browser-live-url">{liveUrl}</span> : null}
+      </div>
+
+      <div className="cloud-browser-viewport">
+        {screenshot ? (
+          <img
+            ref={imgRef}
+            src={screenshot}
+            alt="Browser viewport"
+            className="cloud-browser-screenshot"
+            onClick={handleImgClick}
+            draggable={false}
+          />
+        ) : (
+          <div className="cloud-browser-empty">
+            {loading ? (
+              <>
+                <div className="cloud-browser-spinner" />
+                <p>Starting CamoFox…</p>
+              </>
+            ) : (
+              <>
+                <p>Enter a URL and tap <strong>Go</strong> to browse.</p>
+                <button
+                  type="button"
+                  className="cloud-browser-start-btn"
+                  onClick={() => void doNavigate(draftUrl)}
+                >
+                  Open Browser
+                </button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Desktop BrowserWorkspace — unchanged below
+// ---------------------------------------------------------------------------
 
 const DEFAULT_BROWSER_URL = "https://resonantos.com";
 const CHROME_WEB_STORE_URL = "https://chromewebstore.google.com/category/extensions";
@@ -541,6 +709,11 @@ export function BrowserWorkspace({
       installed: extensions.some((extension) => /bitwarden/i.test(extension.name)),
     },
   ] as const;
+
+  // Cloud / mobile mode: skip native browser stack entirely
+  if (isWebMode()) {
+    return <CloudBrowserView />;
+  }
 
   if (!browserReady) {
     return (
