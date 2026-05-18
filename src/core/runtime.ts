@@ -53,6 +53,11 @@ import type {
   BrowserReadPageResult,
   BrowserToolCommand,
   BrowserViewportInput,
+  ComputePassiveDiagnosticsResult,
+  ComputeRemoteProbeRequest,
+  ComputeRemoteProbeResult,
+  ComputeSafeCommandRequest,
+  ComputeSafeCommandResult,
   ConversationMessage,
   DelegationPacket,
   EngineerRecoveryTurnResult,
@@ -62,6 +67,9 @@ import type {
   HermesInstallResult,
   HermesInstallStatus,
   HermesWorkspaceSnapshot,
+  Gx10LlamaStatusResult,
+  Gx10LlamaSwitchRequest,
+  Gx10LlamaSwitchResult,
   LocalRuntimeStatus,
   LivingArchiveMemoryServiceResult,
   LivingArchiveMemoryServiceStatus,
@@ -72,6 +80,7 @@ import type {
   ObsidianVaultIndex,
   ObsidianWriteNoteResult,
   ObsidianVaultStatus,
+  NasBackupStatusResult,
   OpenCodeLaunchMode,
   OpenCodeServiceResult,
   OpenCodeStatus,
@@ -89,6 +98,8 @@ import type {
   TaskWorkspacePayload,
   TerminalPtySessionResult,
   TerminalRunCommandResult,
+  TelegramServiceStatus,
+  TrustKernelAdvisory,
 } from "./contracts";
 import type { BrowserToolResult } from "./browser-tools";
 import { buildDefaultState } from "./defaults";
@@ -176,7 +187,48 @@ export const saveProviderSecret = async (providerId: string, apiKey: string): Pr
   window.localStorage.setItem(`${STORAGE_KEY}.secret.${providerId}`, apiKey);
 };
 
+export const saveTelegramBotToken = async (botToken: string): Promise<void> => {
+  if (hasTauri()) {
+    await invoke("telegram_save_bot_token", { botToken });
+    return;
+  }
+  window.localStorage.setItem(`${STORAGE_KEY}.secret.addon.telegram-channel.bot-token`, botToken);
+};
+
+export const requestTelegramServiceStatus = async (channelId = "telegram-primary"): Promise<TelegramServiceStatus> => {
+  if (hasTauri()) {
+    return (await invoke("telegram_service_status", { channelId })) as TelegramServiceStatus;
+  }
+  return {
+    running: false,
+    tokenConfigured: Boolean(window.localStorage.getItem(`${STORAGE_KEY}.secret.addon.telegram-channel.bot-token`)),
+    channelId,
+  };
+};
+
+export const startTelegramService = async (input: {
+  channelId?: string;
+  allowedChatIds?: string[];
+  preferredModel?: string;
+}): Promise<TelegramServiceStatus> => {
+  if (hasTauri()) {
+    return (await invoke("telegram_service_start", { request: input })) as TelegramServiceStatus;
+  }
+  throw new Error("Telegram channel service is available only in the desktop shell.");
+};
+
+export const stopTelegramService = async (channelId = "telegram-primary"): Promise<TelegramServiceStatus> => {
+  if (hasTauri()) {
+    return (await invoke("telegram_service_stop", { channelId })) as TelegramServiceStatus;
+  }
+  return { running: false, tokenConfigured: false, channelId };
+};
+
 export const requestProviderServiceChatCompletion = async (input: {
+  requestId?: string;
+  threadId?: string;
+  agentId?: string;
+  channelId?: string;
   providerId: string;
   providerType: ProviderProfile["providerType"];
   apiBaseUrl?: string;
@@ -209,6 +261,9 @@ export type ProviderChatStreamEvent = {
 export const requestProviderServiceChatCompletionStream = async (
   input: {
     runId: string;
+    threadId?: string;
+    agentId?: string;
+    channelId?: string;
     providerId: string;
     providerType: ProviderProfile["providerType"];
     apiBaseUrl?: string;
@@ -258,6 +313,64 @@ export const requestLocalRuntimeStatus = async (targetModel?: string): Promise<L
     return webInvoke<LocalRuntimeStatus>("local_runtime_status", { targetModel });
   }
   throw new Error("Local runtime diagnostics are available only in the desktop shell.");
+};
+
+export const requestComputeLocalPassiveDiagnostics = async (): Promise<ComputePassiveDiagnosticsResult> => {
+  if (hasTauri()) {
+    return (await invoke("compute_local_passive_diagnostics")) as ComputePassiveDiagnosticsResult;
+  }
+  const platform = typeof navigator === "undefined" ? "web-preview" : navigator.platform || "web-preview";
+  const userAgent = typeof navigator === "undefined" ? "" : navigator.userAgent;
+  return {
+    nodeId: "compute-desktop-local",
+    os: platform.toLowerCase().includes("mac") ? "macos" : platform.toLowerCase().includes("win") ? "windows" : "web-preview",
+    arch: userAgent.includes("arm64") || userAgent.includes("aarch64") ? "aarch64" : "unknown",
+    family: "web-preview",
+    executableSuffix: "",
+    checkedAt: "web-preview",
+    summary: "Web preview can only report browser platform hints. Desktop passive diagnostics run inside Tauri.",
+  };
+};
+
+export const requestComputeLocalSafeCommand = async (
+  request: ComputeSafeCommandRequest,
+): Promise<ComputeSafeCommandResult> => {
+  if (hasTauri()) {
+    return (await invoke("compute_local_safe_command", { request })) as ComputeSafeCommandResult;
+  }
+  throw new Error("Compute safe commands are available only in the desktop shell.");
+};
+
+export const requestComputeRemoteProbe = async (
+  request: ComputeRemoteProbeRequest,
+): Promise<ComputeRemoteProbeResult> => {
+  if (hasTauri()) {
+    return (await invoke("compute_remote_probe", { request })) as ComputeRemoteProbeResult;
+  }
+  throw new Error("Remote compute probes are available only in the desktop shell.");
+};
+
+export const requestGx10LlamaStatus = async (): Promise<Gx10LlamaStatusResult> => {
+  if (hasTauri()) {
+    return (await invoke("compute_gx10_llama_status")) as Gx10LlamaStatusResult;
+  }
+  throw new Error("GX10 llama status is available only in the desktop shell.");
+};
+
+export const requestGx10LlamaSwitch = async (
+  request: Gx10LlamaSwitchRequest,
+): Promise<Gx10LlamaSwitchResult> => {
+  if (hasTauri()) {
+    return (await invoke("compute_gx10_llama_switch", { request })) as Gx10LlamaSwitchResult;
+  }
+  throw new Error("GX10 llama model switching is available only in the desktop shell.");
+};
+
+export const requestNasBackupStatus = async (): Promise<NasBackupStatusResult> => {
+  if (hasTauri()) {
+    return (await invoke("compute_nas_backup_status")) as NasBackupStatusResult;
+  }
+  throw new Error("NAS backup status is available only in the desktop shell.");
 };
 
 export const requestEngineerRecoveryTurn = async (input: {
@@ -674,6 +787,22 @@ export const requestOpenCodeStopService = async (sessionId?: string): Promise<Op
     return (await invoke("opencode_stop_service", { request: { sessionId } })) as OpenCodeServiceResult;
   }
   throw new Error("OpenCode service shutdown is available only in the desktop shell.");
+};
+
+export const requestOpenCodeTrustEventRecord = async (input: {
+  sessionId?: string;
+  eventType: "user_message" | "assistant_message" | "tool_call" | "artifact_written" | "agent_end" | "verification_report";
+  content?: string;
+  command?: string;
+  tool?: string;
+  path?: string;
+  returncode?: number;
+  metadata?: Record<string, unknown>;
+}): Promise<TrustKernelAdvisory> => {
+  if (hasTauri()) {
+    return (await invoke("opencode_record_trust_event", { request: input })) as TrustKernelAdvisory;
+  }
+  throw new Error("OpenCode Trust Kernel event recording is available only in the desktop shell.");
 };
 
 export const requestPaperclipStatus = async (endpoint?: string): Promise<PaperclipStatus> => {
@@ -1614,7 +1743,12 @@ const normalizeProviders = (
     if (!current) {
       return profile;
     }
-    const primaryModel = profile.allowedModels.includes(current.primaryModel) ? current.primaryModel : profile.primaryModel;
+    const primaryModel =
+      profile.id === "shared-minimax" && current.primaryModel === "MiniMax-M2.7"
+        ? profile.primaryModel
+        : profile.allowedModels.includes(current.primaryModel)
+          ? current.primaryModel
+          : profile.primaryModel;
     const fallbackModel =
       current.fallbackModel && profile.allowedModels.includes(current.fallbackModel)
         ? current.fallbackModel
@@ -1651,6 +1785,7 @@ const normalizeRuntimeNodes = (
       ...current,
       kind: node.kind,
       locality: node.locality,
+      providerProfileId: node.providerProfileId,
       supportedModels: node.supportedModels,
       authTier: node.authTier,
       deployableOnDemand: node.deployableOnDemand,
@@ -1659,6 +1794,7 @@ const normalizeRuntimeNodes = (
     if (node.id === "node-gx10-qwen" && !String(merged.endpoint ?? "").startsWith("http")) {
       return {
         ...merged,
+        endpoint: node.endpoint,
         healthState: node.healthState,
       };
     }
@@ -1790,21 +1926,37 @@ const normalizeProviderRouting = (
 const normalizeModelStrategy = (
   persisted: ResonantShellState["modelStrategy"] | undefined,
   defaults: ResonantShellState["modelStrategy"],
-): ResonantShellState["modelStrategy"] => ({
-  ...defaults,
-  ...(persisted ?? {}),
-  fallbackChains: persisted?.fallbackChains?.length ? persisted.fallbackChains : defaults.fallbackChains,
-  workloadStrategies: persisted?.workloadStrategies?.length ? persisted.workloadStrategies : defaults.workloadStrategies,
-  emergencyPolicy: {
-    ...defaults.emergencyPolicy,
-    ...(persisted?.emergencyPolicy ?? {}),
-    orderedPromotionTargets:
-      persisted?.emergencyPolicy?.orderedPromotionTargets?.length
-        ? persisted.emergencyPolicy.orderedPromotionTargets
-        : defaults.emergencyPolicy.orderedPromotionTargets,
-    hardFloorRoute: persisted?.emergencyPolicy?.hardFloorRoute ?? defaults.emergencyPolicy.hardFloorRoute,
-  },
-});
+): ResonantShellState["modelStrategy"] => {
+  const defaultStrategiesById = new Map(defaults.workloadStrategies.map((strategy) => [strategy.id, strategy]));
+  const workloadStrategies = (persisted?.workloadStrategies?.length ? persisted.workloadStrategies : defaults.workloadStrategies).map((strategy) => {
+    const defaultStrategy = defaultStrategiesById.get(strategy.id);
+    if (!defaultStrategy) {
+      return strategy;
+    }
+    if (
+      (strategy.id === "strategy-augmentor-primary" && strategy.primaryRoute.model === "MiniMax-M2.7") ||
+      (strategy.id === "strategy-archive-ingest" && strategy.primaryRoute.model === "gpt-5.4")
+    ) {
+      return {
+        ...strategy,
+        primaryRoute: defaultStrategy.primaryRoute,
+      };
+    }
+    return strategy;
+  });
+  return {
+    ...defaults,
+    ...(persisted ?? {}),
+    fallbackChains: defaults.fallbackChains,
+    workloadStrategies,
+    emergencyPolicy: {
+      ...defaults.emergencyPolicy,
+      ...(persisted?.emergencyPolicy ?? {}),
+      orderedPromotionTargets: defaults.emergencyPolicy.orderedPromotionTargets,
+      hardFloorRoute: defaults.emergencyPolicy.hardFloorRoute,
+    },
+  };
+};
 
 const normalizeArchivePolicy = (
   persisted: ResonantShellState["archivePolicy"] | undefined,
@@ -1831,6 +1983,16 @@ const normalizeArchivePolicy = (
   },
   actorPolicies: persisted?.actorPolicies?.length ? persisted.actorPolicies : defaults.actorPolicies,
   notes: persisted?.notes?.length ? persisted.notes : defaults.notes,
+});
+
+const normalizeArchiveAutomationPolicy = (
+  persisted: ResonantShellState["archiveAutomationPolicy"] | undefined,
+  defaults: ResonantShellState["archiveAutomationPolicy"],
+): ResonantShellState["archiveAutomationPolicy"] => ({
+  ...defaults,
+  ...(persisted ?? {}),
+  autoSyncEnabled: persisted?.autoSyncEnabled ?? defaults.autoSyncEnabled,
+  aiMemoryBuilds: persisted?.aiMemoryBuilds ?? defaults.aiMemoryBuilds,
 });
 
 export const normalizeState = (state: ResonantShellState, base: ResonantShellState): ResonantShellState => {
@@ -1870,11 +2032,22 @@ export const normalizeState = (state: ResonantShellState, base: ResonantShellSta
     providers: normalizeProviders(state.providers, base.providers),
     runtimeNodes: normalizeRuntimeNodes(state.runtimeNodes, base.runtimeNodes),
     providerRouting: normalizeProviderRouting(state.providerRouting, base.providerRouting),
+    computeFabric: state.computeFabric
+      ? {
+          ...base.computeFabric,
+          ...state.computeFabric,
+          nodes: mergeById(state.computeFabric.nodes, base.computeFabric.nodes),
+          jobs: state.computeFabric.jobs ?? base.computeFabric.jobs,
+          artifacts: state.computeFabric.artifacts ?? base.computeFabric.artifacts,
+          audit: state.computeFabric.audit ?? base.computeFabric.audit,
+        }
+      : base.computeFabric,
     modelStrategy: normalizeModelStrategy(state.modelStrategy, base.modelStrategy),
     agents: normalizeAgents(state.agents, base.agents),
     channels: normalizeChannels(installations, state.channels, base.channels),
     workspaces: normalizeWorkspaces(state.workspaces, base.workspaces),
     archivePolicy: normalizeArchivePolicy(state.archivePolicy, base.archivePolicy),
+    archiveAutomationPolicy: normalizeArchiveAutomationPolicy(state.archiveAutomationPolicy, base.archiveAutomationPolicy),
     chatProjects: state.chatProjects ?? base.chatProjects,
     conversationThreads: mergeConversationThreads(state.conversationThreads, base.conversationThreads),
     transcriptLedger: state.transcriptLedger ?? base.transcriptLedger,

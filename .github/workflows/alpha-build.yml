@@ -73,6 +73,18 @@ jobs:
         with:
           workspaces: ./src-tauri -> target
 
+      - name: Stabilize Rust command shims
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/rust-bin"
+          cat > "$RUNNER_TEMP/rust-bin/cargo" <<'EOF'
+          #!/usr/bin/env bash
+          exec rustup run 1.94.1 cargo "$@"
+          EOF
+          chmod +x "$RUNNER_TEMP/rust-bin/cargo"
+          echo "$RUNNER_TEMP/rust-bin" >> "$GITHUB_PATH"
+          rustup run 1.94.1 cargo --version
+
       - name: Install frontend dependencies
         run: npm ci
 

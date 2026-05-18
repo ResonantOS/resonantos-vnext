@@ -2,7 +2,16 @@
 // Intent citation: docs/architecture/ADR-006-addon-runtime-sdk.md
 
 import type { Dispatch, SetStateAction } from "react";
-import type { AddOnInstallation, AddOnManifest, CapabilityGrant, ResonantShellState } from "../../core/contracts";
+import type {
+  AddOnHookDefinition,
+  AddOnInstallation,
+  AddOnManifest,
+  AddOnScriptDefinition,
+  CapabilityGrant,
+  LogicianExecutionArtifact,
+  ResonantShellState,
+} from "../../core/contracts";
+import { executeLogicianHook, executeLogicianScript } from "../../core/logician";
 import { applyProviderCredentialStatuses, hydrateState, loadProviderCredentialStatuses, sideloadManifest } from "../../core/runtime";
 
 type SideloadControllerInput = {
@@ -144,4 +153,61 @@ export const updateAddonConfig = (
     };
     return draft;
   });
+};
+
+const appendVerificationArtifact = (
+  artifact: LogicianExecutionArtifact,
+  updateRuntimeState: (updater: (current: ResonantShellState) => ResonantShellState) => void,
+): void => {
+  updateRuntimeState((draft) => {
+    const installation = draft.installations[artifact.addonId] as AddOnInstallation | undefined;
+    if (!installation) {
+      return draft;
+    }
+    const artifacts = [artifact, ...(installation.verificationArtifacts ?? [])].slice(0, 20);
+    installation.verificationArtifacts = artifacts;
+    if (artifact.status === "failed" || artifact.status === "blocked") {
+      installation.status = installation.enabled ? "degraded" : installation.status;
+      installation.notes = [`Latest Logician check ${artifact.status}: ${artifact.summary}`];
+    } else if (artifact.status === "passed" && installation.enabled) {
+      installation.status = "enabled";
+      installation.notes = [`Latest Logician check passed: ${artifact.summary}`];
+    } else if (artifact.status === "degraded" && installation.enabled) {
+      installation.status = "degraded";
+      installation.notes = [`Latest Logician check degraded: ${artifact.summary}`];
+    }
+    return draft;
+  });
+};
+
+export const runAddonLogicianScript = async (
+  manifest: AddOnManifest,
+  installation: AddOnInstallation,
+  script: AddOnScriptDefinition,
+  updateRuntimeState: (updater: (current: ResonantShellState) => ResonantShellState) => void,
+): Promise<LogicianExecutionArtifact> => {
+  const artifact = await executeLogicianScript({
+    manifest,
+    installation,
+    script,
+    humanInitiated: true,
+  });
+  appendVerificationArtifact(artifact, updateRuntimeState);
+  return artifact;
+};
+
+export const runAddonLogicianHook = async (
+  manifest: AddOnManifest,
+  installation: AddOnInstallation,
+  hook: AddOnHookDefinition,
+  updateRuntimeState: (updater: (current: ResonantShellState) => ResonantShellState) => void,
+): Promise<LogicianExecutionArtifact> => {
+  const artifact = await executeLogicianHook({
+    manifest,
+    installation,
+    hook,
+    humanInitiated: true,
+  });
+  appendVerificationArtifact(artifact, updateRuntimeState);
+  return artifact;
 };

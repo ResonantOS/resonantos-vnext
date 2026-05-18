@@ -311,7 +311,7 @@ export const createEngineerDelegationPacket = (
     providerPolicy: {
       preferredProviderProfileIds: ["shared-local", "shared-minimax", "shared-openai"],
       preferredRuntimeNodeIds: ["node-local-resurrect", "node-minimax-cloud", "node-openai-cloud"],
-      preferredModels: ["batiai/gemma4-e2b:q4", "MiniMax-M2.7", "gpt-5.4"],
+      preferredModels: ["batiai/gemma4-e2b:q4", "MiniMax-M2.7-highspeed", "gpt-5.5"],
       allowedRuntimeKinds: ["local", "cloud", "remote-user-owned"],
       fallbackPolicyId: "recovery-default",
     },
@@ -411,7 +411,7 @@ export const createHermesDelegationPacket = (
     providerPolicy: {
       preferredProviderProfileIds: ["shared-minimax", "shared-local", "shared-openai"],
       preferredRuntimeNodeIds: ["node-minimax-cloud", "node-local-resurrect", "node-openai-cloud"],
-      preferredModels: ["MiniMax-M2.7", "batiai/gemma4-e2b:q4", "gpt-5.4"],
+      preferredModels: ["MiniMax-M2.7-highspeed", "batiai/gemma4-e2b:q4", "gpt-5.5"],
       allowedRuntimeKinds: ["local", "cloud", "remote-user-owned"],
       fallbackPolicyId: "routine-default",
     },

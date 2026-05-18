@@ -1,0 +1,125 @@
+{
+  "id": "addon.coherence-gate",
+  "name": "Coherence Gate",
+  "version": "0.1.0",
+  "author": "Resonant Alpha",
+  "category": "security",
+  "description": "Task tracking and drift detection daemon. Intercepts tool calls to evaluate whether agent actions align with the active task, logging execution entries and flagging potential drift based on keyword and path overlap analysis. Supports advisory, gated, and strict enforcement modes.",
+  "runtimeType": "local-service",
+  "surfaces": [
+    {
+      "id": "coherence-gate-monitor",
+      "type": "background-task-monitor",
+      "label": "Coherence Gate Monitor",
+      "description": "Background monitor showing active task status, recent drift scores, and execution log entries."
+    }
+  ],
+  "requestedCapabilities": [
+    {
+      "capability": "filesystem",
+      "granted": false,
+      "scope": "workspace",
+      "revocationBehavior": "hard-stop"
+    },
+    {
+      "capability": "notifications",
+      "granted": false,
+      "scope": "shared",
+      "revocationBehavior": "degrade"
+    }
+  ],
+  "provenance": {
+    "tier": "curated-signed",
+    "verificationState": "verified",
+    "signed": true,
+    "signer": "ResonantOS bundled catalog"
+  },
+  "runtimeIsolation": {
+    "boundary": "host-mediated-service",
+    "supportsDegradedMode": true,
+    "requiresReviewedGrant": false
+  },
+  "grantPresets": [
+    {
+      "id": "recommended-coherence-enforcement",
+      "label": "Recommended coherence enforcement",
+      "description": "Enable task-drift detection with filesystem access for task files and execution logs, plus notifications for drift warnings.",
+      "grants": [
+        {
+          "capability": "filesystem",
+          "granted": true,
+          "scope": "workspace",
+          "revocationBehavior": "hard-stop"
+        },
+        {
+          "capability": "notifications",
+          "granted": true,
+          "scope": "shared",
+          "revocationBehavior": "degrade"
+        }
+      ]
+    }
+  ],
+  "providerRequirements": {
+    "sharedProfiles": [],
+    "supportsPrivateCredentials": false
+  },
+  "archiveIntegration": {
+    "readScopes": [],
+    "intakeWriteScopes": [],
+    "canRequestIngest": false,
+    "canWriteKnowledgePages": false
+  },
+  "health": {
+    "strategy": "local-daemon"
+  },
+  "tools": [
+    {
+      "name": "coherence_gate.status",
+      "description": "Report the current active task, enforcement mode, drift threshold, and recent execution log entries.",
+      "requiredCapabilities": ["filesystem"],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "includeLog": {
+            "type": "boolean",
+            "description": "Include recent execution log entries in the response."
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "mode": { "type": "string" },
+          "activeTask": { "type": "string" },
+          "driftThreshold": { "type": "number" },
+          "recentEntries": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      },
+      "audit": {
+        "logRequest": true,
+        "logResult": true,
+        "artifactTypes": ["log"]
+      }
+    }
+  ],
+  "installHooks": {
+    "onEnable": "start-coherence-gate"
+  },
+  "install": {
+    "mode": "bundled",
+    "requiredCapabilities": [],
+    "requiresHumanApprovalBeforeInstall": false,
+    "preservesExistingUserConfig": true,
+    "credentialSetup": "none",
+    "auditLogRequired": true,
+    "expectedArtifacts": ["log"]
+  },
+  "compatibility": {
+    "shellVersion": "^0.1.0",
+    "platforms": ["macOS", "linux"]
+  }
+}

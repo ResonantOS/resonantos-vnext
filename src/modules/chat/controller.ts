@@ -51,11 +51,8 @@ import {
   shouldDelegateToHermes,
 } from "../../core/delegation";
 import {
-  buildContextBudget,
   compactThreadContext,
   formatCompactStateForPrompt,
-  latestCompactStateForThread,
-  promptMessagesForThread,
   shouldAutoCompactContext,
   shouldHardStopContext,
 } from "../../core/context-memory";
@@ -68,6 +65,7 @@ import {
 } from "./archive-context";
 import type { ComposerAttachment, ThinkingDepth } from "./types";
 import { attachmentPromptBlock } from "./utils";
+import { buildProviderChatRouteRequest } from "./chat-route-request";
 
 type ReadyShellSnapshot = {
   state: ResonantShellState;
@@ -224,7 +222,7 @@ export const executeChatTurn = async ({
         return;
       }
       recordRunEvent("tool-running", "Read delegated workspace packet.", payload.workspace.id);
-      const engineerRoute = resolveAgentChatRoute(nextState, nextState.recoverySession.engineerAgentId, activeChatModel);
+      const engineerRoute = resolveAgentChatRoute(nextState, nextState.recoverySession.engineerAgentId);
       const engineerProvider = engineerRoute.provider;
       const engineerRuntimeNode = engineerRoute.runtimeNode;
       if (!engineerProvider || !engineerRuntimeNode || !engineerRoute.model) {
@@ -427,55 +425,32 @@ export const executeChatTurn = async ({
       routedState = nextState;
     }
 
-    const route = resolveAgentChatRoute(routedState, activeThread.owningAgentId, activeChatModel);
-    const provider = route.provider;
-    const runtimeNode = route.runtimeNode;
-    if (!provider || !runtimeNode || !route.model) {
-      throw new Error(
-        route.decision.resolutionReason === "no-viable-route"
-          ? "No live provider route is currently available for Strategist chat. A recovery route may exist in the provider fabric, but it is not currently executable."
-          : "No routed provider node is currently available for Strategist chat.",
-      );
-    }
+    const recoveryAgentActive = activeThread.owningAgentId === routedState.recoverySession.engineerAgentId;
+    const selectedModelForRoute = recoveryAgentActive ? "" : activeChatModel;
+    let routeRequest = buildProviderChatRouteRequest({
+      state: routedState,
+      threadId: activeThread.id,
+      agentId: activeThread.owningAgentId,
+      selectedModel: selectedModelForRoute,
+    });
+    let { route, provider, runtimeNode, routedModel, compactState, providerMessages } = routeRequest;
     if (!providerCredentialReady(provider)) {
       throw new Error(`${provider.label} credential missing. Add it in Settings > Provider Profiles.`);
     }
-    const routedModel = route.model;
 
-    let thread = threadById(routedState, activeThread.id);
-    if (!thread) {
-      throw new Error("Active Strategist thread was not found.");
-    }
-    let compactState = latestCompactStateForThread(routedState, thread.id);
-    let providerMessages = promptMessagesForThread(thread, compactState);
-    const contextBudget = buildContextBudget({
-      thread: { ...thread, messages: providerMessages },
-      composer: "",
-      attachments: [],
-      provider,
-      runtimeNode,
-      modelId: route.model,
-    });
-    if (shouldAutoCompactContext(contextBudget)) {
+    if (shouldAutoCompactContext(routeRequest.contextBudget)) {
       markProgress("tool-running", "Auto-compacting conversation memory before the next provider call.");
       routedState = compactThreadContext(routedState, activeThread.id);
       commitReadyState(routedState);
       setChatNotice("Context reached the automatic compaction threshold. Conversation memory was compacted before sending.");
-      thread = threadById(routedState, activeThread.id);
-      if (!thread) {
-        throw new Error("Active Strategist thread was not found after compaction.");
-      }
-      compactState = latestCompactStateForThread(routedState, thread.id);
-      providerMessages = promptMessagesForThread(thread, compactState);
-      const compactedBudget = buildContextBudget({
-        thread: { ...thread, messages: providerMessages },
-        composer: "",
-        attachments: [],
-        provider,
-        runtimeNode,
-        modelId: route.model,
+      routeRequest = buildProviderChatRouteRequest({
+        state: routedState,
+        threadId: activeThread.id,
+        agentId: activeThread.owningAgentId,
+        selectedModel: selectedModelForRoute,
       });
-      if (shouldHardStopContext(compactedBudget)) {
+      ({ route, provider, runtimeNode, routedModel, compactState, providerMessages } = routeRequest);
+      if (shouldHardStopContext(routeRequest.contextBudget)) {
         throw new Error(
           "Context remains above the hard-stop threshold after compaction. Start a branched chat or switch to a model with a larger context window before continuing.",
         );
@@ -500,19 +475,18 @@ export const executeChatTurn = async ({
     const systemPrompt =
       activeThread.owningAgentId === routedState.recoverySession.engineerAgentId
         ? engineerSystemPrompt({
-            activeModel: route.model,
+            activeModel: routedModel,
             activeRouteLabel: runtimeNode.label,
             activeRuntimeKind: runtimeNode.kind,
             localRuntimeStatus: runtimeStatusForPrompt,
           })
         : strategistSystemPrompt(routedState, [...snapshot.bundled, ...snapshot.sideloaded], {
-            activeModel: route.model,
+            activeModel: routedModel,
             activeProviderLabel: provider.label,
             activeRouteLabel: runtimeNode.label,
             activeRuntimeKind: runtimeNode.kind,
           });
 
-    const recoveryAgentActive = activeThread.owningAgentId === routedState.recoverySession.engineerAgentId;
     const memoryProvider = resolveMemoryProviderBroker(routedState, [...snapshot.bundled, ...snapshot.sideloaded]);
     if (recoveryAgentActive) {
       markProgress("tool-running", "Probing stronger routes, reading state, and preparing the next recovery step.");
@@ -567,7 +541,7 @@ export const executeChatTurn = async ({
           apiBaseUrl: runtimeNode.endpoint ?? provider.apiBaseUrl,
           runtimeNodeId: runtimeNode.id,
           runtimeNodeKind: runtimeNode.kind,
-          model: route.model,
+          model: routedModel,
           systemPrompt: effectiveSystemPrompt,
           messages: providerMessages,
           runtimeNodeEndpoint: runtimeNode.endpoint,
@@ -609,6 +583,10 @@ export const executeChatTurn = async ({
     };
     const nonStreamingRequest = () =>
       requestProviderServiceChatCompletion({
+        requestId: runToken,
+        threadId: activeThread.id,
+        agentId: activeThread.owningAgentId,
+        channelId: activeThread.channelId,
         providerId: provider.id,
         providerType: provider.providerType,
         apiBaseUrl: runtimeNode.endpoint ?? provider.apiBaseUrl,
@@ -627,6 +605,9 @@ export const executeChatTurn = async ({
         ? await requestProviderServiceChatCompletionStream(
             {
               runId: runToken,
+              threadId: activeThread.id,
+              agentId: activeThread.owningAgentId,
+              channelId: activeThread.channelId,
               providerId: provider.id,
               providerType: provider.providerType,
               apiBaseUrl: runtimeNode.endpoint ?? provider.apiBaseUrl,

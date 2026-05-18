@@ -207,6 +207,85 @@ describe("context memory budget estimation", () => {
     expect(latestCompactStateForThread({ contextMemoryStates: [compactState] }, thread.id)?.checksum).toBe(compactState.checksum);
   });
 
+  it("falls back to the visible transcript when compact memory points at stale message ids", () => {
+    const state = buildDefaultState([]);
+    const thread = {
+      ...state.conversationThreads.find((item) => item.id === "thread-main-desktop")!,
+      messages: [
+        {
+          id: "thread-main-desktop:seed-1",
+          threadId: "thread-main-desktop",
+          channelId: "desktop-main",
+          role: "assistant" as const,
+          author: "Augmentor",
+          createdAt: "2026-04-25T10:00:00.000Z",
+          content: "Ready.",
+        },
+        {
+          id: "thread-main-desktop:m2",
+          threadId: "thread-main-desktop",
+          channelId: "desktop-main",
+          role: "user" as const,
+          author: "You",
+          createdAt: "2026-04-25T10:01:00.000Z",
+          content: "This latest user message must reach the provider.",
+        },
+      ],
+    };
+    const staleCompactState = {
+      ...buildDeterministicCompactState(thread, 1),
+      sourceRange: {
+        fromMessageId: "thread-main-desktop:seed-1",
+        toMessageId: "thread-main-desktop:m42",
+      },
+      preservedRecentMessageIds: ["thread-main-desktop:m35", "thread-main-desktop:m36"],
+    };
+
+    expect(promptMessagesForThread(thread, staleCompactState).map((message) => message.id)).toEqual(["thread-main-desktop:m2"]);
+  });
+
+  it("keeps failed assistant errors visible but out of provider prompt history", () => {
+    const state = buildDefaultState([]);
+    const thread = {
+      ...state.conversationThreads.find((item) => item.id === "thread-main-desktop")!,
+      messages: [
+        {
+          id: "thread-main-desktop:m1",
+          threadId: "thread-main-desktop",
+          channelId: "desktop-main",
+          role: "user" as const,
+          author: "You",
+          createdAt: "2026-04-25T10:00:00.000Z",
+          content: "First attempt.",
+        },
+        {
+          id: "thread-main-desktop:m2",
+          threadId: "thread-main-desktop",
+          channelId: "desktop-main",
+          role: "assistant" as const,
+          author: "Augmentor",
+          createdAt: "2026-04-25T10:01:00.000Z",
+          content: "invalid params, chat content is empty (2013)",
+          status: "failed" as const,
+        },
+        {
+          id: "thread-main-desktop:m3",
+          threadId: "thread-main-desktop",
+          channelId: "desktop-main",
+          role: "user" as const,
+          author: "You",
+          createdAt: "2026-04-25T10:02:00.000Z",
+          content: "Retry with real content.",
+        },
+      ],
+    };
+
+    expect(promptMessagesForThread(thread, null).map((message) => message.id)).toEqual([
+      "thread-main-desktop:m1",
+      "thread-main-desktop:m3",
+    ]);
+  });
+
   it("copies compact states when a compacted thread is forked", () => {
     const state = buildDefaultState([]);
     const compacted = compactThreadContext(state, "thread-main-desktop", 1);

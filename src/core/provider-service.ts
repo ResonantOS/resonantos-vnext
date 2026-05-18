@@ -22,6 +22,15 @@ export type ProviderRouteResolution = {
 };
 
 const ROUTABLE_RUNTIME_HEALTH: ProviderRuntimeNode["healthState"][] = ["ready", "degraded", "deployable"];
+const CANONICAL_CHAT_MODEL_ORDER = [
+  "MiniMax-M2.7-highspeed",
+  "MiniMax-M2.7",
+  "gpt-5.5",
+  "gpt-5.4-mini",
+  "batiai/gemma4-e2b:q4",
+  "gemma-4-26B-A4B-it-UD-Q4_K_M.gguf",
+  "Qwen3.6-27B-Q4_K_M.gguf",
+];
 
 const adapterPolicyForRoute = (
   adapters: ProviderExecutionAdapterPolicy[],
@@ -77,10 +86,12 @@ export const selectableAgentChatModels = (
     : ["cloud", "local", "remote-user-owned"];
   const models = state.providers.flatMap((provider) =>
     provider.allowedModels.filter((model) =>
+      CANONICAL_CHAT_MODEL_ORDER.includes(model) &&
       state.runtimeNodes.some((node) => routeCanServeModel(state, provider, node, model, allowedRuntimeKinds)),
     ),
   );
-  return uniqueValues(models);
+  const uniqueModels = uniqueValues(models);
+  return CANONICAL_CHAT_MODEL_ORDER.filter((model) => uniqueModels.includes(model));
 };
 
 export const resolveAgentChatRoute = (

@@ -120,10 +120,10 @@
     }
   ],
   "providerRequirements": {
-    "sharedProfiles": ["shared-minimax", "shared-openai", "shared-local"],
+    "sharedProfiles": ["shared-minimax", "gx10-local-llama", "shared-openai", "shared-local"],
     "supportsPrivateCredentials": true,
     "recommendedPrimaryModel": "MiniMax-M2.7",
-    "recommendedFallbackModel": "gpt-5.4",
+    "recommendedFallbackModel": "gpt-5.5",
     "preferredRuntimeKinds": ["cloud", "remote-user-owned", "local"],
     "allowExperimentalAuth": true,
     "fallbackPolicyId": "core-default"
@@ -134,6 +134,72 @@
     "canRequestIngest": true,
     "canWriteKnowledgePages": false
   },
+  "workflowBoundaries": [
+    {
+      "id": "primary-strategist-chat",
+      "label": "Primary Strategist conversation",
+      "jobToBeDone": "Give the human a persistent, replaceable chat interface for the trusted Strategist identity.",
+      "userValue": "The human can talk to Augmentor from the dashboard or a floating window while provider routing, memory context, and permissions remain host-mediated.",
+      "repeatability": "workflow-package",
+      "owner": "augmentor",
+      "nonGoals": [
+        "Make the chat interface a non-replaceable core dependency",
+        "Bypass provider routing policy",
+        "Write trusted memory pages directly"
+      ]
+    }
+  ],
+  "skills": [
+    {
+      "id": "strategist-conversation",
+      "name": "Strategist conversation",
+      "description": "Keep Augmentor grounded in user intent, active workspace context, provider cost, and Living Archive boundaries.",
+      "documentPath": "docs/architecture/addon-skills/augmentor-chat/STRATEGIST_CONVERSATION.md",
+      "invocation": "automatic",
+      "requiredCapabilities": ["chat-interface", "providers", "archive-read"],
+      "requiredTools": []
+    }
+  ],
+  "connectors": [
+    {
+      "id": "provider-fabric",
+      "name": "Provider fabric",
+      "type": "api",
+      "description": "Routes Strategist turns through ResonantOS provider policy instead of add-on-owned model selection.",
+      "requiredCapabilities": ["providers"],
+      "configScope": "host-vault"
+    },
+    {
+      "id": "active-memory-context",
+      "name": "Active memory context",
+      "type": "app-connector",
+      "description": "Reads scoped context from the active memory provider for Strategist turns.",
+      "requiredCapabilities": ["archive-read"],
+      "configScope": "none"
+    }
+  ],
+  "scripts": [
+    {
+      "id": "strategist-route-preflight",
+      "name": "Strategist route preflight",
+      "description": "Verify that at least one allowed provider route is available before a Strategist request runs.",
+      "commandRef": "provider.route.preflight",
+      "runPolicy": "preflight",
+      "deterministic": true,
+      "requiredCapabilities": ["providers"],
+      "producesArtifacts": ["diagnostic-report"],
+      "requiresHumanApproval": false
+    }
+  ],
+  "hooks": [
+    {
+      "id": "strategist-health-check",
+      "event": "health-check",
+      "handlerRef": "strategist-route-preflight",
+      "requiredCapabilities": ["providers"],
+      "failurePolicy": "degrade"
+    }
+  ],
   "health": {
     "strategy": "host-command-ready"
   },

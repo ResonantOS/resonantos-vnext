@@ -16,25 +16,14 @@ describe("model strategy planner", () => {
 
     expect(options.some((option) => option.key === "shared-minimax::node-minimax-cloud::MiniMax-M2.7")).toBe(true);
     expect(options.find((option) => option.runtimeNodeId === "node-local-resurrect")?.costPosture).toBe("emergency-only");
-    expect(options.find((option) => option.runtimeNodeId === "node-gx10-qwen")).toBeUndefined();
+    expect(options.some((option) => option.key === "gx10-local-llama::node-gx10-gemma::gemma-4-26B-A4B-it-UD-Q4_K_M.gguf")).toBe(true);
+    expect(options.some((option) => option.key === "gx10-local-llama::node-gx10-qwen::Qwen3.6-27B-Q4_K_M.gguf")).toBe(true);
     expect(costPostureLabel("subscription")).toBe("Subscription");
   });
 
   it("updates a workload primary route and changes routing deterministically", () => {
-    const state = {
-      ...buildDefaultState([]),
-      runtimeNodes: buildDefaultState([]).runtimeNodes.map((node) =>
-        node.id === "node-gx10-qwen"
-          ? {
-              ...node,
-              endpoint: "http://gx10.local:30000/v1",
-              supportedModels: ["qwen3:4b"],
-              healthState: "ready" as const,
-            }
-          : node,
-      ),
-    };
-    const route = routeFromOptionKey(state, "shared-local::node-gx10-qwen::qwen3:4b");
+    const state = buildDefaultState([]);
+    const route = routeFromOptionKey(state, "gx10-local-llama::node-gx10-qwen::Qwen3.6-27B-Q4_K_M.gguf");
 
     expect(route).toBeDefined();
     const updated = updateWorkloadStrategy(state, "strategy-routine-background", {
@@ -45,11 +34,11 @@ describe("model strategy planner", () => {
     const resolved = resolveRoutineRoute(updated);
 
     expect(routeOptionKey(updated.modelStrategy.workloadStrategies.find((strategy) => strategy.id === "strategy-routine-background")!.primaryRoute)).toBe(
-      "shared-local::node-gx10-qwen::qwen3:4b",
+      "gx10-local-llama::node-gx10-qwen::Qwen3.6-27B-Q4_K_M.gguf",
     );
-    expect(resolved.provider?.id).toBe("shared-local");
+    expect(resolved.provider?.id).toBe("gx10-local-llama");
     expect(resolved.runtimeNode?.id).toBe("node-gx10-qwen");
-    expect(resolved.model).toBe("qwen3:4b");
+    expect(resolved.model).toBe("Qwen3.6-27B-Q4_K_M.gguf");
   });
 
   it("ignores unknown route option keys rather than corrupting a strategy", () => {

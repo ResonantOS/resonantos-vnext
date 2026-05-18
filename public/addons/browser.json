@@ -480,6 +480,64 @@
       "AI control must be routed through audited browser-session tools, not direct hidden DOM automation."
     ]
   },
+  "workflowBoundaries": [
+    {
+      "id": "visible-browser-work",
+      "label": "Visible browser work",
+      "jobToBeDone": "Let ResonantOS open, inspect, and capture live web pages through a visible, host-mediated browser session.",
+      "userValue": "The human avoids repeated copy/paste browser work while keeping sensitive browsing actions visible and auditable.",
+      "repeatability": "workflow-package",
+      "owner": "augmentor",
+      "nonGoals": [
+        "Hidden browsing that the human cannot inspect",
+        "Credential entry without explicit human approval",
+        "Direct trusted Living Archive knowledge-page writes"
+      ]
+    }
+  ],
+  "skills": [
+    {
+      "id": "browser-research-session",
+      "name": "Browser-backed research session",
+      "description": "Guide Augmentor through a browser task that needs visual inspection, login-aware context, form interaction, or evidence capture.",
+      "documentPath": "docs/addons/browser/skills/browser-research-session.md",
+      "invocation": "agent-suggested",
+      "requiredCapabilities": ["network", "browser-control"],
+      "requiredTools": ["browser.open_url", "browser.read_page", "browser.capture_evidence"]
+    }
+  ],
+  "connectors": [
+    {
+      "id": "controlled-chromium-host",
+      "name": "Controlled Chromium host",
+      "type": "local-runtime",
+      "description": "Host-mediated Chromium runtime used for visible browsing, page reads, interaction, and evidence capture.",
+      "requiredCapabilities": ["network", "ui-embedding", "browser-control"],
+      "configScope": "user-config"
+    }
+  ],
+  "scripts": [
+    {
+      "id": "browser-host-preflight",
+      "name": "Browser host preflight",
+      "description": "Verify that the native browser host and controlled Chromium runtime are reachable before a delegated browser task runs.",
+      "commandRef": "browser.health",
+      "runPolicy": "preflight",
+      "deterministic": true,
+      "requiredCapabilities": ["browser-control"],
+      "producesArtifacts": ["diagnostic-report"],
+      "requiresHumanApproval": false
+    }
+  ],
+  "hooks": [
+    {
+      "id": "browser-task-completion-check",
+      "event": "before-task-complete",
+      "handlerRef": "browser-host-preflight",
+      "requiredCapabilities": ["browser-control"],
+      "failurePolicy": "block"
+    }
+  ],
   "installHooks": {
     "onInstall": "register-browser-surface"
   },

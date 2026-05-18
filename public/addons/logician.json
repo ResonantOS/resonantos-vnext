@@ -38,6 +38,64 @@
     "canRequestIngest": false,
     "canWriteKnowledgePages": false
   },
+  "workflowBoundaries": [
+    {
+      "id": "deterministic-reasoning-gates",
+      "label": "Deterministic reasoning gates",
+      "jobToBeDone": "Run policy, consistency, schema, and reasoning checks that should not depend on LLM memory or improvisation.",
+      "userValue": "The human gets repeatable verification evidence before agents complete risky or structured work.",
+      "repeatability": "workflow-package",
+      "owner": "engineer",
+      "nonGoals": [
+        "Replace human judgment for high-impact approvals",
+        "Grant add-ons extra authority",
+        "Write trusted memory pages directly"
+      ]
+    }
+  ],
+  "skills": [
+    {
+      "id": "verification-policy-design",
+      "name": "Verification policy design",
+      "description": "Define when a workflow needs deterministic checks, what evidence is required, and which failure policy applies.",
+      "documentPath": "docs/architecture/addon-skills/logician/VERIFICATION_POLICY_DESIGN.md",
+      "invocation": "agent-suggested",
+      "requiredCapabilities": ["filesystem", "archive-read"],
+      "requiredTools": []
+    }
+  ],
+  "connectors": [
+    {
+      "id": "policy-library",
+      "name": "Policy library",
+      "type": "filesystem",
+      "description": "Reads reviewed policy and protocol files used to evaluate deterministic checks.",
+      "requiredCapabilities": ["filesystem", "archive-read"],
+      "configScope": "none"
+    }
+  ],
+  "scripts": [
+    {
+      "id": "logician-policy-check",
+      "name": "Logician policy check",
+      "description": "Run a deterministic policy check and produce verification evidence.",
+      "commandRef": "logician.policy_check",
+      "runPolicy": "on-demand",
+      "deterministic": true,
+      "requiredCapabilities": ["filesystem", "archive-read"],
+      "producesArtifacts": ["verification-report"],
+      "requiresHumanApproval": false
+    }
+  ],
+  "hooks": [
+    {
+      "id": "before-task-complete-policy-check",
+      "event": "before-task-complete",
+      "handlerRef": "logician-policy-check",
+      "requiredCapabilities": ["filesystem", "archive-read"],
+      "failurePolicy": "block"
+    }
+  ],
   "health": {
     "strategy": "policy-engine"
   },

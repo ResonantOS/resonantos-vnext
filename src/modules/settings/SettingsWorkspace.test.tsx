@@ -9,20 +9,7 @@ describe("SettingsWorkspace strategy planner", () => {
   it("lets the user change the workload primary route and failure behavior", () => {
     const onUpdateWorkloadStrategy = vi.fn();
     const onUpdateWorkloadStrategyRoute = vi.fn();
-    const baseState = buildDefaultState([]);
-    const state = {
-      ...baseState,
-      runtimeNodes: baseState.runtimeNodes.map((node) =>
-        node.id === "node-gx10-qwen"
-          ? {
-              ...node,
-              endpoint: "http://gx10.local:30000/v1",
-              supportedModels: ["qwen3:4b"],
-              healthState: "ready" as const,
-            }
-          : node,
-      ),
-    };
+    const state = buildDefaultState([]);
 
     render(
       <SettingsWorkspace
@@ -59,12 +46,12 @@ describe("SettingsWorkspace strategy planner", () => {
     expect(routineCard).toBeTruthy();
     const controls = routineCard!.querySelectorAll("select");
 
-    fireEvent.change(controls[0], { target: { value: "shared-local::node-gx10-qwen::qwen3:4b" } });
+    fireEvent.change(controls[0], { target: { value: "gx10-local-llama::node-gx10-qwen::Qwen3.6-27B-Q4_K_M.gguf" } });
     fireEvent.change(controls[2], { target: { value: "hard-stop" } });
 
     expect(onUpdateWorkloadStrategyRoute).toHaveBeenCalledWith(
       "strategy-routine-background",
-      "shared-local::node-gx10-qwen::qwen3:4b",
+      "gx10-local-llama::node-gx10-qwen::Qwen3.6-27B-Q4_K_M.gguf",
     );
     expect(onUpdateWorkloadStrategy).toHaveBeenCalledWith("strategy-routine-background", {
       hardStopWhenNoFallback: true,

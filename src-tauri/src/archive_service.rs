@@ -158,6 +158,16 @@ pub(crate) struct ArchiveReviewDecision {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct ArchiveReviewPromotion {
+    pub(crate) status: String,
+    pub(crate) actor_id: Option<String>,
+    pub(crate) promoted_at: Option<String>,
+    pub(crate) pages_written: usize,
+    pub(crate) pages_skipped: usize,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct ArchiveReviewArtifact {
     pub(crate) artifact_file: String,
     pub(crate) checked_at: String,
@@ -175,6 +185,7 @@ pub(crate) struct ArchiveReviewArtifact {
     pub(crate) recommendation_reason: String,
     pub(crate) proposed_pages: Vec<Value>,
     pub(crate) decision: ArchiveReviewDecision,
+    pub(crate) promotion: Option<ArchiveReviewPromotion>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -265,6 +276,7 @@ pub(crate) struct ArchiveMaintenanceCycleResult {
     pub(crate) started_at: String,
     pub(crate) finished_at: String,
     pub(crate) processed: Vec<ArchiveProcessIngestResult>,
+    pub(crate) repaired: Vec<ArchiveReviewDecisionResult>,
     pub(crate) promoted: Vec<ArchivePromoteReviewArtifactResult>,
     pub(crate) navigation: ArchiveWikiNavigationRefreshResult,
     pub(crate) lint: ArchiveLintResult,
@@ -1837,6 +1849,10 @@ pub(crate) async fn semantic_lint_archive(
     let reply = execute_provider_service_chat(
         app,
         ProviderServiceChatRequest {
+            request_id: Some("archive-semantic-lint".to_string()),
+            thread_id: None,
+            agent_id: Some("archive-ingest.core".to_string()),
+            channel_id: None,
             provider_id: request.provider_id.clone(),
             provider_type: request.provider_type,
             api_base_url: request.api_base_url,
@@ -2546,6 +2562,9 @@ pub(crate) fn write_archive_intake_artifact(
 ) -> Result<ArchiveIntakeWriteResult, String> {
     let runtime = ArchiveRuntime::resolve(app)?;
     let bucket = slugify(&request.bucket);
+    if bucket.is_empty() {
+        return Err("Archive intake bucket must normalize to a non-empty safe name.".to_string());
+    }
     let file_name = request.file_name.trim();
     if file_name.is_empty() {
         return Err("Archive intake artifact must have a file name.".to_string());
@@ -2555,9 +2574,8 @@ pub(crate) fn write_archive_intake_artifact(
     let bucket_root = runtime.intake_root().join(bucket.clone());
     fs::create_dir_all(&bucket_root)
         .map_err(|error| format!("Failed to create archive intake bucket: {error}"))?;
-    let artifact_path = bucket_root.join(file_name);
-    fs::write(&artifact_path, request.content)
-        .map_err(|error| format!("Failed to write archive intake artifact: {error}"))?;
+    let artifact_path =
+        write_unique_intake_artifact_file(&bucket_root, file_name, request.content.as_bytes())?;
 
     let metadata_path = if let Some(metadata) = request.metadata {
         let meta_path = artifact_path.with_extension(format!(
@@ -2601,6 +2619,47 @@ pub(crate) fn write_archive_intake_artifact(
     })
 }
 
+fn intake_collision_file_name(file_name: &str, collision_index: usize) -> String {
+    if collision_index == 0 {
+        return file_name.to_string();
+    }
+    let path = Path::new(file_name);
+    let stem = path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or(file_name);
+    let extension = path.extension().and_then(|value| value.to_str());
+    match extension {
+        Some(extension) if !extension.is_empty() => format!("{stem}-{collision_index}.{extension}"),
+        _ => format!("{stem}-{collision_index}"),
+    }
+}
+
+fn write_unique_intake_artifact_file(
+    bucket_root: &Path,
+    file_name: &str,
+    content: &[u8],
+) -> Result<PathBuf, String> {
+    for collision_index in 0..1000 {
+        let candidate = bucket_root.join(intake_collision_file_name(file_name, collision_index));
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&candidate)
+        {
+            Ok(mut file) => {
+                use std::io::Write;
+                file.write_all(content)
+                    .map_err(|error| format!("Failed to write archive intake artifact: {error}"))?;
+                return Ok(candidate);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(format!("Failed to write archive intake artifact: {error}")),
+        }
+    }
+    Err("Failed to allocate a unique archive intake artifact filename.".to_string())
+}
+
 pub(crate) fn queue_archive_ingest_request(
     app: &AppHandle,
     request: ArchiveIngestRequestRecord,
@@ -2612,12 +2671,7 @@ pub(crate) fn queue_archive_ingest_request(
         .map_err(|error| format!("Failed to create archive review request root: {error}"))?;
 
     let queued_at = unix_timestamp();
-    let file_name = format!(
-        "{}-{}.json",
-        queued_at.replace(':', "-"),
-        slugify(&format!("{}-{}", request.actor_id, request.intent))
-    );
-    let request_file = requests_root.join(file_name);
+    let actor_id = request.actor_id.clone();
     let payload = json!({
         "queuedAt": queued_at,
         "actorId": request.actor_id,
@@ -2627,22 +2681,20 @@ pub(crate) fn queue_archive_ingest_request(
         "intent": request.intent,
         "provenance": request.provenance,
     });
-    fs::write(
-        &request_file,
-        serde_json::to_string_pretty(&payload)
-            .map_err(|error| format!("Failed to encode archive ingest request: {error}"))?,
-    )
-    .map_err(|error| format!("Failed to write archive ingest request: {error}"))?;
+    let encoded = serde_json::to_string_pretty(&payload)
+        .map_err(|error| format!("Failed to encode archive ingest request: {error}"))?;
+    let request_file = write_unique_archive_ingest_request_file(
+        &requests_root,
+        &queued_at,
+        &payload,
+        &resolved_source,
+        encoded.as_bytes(),
+    )?;
 
     if let Some(connection) = open_archive_db(&runtime)? {
         let _ = connection.execute(
             "INSERT INTO activity_log (ts, action, details, agent_id) VALUES (?1, ?2, ?3, ?4)",
-            params![
-                queued_at,
-                "ingest_request",
-                payload.to_string(),
-                request.actor_id
-            ],
+            params![queued_at, "ingest_request", payload.to_string(), actor_id],
         );
     }
 
@@ -2650,6 +2702,97 @@ pub(crate) fn queue_archive_ingest_request(
         request_file: request_file.display().to_string(),
         queued_at,
     })
+}
+
+fn archive_ingest_request_source_key(payload: &Value, resolved_source: &Path) -> String {
+    let explicit_source_id = payload
+        .get("provenance")
+        .and_then(|provenance| provenance.get("sourceId"))
+        .and_then(Value::as_str)
+        .map(slugify)
+        .filter(|value| !value.is_empty());
+    let source_hash = sha256_hex(resolved_source.display().to_string().as_bytes());
+    let hash_suffix = source_hash.chars().take(16).collect::<String>();
+    match explicit_source_id {
+        Some(source_id) => format!(
+            "{}-{}",
+            source_id.chars().take(80).collect::<String>(),
+            hash_suffix
+        ),
+        None => {
+            let stem = resolved_source
+                .file_stem()
+                .and_then(|value| value.to_str())
+                .map(slugify)
+                .filter(|value| !value.is_empty())
+                .unwrap_or_else(|| "source".to_string());
+            format!(
+                "{}-{}",
+                stem.chars().take(80).collect::<String>(),
+                hash_suffix
+            )
+        }
+    }
+}
+
+fn archive_ingest_request_file_name(
+    queued_at: &str,
+    payload: &Value,
+    resolved_source: &Path,
+    collision_index: usize,
+) -> String {
+    let actor_id = payload
+        .get("actorId")
+        .and_then(Value::as_str)
+        .unwrap_or("archive");
+    let intent = payload
+        .get("intent")
+        .and_then(Value::as_str)
+        .unwrap_or("ingest");
+    let collision_suffix = if collision_index == 0 {
+        String::new()
+    } else {
+        format!("-{collision_index}")
+    };
+    format!(
+        "{}-{}-{}{}.json",
+        queued_at.replace(':', "-"),
+        archive_ingest_request_source_key(payload, resolved_source),
+        slugify(&format!("{actor_id}-{intent}")),
+        collision_suffix
+    )
+}
+
+fn write_unique_archive_ingest_request_file(
+    requests_root: &Path,
+    queued_at: &str,
+    payload: &Value,
+    resolved_source: &Path,
+    encoded: &[u8],
+) -> Result<PathBuf, String> {
+    for collision_index in 0..1000 {
+        let request_file = requests_root.join(archive_ingest_request_file_name(
+            queued_at,
+            payload,
+            resolved_source,
+            collision_index,
+        ));
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&request_file)
+        {
+            Ok(mut file) => {
+                use std::io::Write;
+                file.write_all(encoded)
+                    .map_err(|error| format!("Failed to write archive ingest request: {error}"))?;
+                return Ok(request_file);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(format!("Failed to write archive ingest request: {error}")),
+        }
+    }
+    Err("Failed to allocate a unique archive ingest request filename.".to_string())
 }
 
 fn imported_library_manifest_is_known(
@@ -2703,6 +2846,7 @@ fn queued_source_paths(app: &AppHandle) -> Result<HashSet<String>, String> {
 fn processed_source_ids(runtime: &ArchiveRuntime) -> Result<HashSet<String>, String> {
     let mut processed = HashSet::new();
     let Some(connection) = open_archive_db(runtime)? else {
+        collect_review_state_source_ids(runtime, &mut processed)?;
         return Ok(processed);
     };
     let mut statement = connection
@@ -2719,7 +2863,94 @@ fn processed_source_ids(runtime: &ArchiveRuntime) -> Result<HashSet<String>, Str
         processed.insert(source_id);
         processed.insert(raw_path);
     }
+    collect_review_state_source_ids(runtime, &mut processed)?;
     Ok(processed)
+}
+
+fn collect_review_state_source_ids(
+    runtime: &ArchiveRuntime,
+    processed: &mut HashSet<String>,
+) -> Result<(), String> {
+    for root in [
+        runtime.review_queue_root().join("processed"),
+        runtime.review_queue_root().join("artifacts"),
+    ] {
+        if !root.exists() {
+            continue;
+        }
+        for entry in fs::read_dir(&root)
+            .map_err(|error| format!("Failed to read archive review state root: {error}"))?
+        {
+            let entry = entry
+                .map_err(|error| format!("Failed to read archive review state entry: {error}"))?;
+            let path = entry.path();
+            if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
+                continue;
+            }
+            let raw = fs::read_to_string(&path)
+                .map_err(|error| format!("Failed to read archive review state file: {error}"))?;
+            let payload = serde_json::from_str::<Value>(&raw)
+                .map_err(|error| format!("Invalid archive review state JSON: {error}"))?;
+            collect_processed_source_markers(&payload, processed);
+        }
+    }
+    Ok(())
+}
+
+fn collect_processed_source_markers(payload: &Value, processed: &mut HashSet<String>) {
+    for key in ["sourcePath", "rawPath", "canonicalPath"] {
+        if let Some(value) = payload.get(key).and_then(Value::as_str) {
+            processed.insert(value.to_string());
+        }
+    }
+    if let Some(value) = payload
+        .get("sourceRead")
+        .and_then(|source_read| source_read.get("path"))
+        .and_then(Value::as_str)
+    {
+        processed.insert(value.to_string());
+    }
+    if let Some(value) = payload
+        .get("provenance")
+        .and_then(|provenance| provenance.get("sourceId"))
+        .and_then(Value::as_str)
+    {
+        processed.insert(value.to_string());
+    }
+}
+
+fn resolve_imported_record_canonical_path(
+    manifest_path: &Path,
+    payload: &Value,
+    canonical_path: &str,
+) -> PathBuf {
+    let direct = PathBuf::from(canonical_path);
+    if direct.exists() {
+        return direct;
+    }
+
+    let Some(library_id) = payload.get("libraryId").and_then(Value::as_str) else {
+        return direct;
+    };
+    let Some(canonical_root) = payload.get("canonicalRoot").and_then(Value::as_str) else {
+        return direct;
+    };
+    let Ok(relative) = Path::new(canonical_path).strip_prefix(canonical_root) else {
+        return direct;
+    };
+    let Some(metadata_root) = manifest_path.parent() else {
+        return direct;
+    };
+    let Some(domain_root) = metadata_root.parent() else {
+        return direct;
+    };
+
+    let migrated = domain_root.join("sources").join(library_id).join(relative);
+    if migrated.exists() {
+        migrated
+    } else {
+        direct
+    }
 }
 
 pub(crate) fn queue_imported_library_for_ingest(
@@ -2745,8 +2976,35 @@ pub(crate) fn queue_imported_library_for_ingest(
     let actor_id = request
         .actor_id
         .unwrap_or_else(|| "strategist.core".to_string());
-    let mut queued_paths = queued_source_paths(app)?;
+    let queued_paths = queued_source_paths(app)?;
     let processed_ids = processed_source_ids(&runtime)?;
+    queue_imported_library_records_for_ingest(
+        &manifest_path,
+        &library,
+        &payload,
+        &records,
+        max_records,
+        actor_id,
+        queued_paths,
+        &processed_ids,
+        |record| queue_archive_ingest_request(app, record).map(|result| result.request_file),
+    )
+}
+
+fn queue_imported_library_records_for_ingest<F>(
+    manifest_path: &Path,
+    library: &ArchiveImportedLibrarySummary,
+    payload: &Value,
+    records: &[Value],
+    max_records: Option<usize>,
+    actor_id: String,
+    mut queued_paths: HashSet<String>,
+    processed_ids: &HashSet<String>,
+    mut enqueue: F,
+) -> Result<ArchiveQueueImportedLibraryResult, String>
+where
+    F: FnMut(ArchiveIngestRequestRecord) -> Result<String, String>,
+{
     let mut queued = 0;
     let mut skipped_existing_queue = 0;
     let mut skipped_processed = 0;
@@ -2776,50 +3034,56 @@ pub(crate) fn queue_imported_library_for_ingest(
             skipped_missing += 1;
             continue;
         }
+        let resolved_canonical_path =
+            resolve_imported_record_canonical_path(&manifest_path, &payload, canonical_path);
+        let resolved_canonical_path_string = resolved_canonical_path.display().to_string();
         if !text_ingest_source_type(source_type) {
             skipped_unsupported += 1;
             continue;
         }
-        if queued_paths.contains(canonical_path) {
+        if queued_paths.contains(canonical_path)
+            || queued_paths.contains(&resolved_canonical_path_string)
+        {
             skipped_existing_queue += 1;
             continue;
         }
-        if processed_ids.contains(source_id) || processed_ids.contains(canonical_path) {
+        if processed_ids.contains(source_id)
+            || processed_ids.contains(canonical_path)
+            || processed_ids.contains(&resolved_canonical_path_string)
+        {
             skipped_processed += 1;
             continue;
         }
-        if !Path::new(canonical_path).exists() {
+        if !resolved_canonical_path.exists() {
             skipped_missing += 1;
             continue;
         }
 
-        let result = queue_archive_ingest_request(
-            app,
-            ArchiveIngestRequestRecord {
-                actor_id: actor_id.clone(),
-                source_path: canonical_path.to_string(),
-                source_type: source_type.to_string(),
-                source_role: Some(library.domain.clone()),
-                intent: "review-and-ingest".to_string(),
-                provenance: Some(json!({
-                    "origin": "imported-library",
-                    "libraryId": library.library_id.clone(),
-                    "libraryName": library.library_name.clone(),
-                    "manifestPath": manifest_path.display().to_string(),
-                    "sourceId": source_id,
-                    "versionId": record.get("versionId").and_then(Value::as_str),
-                    "originalPath": record.get("originalPath").and_then(Value::as_str),
-                })),
-            },
-        )?;
+        let request_file = enqueue(ArchiveIngestRequestRecord {
+            actor_id: actor_id.clone(),
+            source_path: resolved_canonical_path_string.clone(),
+            source_type: source_type.to_string(),
+            source_role: Some(library.domain.clone()),
+            intent: "review-and-ingest".to_string(),
+            provenance: Some(json!({
+                "origin": "imported-library",
+                "libraryId": library.library_id.clone(),
+                "libraryName": library.library_name.clone(),
+                "manifestPath": manifest_path.display().to_string(),
+                "sourceId": source_id,
+                "versionId": record.get("versionId").and_then(Value::as_str),
+                "originalPath": record.get("originalPath").and_then(Value::as_str),
+                "manifestCanonicalPath": canonical_path,
+            })),
+        })?;
         queued += 1;
-        queued_paths.insert(canonical_path.to_string());
-        request_files.push(result.request_file);
+        queued_paths.insert(resolved_canonical_path_string);
+        request_files.push(request_file);
     }
 
     Ok(ArchiveQueueImportedLibraryResult {
         manifest_path: manifest_path.display().to_string(),
-        library_name: library.library_name,
+        library_name: library.library_name.clone(),
         records_seen: records.len(),
         queued,
         skipped_existing_queue,
@@ -2925,6 +3189,21 @@ fn build_job_status(
             "Review build errors before continuing AI Memory processing.".to_string(),
         );
     }
+    if queue_remaining > 0 {
+        let review_note = if review_escalated > 0 {
+            format!(
+                " {review_escalated} escalated artifact(s) also need review, but they do not block processing remaining sources."
+            )
+        } else {
+            String::new()
+        };
+        return (
+            "running".to_string(),
+            format!(
+                "Continue the AI Memory build to process the remaining queued sources.{review_note}"
+            ),
+        );
+    }
     if review_escalated > 0 {
         return (
             "needs-human-review".to_string(),
@@ -2944,16 +3223,43 @@ fn build_job_status(
             "Promote approved artifacts to trusted wiki memory.".to_string(),
         );
     }
-    if queue_remaining > 0 {
-        return (
-            "running".to_string(),
-            "Continue the AI Memory build to process the remaining queued sources.".to_string(),
-        );
-    }
     (
         "complete".to_string(),
         "AI Memory build has no queued or pending review work remaining.".to_string(),
     )
+}
+
+fn queue_integrity_gap(
+    queued_this_run: usize,
+    processed_this_run: usize,
+    queue_remaining: usize,
+) -> usize {
+    queued_this_run.saturating_sub(processed_this_run.saturating_add(queue_remaining))
+}
+
+fn apply_ai_memory_job_integrity(
+    status: &mut String,
+    next_action: &mut String,
+    records_seen: usize,
+    skipped_missing: usize,
+    queued_this_run: usize,
+    processed_this_run: usize,
+    queue_remaining: usize,
+) {
+    if *status == "complete" && records_seen > 0 && skipped_missing > 0 {
+        *status = "attention".to_string();
+        *next_action = format!(
+            "{skipped_missing} imported source path(s) could not be found. Re-run Build AI Memory so ResonantOS can resolve the current portable archive paths."
+        );
+    }
+
+    let lost = queue_integrity_gap(queued_this_run, processed_this_run, queue_remaining);
+    if lost > 0 {
+        *status = "attention".to_string();
+        *next_action = format!(
+            "AI Memory queue integrity check found {lost} queued source(s) with no durable request file. Re-run Build AI Memory to rebuild the missing queue safely."
+        );
+    }
 }
 
 fn archive_ai_memory_jobs_root(runtime: &ArchiveRuntime) -> PathBuf {
@@ -3010,26 +3316,42 @@ fn read_archive_ai_memory_build_job_summary(
         .and_then(|maintenance| maintenance.get("finishedAt"))
         .and_then(Value::as_str)
         .map(ToString::to_string);
+    let records_seen = value_usize(&payload, "recordsSeen");
+    let queued_this_run = value_usize(&payload, "queuedThisRun");
+    let processed_this_run = value_usize(&payload, "processedThisRun");
+    let queue_remaining = value_usize(&payload, "queueRemaining");
+    let skipped_missing = value_usize(&payload, "skippedMissing");
+    let mut status = value_string(&payload, "status");
+    let mut next_action = value_string(&payload, "nextAction");
+    apply_ai_memory_job_integrity(
+        &mut status,
+        &mut next_action,
+        records_seen,
+        skipped_missing,
+        queued_this_run,
+        processed_this_run,
+        queue_remaining,
+    );
 
     Ok(ArchiveAiMemoryBuildJobSummary {
         job_id: value_string(&payload, "jobId"),
         job_file: job_file.display().to_string(),
-        status: value_string(&payload, "status"),
+        status,
         library_name: value_string(&payload, "libraryName"),
         manifest_path: value_string(&payload, "manifestPath"),
         started_at,
         finished_at,
-        records_seen: value_usize(&payload, "recordsSeen"),
-        queued_this_run: value_usize(&payload, "queuedThisRun"),
-        processed_this_run: value_usize(&payload, "processedThisRun"),
+        records_seen,
+        queued_this_run,
+        processed_this_run,
         promoted_this_run: value_usize(&payload, "promotedThisRun"),
-        queue_remaining: value_usize(&payload, "queueRemaining"),
+        queue_remaining,
         review_pending: value_usize(&payload, "reviewPending"),
         review_approved: value_usize(&payload, "reviewApproved"),
         review_escalated: value_usize(&payload, "reviewEscalated"),
         review_rejected: value_usize(&payload, "reviewRejected"),
         errors,
-        next_action: value_string(&payload, "nextAction"),
+        next_action,
     })
 }
 
@@ -3132,12 +3454,21 @@ pub(crate) async fn run_archive_ai_memory_build_job(
         .iter()
         .filter(|artifact| artifact.decision.status == "rejected")
         .count();
-    let (status, next_action) = build_job_status(
+    let (mut status, mut next_action) = build_job_status(
         queue.len(),
         review_pending,
         review_approved,
         review_escalated,
         &maintenance.errors,
+    );
+    apply_ai_memory_job_integrity(
+        &mut status,
+        &mut next_action,
+        queue_result.records_seen,
+        queue_result.skipped_missing,
+        queue_result.queued,
+        maintenance.processed.len(),
+        queue.len(),
     );
 
     let job_id = format!(
@@ -3190,7 +3521,10 @@ mod tests {
     use super::{
         parse_semantic_lint_findings, render_archive_index_markdown, render_archive_log_markdown,
     };
-    use super::{read_archive_ai_memory_build_job_summary, unix_timestamp};
+    use super::{
+        queue_imported_library_records_for_ingest, read_archive_ai_memory_build_job_summary,
+        unix_timestamp, ArchiveImportedLibrarySummary,
+    };
     use super::{upsert_promoted_page_index, PromotedPageIndexInput};
     use super::{ArchiveWikiNavigationLogEntry, ArchiveWikiNavigationPage};
     use rusqlite::{params, Connection};
@@ -3310,6 +3644,362 @@ mod tests {
         assert_eq!(summary.queue_remaining, 1448);
         assert_eq!(summary.next_action, "Continue the AI Memory build.");
         fs::remove_dir_all(root).expect("test job root should be removed");
+    }
+
+    #[test]
+    fn reclassifies_legacy_missing_source_ai_memory_jobs_as_attention() {
+        let root = std::env::temp_dir().join(format!(
+            "resonantos-ai-memory-legacy-job-test-{}",
+            unix_timestamp().replace(':', "-")
+        ));
+        fs::create_dir_all(&root).expect("test job root should be created");
+        let job_file = root.join("resonant-os-base-unix-11.json");
+        fs::write(
+            &job_file,
+            serde_json::to_string_pretty(&json!({
+                "jobId": "resonant-os-base-unix-11",
+                "status": "complete",
+                "libraryName": "RESONANT_OS_BASE",
+                "manifestPath": "/tmp/resonant-os-base-manifest.json",
+                "recordsSeen": 1109,
+                "queuedThisRun": 0,
+                "processedThisRun": 0,
+                "promotedThisRun": 0,
+                "queueRemaining": 0,
+                "reviewPending": 0,
+                "reviewApproved": 0,
+                "reviewEscalated": 0,
+                "reviewRejected": 0,
+                "skippedMissing": 1071,
+                "errors": [],
+                "nextAction": "AI Memory build has no queued or pending review work remaining.",
+                "maintenance": {
+                    "startedAt": "unix:11",
+                    "finishedAt": "unix:12"
+                }
+            }))
+            .expect("test job JSON should encode"),
+        )
+        .expect("test job JSON should write");
+
+        let summary = read_archive_ai_memory_build_job_summary(job_file)
+            .expect("test job summary should parse");
+
+        assert_eq!(summary.status, "attention");
+        assert!(summary.next_action.contains("1071 imported source path"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn reclassifies_queue_file_loss_ai_memory_jobs_as_attention() {
+        let root = std::env::temp_dir().join(format!(
+            "resonantos-ai-memory-lost-queue-job-test-{}",
+            unix_timestamp().replace(':', "-")
+        ));
+        fs::create_dir_all(&root).expect("test job root should be created");
+        let job_file = root.join("resonant-os-base-unix-12.json");
+        fs::write(
+            &job_file,
+            serde_json::to_string_pretty(&json!({
+                "jobId": "resonant-os-base-unix-12",
+                "status": "needs-human-review",
+                "libraryName": "RESONANT_OS_BASE",
+                "manifestPath": "/tmp/resonant-os-base-manifest.json",
+                "recordsSeen": 1109,
+                "queuedThisRun": 1071,
+                "processedThisRun": 3,
+                "promotedThisRun": 0,
+                "queueRemaining": 0,
+                "reviewPending": 0,
+                "reviewApproved": 0,
+                "reviewEscalated": 3,
+                "reviewRejected": 0,
+                "skippedMissing": 0,
+                "errors": [],
+                "nextAction": "Review escalated artifacts before they can become trusted AI Memory.",
+                "maintenance": {
+                    "startedAt": "unix:12",
+                    "finishedAt": "unix:13"
+                }
+            }))
+            .expect("test job JSON should encode"),
+        )
+        .expect("test job JSON should write");
+
+        let summary = read_archive_ai_memory_build_job_summary(job_file)
+            .expect("test job summary should parse");
+
+        assert_eq!(summary.status, "attention");
+        assert!(summary.next_action.contains("1068 queued source"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn live_ai_memory_job_integrity_marks_queue_loss_as_attention() {
+        let mut status = "needs-human-review".to_string();
+        let mut next_action =
+            "Review escalated artifacts before they can become trusted AI Memory.".to_string();
+
+        super::apply_ai_memory_job_integrity(&mut status, &mut next_action, 1109, 0, 1071, 3, 0);
+
+        assert_eq!(status, "attention");
+        assert!(next_action.contains("1068 queued source"));
+    }
+
+    #[test]
+    fn ingest_request_filenames_are_unique_per_source_in_same_second() {
+        let queued_at = "unix:1778076231";
+        let first_source = Path::new("/archive/imports/source-a.md");
+        let second_source = Path::new("/archive/imports/source-b.md");
+        let first_payload = json!({
+            "actorId": "strategist.core",
+            "intent": "review-and-ingest",
+            "provenance": {"sourceId": "source-a"}
+        });
+        let second_payload = json!({
+            "actorId": "strategist.core",
+            "intent": "review-and-ingest",
+            "provenance": {"sourceId": "source-b"}
+        });
+
+        let first_name =
+            super::archive_ingest_request_file_name(queued_at, &first_payload, first_source, 0);
+        let second_name =
+            super::archive_ingest_request_file_name(queued_at, &second_payload, second_source, 0);
+
+        assert_ne!(first_name, second_name);
+        assert!(first_name.contains("source-a"));
+        assert!(second_name.contains("source-b"));
+    }
+
+    #[test]
+    fn intake_artifact_writes_do_not_overwrite_existing_files() {
+        let root = std::env::temp_dir().join(format!(
+            "resonantos-intake-write-test-{}",
+            unix_timestamp().replace(':', "-")
+        ));
+        fs::create_dir_all(&root).expect("test intake root should be created");
+
+        let first = super::write_unique_intake_artifact_file(&root, "note.md", b"first")
+            .expect("first intake write should succeed");
+        let second = super::write_unique_intake_artifact_file(&root, "note.md", b"second")
+            .expect("second intake write should allocate a unique filename");
+
+        assert_ne!(first, second);
+        assert_eq!(
+            fs::read_to_string(first).expect("first file should read"),
+            "first"
+        );
+        assert_eq!(
+            fs::read_to_string(second).expect("second file should read"),
+            "second"
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn processed_source_markers_include_archived_request_and_review_artifact_sources() {
+        let mut processed = HashSet::new();
+        let archived_request = json!({
+            "sourcePath": "/archive/imports/source-a.md",
+            "provenance": {"sourceId": "source-a"}
+        });
+        let review_artifact = json!({
+            "sourceRead": {"path": "/archive/imports/source-b.md"}
+        });
+
+        super::collect_processed_source_markers(&archived_request, &mut processed);
+        super::collect_processed_source_markers(&review_artifact, &mut processed);
+
+        assert!(processed.contains("/archive/imports/source-a.md"));
+        assert!(processed.contains("source-a"));
+        assert!(processed.contains("/archive/imports/source-b.md"));
+    }
+
+    #[test]
+    fn resolves_imported_record_paths_after_portable_root_migration() {
+        let root = std::env::temp_dir().join(format!(
+            "resonantos-imported-record-path-test-{}",
+            unix_timestamp().replace(':', "-")
+        ));
+        let metadata_root = root
+            .join("Memory")
+            .join("INTAKE")
+            .join("imports")
+            .join("mixed")
+            .join("metadata");
+        let source_file = root
+            .join("Memory")
+            .join("INTAKE")
+            .join("imports")
+            .join("mixed")
+            .join("sources")
+            .join("resonant-os-base")
+            .join("04_MEMORY_LOG")
+            .join("entry.md");
+        fs::create_dir_all(source_file.parent().expect("source parent should exist"))
+            .expect("test source parent should write");
+        fs::create_dir_all(&metadata_root).expect("metadata root should write");
+        fs::write(&source_file, "# Entry").expect("test source should write");
+        let manifest_path = metadata_root.join("resonant-os-base-manifest.json");
+        fs::write(&manifest_path, "{}").expect("manifest should write");
+        let payload = json!({
+            "libraryId": "resonant-os-base",
+            "canonicalRoot": "/Users/example/Documents/ResonantOS_User/Memory/INTAKE/imports/mixed/sources/resonant-os-base"
+        });
+        let stale_path = "/Users/example/Documents/ResonantOS_User/Memory/INTAKE/imports/mixed/sources/resonant-os-base/04_MEMORY_LOG/entry.md";
+
+        let resolved =
+            super::resolve_imported_record_canonical_path(&manifest_path, &payload, stale_path);
+
+        assert_eq!(resolved, source_file);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn queues_imported_library_records_after_portable_root_migration() {
+        let root = std::env::temp_dir().join(format!(
+            "resonantos-queue-imported-library-test-{}",
+            unix_timestamp().replace(':', "-")
+        ));
+        let metadata_root = root
+            .join("Memory")
+            .join("INTAKE")
+            .join("imports")
+            .join("mixed")
+            .join("metadata");
+        let sources_root = root
+            .join("Memory")
+            .join("INTAKE")
+            .join("imports")
+            .join("mixed")
+            .join("sources")
+            .join("resonant-os-base");
+        let first_source = sources_root.join("04_MEMORY_LOG").join("entry.md");
+        let second_source = sources_root.join("02_PROTOCOL_LIBRARY").join("play.txt");
+        let unsupported_source = sources_root.join("raw").join("audio.mp3");
+        for source in [&first_source, &second_source, &unsupported_source] {
+            fs::create_dir_all(source.parent().expect("test source parent should exist"))
+                .expect("test source parent should write");
+            fs::write(source, "test source").expect("test source should write");
+        }
+        fs::create_dir_all(&metadata_root).expect("metadata root should write");
+
+        let stale_root = "/Users/example/Documents/ResonantOS_User/Memory/INTAKE/imports/mixed/sources/resonant-os-base";
+        let manifest_path = metadata_root.join("resonant-os-base-manifest.json");
+        fs::write(
+            &manifest_path,
+            serde_json::to_string_pretty(&json!({
+                "actorId": "strategist.core",
+                "canonicalRoot": stale_root,
+                "classificationStatus": "needs-ai-assisted-classification",
+                "domain": "mixed-library",
+                "filesSeen": 3,
+                "importMode": "copy",
+                "importedAt": "unix:1",
+                "libraryId": "resonant-os-base",
+                "libraryName": "RESONANT_OS_BASE",
+                "metadataStandard": "obsidian-compatible-existing-vault",
+                "obsidianVaultDetected": true,
+                "originalPath": "/Users/example/Documents/RESONANT_OS_BASE",
+                "records": [
+                    {
+                        "canonicalPath": format!("{stale_root}/04_MEMORY_LOG/entry.md"),
+                        "hash": "sha256:first",
+                        "originalPath": "/Users/example/Documents/RESONANT_OS_BASE/04_MEMORY_LOG/entry.md",
+                        "sizeBytes": 11,
+                        "sourceId": "entry-md",
+                        "sourceType": "md",
+                        "title": "entry",
+                        "versionId": "v1"
+                    },
+                    {
+                        "canonicalPath": format!("{stale_root}/02_PROTOCOL_LIBRARY/play.txt"),
+                        "hash": "sha256:second",
+                        "originalPath": "/Users/example/Documents/RESONANT_OS_BASE/02_PROTOCOL_LIBRARY/play.txt",
+                        "sizeBytes": 11,
+                        "sourceId": "play-txt",
+                        "sourceType": "txt",
+                        "title": "play",
+                        "versionId": "v1"
+                    },
+                    {
+                        "canonicalPath": format!("{stale_root}/raw/audio.mp3"),
+                        "hash": "sha256:unsupported",
+                        "originalPath": "/Users/example/Documents/RESONANT_OS_BASE/raw/audio.mp3",
+                        "sizeBytes": 11,
+                        "sourceId": "audio-mp3",
+                        "sourceType": "mp3",
+                        "title": "audio",
+                        "versionId": "v1"
+                    }
+                ],
+                "skippedFiles": 0
+            }))
+            .expect("manifest JSON should encode"),
+        )
+        .expect("manifest should write");
+
+        let payload = serde_json::from_str::<Value>(
+            &fs::read_to_string(&manifest_path).expect("manifest should read"),
+        )
+        .expect("manifest should parse");
+        let records = payload
+            .get("records")
+            .and_then(Value::as_array)
+            .cloned()
+            .expect("manifest should contain records");
+        let library = ArchiveImportedLibrarySummary {
+            imported_at: "unix:1".to_string(),
+            domain: "mixed-library".to_string(),
+            import_mode: "copy".to_string(),
+            library_id: "resonant-os-base".to_string(),
+            library_name: "RESONANT_OS_BASE".to_string(),
+            original_path: "/Users/example/Documents/RESONANT_OS_BASE".to_string(),
+            canonical_root: stale_root.to_string(),
+            files_seen: 3,
+            files_imported: 3,
+            skipped_files: 0,
+            manifest_path: manifest_path.display().to_string(),
+            version_ledger_path: None,
+            classification_manifest_path: None,
+            classification_status: "needs-ai-assisted-classification".to_string(),
+            metadata_standard: "obsidian-compatible-existing-vault".to_string(),
+            obsidian_vault_detected: true,
+            recommended_addon: None,
+            records_count: 3,
+        };
+        let mut enqueued = Vec::new();
+        let result = queue_imported_library_records_for_ingest(
+            &manifest_path,
+            &library,
+            &payload,
+            &records,
+            None,
+            "strategist.core".to_string(),
+            HashSet::new(),
+            &HashSet::new(),
+            |record| {
+                let request_file = format!("request-{}.json", enqueued.len() + 1);
+                enqueued.push(record);
+                Ok(request_file)
+            },
+        )
+        .expect("imported library queue should resolve migrated paths");
+
+        assert_eq!(result.records_seen, 3);
+        assert_eq!(result.queued, 2);
+        assert_eq!(result.skipped_unsupported, 1);
+        assert_eq!(result.skipped_missing, 0);
+        assert_eq!(result.request_files.len(), 2);
+        for record in &enqueued {
+            let normalized_source_path = record.source_path.replace('\\', "/");
+            assert!(normalized_source_path
+                .contains("/Memory/INTAKE/imports/mixed/sources/resonant-os-base/"));
+            assert!(!normalized_source_path
+                .contains("/Documents/ResonantOS_User/Memory/INTAKE/imports/"));
+        }
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

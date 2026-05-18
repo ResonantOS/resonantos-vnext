@@ -157,7 +157,79 @@ export type NativeToolCapability =
   | "delegation.collect_artifacts"
   | "delegation.verify_result"
   | "addon.health_check"
-  | "addon.enable_disable";
+  | "addon.enable_disable"
+  | "runner.probe.passive"
+  | "runner.probe.executable"
+  | "runner.node.enroll"
+  | "runner.node.revoke"
+  | "runner.job.submit"
+  | "runner.job.cancel"
+  | "runner.job.status"
+  | "runner.command.safe"
+  | "runner.container.run"
+  | "runner.cleanroom.run"
+  | "runner.service.start"
+  | "runner.service.stop"
+  | "runner.artifact.read"
+  | "runner.artifact.write"
+  | "runner.artifact.export"
+  | "runner.network.egress"
+  | "runner.model.endpoint_probe";
+
+export type ComputeNodeKind =
+  | "desktop-local"
+  | "lan-remote"
+  | "ssh-remote"
+  | "cloud-vm"
+  | "container-host"
+  | "provider-managed";
+export type ComputeNodeTrustTier =
+  | "local-owned"
+  | "user-owned-remote"
+  | "organization-owned"
+  | "ephemeral-cloud"
+  | "untrusted";
+export type ComputeNodeEnrollmentState = "pending" | "enrolled" | "quarantined" | "revoked";
+export type ComputeNodeHealthState = "ready" | "degraded" | "unavailable" | "unknown";
+export type ComputeNodeTransport = "local-host-command" | "ssh" | "mtls-http" | "runner-agent";
+export type ComputeNodeRole =
+  | "shell-runner"
+  | "safe-command-runner"
+  | "container-runner"
+  | "cleanroom-runner"
+  | "artifact-store"
+  | "model-host"
+  | "browser-runner"
+  | "eval-runner"
+  | "service-host";
+export type ComputeJobType =
+  | "passive-probe"
+  | "executable-probe"
+  | "safe-command"
+  | "container-job"
+  | "cleanroom-container-job"
+  | "service-start"
+  | "service-stop"
+  | "artifact-collect"
+  | "model-endpoint-probe"
+  | "benchmark-eval"
+  | "delegated-agent-workspace";
+export type ComputeNetworkMode = "none" | "loopback-only" | "lan-only" | "allowlist" | "internet-approved";
+export type ComputeWorkspaceMode =
+  | "ephemeral"
+  | "persistent-per-project"
+  | "read-only-source"
+  | "write-artifacts-only"
+  | "cleanroom";
+export type ComputeArtifactSensitivity = "public" | "internal" | "sensitive" | "secret-adjacent";
+export type ComputeJobStatus =
+  | "queued"
+  | "approved"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "cancelled"
+  | "blocked";
 
 export interface CapabilityGrant {
   capability: Capability;
@@ -314,6 +386,28 @@ export interface AddOnHookDefinition {
   handlerRef: string;
   requiredCapabilities: Capability[];
   failurePolicy: AddOnHookFailurePolicy;
+}
+
+export type LogicianExecutionStatus = "passed" | "failed" | "blocked" | "degraded" | "unsupported";
+export type LogicianExecutionKind = "script" | "hook";
+
+export interface LogicianExecutionArtifact {
+  id: string;
+  addonId: string;
+  kind: LogicianExecutionKind;
+  targetId: string;
+  label: string;
+  commandRef: string;
+  status: LogicianExecutionStatus;
+  summary: string;
+  detail: string;
+  requiredCapabilities: Capability[];
+  missingCapabilities: Capability[];
+  producedArtifacts: DelegationArtifactType[];
+  startedAt: string;
+  completedAt: string;
+  durationMs: number;
+  evidence: Record<string, unknown>;
 }
 
 export type AddOnInstallMode = "detect-existing-only" | "detect-existing-or-install" | "bundled" | "manual";
@@ -575,6 +669,15 @@ export interface ProviderSetupProbeResult {
   source: "native-template" | "openai-compatible-models" | "ollama-tags" | "http-probe" | "unsupported-adapter";
 }
 
+export interface TelegramServiceStatus {
+  running: boolean;
+  tokenConfigured: boolean;
+  channelId: string;
+  lastError?: string;
+  lastUpdateId?: number;
+  startedAt?: string;
+}
+
 export interface HermesAuditFinding {
   id: string;
   severity: "ready" | "info" | "warning" | "blocked";
@@ -774,6 +877,264 @@ export interface ProviderRoutingState {
     allowOptIn: boolean;
     note: string;
   };
+}
+
+export interface ComputeNodeProbeSummary {
+  os?: string;
+  arch?: string;
+  cpuCores?: number;
+  ramGb?: number;
+  gpu?: string[];
+  containerRuntimes?: string[];
+  containerPlatforms?: string[];
+  toolchains?: string[];
+  modelEndpoints?: string[];
+  checkedAt?: string;
+}
+
+export interface ComputeNode {
+  id: string;
+  label: string;
+  kind: ComputeNodeKind;
+  trustTier: ComputeNodeTrustTier;
+  enrollmentState: ComputeNodeEnrollmentState;
+  endpoint?: string;
+  identityFingerprint?: string;
+  supportedTransports: ComputeNodeTransport[];
+  roles: ComputeNodeRole[];
+  healthState: ComputeNodeHealthState;
+  lastVerifiedAt?: string;
+  probe?: ComputeNodeProbeSummary;
+  notes?: string[];
+}
+
+export interface ComputeJobConstraints {
+  os?: string[];
+  arch?: string[];
+  containerRuntime?: string[];
+  containerPlatform?: string[];
+  minRamGb?: number;
+  minDiskGb?: number;
+  gpu?: "required" | "optional" | "none";
+  networkModes?: ComputeNetworkMode[];
+  maxWallClockMinutes?: number;
+}
+
+export interface ComputeNetworkPolicy {
+  mode: ComputeNetworkMode;
+  allowlist?: string[];
+  reason: string;
+}
+
+export interface ComputeWorkspacePolicy {
+  mode: ComputeWorkspaceMode;
+  rootPath?: string;
+  projectId?: string;
+  cleanup: "delete-on-success" | "delete-on-failure" | "retain-for-review" | "manual";
+}
+
+export interface ComputeFilesystemPolicy {
+  readRoots: string[];
+  writeRoots: string[];
+  allowSymlinks: boolean;
+  allowArchiveExtraction: boolean;
+}
+
+export interface ComputeSecretPolicy {
+  allowRawSecrets: boolean;
+  approvedSecretRefs: string[];
+  exposure: "none" | "env" | "file" | "stdin" | "runtime-mediated";
+  redactionRequired: boolean;
+}
+
+export interface ComputeArtifactPolicy {
+  expectedTypes: DelegationArtifactType[];
+  maxFileBytes: number;
+  maxTotalBytes: number;
+  maxFileCount: number;
+  retention: "ephemeral" | "review" | "project" | "manual";
+  archiveIntakeAllowed: boolean;
+}
+
+export interface ComputeApprovalPolicy {
+  humanApprovalRequired: boolean;
+  approvalReasons: DelegationApprovalReason[];
+  approvedBy?: string;
+  approvedAt?: string;
+}
+
+export interface ComputeTimeoutPolicy {
+  queueTimeoutSeconds: number;
+  executionTimeoutSeconds: number;
+  cancellationGraceSeconds: number;
+}
+
+export interface ComputeCommandSpec {
+  command: string[];
+  cwd?: string;
+  env?: Record<string, string>;
+}
+
+export interface ComputeContainerSpec {
+  image: string;
+  imageDigest?: string;
+  command?: string[];
+  env?: Record<string, string>;
+  mounts?: Array<{
+    source: string;
+    target: string;
+    mode: "ro" | "rw";
+  }>;
+}
+
+export interface ComputeJob {
+  id: string;
+  createdAt: string;
+  createdBy: string;
+  consumerId: string;
+  purpose: string;
+  jobType: ComputeJobType;
+  requiredNodeRoles: ComputeNodeRole[];
+  constraints: ComputeJobConstraints;
+  targetNodeId?: string;
+  workspacePolicy: ComputeWorkspacePolicy;
+  networkPolicy: ComputeNetworkPolicy;
+  filesystemPolicy: ComputeFilesystemPolicy;
+  secretPolicy: ComputeSecretPolicy;
+  artifactPolicy: ComputeArtifactPolicy;
+  approvalPolicy: ComputeApprovalPolicy;
+  costPolicy: DelegationCostPolicy;
+  timeoutPolicy: ComputeTimeoutPolicy;
+  auditLogPath: string;
+  command?: ComputeCommandSpec;
+  container?: ComputeContainerSpec;
+  status: ComputeJobStatus;
+}
+
+export interface ComputeArtifactRecord {
+  id: string;
+  jobId: string;
+  nodeId: string;
+  path: string;
+  type: DelegationArtifactType;
+  sizeBytes: number;
+  sha256: string;
+  createdAt: string;
+  retention: ComputeArtifactPolicy["retention"];
+  sensitivity: ComputeArtifactSensitivity;
+}
+
+export interface ComputePassiveDiagnosticsResult {
+  nodeId: string;
+  os: string;
+  arch: string;
+  family: string;
+  executableSuffix: string;
+  checkedAt: string;
+  summary: string;
+}
+
+export interface ComputeSafeCommandRequest {
+  nodeId: string;
+  command: string[];
+  jobId?: string;
+}
+
+export interface ComputeSafeCommandResult {
+  nodeId: string;
+  jobId?: string;
+  command: string[];
+  status: "succeeded" | "failed";
+  exitCode: number | null;
+  stdout: string;
+  stderr: string;
+  startedAt: string;
+  completedAt: string;
+  summary: string;
+}
+
+export interface ComputeRemoteProbeRequest {
+  nodeId: "compute-gx10" | "compute-nas-backup";
+}
+
+export interface ComputeRemoteProbeResult {
+  nodeId: string;
+  status: "succeeded" | "failed";
+  host: string;
+  stdout: string;
+  stderr: string;
+  checkedAt: string;
+  summary: string;
+}
+
+export interface Gx10LlamaStatusResult {
+  nodeId: "compute-gx10";
+  status: "succeeded" | "failed";
+  stdout: string;
+  stderr: string;
+  checkedAt: string;
+  models: Array<{
+    id: string;
+    port: number;
+    health: "ok" | "failed" | "unknown";
+    processRunning: boolean;
+  }>;
+  summary: string;
+}
+
+export interface Gx10LlamaSwitchRequest {
+  modelId: "gemma-4-26B-A4B-it-UD-Q4_K_M.gguf" | "Qwen3.6-27B-Q4_K_M.gguf";
+}
+
+export interface Gx10LlamaSwitchResult {
+  nodeId: "compute-gx10";
+  status: "succeeded" | "failed";
+  modelId: string;
+  port: number;
+  stdout: string;
+  stderr: string;
+  startedAt: string;
+  completedAt: string;
+  summary: string;
+}
+
+export interface NasBackupStatusResult {
+  nodeId: "compute-nas-backup";
+  status: "succeeded" | "failed";
+  stdout: string;
+  stderr: string;
+  checkedAt: string;
+  backupRoot: string;
+  summary: string;
+}
+
+export interface ComputeAuditRecord {
+  id: string;
+  jobId: string;
+  nodeId?: string;
+  createdAt: string;
+  event:
+    | "submitted"
+    | "selected-node"
+    | "enrolled"
+    | "quarantined"
+    | "revoked"
+    | "approved"
+    | "started"
+    | "completed"
+    | "failed"
+    | "cancelled"
+    | "artifact-recorded";
+  detail: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface ComputeFabricState {
+  policyEngineId: string;
+  nodes: ComputeNode[];
+  jobs: ComputeJob[];
+  artifacts: ComputeArtifactRecord[];
+  audit: ComputeAuditRecord[];
 }
 
 export interface StrategyRouteReference {
@@ -1228,6 +1589,14 @@ export interface ArchiveReviewDecision {
   notes?: string;
 }
 
+export interface ArchiveReviewPromotion {
+  status: "promoted" | "no-op" | string;
+  actorId?: string;
+  promotedAt?: string;
+  pagesWritten: number;
+  pagesSkipped: number;
+}
+
 export interface ArchiveReviewArtifact {
   artifactFile: string;
   checkedAt: string;
@@ -1245,6 +1614,7 @@ export interface ArchiveReviewArtifact {
   recommendationReason: string;
   proposedPages: Array<Record<string, unknown>>;
   decision: ArchiveReviewDecision;
+  promotion?: ArchiveReviewPromotion;
 }
 
 export interface ArchiveProcessIngestResult {
@@ -1260,6 +1630,7 @@ export interface ArchiveMaintenanceCycleResult {
   startedAt: string;
   finishedAt: string;
   processed: ArchiveProcessIngestResult[];
+  repaired: ArchiveReviewDecisionResult[];
   promoted: ArchivePromoteReviewArtifactResult[];
   navigation: ArchiveWikiNavigationRefreshResult;
   lint: ArchiveLintResult;
@@ -1658,6 +2029,14 @@ export interface ArchivePolicy {
   notes: string[];
 }
 
+export type ArchiveAiMemoryAutomationCostPolicy = "off" | "local-and-subscription" | "any-configured-route";
+
+export interface ArchiveAutomationPolicy {
+  autoSyncEnabled: boolean;
+  aiMemoryBuilds: ArchiveAiMemoryAutomationCostPolicy;
+  updatedAt?: string;
+}
+
 export interface AddOnInstallation {
   addonId: string;
   source: "bundled" | "sideload";
@@ -1672,6 +2051,7 @@ export interface AddOnInstallation {
   privateProviderProfileIds: string[];
   config?: Record<string, unknown>;
   notes: string[];
+  verificationArtifacts?: LogicianExecutionArtifact[];
 }
 
 export interface ObsidianVaultStatus {
@@ -2003,6 +2383,17 @@ export interface OpenCodeServiceResult {
   command: string;
   pid?: number | null;
   alreadyRunning: boolean;
+  trustKernelRunDir?: string | null;
+  trustKernelPacketPath?: string | null;
+  trustKernelBriefPath?: string | null;
+  trustKernelWarning?: string | null;
+}
+
+export interface TrustKernelAdvisory {
+  runDir?: string | null;
+  packetPath?: string | null;
+  briefPath?: string | null;
+  warning?: string | null;
 }
 
 export interface PaperclipStatus {
@@ -2294,6 +2685,7 @@ export interface UiPreferences {
     | "strategist"
     | "archive"
     | "delegation"
+    | "compute"
     | "addons"
     | "obsidian"
     | "browser"
@@ -2339,11 +2731,13 @@ export interface ResonantShellState {
   providers: ProviderProfile[];
   runtimeNodes: ProviderRuntimeNode[];
   providerRouting: ProviderRoutingState;
+  computeFabric: ComputeFabricState;
   modelStrategy: ModelStrategyState;
   agents: AgentDefinition[];
   channels: ChannelDefinition[];
   workspaces: WorkspaceDefinition[];
   archivePolicy: ArchivePolicy;
+  archiveAutomationPolicy: ArchiveAutomationPolicy;
   chatProjects: ChatProject[];
   conversationThreads: ConversationThread[];
   transcriptLedger: ConversationTranscriptEvent[];

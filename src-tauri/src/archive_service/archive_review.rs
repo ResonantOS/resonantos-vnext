@@ -2,7 +2,7 @@
 // Intent citation: docs/architecture/ADR-012-living-archive-approval-policy.md
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::{json, Value};
@@ -26,6 +26,46 @@ struct IngestSourceContent {
     prompt_content: String,
     verifier_excerpt: String,
     chunk_manifest: Value,
+}
+
+fn path_is_inside_root(path: &Path, root: &Path) -> bool {
+    path == root || path.starts_with(root)
+}
+
+fn resolve_review_request_path(
+    runtime: &ArchiveRuntime,
+    requested_path: &str,
+) -> Result<PathBuf, String> {
+    let resolved = resolve_document_path(runtime, requested_path)?;
+    let requests_root = runtime.review_queue_root().join("requests");
+    let normalized_requests_root = requests_root
+        .canonicalize()
+        .map_err(|error| format!("Failed to resolve archive review request root: {error}"))?;
+    if !path_is_inside_root(&resolved, &normalized_requests_root) {
+        return Err(
+            "Archive ingest processing only accepts files from the REVIEW/requests queue."
+                .to_string(),
+        );
+    }
+    Ok(resolved)
+}
+
+fn resolve_review_artifact_path(
+    runtime: &ArchiveRuntime,
+    requested_path: &str,
+) -> Result<PathBuf, String> {
+    let resolved = resolve_document_path(runtime, requested_path)?;
+    let artifacts_root = runtime.review_queue_root().join("artifacts");
+    let normalized_artifacts_root = artifacts_root
+        .canonicalize()
+        .map_err(|error| format!("Failed to resolve archive review artifact root: {error}"))?;
+    if !path_is_inside_root(&resolved, &normalized_artifacts_root) {
+        return Err(
+            "Archive review decisions and promotion only accept files from REVIEW/artifacts."
+                .to_string(),
+        );
+    }
+    Ok(resolved)
 }
 
 fn normalize_confidence(value: Option<&Value>) -> String {
@@ -121,7 +161,129 @@ pub(super) fn evaluate_approval_tier(
 }
 
 fn parse_proposed_pages(value: Option<&Value>) -> Vec<Value> {
-    value.and_then(Value::as_array).cloned().unwrap_or_default()
+    value
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| match item {
+                    Value::Object(_) => Some(item.clone()),
+                    Value::String(title) if !title.trim().is_empty() => Some(json!({
+                        "type": "concept",
+                        "title": title.trim(),
+                        "content": format!("This concept was identified by the ingest draft, but the model did not provide a full page body. Keep this as a review stub until a later ingest pass expands it from source evidence."),
+                        "stage": "stub"
+                    })),
+                    _ => None,
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn markdown_bullets(value: Option<&Value>) -> String {
+    let Some(Value::Array(items)) = value else {
+        return String::new();
+    };
+    items
+        .iter()
+        .filter_map(|item| match item {
+            Value::String(text) => Some(text.trim().to_string()),
+            Value::Object(object) => object
+                .get("claim")
+                .or_else(|| object.get("name"))
+                .or_else(|| object.get("title"))
+                .or_else(|| object.get("value"))
+                .and_then(Value::as_str)
+                .map(|text| text.trim().to_string()),
+            _ => None,
+        })
+        .filter(|item| !item.is_empty())
+        .map(|item| format!("- {item}"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn source_title_from_path(source_path: Option<&str>) -> String {
+    source_path
+        .and_then(|path| {
+            Path::new(path)
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+                .map(ToString::to_string)
+        })
+        .filter(|title| !title.trim().is_empty())
+        .unwrap_or_else(|| "Imported Source Summary".to_string())
+}
+
+fn synthesize_summary_page_from_result(result: &Value, source_path: Option<&str>) -> Option<Value> {
+    let summary = result.get("summary").and_then(Value::as_str)?.trim();
+    if summary.is_empty() {
+        return None;
+    }
+
+    let claims = markdown_bullets(result.get("claims"));
+    let concepts = markdown_bullets(result.get("concepts"));
+    let entities = markdown_bullets(result.get("entities"));
+    let tensions = markdown_bullets(result.get("tensions"));
+    let open_questions = markdown_bullets(result.get("open_questions"));
+    let mut sections = vec![format!("## Summary\n\n{summary}")];
+    if !claims.is_empty() {
+        sections.push(format!("## Source Claims\n\n{claims}"));
+    }
+    if !concepts.is_empty() {
+        sections.push(format!("## Concepts\n\n{concepts}"));
+    }
+    if !entities.is_empty() {
+        sections.push(format!("## Entities\n\n{entities}"));
+    }
+    if !tensions.is_empty() {
+        sections.push(format!("## Tensions\n\n{tensions}"));
+    }
+    if !open_questions.is_empty() {
+        sections.push(format!("## Open Questions\n\n{open_questions}"));
+    }
+    sections.push(
+        "## Review Boundary\n\nThis page was synthesized from structured ingest fields because the model did not return full `proposed_pages` objects. Treat it as a conservative source-summary page, not a doctrine-level interpretation."
+            .to_string(),
+    );
+
+    Some(json!({
+        "type": "summary",
+        "title": source_title_from_path(source_path),
+        "content": sections.join("\n\n"),
+        "stage": "developing",
+        "mergeMode": "append-or-merge"
+    }))
+}
+
+fn proposed_pages_need_summary_fallback(value: Option<&Value>, normalized_pages: &[Value]) -> bool {
+    let raw_has_non_object = value
+        .and_then(Value::as_array)
+        .map(|items| items.iter().any(|item| !item.is_object()))
+        .unwrap_or(false);
+    let has_promotable_full_body = normalized_pages.iter().any(|page| {
+        let page_type = string_field(page, &["type", "page_type", "pageType"]).unwrap_or("");
+        let has_body = string_field(
+            page,
+            &["content", "body", "markdown", "summary", "description"],
+        )
+        .map(str::trim)
+        .map(|body| !body.is_empty())
+        .unwrap_or(false);
+        wiki_page_subdir(page_type).is_some() && has_body
+    });
+    raw_has_non_object || !has_promotable_full_body
+}
+
+fn proposed_pages_from_result(result: &Value, source_path: Option<&str>) -> Vec<Value> {
+    let mut pages = parse_proposed_pages(result.get("proposed_pages"));
+    if proposed_pages_need_summary_fallback(result.get("proposed_pages"), &pages) {
+        if let Some(summary_page) = synthesize_summary_page_from_result(result, source_path) {
+            pages.insert(0, summary_page);
+        }
+    }
+    pages
 }
 
 fn verifier_decision_status(value: &Value) -> &str {
@@ -169,7 +331,7 @@ async fn verify_review_draft(
         });
     }
 
-    if proposed_page_types(&parse_proposed_pages(draft.get("proposed_pages"))).is_empty() {
+    if proposed_page_types(&proposed_pages_from_result(draft, None)).is_empty() {
         return json!({
             "decision": "escalate",
             "reason": "Draft contains no promotable wiki pages.",
@@ -196,6 +358,10 @@ async fn verify_review_draft(
     match execute_provider_service_chat(
         app,
         ProviderServiceChatRequest {
+            request_id: Some("archive-verifier".to_string()),
+            thread_id: None,
+            agent_id: Some("archive-ingest.core".to_string()),
+            channel_id: None,
             provider_id: request
                 .verifier_provider_id
                 .clone()
@@ -435,6 +601,52 @@ fn decision_from_policy_and_verifier(
             "tierApplied": "human-review",
             "notes": verifier_notes(verifier)
         }),
+    }
+}
+
+fn validate_review_decision_transition(
+    current_status: &str,
+    action: &str,
+    actor_id: &str,
+    recommended_tier: &str,
+) -> Result<String, String> {
+    if !matches!(action, "approve" | "reject" | "escalate") {
+        return Err(
+            "Archive review decision action must be approve, reject, or escalate.".to_string(),
+        );
+    }
+
+    match current_status {
+        "pending" => {
+            if action == "approve" && recommended_tier == "human-review" && actor_id != "human.user"
+            {
+                return Err(
+                    "This archive review artifact requires human review and cannot be approved by the Strategist."
+                        .to_string(),
+                );
+            }
+
+            if action == "escalate" {
+                Ok("human-review".to_string())
+            } else {
+                Ok(recommended_tier.to_string())
+            }
+        }
+        "escalated" => {
+            if actor_id != "human.user" {
+                return Err(
+                    "Escalated archive review artifacts require an explicit human decision."
+                        .to_string(),
+                );
+            }
+            if action == "escalate" {
+                return Err(
+                    "Archive review artifact is already escalated to human review.".to_string(),
+                );
+            }
+            Ok("human-review".to_string())
+        }
+        _ => Err("Archive review artifact already has a final decision.".to_string()),
     }
 }
 
@@ -731,6 +943,7 @@ fn parse_review_decision(payload: &Value) -> ArchiveReviewDecision {
 
 fn parse_review_artifact(artifact_file: PathBuf, payload: &Value) -> ArchiveReviewArtifact {
     let result = payload.get("result").unwrap_or(payload);
+    let promotion = payload.get("promotion");
     ArchiveReviewArtifact {
         artifact_file: artifact_file.display().to_string(),
         checked_at: payload
@@ -796,8 +1009,34 @@ fn parse_review_artifact(artifact_file: PathBuf, payload: &Value) -> ArchiveRevi
             .and_then(Value::as_str)
             .unwrap_or("Strategist review is the default approval tier.")
             .to_string(),
-        proposed_pages: parse_proposed_pages(result.get("proposed_pages")),
+        proposed_pages: proposed_pages_from_result(
+            result,
+            payload.get("sourcePath").and_then(Value::as_str),
+        ),
         decision: parse_review_decision(payload),
+        promotion: promotion.map(|value| super::ArchiveReviewPromotion {
+            status: value
+                .get("status")
+                .and_then(Value::as_str)
+                .unwrap_or("unknown")
+                .to_string(),
+            actor_id: value
+                .get("actorId")
+                .and_then(Value::as_str)
+                .map(ToString::to_string),
+            promoted_at: value
+                .get("promotedAt")
+                .and_then(Value::as_str)
+                .map(ToString::to_string),
+            pages_written: value
+                .get("pagesWritten")
+                .and_then(Value::as_u64)
+                .unwrap_or_default() as usize,
+            pages_skipped: value
+                .get("pagesSkipped")
+                .and_then(Value::as_u64)
+                .unwrap_or_default() as usize,
+        }),
     }
 }
 
@@ -941,7 +1180,7 @@ pub(crate) async fn process_archive_ingest_request(
     request: ArchiveProcessIngestRequest,
 ) -> Result<ArchiveProcessIngestResult, String> {
     let runtime = ArchiveRuntime::resolve(app)?;
-    let request_path = resolve_document_path(&runtime, &request.request_file)?;
+    let request_path = resolve_review_request_path(&runtime, &request.request_file)?;
     let request_raw = fs::read_to_string(&request_path)
         .map_err(|error| format!("Failed to read queued archive ingest request: {error}"))?;
     let payload = serde_json::from_str::<Value>(&request_raw)
@@ -993,6 +1232,10 @@ pub(crate) async fn process_archive_ingest_request(
     let reply = execute_provider_service_chat(
         app,
         ProviderServiceChatRequest {
+            request_id: Some("archive-ingest-review".to_string()),
+            thread_id: None,
+            agent_id: Some("archive-ingest.core".to_string()),
+            channel_id: None,
             provider_id: request.provider_id.clone(),
             provider_type: request.provider_type.clone(),
             api_base_url: request.api_base_url.clone(),
@@ -1037,7 +1280,8 @@ pub(crate) async fn process_archive_ingest_request(
     let confidence = normalize_confidence(parsed.get("confidence"));
     let doctrine_sensitivity =
         normalize_doctrine_sensitivity(parsed.get("doctrine_sensitivity"), source_type);
-    let proposed_pages = parse_proposed_pages(parsed.get("proposed_pages"));
+    let resolved_source_display = resolved_source.display().to_string();
+    let proposed_pages = proposed_pages_from_result(&parsed, Some(&resolved_source_display));
     let (recommended_tier, recommendation_reason) = evaluate_approval_tier(
         source_type,
         intent,
@@ -1139,7 +1383,7 @@ pub(crate) fn decide_archive_review_artifact(
     request: ArchiveReviewDecisionRequest,
 ) -> Result<ArchiveReviewDecisionResult, String> {
     let runtime = ArchiveRuntime::resolve(app)?;
-    let artifact_path = resolve_document_path(&runtime, &request.artifact_file)?;
+    let artifact_path = resolve_review_artifact_path(&runtime, &request.artifact_file)?;
     let raw = fs::read_to_string(&artifact_path)
         .map_err(|error| format!("Failed to read archive review artifact: {error}"))?;
     let mut payload = serde_json::from_str::<Value>(&raw)
@@ -1156,23 +1400,14 @@ pub(crate) fn decide_archive_review_artifact(
         .and_then(|value| value.get("status"))
         .and_then(Value::as_str)
         .unwrap_or("pending");
-    if current_status != "pending" {
-        return Err("Archive review artifact already has a final decision.".to_string());
-    }
 
     let action = request.action.as_str();
-    if !matches!(action, "approve" | "reject" | "escalate") {
-        return Err(
-            "Archive review decision action must be approve, reject, or escalate.".to_string(),
-        );
-    }
-
-    if action == "approve" && recommended_tier == "human-review" && request.actor_id != "human.user"
-    {
-        return Err(
-            "This archive review artifact requires human review and cannot be approved by the Strategist.".to_string(),
-        );
-    }
+    let tier_applied = validate_review_decision_transition(
+        current_status,
+        action,
+        &request.actor_id,
+        &recommended_tier,
+    )?;
 
     let decided_at = unix_timestamp();
     let resulting_status = match action {
@@ -1180,13 +1415,6 @@ pub(crate) fn decide_archive_review_artifact(
         "reject" => "rejected",
         "escalate" => "escalated",
         _ => "pending",
-    };
-    let tier_applied = if action == "approve" {
-        recommended_tier.clone()
-    } else if action == "escalate" {
-        "human-review".to_string()
-    } else {
-        recommended_tier.clone()
     };
 
     let decision_value = json!({
@@ -1252,7 +1480,7 @@ pub(crate) fn promote_archive_review_artifact(
     request: ArchivePromoteReviewArtifactRequest,
 ) -> Result<ArchivePromoteReviewArtifactResult, String> {
     let runtime = ArchiveRuntime::resolve(app)?;
-    let artifact_path = resolve_document_path(&runtime, &request.artifact_file)?;
+    let artifact_path = resolve_review_artifact_path(&runtime, &request.artifact_file)?;
     let raw = fs::read_to_string(&artifact_path)
         .map_err(|error| format!("Failed to read archive review artifact: {error}"))?;
     let mut payload = serde_json::from_str::<Value>(&raw)
@@ -1264,6 +1492,22 @@ pub(crate) fn promote_archive_review_artifact(
             "Only approved archive review artifacts can be promoted to trusted wiki pages."
                 .to_string(),
         );
+    }
+
+    if artifact.promotion.as_ref().map(|item| item.status.as_str()) == Some("promoted") {
+        return Ok(ArchivePromoteReviewArtifactResult {
+            artifact_file: artifact.artifact_file,
+            promoted_at: artifact
+                .promotion
+                .and_then(|item| item.promoted_at)
+                .unwrap_or_else(unix_timestamp),
+            actor_id: request.actor_id,
+            pages_written: Vec::new(),
+            skipped_pages: vec![ArchiveSkippedPage {
+                title: "Review artifact".to_string(),
+                reason: "Artifact was already promoted to the trusted wiki.".to_string(),
+            }],
+        });
     }
 
     let promoted_at = unix_timestamp();
@@ -1468,6 +1712,233 @@ pub(crate) fn promote_archive_review_artifact(
     })
 }
 
+fn repairable_escalated_artifact(payload: &Value) -> bool {
+    let decision_status = payload
+        .get("decision")
+        .and_then(|value| value.get("status"))
+        .and_then(Value::as_str)
+        .unwrap_or("pending");
+    if decision_status != "escalated" {
+        return false;
+    }
+
+    let result = payload.get("result").unwrap_or(payload);
+    if proposed_pages_from_result(result, payload.get("sourcePath").and_then(Value::as_str))
+        .is_empty()
+    {
+        return false;
+    }
+
+    let risks = payload
+        .get("verification")
+        .and_then(|value| value.get("risks"))
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let reason = payload
+        .get("verification")
+        .and_then(|value| value.get("reason"))
+        .or_else(|| payload.get("decision").and_then(|value| value.get("notes")))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    risks
+        .iter()
+        .filter_map(Value::as_str)
+        .any(|risk| matches!(risk, "empty-proposed-pages" | "invalid-verifier-json"))
+        || reason.contains("no promotable wiki pages")
+        || reason.contains("not valid JSON")
+}
+
+async fn repair_escalated_review_artifact(
+    app: &AppHandle,
+    artifact_path: &Path,
+    request: &ArchiveMaintenanceCycleRequest,
+) -> Result<Option<ArchiveReviewDecisionResult>, String> {
+    let raw = fs::read_to_string(artifact_path)
+        .map_err(|error| format!("Failed to read archive review artifact for repair: {error}"))?;
+    let mut payload = serde_json::from_str::<Value>(&raw)
+        .map_err(|error| format!("Invalid archive review artifact JSON for repair: {error}"))?;
+    if !repairable_escalated_artifact(&payload) {
+        return Ok(None);
+    }
+
+    let source_path = payload
+        .get("sourcePath")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    if source_path.is_empty() || !Path::new(&source_path).exists() {
+        return Ok(None);
+    }
+
+    let source_type = payload
+        .get("sourceType")
+        .and_then(Value::as_str)
+        .unwrap_or("md")
+        .to_string();
+    let intent = payload
+        .get("intent")
+        .and_then(Value::as_str)
+        .unwrap_or("review-and-ingest")
+        .to_string();
+    let result = payload.get("result").cloned().unwrap_or_else(|| json!({}));
+    let repaired_pages = proposed_pages_from_result(&result, Some(&source_path));
+    if repaired_pages.is_empty() {
+        return Ok(None);
+    }
+
+    let confidence = normalize_confidence(result.get("confidence"));
+    let doctrine_sensitivity =
+        normalize_doctrine_sensitivity(result.get("doctrine_sensitivity"), &source_type);
+    let (recommended_tier, recommendation_reason) = evaluate_approval_tier(
+        &source_type,
+        &intent,
+        &confidence,
+        &doctrine_sensitivity,
+        &repaired_pages,
+    );
+    if recommended_tier == "human-review" {
+        return Ok(None);
+    }
+
+    let runtime = ArchiveRuntime::resolve(app)?;
+    let resolved_source = resolve_allowed_source_path(&runtime, &source_path)?;
+    let repair_checked_at = unix_timestamp();
+    let ingest_source = load_ingest_source_content(&runtime, &resolved_source, &repair_checked_at)?;
+    let mut repaired_result = result;
+    if let Some(object) = repaired_result.as_object_mut() {
+        object.insert("proposed_pages".to_string(), Value::Array(repaired_pages));
+    }
+
+    let verification = verify_review_draft(
+        app,
+        &ArchiveProcessIngestRequest {
+            request_file: payload
+                .get("requestFile")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
+            provider_id: request.provider_id.clone(),
+            provider_type: request.provider_type.clone(),
+            api_base_url: request.api_base_url.clone(),
+            runtime_node_id: request.runtime_node_id.clone(),
+            runtime_node_kind: request.runtime_node_kind.clone(),
+            runtime_node_endpoint: request.runtime_node_endpoint.clone(),
+            auth_tier: request.auth_tier.clone(),
+            model: request.model.clone(),
+            verifier_provider_id: request.verifier_provider_id.clone(),
+            verifier_provider_type: request.verifier_provider_type.clone(),
+            verifier_api_base_url: request.verifier_api_base_url.clone(),
+            verifier_runtime_node_id: request.verifier_runtime_node_id.clone(),
+            verifier_runtime_node_kind: request.verifier_runtime_node_kind.clone(),
+            verifier_runtime_node_endpoint: request.verifier_runtime_node_endpoint.clone(),
+            verifier_auth_tier: request.verifier_auth_tier.clone(),
+            verifier_model: request.verifier_model.clone(),
+        },
+        &ingest_source.verifier_excerpt,
+        &source_type,
+        &intent,
+        &recommended_tier,
+        &repaired_result,
+    )
+    .await;
+    let decision =
+        decision_from_policy_and_verifier(&recommended_tier, &repair_checked_at, &verification);
+
+    if let Some(object) = payload.as_object_mut() {
+        object.insert("result".to_string(), repaired_result);
+        object.insert(
+            "policy".to_string(),
+            json!({
+                "confidence": confidence,
+                "doctrineSensitivity": doctrine_sensitivity,
+                "recommendedTier": recommended_tier,
+                "recommendationReason": recommendation_reason,
+            }),
+        );
+        object.insert("verification".to_string(), verification);
+        object.insert("decision".to_string(), decision.clone());
+        object.insert(
+            "repair".to_string(),
+            json!({
+                "status": "reverified",
+                "actorId": "archive-maintenance.ai",
+                "repairedAt": repair_checked_at,
+                "reason": "Repaired malformed or empty proposed_pages output into conservative source-grounded wiki proposals, then re-ran verifier policy."
+            }),
+        );
+    }
+
+    fs::write(
+        artifact_path,
+        serde_json::to_string_pretty(&payload).map_err(|error| {
+            format!("Failed to encode repaired archive review artifact: {error}")
+        })?,
+    )
+    .map_err(|error| format!("Failed to write repaired archive review artifact: {error}"))?;
+
+    let status = decision
+        .get("status")
+        .and_then(Value::as_str)
+        .unwrap_or("pending")
+        .to_string();
+    let action = decision
+        .get("action")
+        .and_then(Value::as_str)
+        .unwrap_or("repair")
+        .to_string();
+    let tier_applied = decision
+        .get("tierApplied")
+        .and_then(Value::as_str)
+        .unwrap_or(&recommended_tier)
+        .to_string();
+    Ok(Some(ArchiveReviewDecisionResult {
+        artifact_file: artifact_path.display().to_string(),
+        status,
+        action,
+        actor_id: "archive-maintenance.ai".to_string(),
+        decided_at: repair_checked_at,
+        tier_applied,
+        summary: payload
+            .get("result")
+            .and_then(|value| value.get("summary"))
+            .and_then(Value::as_str)
+            .unwrap_or("Archive review artifact repaired.")
+            .to_string(),
+    }))
+}
+
+async fn repair_escalated_review_artifacts(
+    app: &AppHandle,
+    request: &ArchiveMaintenanceCycleRequest,
+    limit: usize,
+) -> Result<Vec<ArchiveReviewDecisionResult>, String> {
+    let runtime = ArchiveRuntime::resolve(app)?;
+    let artifacts_root = runtime.review_queue_root().join("artifacts");
+    if !artifacts_root.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut repaired = Vec::new();
+    for entry in fs::read_dir(&artifacts_root)
+        .map_err(|error| format!("Failed to list archive review artifacts for repair: {error}"))?
+    {
+        if repaired.len() >= limit {
+            break;
+        }
+        let path = entry
+            .map_err(|error| format!("Failed to read archive review artifact entry: {error}"))?
+            .path();
+        if path.extension().and_then(|value| value.to_str()) != Some("json") {
+            continue;
+        }
+        if let Some(result) = repair_escalated_review_artifact(app, &path, request).await? {
+            repaired.push(result);
+        }
+    }
+    Ok(repaired)
+}
+
 pub(crate) async fn run_archive_maintenance_cycle(
     app: &AppHandle,
     request: ArchiveMaintenanceCycleRequest,
@@ -1481,6 +1952,7 @@ pub(crate) async fn run_archive_maintenance_cycle(
         .unwrap_or_else(|| "archive-maintenance.ai".to_string());
     let queued = list_archive_ingest_requests(app)?;
     let mut processed = Vec::new();
+    let mut repaired = Vec::new();
     let mut promoted = Vec::new();
     let mut skipped = Vec::new();
     let mut errors = Vec::new();
@@ -1552,6 +2024,32 @@ pub(crate) async fn run_archive_maintenance_cycle(
         processed.push(process_result);
     }
 
+    match repair_escalated_review_artifacts(app, &request, max_requests).await {
+        Ok(results) => {
+            repaired = results;
+            if auto_promote {
+                for result in repaired.iter().filter(|result| result.status == "approved") {
+                    match promote_archive_review_artifact(
+                        app,
+                        ArchivePromoteReviewArtifactRequest {
+                            artifact_file: result.artifact_file.clone(),
+                            actor_id: actor_id.clone(),
+                        },
+                    ) {
+                        Ok(result) => promoted.push(result),
+                        Err(error) => errors.push(format!(
+                            "Failed to promote repaired artifact {}: {error}",
+                            result.artifact_file
+                        )),
+                    }
+                }
+            }
+        }
+        Err(error) => errors.push(format!(
+            "Failed to repair escalated archive artifacts: {error}"
+        )),
+    }
+
     let navigation = refresh_archive_wiki_navigation(app)?;
     let lint = lint_archive(app)?;
 
@@ -1559,6 +2057,7 @@ pub(crate) async fn run_archive_maintenance_cycle(
         started_at,
         finished_at: unix_timestamp(),
         processed,
+        repaired,
         promoted,
         navigation,
         lint,
@@ -1571,9 +2070,11 @@ pub(crate) async fn run_archive_maintenance_cycle(
 mod tests {
     use super::{
         chunk_text, decision_from_policy_and_verifier, merge_promoted_page_body,
-        text_ingest_extension, verifier_decision_status,
+        path_is_inside_root, proposed_pages_from_result, repairable_escalated_artifact,
+        text_ingest_extension, validate_review_decision_transition, verifier_decision_status,
     };
     use serde_json::json;
+    use std::path::Path;
 
     #[test]
     fn verifier_can_approve_strategist_review_without_human_bottleneck() {
@@ -1632,6 +2133,83 @@ mod tests {
     }
 
     #[test]
+    fn human_can_resolve_escalated_review_artifacts() {
+        assert_eq!(
+            validate_review_decision_transition(
+                "escalated",
+                "approve",
+                "human.user",
+                "strategist-review"
+            )
+            .unwrap(),
+            "human-review"
+        );
+        assert_eq!(
+            validate_review_decision_transition(
+                "escalated",
+                "reject",
+                "human.user",
+                "strategist-review"
+            )
+            .unwrap(),
+            "human-review"
+        );
+    }
+
+    #[test]
+    fn non_human_actor_cannot_resolve_escalated_review_artifacts() {
+        let result = validate_review_decision_transition(
+            "escalated",
+            "approve",
+            "strategist.core",
+            "strategist-review",
+        );
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn malformed_proposed_pages_get_conservative_summary_page() {
+        let pages = proposed_pages_from_result(
+            &json!({
+                "summary": "A source-grounded summary from the ingest model.",
+                "claims": ["Claim one", {"claim": "Claim two"}],
+                "concepts": ["Concept A"],
+                "proposed_pages": ["Concept A"]
+            }),
+            Some("/archive/HUMAN_KNOWLEDGE/source-note.md"),
+        );
+
+        assert_eq!(pages[0]["type"], "summary");
+        assert_eq!(pages[0]["title"], "source-note");
+        assert!(pages[0]["content"]
+            .as_str()
+            .unwrap()
+            .contains("## Review Boundary"));
+        assert_eq!(pages[1]["type"], "concept");
+        assert_eq!(pages[1]["stage"], "stub");
+    }
+
+    #[test]
+    fn empty_page_escalations_are_repairable_when_structured_result_exists() {
+        assert!(repairable_escalated_artifact(&json!({
+            "sourcePath": "/archive/source.md",
+            "decision": {
+                "status": "escalated",
+                "notes": "Draft contains no promotable wiki pages."
+            },
+            "verification": {
+                "risks": ["empty-proposed-pages"],
+                "reason": "Draft contains no promotable wiki pages."
+            },
+            "result": {
+                "summary": "A source-grounded summary exists.",
+                "proposed_pages": ["A concept"]
+            }
+        })));
+    }
+
+    #[test]
     fn chunking_preserves_large_source_text_order() {
         let chunks = chunk_text("abcdefghij", 3);
 
@@ -1648,9 +2226,29 @@ mod tests {
     }
 
     #[test]
+    fn review_scope_helper_rejects_sibling_paths() {
+        let root = Path::new("/archive/Memory/REVIEW/requests");
+
+        assert!(path_is_inside_root(
+            Path::new("/archive/Memory/REVIEW/requests/item.json"),
+            root
+        ));
+        assert!(!path_is_inside_root(
+            Path::new("/archive/Memory/REVIEW/artifacts/item.json"),
+            root
+        ));
+        assert!(!path_is_inside_root(
+            Path::new("/archive/Memory/REVIEW/requests-evil/item.json"),
+            root
+        ));
+    }
+
+    #[test]
     fn promotion_merge_updates_matching_sections_without_append_only_drift() {
         let merged = merge_promoted_page_body(
-            Some("# Topic\n\nStable intro.\n\n## Current View\n\nOld claim.\n\n## Open Questions\n\nOld question."),
+            Some(
+                "# Topic\n\nStable intro.\n\n## Current View\n\nOld claim.\n\n## Open Questions\n\nOld question.",
+            ),
             "Topic",
             "## Current View\n\nNew grounded claim.\n\n## Evidence\n\nFresh source.",
             "/sources/source.md",

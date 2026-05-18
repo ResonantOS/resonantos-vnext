@@ -2,7 +2,13 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { AddOnManifest } from "./contracts";
-import { appendAssistantMessage, appendUserMessage, createStrategistThread, strategistSystemPrompt } from "./chat";
+import {
+  appendAssistantMessage,
+  appendUserMessage,
+  createStrategistThread,
+  engineerSystemPrompt,
+  strategistSystemPrompt,
+} from "./chat";
 import { buildDefaultState } from "./defaults";
 
 describe("chat transcript ledger", () => {
@@ -247,5 +253,29 @@ describe("chat transcript ledger", () => {
 
     expect(prompt).toContain("Current active model for this reply: gemma-4-26b-a4b-q4_k_m.gguf.");
     expect(prompt).toContain("If the user asks which AI model you are running on");
+  });
+
+  it("teaches the Resonant Engineer Agent the Senior AI Developer command aliases", () => {
+    const prompt = engineerSystemPrompt({
+      activeModel: "gpt-5.4",
+      activeRouteLabel: "Core Fast Chain",
+      activeRuntimeKind: "cloud",
+      localRuntimeStatus: null,
+    });
+
+    expect(prompt).toContain("Core Engineer skill: Senior AI Developer");
+    expect(prompt).toContain("$senior-ai-developer");
+    expect(prompt).toContain("$senior-ai-develope");
+    expect(prompt).toContain("what code means to humans with what it actually permits");
+    expect(prompt).toContain("Human authorship is not a security claim");
+    expect(prompt).toContain("Critical, High, Medium, Low");
+    expect(prompt).toContain("Findings, Evidence, Exploitability, Impact, Fix, Verification, Tests Run, and Residual Risk");
+    expect(prompt).toContain("Provider Vault secrets");
+    expect(prompt).toContain("manifest capabilities, UI grant presets");
+    expect(prompt).toContain("UI grants must never be the only boundary");
+    expect(prompt).toContain("passive inspection cannot launch subprocesses");
+    expect(prompt).toContain("manifest/backend capability drift");
+    expect(prompt).toContain("Stop and ask before destructive filesystem changes");
+    expect(prompt).toContain("prompt or tool injection");
   });
 });

@@ -3,16 +3,21 @@
 import { useEffect, useState } from "react";
 import type {
   AddOnInstallation,
+  AddOnHookDefinition,
   AddOnManifest,
   AddOnRegistryEntry,
+  AddOnScriptDefinition,
   BrowserEngineStatus,
   CapabilityGrant,
+  LogicianExecutionArtifact,
 } from "../../core/contracts";
 import { Panel } from "../../components/Panel";
+import { assessLogicianHookActivation } from "../../core/logician";
 import { requestBrowserEngineStatus, requestBrowserInstallEngine } from "../../core/runtime";
 import { createAddOnRegistryEntry } from "../../sdk/addons";
 import { HermesAddonPanel } from "./HermesAddonPanel";
 import { ObsidianAddonPanel } from "./ObsidianAddonPanel";
+import { TelegramAddonPanel } from "./TelegramAddonPanel";
 
 type AddOnsWorkspaceProps = {
   search: string;
@@ -34,6 +39,16 @@ type AddOnsWorkspaceProps = {
   ) => void;
   onGrantTerminalWorkspaceAccess: (manifest: AddOnManifest) => void;
   onUpdateAddonConfig: (manifestId: string, config: Record<string, unknown>) => void;
+  onRunLogicianScript: (
+    manifest: AddOnManifest,
+    installation: AddOnInstallation,
+    script: AddOnScriptDefinition,
+  ) => Promise<LogicianExecutionArtifact>;
+  onRunLogicianHook: (
+    manifest: AddOnManifest,
+    installation: AddOnInstallation,
+    hook: AddOnHookDefinition,
+  ) => Promise<LogicianExecutionArtifact>;
   onAskAugmentor: (message: string) => Promise<void>;
   onOpenArchiveReview: () => void;
 };
@@ -63,6 +78,15 @@ const isTerminalVisibleReady = (installation: AddOnInstallation | null): boolean
   Boolean(installation?.enabled && hasGrant(installation, "shell") && hasGrant(installation, "ui-embedding"));
 const isHermesBridgeReady = (installation: AddOnInstallation | null): boolean =>
   Boolean(installation?.enabled && hasGrant(installation, "shell") && hasGrant(installation, "ui-embedding"));
+const hasScaffoldContract = (manifest: AddOnManifest): boolean =>
+  Boolean(
+    manifest.workflowBoundaries?.length ||
+      manifest.skills?.length ||
+      manifest.connectors?.length ||
+      manifest.scripts?.length ||
+      manifest.hooks?.length ||
+      manifest.tools?.length,
+  );
 
 const addonPrimaryActionLabel = (manifest: AddOnManifest, installation: AddOnInstallation | null): string => {
   if (manifest.id === "addon.browser" && !isBrowserVisibleReady(installation)) {
@@ -72,7 +96,7 @@ const addonPrimaryActionLabel = (manifest: AddOnManifest, installation: AddOnIns
     return "Install and grant terminal access";
   }
   if (manifest.id === "addon.hermes" && !isHermesBridgeReady(installation)) {
-    return "Install and grant Hermes access";
+    return "Install and grant Hermes workspace access";
   }
   if (!installation?.installed) {
     return "Install";
@@ -158,7 +182,7 @@ export function AddOnsWorkspace(props: AddOnsWorkspaceProps) {
                       props.onSelectManifest(manifest.id);
                       props.onGrantCapabilities(
                         manifest.id,
-                        ["network", "shell", "ui-embedding", "providers", "archive-read", "archive-intake-write"],
+                        ["shell", "ui-embedding"],
                         manifest.requestedCapabilities,
                       );
                       return;
@@ -182,6 +206,8 @@ export function AddOnsWorkspace(props: AddOnsWorkspaceProps) {
           onToggleGrant={props.onToggleGrant}
           onGrantCapabilities={props.onGrantCapabilities}
           onUpdateAddonConfig={props.onUpdateAddonConfig}
+          onRunLogicianScript={props.onRunLogicianScript}
+          onRunLogicianHook={props.onRunLogicianHook}
           onAskAugmentor={props.onAskAugmentor}
           onOpenArchiveReview={props.onOpenArchiveReview}
         />
@@ -192,7 +218,13 @@ export function AddOnsWorkspace(props: AddOnsWorkspaceProps) {
 
 type AddOnDetailPanelProps = Pick<
   AddOnsWorkspaceProps,
-  "onAskAugmentor" | "onGrantCapabilities" | "onOpenArchiveReview" | "onToggleGrant" | "onUpdateAddonConfig"
+  | "onAskAugmentor"
+  | "onGrantCapabilities"
+  | "onOpenArchiveReview"
+  | "onRunLogicianHook"
+  | "onRunLogicianScript"
+  | "onToggleGrant"
+  | "onUpdateAddonConfig"
 > & {
   selectedManifest: AddOnManifest;
   selectedInstallation: AddOnInstallation;
@@ -200,6 +232,33 @@ type AddOnDetailPanelProps = Pick<
 };
 
 function AddOnDetailPanel(props: AddOnDetailPanelProps) {
+  const [logicianBusyId, setLogicianBusyId] = useState<string | null>(null);
+  const [logicianNotice, setLogicianNotice] = useState("");
+  const runScript = async (script: AddOnScriptDefinition) => {
+    setLogicianBusyId(script.id);
+    setLogicianNotice("");
+    try {
+      const artifact = await props.onRunLogicianScript(props.selectedManifest, props.selectedInstallation, script);
+      setLogicianNotice(`${artifact.status}: ${artifact.summary}`);
+    } catch (error) {
+      setLogicianNotice(error instanceof Error ? error.message : "Logician script failed.");
+    } finally {
+      setLogicianBusyId(null);
+    }
+  };
+  const runHook = async (hook: AddOnHookDefinition) => {
+    setLogicianBusyId(hook.id);
+    setLogicianNotice("");
+    try {
+      const artifact = await props.onRunLogicianHook(props.selectedManifest, props.selectedInstallation, hook);
+      setLogicianNotice(`${artifact.status}: ${artifact.summary}`);
+    } catch (error) {
+      setLogicianNotice(error instanceof Error ? error.message : "Logician hook failed.");
+    } finally {
+      setLogicianBusyId(null);
+    }
+  };
+
   return (
     <Panel
       title={props.selectedManifest.name}
@@ -276,7 +335,31 @@ function AddOnDetailPanel(props: AddOnDetailPanelProps) {
             <li>Knowledge writes: {props.selectedManifest.archiveIntegration.canWriteKnowledgePages ? "yes" : "no"}</li>
           </ul>
         </div>
+        {hasScaffoldContract(props.selectedManifest) && (
+          <div className="detail-card">
+            <span className="eyebrow">Workflow scaffold</span>
+            <ul>
+              <li>Boundaries: {props.selectedManifest.workflowBoundaries?.length ?? 0}</li>
+              <li>Skills: {(props.selectedManifest.skills?.length ?? 0) + (props.selectedManifest.augmentorSkills?.length ?? 0)}</li>
+              <li>Connectors: {props.selectedManifest.connectors?.length ?? 0}</li>
+              <li>Tools: {props.selectedManifest.tools?.length ?? 0}</li>
+              <li>Scripts: {props.selectedManifest.scripts?.length ?? 0}</li>
+              <li>Hooks: {props.selectedManifest.hooks?.length ?? 0}</li>
+            </ul>
+          </div>
+        )}
       </div>
+
+      {hasScaffoldContract(props.selectedManifest) && (
+        <AddOnScaffoldPanel
+          manifest={props.selectedManifest}
+          installation={props.selectedInstallation}
+          busyId={logicianBusyId}
+          notice={logicianNotice}
+          onRunHook={runHook}
+          onRunScript={runScript}
+        />
+      )}
 
       {props.selectedManifest.id === "addon.obsidian" && (
         <ObsidianAddonPanel
@@ -318,6 +401,17 @@ function AddOnDetailPanel(props: AddOnDetailPanelProps) {
         />
       )}
 
+      {props.selectedManifest.id === "addon.telegram-channel" && (
+        <TelegramAddonPanel
+          installation={props.selectedInstallation}
+          requestedCapabilities={props.selectedManifest.requestedCapabilities}
+          onGrantCapabilities={(capabilities, requestedCapabilities) =>
+            props.onGrantCapabilities(props.selectedManifest.id, capabilities, requestedCapabilities)
+          }
+          onConfigChange={(config) => props.onUpdateAddonConfig(props.selectedManifest.id, config)}
+        />
+      )}
+
       {props.selectedManifest.id === "addon.audio2tol" && (
         <div className="bundle-card">
           <span className="eyebrow">Audio2TOL bundle contract</span>
@@ -331,6 +425,159 @@ function AddOnDetailPanel(props: AddOnDetailPanelProps) {
         </div>
       )}
     </Panel>
+  );
+}
+
+function latestArtifactFor(
+  installation: AddOnInstallation,
+  kind: LogicianExecutionArtifact["kind"],
+  targetId: string,
+): LogicianExecutionArtifact | undefined {
+  return installation.verificationArtifacts?.find((artifact) => artifact.kind === kind && artifact.targetId === targetId);
+}
+
+function AddOnScaffoldPanel({
+  manifest,
+  installation,
+  busyId,
+  notice,
+  onRunHook,
+  onRunScript,
+}: {
+  manifest: AddOnManifest;
+  installation: AddOnInstallation;
+  busyId: string | null;
+  notice: string;
+  onRunHook: (hook: AddOnHookDefinition) => void;
+  onRunScript: (script: AddOnScriptDefinition) => void;
+}) {
+  return (
+    <div className="bundle-card">
+      <span className="eyebrow">Packaged workflow</span>
+      <p className="muted-copy">
+        This section explains the add-on scaffold: the repeatable work it packages, the skills it teaches, the
+        systems it connects to, and the deterministic checks it can run through Logician-style tooling.
+      </p>
+      <div className="detail-grid">
+        {manifest.workflowBoundaries?.map((boundary) => (
+          <div className="detail-card" key={boundary.id}>
+            <span className="eyebrow">{boundary.repeatability}</span>
+            <strong>{boundary.label}</strong>
+            <p>{boundary.jobToBeDone}</p>
+            <p className="muted-copy">{boundary.userValue}</p>
+          </div>
+        ))}
+        {manifest.skills?.map((skill) => (
+          <div className="detail-card" key={skill.id}>
+            <span className="eyebrow">Skill · {skill.invocation}</span>
+            <strong>{skill.name}</strong>
+            <p>{skill.description}</p>
+            <p className="muted-copy">{skill.documentPath}</p>
+          </div>
+        ))}
+        {manifest.augmentorSkills?.map((skill) => (
+          <div className="detail-card" key={skill.documentPath}>
+            <span className="eyebrow">Augmentor skill</span>
+            <strong>{skill.objective}</strong>
+            <p className="muted-copy">{skill.documentPath}</p>
+            <p className="muted-copy">
+              {skill.workflowPhases.length} phases · {skill.approvalGates.length} approval gates
+            </p>
+          </div>
+        ))}
+        {manifest.connectors?.map((connector) => (
+          <div className="detail-card" key={connector.id}>
+            <span className="eyebrow">Connector · {connector.type}</span>
+            <strong>{connector.name}</strong>
+            <p>{connector.description}</p>
+            <p className="muted-copy">Config: {connector.configScope}</p>
+          </div>
+        ))}
+        {manifest.scripts?.map((script) => (
+          <div className="detail-card" key={script.id}>
+            <span className="eyebrow">Script · {script.runPolicy}</span>
+            <strong>{script.name}</strong>
+            <p>{script.description}</p>
+            <p className="muted-copy">
+              {script.deterministic ? "Deterministic" : "Non-deterministic"} ·{" "}
+              {script.requiresHumanApproval ? "approval required" : "host-gated"}
+            </p>
+            {latestArtifactFor(installation, "script", script.id) ? (
+              <p className="muted-copy">
+                Latest: {latestArtifactFor(installation, "script", script.id)?.status} ·{" "}
+                {latestArtifactFor(installation, "script", script.id)?.summary}
+              </p>
+            ) : null}
+            <button
+              type="button"
+              className="button-secondary touch-action"
+              disabled={busyId === script.id}
+              onClick={() => onRunScript(script)}
+            >
+              {busyId === script.id ? "Running check..." : "Run Logician check"}
+            </button>
+          </div>
+        ))}
+        {manifest.hooks?.map((hook) => (
+          <AddOnHookCard
+            key={hook.id}
+            manifest={manifest}
+            installation={installation}
+            hook={hook}
+            busy={busyId === hook.id}
+            onRunHook={onRunHook}
+          />
+        ))}
+      </div>
+      {notice ? <p className="muted-copy">{notice}</p> : null}
+    </div>
+  );
+}
+
+function AddOnHookCard({
+  manifest,
+  installation,
+  hook,
+  busy,
+  onRunHook,
+}: {
+  manifest: AddOnManifest;
+  installation: AddOnInstallation;
+  hook: AddOnHookDefinition;
+  busy: boolean;
+  onRunHook: (hook: AddOnHookDefinition) => void;
+}) {
+  const activation = assessLogicianHookActivation({
+    manifest,
+    installation,
+    hook,
+    humanInitiated: false,
+  });
+  const latest = latestArtifactFor(installation, "hook", hook.id);
+  const blocked = activation.status === "blocked";
+
+  return (
+    <div className="detail-card">
+      <span className="eyebrow">Hook · {hook.event}</span>
+      <strong>{hook.handlerRef}</strong>
+      <p className="muted-copy">
+        {activation.status} · failure policy: {hook.failurePolicy}
+      </p>
+      {blocked ? <p className="muted-copy">{activation.issues.map((issue) => issue.message).join(" ")}</p> : null}
+      {latest ? (
+        <p className="muted-copy">
+          Latest: {latest.status} · {latest.summary}
+        </p>
+      ) : null}
+      <button
+        type="button"
+        className="button-secondary touch-action"
+        disabled={busy || blocked}
+        onClick={() => onRunHook(hook)}
+      >
+        {busy ? "Running hook..." : blocked ? "Hook blocked" : "Run hook"}
+      </button>
+    </div>
   );
 }
 

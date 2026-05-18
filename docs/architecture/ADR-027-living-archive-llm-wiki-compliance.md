@@ -106,12 +106,23 @@ Implemented:
 - chunk staging for large text sources, with chunk manifests recorded in review artifacts
 - conservative attachment stubs for non-text sources that require a specialist add-on pipeline
 - separate ingest-writer and verifier provider fields so the verifier can use a different configured model/route
+- source-specific durable queue filenames for imported-library AI Memory builds; request files must not be named only by timestamp/actor/intent because large same-second batches can overwrite work
+- persisted job integrity checks that reclassify stale imported-source paths or missing queued request files as `attention`
+- live AI Memory build results must apply the same queue-integrity checks before reporting status, so a current run cannot report `needs-human-review` or `complete` when queued sources have no durable request files
+- escalated review artifacts must not block unrelated queued source processing; they block promotion for those artifacts only while the remaining queue continues under the configured automation policy
+- escalated review artifacts require an explicit `human.user` approve/reject decision before promotion; Strategist or verifier actors may escalate but may not resolve human-review work
+- review execution is path-scoped: ingest processing accepts only files under `Memory/REVIEW/requests`, and decision/promotion accepts only files under `Memory/REVIEW/artifacts`
+- intake artifact writes must be collision-safe and never overwrite prior raw/source evidence with the same bucket and filename
+- review artifacts must expose durable promotion state after trusted wiki writes, so the UI and maintenance jobs can distinguish approved-but-unpromoted work from already-promoted wiki memory
+- malformed model `proposed_pages` output must not dead-end the LLM Wiki loop when the rest of the ingest result is structured; the host may synthesize a conservative summary page from source-grounded structured fields and keep weaker string-only page ideas as stubs
+- maintenance cycles must attempt AI repair/reverification of repairable escalated artifacts before treating human review as the next step; only genuinely unsafe, doctrine-sensitive, low-confidence, or still-unverified artifacts should remain human exceptions
 
 Completed baseline:
 
 - The Living Archive now has the full LLM Wiki control loop: source scan, queue, ingest, verifier approval, promotion, index/log refresh, deterministic lint, semantic lint, and semantic repair queueing.
-- Auto-sync remains explicitly opt-in because provider usage can cost money.
+- Auto-sync remains explicitly opt-in because provider usage can cost money. The user's Archive automation policy must be persisted, and unattended AI Memory batches must be blocked unless the policy allows the active archive ingest route cost tier.
 - Non-text attachments are safely represented as stubs unless the relevant add-on, such as Audio2TOL, Obsidian, PDF, or DOCX processing, emits a text/structured intake bundle.
+- Imported-library AI Memory jobs must be restart-safe: old false-complete states and queue-loss states are treated as repairable attention states, not as successful completion.
 
 Hardening backlog:
 

@@ -15,6 +15,7 @@ mod opencode_service;
 mod paperclip_service;
 mod provider_service;
 mod recovery_service;
+mod telegram_service;
 mod terminal_service;
 mod resonator_service;
 
@@ -83,6 +84,13 @@ use crate::browser_service::{
     execute_browser_native_webview_hide, execute_browser_native_webview_resize,
     execute_browser_native_webview_show,
 };
+use crate::compute_service::{
+    execute_local_safe_command, execute_remote_probe, query_gx10_llama_status,
+    query_local_passive_diagnostics, query_nas_backup_status, switch_gx10_llama_model,
+    ComputePassiveDiagnosticsResult, ComputeRemoteProbeRequest, ComputeRemoteProbeResult,
+    ComputeSafeCommandRequest, ComputeSafeCommandResult, Gx10LlamaStatusResult,
+    Gx10LlamaSwitchRequest, Gx10LlamaSwitchResult, NasBackupStatusResult,
+};
 use crate::delegation_service::{
     create_task_workspace, finish_task_workspace, list_task_workspaces, read_task_workspace,
     CreateTaskWorkspaceRequest, FinishTaskWorkspaceRequest, FinishTaskWorkspaceResult,
@@ -116,8 +124,9 @@ use crate::obsidian_service::{
     ObsidianWriteNoteResult,
 };
 use crate::opencode_service::{
-    query_opencode_status, start_opencode_service, stop_opencode_service, OpenCodeServiceResult,
-    OpenCodeStartRequest, OpenCodeStatus, OpenCodeStopRequest,
+    query_opencode_status, record_opencode_trust_event, start_opencode_service,
+    stop_opencode_service, OpenCodeServiceResult, OpenCodeStartRequest, OpenCodeStatus,
+    OpenCodeStopRequest, OpenCodeTrustEventRequest, TrustKernelAdvisory,
 };
 use crate::paperclip_service::{
     create_paperclip_issue_from_delegation, query_paperclip_dashboard_snapshot,
@@ -137,6 +146,10 @@ use crate::provider_service::{
 };
 use crate::recovery_service::{
     execute_engineer_recovery_turn, EngineerRecoveryTurnRequest, EngineerRecoveryTurnResult,
+};
+use crate::telegram_service::{
+    save_telegram_bot_token, start_telegram_service, stop_telegram_service, telegram_status,
+    TelegramServiceStartRequest, TelegramServiceStatus,
 };
 use crate::terminal_service::{
     resize_terminal_pty, run_terminal_command, start_terminal_pty, stop_terminal_pty,
@@ -188,6 +201,42 @@ fn delegation_finish_task_workspace(
     request: FinishTaskWorkspaceRequest,
 ) -> Result<FinishTaskWorkspaceResult, String> {
     finish_task_workspace(&app, request)
+}
+
+#[tauri::command]
+fn compute_local_passive_diagnostics() -> ComputePassiveDiagnosticsResult {
+    query_local_passive_diagnostics()
+}
+
+#[tauri::command]
+fn compute_local_safe_command(
+    request: ComputeSafeCommandRequest,
+) -> Result<ComputeSafeCommandResult, String> {
+    execute_local_safe_command(request)
+}
+
+#[tauri::command]
+fn compute_remote_probe(
+    request: ComputeRemoteProbeRequest,
+) -> Result<ComputeRemoteProbeResult, String> {
+    execute_remote_probe(request)
+}
+
+#[tauri::command]
+fn compute_gx10_llama_status() -> Result<Gx10LlamaStatusResult, String> {
+    query_gx10_llama_status()
+}
+
+#[tauri::command]
+fn compute_gx10_llama_switch(
+    request: Gx10LlamaSwitchRequest,
+) -> Result<Gx10LlamaSwitchResult, String> {
+    switch_gx10_llama_model(request)
+}
+
+#[tauri::command]
+fn compute_nas_backup_status() -> Result<NasBackupStatusResult, String> {
+    query_nas_backup_status()
 }
 
 #[tauri::command]
@@ -264,6 +313,35 @@ fn save_provider_secret(
         secrets.insert(provider_id, trimmed);
     }
     write_provider_secrets(&app, &secrets)
+}
+
+#[tauri::command]
+fn telegram_save_bot_token(app: AppHandle, bot_token: String) -> Result<(), String> {
+    save_telegram_bot_token(&app, bot_token)
+}
+
+#[tauri::command]
+fn telegram_service_status(
+    app: AppHandle,
+    channel_id: Option<String>,
+) -> Result<TelegramServiceStatus, String> {
+    telegram_status(&app, channel_id)
+}
+
+#[tauri::command]
+async fn telegram_service_start(
+    app: AppHandle,
+    request: TelegramServiceStartRequest,
+) -> Result<TelegramServiceStatus, String> {
+    start_telegram_service(app, request).await
+}
+
+#[tauri::command]
+fn telegram_service_stop(
+    app: AppHandle,
+    channel_id: Option<String>,
+) -> Result<TelegramServiceStatus, String> {
+    stop_telegram_service(&app, channel_id)
 }
 
 #[tauri::command]
@@ -879,6 +957,15 @@ fn opencode_stop_service(
 }
 
 #[tauri::command]
+fn opencode_record_trust_event(
+    app: AppHandle,
+    request: OpenCodeTrustEventRequest,
+) -> Result<TrustKernelAdvisory, String> {
+    assert_addon_capabilities(&app, "addon.opencode", &["shell"])?;
+    record_opencode_trust_event(request)
+}
+
+#[tauri::command]
 fn paperclip_start_service(
     app: AppHandle,
     request: PaperclipStartRequest,
@@ -1016,7 +1103,7 @@ async fn archive_process_ingest_request(
     app: AppHandle,
     request: ArchiveProcessIngestRequest,
 ) -> Result<ArchiveProcessIngestResult, String> {
-    assert_living_archive_host_access(&app, &["archive-read", "providers"])?;
+    assert_living_archive_host_access(&app, &["archive-read", "providers", "filesystem"])?;
     process_archive_ingest_request(&app, request).await
 }
 
@@ -1068,7 +1155,7 @@ fn archive_review_decision(
     app: AppHandle,
     request: ArchiveReviewDecisionRequest,
 ) -> Result<ArchiveReviewDecisionResult, String> {
-    assert_living_archive_host_access(&app, &["archive-read"])?;
+    assert_living_archive_host_access(&app, &["archive-read", "filesystem"])?;
     decide_archive_review_artifact(&app, request)
 }
 
@@ -1152,6 +1239,10 @@ async fn provider_diagnostics(
 #[tauri::command]
 async fn provider_service_chat_completion(
     app: AppHandle,
+    request_id: Option<String>,
+    thread_id: Option<String>,
+    agent_id: Option<String>,
+    channel_id: Option<String>,
     provider_id: String,
     provider_type: String,
     api_base_url: Option<String>,
@@ -1167,6 +1258,10 @@ async fn provider_service_chat_completion(
     execute_provider_service_chat(
         &app,
         ProviderServiceChatRequest {
+            request_id,
+            thread_id,
+            agent_id,
+            channel_id,
             provider_id,
             provider_type,
             api_base_url,
@@ -1188,6 +1283,9 @@ async fn provider_service_chat_completion_stream(
     app: AppHandle,
     window: Window,
     run_id: String,
+    thread_id: Option<String>,
+    agent_id: Option<String>,
+    channel_id: Option<String>,
     provider_id: String,
     provider_type: String,
     api_base_url: Option<String>,
@@ -1205,6 +1303,9 @@ async fn provider_service_chat_completion_stream(
         &window,
         ProviderServiceChatStreamRequest {
             run_id,
+            thread_id,
+            agent_id,
+            channel_id,
             provider_id,
             provider_type,
             api_base_url,
@@ -1236,6 +1337,10 @@ async fn provider_smoke_test(
     execute_provider_smoke_test(
         &app,
         ProviderServiceChatRequest {
+            request_id: Some("provider-smoke-test".to_string()),
+            thread_id: None,
+            agent_id: None,
+            channel_id: None,
             provider_id,
             provider_type,
             api_base_url,
@@ -1327,8 +1432,18 @@ pub fn run() {
             delegation_finish_task_workspace,
             list_sideloaded_addons,
             sideload_addon_manifest,
+            compute_local_passive_diagnostics,
+            compute_local_safe_command,
+            compute_remote_probe,
+            compute_gx10_llama_status,
+            compute_gx10_llama_switch,
+            compute_nas_backup_status,
             load_provider_secret_statuses,
             save_provider_secret,
+            telegram_save_bot_token,
+            telegram_service_status,
+            telegram_service_start,
+            telegram_service_stop,
             local_runtime_status,
             archive_runtime_status,
             archive_scan_source_folders,
@@ -1382,6 +1497,7 @@ pub fn run() {
             opencode_status,
             opencode_start_service,
             opencode_stop_service,
+            opencode_record_trust_event,
             paperclip_status,
             paperclip_start_service,
             paperclip_stop_service,

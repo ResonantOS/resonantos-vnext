@@ -216,6 +216,13 @@ fn assert_addon_capabilities_from_state(
         .get("installations")
         .and_then(|installations| installations.get(addon_id))
         .ok_or_else(|| format!("Add-on `{addon_id}` is not installed."))?;
+    let installed = installation
+        .get("installed")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    if !installed {
+        return Err(format!("Add-on `{addon_id}` is not installed."));
+    }
     let enabled = installation
         .get("enabled")
         .and_then(Value::as_bool)
@@ -413,6 +420,7 @@ mod tests {
         let state = json!({
             "installations": {
                 "addon.browser": {
+                    "installed": true,
                     "enabled": true,
                     "grantedCapabilities": [
                         { "capability": "network", "granted": true },
@@ -436,10 +444,36 @@ mod tests {
     }
 
     #[test]
+    fn addon_capability_gate_requires_installed_state() {
+        let state = json!({
+            "installations": {
+                "addon.opencode": {
+                    "installed": false,
+                    "enabled": true,
+                    "grantedCapabilities": [
+                        { "capability": "filesystem", "granted": true },
+                        { "capability": "shell", "granted": true }
+                    ]
+                }
+            }
+        });
+
+        let error = assert_addon_capabilities_from_state(
+            &state,
+            "addon.opencode",
+            &["filesystem", "shell"],
+        )
+        .expect_err("uninstalled add-on must not pass host capability gate");
+
+        assert_eq!(error, "Add-on `addon.opencode` is not installed.");
+    }
+
+    #[test]
     fn living_archive_host_access_requires_active_memory_provider_grants() {
         let state = json!({
             "installations": {
                 "addon.living-archive": {
+                    "installed": true,
                     "enabled": true,
                     "grantedCapabilities": [
                         { "capability": "memory-provider", "granted": true },
@@ -462,6 +496,7 @@ mod tests {
         let state = json!({
             "installations": {
                 "addon.living-archive": {
+                    "installed": true,
                     "enabled": false,
                     "grantedCapabilities": [
                         { "capability": "memory-provider", "granted": true },

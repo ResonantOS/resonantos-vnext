@@ -110,7 +110,7 @@
         "logResult": true,
         "artifactTypes": ["log"]
       },
-      "requiresHumanApproval": true
+      "requiresHumanApproval": false
     }
   ],
   "delegation": {
@@ -124,6 +124,64 @@
       "The Terminal workspace uses a host-mediated PTY for interactive shells and TUI tools."
     ]
   },
+  "workflowBoundaries": [
+    {
+      "id": "host-mediated-terminal",
+      "label": "Host-mediated terminal",
+      "jobToBeDone": "Provide a scoped terminal workspace for diagnostics, development, and repair commands through explicit shell grants.",
+      "userValue": "The human can run and inspect terminal work inside ResonantOS while shell access stays visible, auditable, and revocable.",
+      "repeatability": "workflow-package",
+      "owner": "engineer",
+      "nonGoals": [
+        "Give arbitrary hidden shell access to add-ons",
+        "Run destructive commands without approval",
+        "Bypass recovery command allowlists"
+      ]
+    }
+  ],
+  "skills": [
+    {
+      "id": "terminal-diagnostic-session",
+      "name": "Terminal diagnostic session",
+      "description": "Use terminal commands for bounded diagnosis and verification with explicit command, cwd, output, and risk reporting.",
+      "documentPath": "docs/architecture/addon-skills/terminal/DIAGNOSTIC_SESSION.md",
+      "invocation": "agent-suggested",
+      "requiredCapabilities": ["shell"],
+      "requiredTools": ["terminal.run_command"]
+    }
+  ],
+  "connectors": [
+    {
+      "id": "local-pty",
+      "name": "Local PTY",
+      "type": "local-runtime",
+      "description": "Connects a host-mediated shell session to the ResonantOS workspace.",
+      "requiredCapabilities": ["shell", "ui-embedding"],
+      "configScope": "none"
+    }
+  ],
+  "scripts": [
+    {
+      "id": "terminal-command-preflight",
+      "name": "Terminal command preflight",
+      "description": "Verify shell grant, cwd, and command metadata before executing host-mediated terminal commands.",
+      "commandRef": "terminal.run_command",
+      "runPolicy": "preflight",
+      "deterministic": true,
+      "requiredCapabilities": ["shell"],
+      "producesArtifacts": ["verification-report"],
+      "requiresHumanApproval": false
+    }
+  ],
+  "hooks": [
+    {
+      "id": "terminal-before-task-complete",
+      "event": "before-task-complete",
+      "handlerRef": "terminal-command-preflight",
+      "requiredCapabilities": ["shell"],
+      "failurePolicy": "block"
+    }
+  ],
   "installHooks": {
     "onInstall": "register-terminal-workspace",
     "onEnable": "enable-host-command-terminal"

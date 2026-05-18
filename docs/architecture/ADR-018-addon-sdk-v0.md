@@ -74,6 +74,11 @@ Optional V0 fields:
 - `tools`
 - `delegation`
 - `agents`
+- `workflowBoundaries`
+- `skills`
+- `connectors`
+- `scripts`
+- `hooks`
 - `engineerSetup`
 - `augmentorSkills`
 - `install`
@@ -82,6 +87,36 @@ Optional V0 fields:
 - `agentRuntime`
 - `memoryAccess`
 - `smokeTests`
+
+### Workflow Scaffold Contract
+
+Add-ons are workflow packages, not just app tiles. A manifest may explicitly describe the scaffold it adds around the agent so humans, Augmentor, the Engineer, and future marketplace reviewers can understand what is being installed.
+
+The scaffold fields are:
+
+- `workflowBoundaries`: the bounded job the add-on packages, its user value, owner, repeatability, and non-goals.
+- `skills`: reusable operating methods, normally markdown-backed, that teach an agent how to do repeated work.
+- `connectors`: access paths to external systems, MCP servers, app connectors, APIs, local runtimes, or filesystem views.
+- `scripts`: deterministic checks or actions that should not rely on the LLM remembering to be careful.
+- `hooks`: lifecycle or workflow events that run reviewed handlers before/after install, enablement, health checks, task completion, or archive intake.
+
+Rules:
+
+- Prompts are for one-off work and should not be encoded as add-on authority.
+- Skills are for reusable process knowledge and do not grant authority by themselves.
+- Connectors require explicit capabilities and must use host-mediated configuration scopes.
+- Scripts and hooks may only require capabilities requested by the manifest.
+- Scripts that mutate system state, launch services, alter filesystem content, or touch external accounts require host policy and may require human approval.
+- Deterministic verification is owned by the Logician workstream. Add-ons declare the checks and hooks; Logician or host-side services execute and report them.
+- Workflow boundaries must state non-goals so add-ons do not silently expand into broad, unsafe automation.
+
+This contract is the implementation-facing expression of the prompt/skill/add-on/connector/script distinction:
+
+- If it is done once, use a prompt.
+- If it is repeated process knowledge, use a skill.
+- If it packages skills, tools, connectors, UI, scripts, or hooks, use an add-on.
+- If it accesses another system, declare a connector.
+- If it must be verified deterministically, declare a script or hook and route execution through Logician/host policy.
 
 ### Runtime Types
 

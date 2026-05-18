@@ -35,6 +35,21 @@ import type { ComposerAttachment, ThinkingDepth } from "./types";
 import type { CompactMemoryPatch } from "./thread-controller";
 import { formatBytes } from "./utils";
 
+const modelLabel = (model: string): string => {
+  const labels: Record<string, string> = {
+    "MiniMax-M2.7-highspeed": "MiniMax 2.7 High Speed",
+    "MiniMax-M2.7": "MiniMax 2.7",
+    "gpt-5.5": "GPT 5.5",
+    "gpt-5.4-mini": "GPT 5.4 Mini",
+    "batiai/gemma4-e2b:q4": "Gemma 4 2B (Mac Mini)",
+    "gemma-4-26B-A4B-it-UD-Q4_K_M.gguf": "Gemma 4 26B (GX10)",
+    "Qwen3.6-27B-Q4_K_M.gguf": "Qwen 3.6 27B (GX10)",
+  };
+  return labels[model] ?? model;
+};
+
+const supportsThinkingDepth = (model: string): boolean => model.startsWith("gpt-5.");
+
 type StrategistChatRailProps = {
   isOpen: boolean;
   mode: "strategist" | "emergency";
@@ -819,11 +834,25 @@ export function StrategistChatRail(props: StrategistChatRailProps) {
               >
                 {props.availableModels.map((model) => (
                   <option key={model} value={model}>
-                    {model}
+                    {modelLabel(model)}
                   </option>
                 ))}
               </select>
             </div>
+            {supportsThinkingDepth(props.activeChatModel) && (
+              <div className="chat-control compact">
+                <select
+                  aria-label="Thinking level"
+                  title="Reasoning effort for GPT routes"
+                  value={props.thinkingDepth}
+                  onChange={(event) => props.onThinkingDepthChange(event.target.value as ThinkingDepth)}
+                >
+                  <option value="minimal">Minimal thinking</option>
+                  <option value="medium">Medium thinking</option>
+                  <option value="high">High thinking</option>
+                </select>
+              </div>
+            )}
           </div>
           <button
             type="button"

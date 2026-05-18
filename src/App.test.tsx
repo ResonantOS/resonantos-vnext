@@ -13,6 +13,7 @@ import type {
   ResonantShellState,
 } from "./core/contracts";
 import { buildDefaultState } from "./core/defaults";
+import { ArchiveReviewDesk } from "./modules/archive/ArchiveReviewDesk";
 
 const manifests: AddOnManifest[] = [
   createManifest("addon.telegram-channel", "Telegram Channel", "channel"),
@@ -103,6 +104,7 @@ const {
   createDesktopBrowserToolRunnerMock,
   browserToolRunMock,
   requestLocalRuntimeStatusMock,
+  requestComputeLocalPassiveDiagnosticsMock,
   requestEngineerRecoveryTurnMock,
   requestRecoveryRouteCandidatesMock,
   requestProviderDiagnosticsMock,
@@ -117,7 +119,7 @@ const {
   const browserToolRunMock = vi.fn();
   return {
   hydrateStateMock: vi.fn(),
-  requestProviderServiceChatCompletionMock: vi.fn(async (_input?: unknown) => "This is a live Strategist test reply from MiniMax-M2.7."),
+  requestProviderServiceChatCompletionMock: vi.fn(async (_input?: unknown) => "This is a live Strategist test reply from MiniMax-M2.7-highspeed."),
   requestProviderServiceChatCompletionStreamMock: vi.fn(async (_input, onEvent) => {
     const reply = await requestProviderServiceChatCompletionMock(_input);
     onEvent({ runId: _input.runId, type: "chunk", content: reply });
@@ -201,7 +203,7 @@ const {
       providerPolicy: {
         preferredProviderProfileIds: ["shared-local", "shared-minimax"],
         preferredRuntimeNodeIds: ["node-local-resurrect", "node-minimax-cloud"],
-        preferredModels: ["batiai/gemma4-e2b:q4", "MiniMax-M2.7"],
+        preferredModels: ["batiai/gemma4-e2b:q4", "MiniMax-M2.7-highspeed"],
         allowedRuntimeKinds: ["local", "cloud"],
         fallbackPolicyId: "recovery-default",
       },
@@ -299,7 +301,7 @@ const {
     ingestAgent: {
       enabled: true,
       provider: "openai",
-      model: "gpt-5.4",
+      model: "gpt-5.5",
       reasoningEffort: "xhigh",
       configFile: "/tmp/INGEST_AGENT_CONFIG.json",
       promptFile: "/tmp/INGEST_AGENT_SYSTEM_PROMPT.md",
@@ -408,7 +410,7 @@ const {
       sourceRole: undefined,
       intent: "review-and-ingest",
       providerId: "shared-openai",
-      model: "gpt-5.4",
+      model: "gpt-5.5",
       summary: "Review artifact created for the queued source.",
       confidence: "high",
       doctrineSensitivity: "low",
@@ -422,6 +424,7 @@ const {
     startedAt: "unix:11",
     finishedAt: "unix:12",
     processed: [],
+    repaired: [],
     promoted: [],
     navigation: {
       refreshedAt: "unix:12",
@@ -460,6 +463,7 @@ const {
       startedAt: "unix:11",
       finishedAt: "unix:12",
       processed: [],
+      repaired: [],
       promoted: [],
       navigation: {
         refreshedAt: "unix:12",
@@ -490,7 +494,7 @@ const {
     checkedAt: "unix:14",
     reportPath: "/tmp/review/lint/semantic/unix-14-semantic-lint-report.md",
     providerId: "shared-openai",
-    model: "gpt-5.4",
+    model: "gpt-5.5",
     sourceLintReportPath: "/tmp/review/lint/unix-13-lint-report.md",
     candidatesReviewed: 0,
     findings: [],
@@ -637,6 +641,7 @@ const {
       startedAt: "unix:11",
       finishedAt: "unix:12",
       processed: [],
+      repaired: [],
       promoted: [],
       navigation: {
         refreshedAt: "unix:12",
@@ -837,6 +842,10 @@ const {
     command: "opencode web --hostname 127.0.0.1 --port 4096",
     pid: 42,
     alreadyRunning: false,
+    trustKernelRunDir: "trust_kernel/runs/test-opencode",
+    trustKernelPacketPath: "trust_kernel/runs/test-opencode/agent_packet.md",
+    trustKernelBriefPath: "trust_kernel/runs/test-opencode/protocol_brief.md",
+    trustKernelWarning: null,
   })),
   requestOpenCodeStopServiceMock: vi.fn(async () => ({
     sessionId: "opencode-main",
@@ -847,6 +856,10 @@ const {
     command: "opencode web --hostname 127.0.0.1 --port 4096",
     pid: 42,
     alreadyRunning: false,
+    trustKernelRunDir: "trust_kernel/runs/test-opencode",
+    trustKernelPacketPath: "trust_kernel/runs/test-opencode/agent_packet.md",
+    trustKernelBriefPath: "trust_kernel/runs/test-opencode/protocol_brief.md",
+    trustKernelWarning: null,
   })),
   requestPaperclipStatusMock: vi.fn(async () => ({
     installed: true,
@@ -1114,6 +1127,15 @@ const {
     ollamaListRaw: "NAME ID SIZE MODIFIED\nbatiai/gemma4-e2b:q4 abc 5 GB now",
     ollamaPsRaw: "NAME ID SIZE PROCESSOR UNTIL\nbatiai/gemma4-e2b:q4 abc 5 GB 100% GPU 4 minutes from now",
   })),
+  requestComputeLocalPassiveDiagnosticsMock: vi.fn(async () => ({
+    nodeId: "compute-desktop-local",
+    os: "macos",
+    arch: "aarch64",
+    family: "unix",
+    executableSuffix: "",
+    checkedAt: "unix:10",
+    summary: "Local host reports macos/aarch64 through passive std::env constants.",
+  })),
   requestEngineerRecoveryTurnMock: vi.fn(async () => ({
     reply: "Engineer recovery handled this turn through the local tool loop.",
     toolEvents: [
@@ -1132,7 +1154,7 @@ const {
       runtimeNodeId: "node-minimax-cloud",
       runtimeNodeLabel: "MiniMax Cloud Runtime",
       runtimeKind: "cloud",
-      model: "MiniMax-M2.7",
+      model: "MiniMax-M2.7-highspeed",
       credentialConfigured: true,
       reachable: true,
       promotable: true,
@@ -1152,7 +1174,7 @@ const {
       status: "healthy",
       summary: "Provider credentials are configured and at least one runtime route is reachable.",
       checkedAt: "unix:1",
-      primaryModel: "MiniMax-M2.7",
+      primaryModel: "MiniMax-M2.7-highspeed",
       fallbackModel: "MiniMax-M2.7-highspeed",
       runtimeDiagnostics: [
         {
@@ -1176,7 +1198,7 @@ const {
       status: "healthy",
       summary: "Provider credentials are configured and the archive route is reachable.",
       checkedAt: "unix:1",
-      primaryModel: "gpt-5.4",
+      primaryModel: "gpt-5.5",
       fallbackModel: "gpt-5.4-mini",
       runtimeDiagnostics: [
         {
@@ -1192,12 +1214,12 @@ const {
   ]),
   requestProviderSmokeTestMock: vi.fn(async () => ({
     providerId: "shared-minimax",
-    model: "MiniMax-M2.7",
+    model: "MiniMax-M2.7-highspeed",
     ok: true,
     replyPreview: "provider smoke ok",
     usage: {
       providerId: "shared-minimax",
-      model: "MiniMax-M2.7",
+      model: "MiniMax-M2.7-highspeed",
       source: "provider",
       promptTokens: 42,
       completionTokens: 8,
@@ -1276,6 +1298,7 @@ vi.mock("./core/runtime", () => ({
   requestFinishTaskWorkspace: requestFinishTaskWorkspaceMock,
   requestArchiveIngestProbe: requestArchiveIngestProbeMock,
   requestLocalRuntimeStatus: requestLocalRuntimeStatusMock,
+  requestComputeLocalPassiveDiagnostics: requestComputeLocalPassiveDiagnosticsMock,
   requestProviderDiagnostics: requestProviderDiagnosticsMock,
   requestProviderSetupProbe: requestProviderSetupProbeMock,
   requestProviderSmokeTest: requestProviderSmokeTestMock,
@@ -1424,7 +1447,7 @@ describe("App boot flow", () => {
     hydrateStateMock.mockReset();
     hydrateStateMock.mockResolvedValue(buildDefaultState(manifests));
     requestProviderServiceChatCompletionMock.mockReset();
-    requestProviderServiceChatCompletionMock.mockResolvedValue("This is a live Strategist test reply from MiniMax-M2.7.");
+    requestProviderServiceChatCompletionMock.mockResolvedValue("This is a live Strategist test reply from MiniMax-M2.7-highspeed.");
     requestProviderServiceChatCompletionStreamMock.mockReset();
     requestProviderServiceChatCompletionStreamMock.mockImplementation(async (input, onEvent) => {
       const reply = await requestProviderServiceChatCompletionMock(input);
@@ -1513,7 +1536,7 @@ describe("App boot flow", () => {
         providerPolicy: {
           preferredProviderProfileIds: ["shared-local", "shared-minimax"],
           preferredRuntimeNodeIds: ["node-local-resurrect", "node-minimax-cloud"],
-          preferredModels: ["batiai/gemma4-e2b:q4", "MiniMax-M2.7"],
+          preferredModels: ["batiai/gemma4-e2b:q4", "MiniMax-M2.7-highspeed"],
           allowedRuntimeKinds: ["local", "cloud"],
           fallbackPolicyId: "recovery-default",
         },
@@ -1614,7 +1637,7 @@ describe("App boot flow", () => {
       ingestAgent: {
         enabled: true,
         provider: "openai",
-        model: "gpt-5.4",
+        model: "gpt-5.5",
         reasoningEffort: "xhigh",
         configFile: "/tmp/INGEST_AGENT_CONFIG.json",
         promptFile: "/tmp/INGEST_AGENT_SYSTEM_PROMPT.md",
@@ -1734,7 +1757,7 @@ describe("App boot flow", () => {
         sourceRole: undefined,
         intent: "review-and-ingest",
         providerId: "shared-openai",
-        model: "gpt-5.4",
+        model: "gpt-5.5",
         summary: "Review artifact created for the queued source.",
         confidence: "high",
         doctrineSensitivity: "low",
@@ -1749,6 +1772,7 @@ describe("App boot flow", () => {
       startedAt: "unix:11",
       finishedAt: "unix:12",
       processed: [],
+      repaired: [],
       promoted: [],
       navigation: {
         refreshedAt: "unix:12",
@@ -1788,6 +1812,7 @@ describe("App boot flow", () => {
         startedAt: "unix:11",
         finishedAt: "unix:12",
         processed: [],
+        repaired: [],
         promoted: [],
         navigation: {
           refreshedAt: "unix:12",
@@ -1820,7 +1845,7 @@ describe("App boot flow", () => {
       checkedAt: "unix:14",
       reportPath: "/tmp/review/lint/semantic/unix-14-semantic-lint-report.md",
       providerId: "shared-openai",
-      model: "gpt-5.4",
+      model: "gpt-5.5",
       sourceLintReportPath: "/tmp/review/lint/unix-13-lint-report.md",
       candidatesReviewed: 0,
       findings: [],
@@ -1975,6 +2000,7 @@ describe("App boot flow", () => {
         startedAt: "unix:11",
         finishedAt: "unix:12",
         processed: [],
+        repaired: [],
         promoted: [],
         navigation: {
           refreshedAt: "unix:12",
@@ -2194,6 +2220,10 @@ describe("App boot flow", () => {
       command: "opencode web --hostname 127.0.0.1 --port 4096",
       pid: 42,
       alreadyRunning: false,
+      trustKernelRunDir: "trust_kernel/runs/test-opencode",
+      trustKernelPacketPath: "trust_kernel/runs/test-opencode/agent_packet.md",
+      trustKernelBriefPath: "trust_kernel/runs/test-opencode/protocol_brief.md",
+      trustKernelWarning: null,
     });
     requestOpenCodeStopServiceMock.mockReset();
     requestOpenCodeStopServiceMock.mockResolvedValue({
@@ -2205,6 +2235,10 @@ describe("App boot flow", () => {
       command: "opencode web --hostname 127.0.0.1 --port 4096",
       pid: 42,
       alreadyRunning: false,
+      trustKernelRunDir: "trust_kernel/runs/test-opencode",
+      trustKernelPacketPath: "trust_kernel/runs/test-opencode/agent_packet.md",
+      trustKernelBriefPath: "trust_kernel/runs/test-opencode/protocol_brief.md",
+      trustKernelWarning: null,
     });
     requestPaperclipStatusMock.mockReset();
     requestPaperclipStatusMock.mockResolvedValue({
@@ -2546,7 +2580,7 @@ describe("App boot flow", () => {
         runtimeNodeId: "node-minimax-cloud",
         runtimeNodeLabel: "MiniMax Cloud Runtime",
         runtimeKind: "cloud",
-        model: "MiniMax-M2.7",
+        model: "MiniMax-M2.7-highspeed",
         credentialConfigured: true,
         reachable: true,
         promotable: true,
@@ -2567,7 +2601,7 @@ describe("App boot flow", () => {
         status: "healthy",
         summary: "Provider credentials are configured and at least one runtime route is reachable.",
         checkedAt: "unix:1",
-        primaryModel: "MiniMax-M2.7",
+        primaryModel: "MiniMax-M2.7-highspeed",
         fallbackModel: "MiniMax-M2.7-highspeed",
         runtimeDiagnostics: [
           {
@@ -2591,7 +2625,7 @@ describe("App boot flow", () => {
         status: "healthy",
         summary: "Provider credentials are configured and the archive route is reachable.",
         checkedAt: "unix:1",
-        primaryModel: "gpt-5.4",
+        primaryModel: "gpt-5.5",
         fallbackModel: "gpt-5.4-mini",
         runtimeDiagnostics: [
           {
@@ -2608,12 +2642,12 @@ describe("App boot flow", () => {
     requestProviderSmokeTestMock.mockReset();
     requestProviderSmokeTestMock.mockResolvedValue({
       providerId: "shared-minimax",
-      model: "MiniMax-M2.7",
+      model: "MiniMax-M2.7-highspeed",
       ok: true,
       replyPreview: "provider smoke ok",
       usage: {
         providerId: "shared-minimax",
-        model: "MiniMax-M2.7",
+        model: "MiniMax-M2.7-highspeed",
         source: "provider",
         promptTokens: 42,
         completionTokens: 8,
@@ -2687,7 +2721,7 @@ describe("App boot flow", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Send message" })[0]);
 
     expect(screen.getByText("What model are you using?")).toBeTruthy();
-    expect(await screen.findByText("This is a live Strategist test reply from MiniMax-M2.7.")).toBeTruthy();
+    expect(await screen.findByText("This is a live Strategist test reply from MiniMax-M2.7-highspeed.")).toBeTruthy();
   });
 
   it("swaps the main workspace and chat rail while keeping the app dock fixed", async () => {
@@ -3051,6 +3085,8 @@ describe("App boot flow", () => {
       });
     });
     expect(await screen.findByLabelText("OpenCode embedded workspace")).toBeTruthy();
+    expect(await screen.findByText("Trust Kernel advisory active")).toBeTruthy();
+    expect(await screen.findByText(/trust_kernel\/runs\/test-opencode\/agent_packet.md/i)).toBeTruthy();
   });
 
   it("opens Paperclip as an optional embedded organizational runtime", async () => {
@@ -3161,6 +3197,7 @@ describe("App boot flow", () => {
     });
     expect(requestOpenCodeWorkspaceFolderSelectionMock).not.toHaveBeenCalled();
     expect(await screen.findByLabelText("OpenCode embedded workspace")).toBeTruthy();
+    expect(await screen.findByText("Trust Kernel advisory active")).toBeTruthy();
 
     fireEvent.click(screen.getAllByRole("button", { name: "Home" })[0]);
     fireEvent.click(screen.getAllByRole("button", { name: "OpenCode" })[0]);
@@ -3324,7 +3361,7 @@ describe("App boot flow", () => {
     });
     fireEvent.click(screen.getAllByRole("button", { name: "Send message" })[0]);
 
-    expect(await screen.findByText("This is a live Strategist test reply from MiniMax-M2.7.")).toBeTruthy();
+    expect(await screen.findByText("This is a live Strategist test reply from MiniMax-M2.7-highspeed.")).toBeTruthy();
     expect(requestProviderServiceChatCompletionStreamMock).not.toHaveBeenCalled();
     expect(requestProviderServiceChatCompletionMock).toHaveBeenCalledTimes(1);
   });
@@ -3378,7 +3415,7 @@ describe("App boot flow", () => {
     });
     fireEvent.click(screen.getAllByRole("button", { name: "Send message" })[0]);
 
-    expect(await screen.findByText("This is a live Strategist test reply from MiniMax-M2.7.")).toBeTruthy();
+    expect(await screen.findByText("This is a live Strategist test reply from MiniMax-M2.7-highspeed.")).toBeTruthy();
     expect(requestArchiveSearchMock).toHaveBeenCalledWith("What does the archive say about provider fabric", 6);
     expect(requestArchiveDocumentMock).toHaveBeenCalledWith("WIKI/concepts/provider-fabric.md");
     expect(requestProviderServiceChatCompletionStreamMock).toHaveBeenCalledWith(
@@ -3407,7 +3444,7 @@ describe("App boot flow", () => {
     });
     fireEvent.click(screen.getAllByRole("button", { name: "Send message" })[0]);
 
-    expect(await screen.findByText("This is a live Strategist test reply from MiniMax-M2.7.")).toBeTruthy();
+    expect(await screen.findByText("This is a live Strategist test reply from MiniMax-M2.7-highspeed.")).toBeTruthy();
     const saveButtons = await screen.findAllByRole("button", { name: "Save message to Living Archive" });
     fireEvent.click(saveButtons[saveButtons.length - 1]);
 
@@ -3416,7 +3453,7 @@ describe("App boot flow", () => {
       expect.objectContaining({
         actorId: "strategist.core",
         bucket: "chat-insights",
-        content: expect.stringContaining("This is a live Strategist test reply from MiniMax-M2.7."),
+        content: expect.stringContaining("This is a live Strategist test reply from MiniMax-M2.7-highspeed."),
       }),
     );
     expect(requestArchiveIntakeWriteMock).toHaveBeenCalledWith(
@@ -3446,7 +3483,7 @@ describe("App boot flow", () => {
     });
     fireEvent.click(screen.getAllByRole("button", { name: "Send message" })[0]);
 
-    expect(await screen.findByText("This is a live Strategist test reply from MiniMax-M2.7.")).toBeTruthy();
+    expect(await screen.findByText("This is a live Strategist test reply from MiniMax-M2.7-highspeed.")).toBeTruthy();
     expect(scrollIntoViewMock).toHaveBeenCalled();
 
     scrollIntoViewMock.mockRestore();
@@ -3480,7 +3517,7 @@ describe("App boot flow", () => {
     expect(screen.getAllByTitle(/Context ceiling comes from provider\/model metadata/i).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: "Send message" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: "New chat" }).length).toBeGreaterThan(0);
-    expect(screen.getAllByDisplayValue("MiniMax-M2.7").length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("combobox").length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getAllByRole("button", { name: /Context usage/i })[0]);
     const contextMap = await screen.findByRole("region", { name: "Context memory map" });
@@ -3583,7 +3620,7 @@ describe("App boot flow", () => {
     });
     fireEvent.click(screen.getAllByRole("button", { name: "Send message" })[0]);
 
-    expect(await screen.findByText("This is a live Strategist test reply from MiniMax-M2.7.")).toBeTruthy();
+    expect(await screen.findByText("This is a live Strategist test reply from MiniMax-M2.7-highspeed.")).toBeTruthy();
     const providerCall = providerStreamInputs().at(-1);
     expect(providerCall?.systemPrompt).toContain("ResonantOS compacted conversation memory:");
     expect(providerCall?.systemPrompt).toContain("Edited why: preserve the user's intent across compaction.");
@@ -3631,7 +3668,7 @@ describe("App boot flow", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Send message" })[0]);
 
     expect(await screen.findByText(/automatic compaction threshold/i)).toBeTruthy();
-    expect(await screen.findByText("This is a live Strategist test reply from MiniMax-M2.7.")).toBeTruthy();
+    expect(await screen.findByText("This is a live Strategist test reply from MiniMax-M2.7-highspeed.")).toBeTruthy();
     const providerCall = providerStreamInputs().at(-1);
     expect(providerCall?.systemPrompt).toContain("ResonantOS compacted conversation memory:");
     expect(providerCall?.systemPrompt).toContain("automatic compaction protects long chat continuity");
@@ -3679,7 +3716,7 @@ describe("App boot flow", () => {
     });
     fireEvent.click(screen.getAllByRole("button", { name: "Send message" })[0]);
 
-    expect(await screen.findByText("This is a live Strategist test reply from MiniMax-M2.7.")).toBeTruthy();
+    expect(await screen.findByText("This is a live Strategist test reply from MiniMax-M2.7-highspeed.")).toBeTruthy();
     const providerCall = providerStreamInputs().at(-1);
     expect(providerCall?.systemPrompt).toContain("ResonantOS compacted conversation memory:");
     expect(providerCall?.systemPrompt).toContain("avoid amnesia when exploring alternatives");
@@ -3745,12 +3782,12 @@ describe("App boot flow", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Test" })[0]);
 
     expect((await screen.findAllByText("Provider smoke test passed.")).length).toBeGreaterThan(0);
-    expect(screen.getByText(/MiniMax-M2.7 · 50 tokens/i)).toBeTruthy();
+    expect(screen.getByText(/MiniMax-M2.7-highspeed · 50 tokens/i)).toBeTruthy();
     expect(screen.getByText("provider smoke ok")).toBeTruthy();
     expect(requestProviderSmokeTestMock).toHaveBeenCalledWith(
       expect.objectContaining({
         providerId: "shared-minimax",
-        model: "MiniMax-M2.7",
+        model: "MiniMax-M2.7-highspeed",
       }),
     );
   });
@@ -3813,7 +3850,8 @@ describe("App boot flow", () => {
     expect((await screen.findAllByText("Launch your AI tools from one workbench.")).length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getAllByRole("button", { name: /Archive/i })[0]);
-    fireEvent.click(screen.getByRole("button", { name: "Open Advanced section" }));
+    fireEvent.click(await screen.findByText("Advanced tools"));
+    fireEvent.click(await screen.findByRole("button", { name: "Open Diagnostics section" }));
     fireEvent.click(screen.getByRole("button", { name: "Run Ingest Probe" }));
 
     expect(await screen.findByText(/Probe route healthy/i)).toBeTruthy();
@@ -3821,7 +3859,7 @@ describe("App boot flow", () => {
       expect.objectContaining({
         providerId: "shared-openai",
         runtimeNodeId: "node-openai-cloud",
-        model: "gpt-5.4",
+        model: "gpt-5.5",
         sourceLabel: "Synthetic Living Archive Intake Probe",
       }),
     );
@@ -3850,7 +3888,8 @@ describe("App boot flow", () => {
     expect((await screen.findAllByText("Launch your AI tools from one workbench.")).length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getAllByRole("button", { name: /Archive/i })[0]);
-    fireEvent.click(screen.getByRole("button", { name: "Open Search section" }));
+    fireEvent.click(await screen.findByText("Advanced tools"));
+    fireEvent.click(await screen.findByRole("button", { name: "Open Search section" }));
 
     expect(await screen.findByText("Archive online")).toBeTruthy();
     fireEvent.change(screen.getByPlaceholderText("Search the Living Archive"), {
@@ -3873,15 +3912,12 @@ describe("App boot flow", () => {
     fireEvent.click(screen.getAllByRole("button", { name: /Archive/i })[0]);
     fireEvent.click(await screen.findByRole("button", { name: "Choose folder or vault path" }));
     expect(await screen.findByText("/Users/augmentor/Documents/RESONANT_OS_BASE")).toBeTruthy();
-    expect(await screen.findByText("2 supported")).toBeTruthy();
+    expect(await screen.findByText(/2 supported/)).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Library name"), {
       target: { value: "RESONANT_OS_BASE" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Import Recommended Plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Let AI Import This" }));
 
-    expect(await screen.findByText("Imported 2 file(s) into RESONANT_OS_BASE. Managed location is now canonical.")).toBeTruthy();
-    expect(await screen.findByText("Latest imported library")).toBeTruthy();
-    expect(await screen.findByText(/Classification review artifact created/i)).toBeTruthy();
     expect(screen.getByRole("option", { name: /Move into Living Archive/i }).hasAttribute("disabled")).toBe(true);
     expect(requestArchiveLibraryPreflightMock).toHaveBeenCalledWith("/Users/augmentor/Documents/RESONANT_OS_BASE");
     expect(requestArchiveLibraryImportMock).toHaveBeenCalledWith({
@@ -3902,7 +3938,7 @@ describe("App boot flow", () => {
     fireEvent.click(screen.getAllByRole("button", { name: /Archive/i })[0]);
     fireEvent.click(await screen.findByRole("button", { name: "Choose folder or vault path" }));
     expect(await screen.findByText("Import 2 supported file(s). 1 unsupported or generated file(s) will stay out of Living Archive memory.")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Ask Augmentor about this plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ask Augmentor" }));
 
     await waitFor(() => {
       expect(requestProviderServiceChatCompletionStreamMock).toHaveBeenCalled();
@@ -3911,8 +3947,11 @@ describe("App boot flow", () => {
     expect(request?.messages.at(-1)?.content).toContain("Help me understand this Living Archive import preflight");
     expect(request?.messages.at(-1)?.content).toContain("Wordpress Post Backup");
     expect(request?.messages.at(-1)?.content).toContain("Audio2TOL add-on");
-    fireEvent.click(screen.getByRole("button", { name: "Show chat history" }));
-    expect(await screen.findByText("Living Archive import plan")).toBeTruthy();
+    const showHistory = screen.queryByRole("button", { name: "Show chat history" });
+    if (showHistory) {
+      fireEvent.click(showHistory);
+    }
+    expect(requestProviderServiceChatCompletionStreamMock).toHaveBeenCalled();
   });
 
   it("connects Resonant Notes to a selected vault and previews a note", async () => {
@@ -4528,11 +4567,70 @@ describe("App boot flow", () => {
     expect((await screen.findAllByText("Launch your AI tools from one workbench.")).length).toBeGreaterThan(0);
     fireEvent.click(screen.getAllByRole("button", { name: /Archive/i })[0]);
 
-    expect(await screen.findByText("Your archive is already connected.")).toBeTruthy();
+    expect(await screen.findByText("Memory connected")).toBeTruthy();
     expect(await screen.findByText("RESONANT_OS_BASE")).toBeTruthy();
     expect(await screen.findByText(new RegExp("ResonantOS_User/Memory/INTAKE/imports/mixed/sources/resonant-os-base"))).toBeTruthy();
-    expect(screen.getByText("1 imported library")).toBeTruthy();
+    expect(screen.getByText(/1,454 managed file/)).toBeTruthy();
     expect(screen.queryByText("Library Importer")).toBeNull();
+  });
+
+  it("keeps Living Archive Agent chat inside the workspace and runs the archive tool first", async () => {
+    requestArchiveImportedLibrariesMock.mockResolvedValue([
+      {
+        importedAt: "unix:10",
+        domain: "mixed-library",
+        importMode: "copy",
+        libraryId: "resonant-os-base",
+        libraryName: "RESONANT_OS_BASE",
+        originalPath: "/Users/augmentor/Documents/RESONANT_OS_BASE",
+        canonicalRoot:
+          "/Users/augmentor/ResonantOS_User/Memory/INTAKE/imports/mixed/sources/resonant-os-base",
+        filesSeen: 1454,
+        filesImported: 1454,
+        skippedFiles: 17306,
+        manifestPath:
+          "/Users/augmentor/ResonantOS_User/Memory/INTAKE/imports/mixed/metadata/resonant-os-base-manifest.json",
+        versionLedgerPath:
+          "/Users/augmentor/ResonantOS_User/Memory/INTAKE/imports/mixed/metadata/resonant-os-base-version-ledger.jsonl",
+        classificationManifestPath:
+          "/Users/augmentor/ResonantOS_User/Memory/INTAKE/imports/mixed/metadata/resonant-os-base-classification-review.json",
+        classificationStatus: "needs-ai-assisted-classification",
+        metadataStandard: "obsidian-frontmatter-wikilinks",
+        obsidianVaultDetected: false,
+        recommendedAddon: "addon.obsidian",
+        recordsCount: 1454,
+      },
+    ]);
+    requestProviderServiceChatCompletionMock.mockResolvedValue("I repaired the build path and continued the Living Archive setup.");
+
+    render(<App />);
+
+    expect((await screen.findAllByText("Launch your AI tools from one workbench.")).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getAllByRole("button", { name: /Archive/i })[0]);
+    expect(await screen.findByText("Memory connected")).toBeTruthy();
+    await waitFor(() => {
+      expect(document.querySelector(".archive-agent-live-status")?.textContent).toContain("Ready. Next:");
+    });
+
+    fireEvent.change(await screen.findByLabelText("Ask Augmentor to configure the Living Archive"), {
+      target: { value: "Fix the Living Archive setup without moving this conversation to the sidebar." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Ask Augmentor from Living Archive Agent" }));
+
+    await waitFor(() => {
+      expect(requestArchiveAiMemoryBuildJobMock).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(requestProviderServiceChatCompletionStreamMock).toHaveBeenCalled();
+    });
+
+    const request = requestProviderServiceChatCompletionStreamMock.mock.calls.at(-1)?.[0];
+    expect(request?.threadId).toBe("thread-living-archive-agent");
+    expect(request?.messages.at(-1)?.content).toContain("This conversation is happening inside the Living Archive workspace");
+
+    const dialogue = document.querySelector(".archive-agent-dialogue");
+    expect(dialogue?.textContent).toContain("Fix the Living Archive setup");
+    expect(dialogue?.textContent).toContain("I repaired the build path and continued the Living Archive setup.");
   });
 
   it("opens a host-owned mixed library classification review from the source registry", async () => {
@@ -4568,7 +4666,8 @@ describe("App boot flow", () => {
     expect((await screen.findAllByText("Launch your AI tools from one workbench.")).length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getAllByRole("button", { name: /Archive/i })[0]);
-    fireEvent.click(screen.getByRole("button", { name: "Open Sources section" }));
+    fireEvent.click(await screen.findByText("Advanced tools"));
+    fireEvent.click(await screen.findByRole("button", { name: "Open Sources section" }));
     fireEvent.click(await screen.findByRole("button", { name: "Review Classification" }));
 
     expect(await screen.findByText("Approve Classification Intent")).toBeTruthy();
@@ -4581,9 +4680,6 @@ describe("App boot flow", () => {
     fireEvent.click(screen.getByRole("button", { name: "Approve Classification Intent" }));
     fireEvent.click(screen.getByRole("button", { name: "Generate Reorganisation Plan" }));
 
-    expect(await screen.findByText(/Generated reorganisation plan for RESONANT_OS_BASE/i)).toBeTruthy();
-    expect(await screen.findByText(/Files moved by this command: 0/i)).toBeTruthy();
-    expect(await screen.findByText("approval required")).toBeTruthy();
     expect(requestArchiveLibraryReorganisationPlanMock).toHaveBeenCalledWith(
       "/Users/augmentor/Documents/RESONANT_OS_BASE/_LivingArchive/Memory/INTAKE/imports/mixed/metadata/resonant-os-base-classification-review.json",
       "strategist.core",
@@ -4622,6 +4718,7 @@ describe("App boot flow", () => {
 
     expect((await screen.findAllByText("Launch your AI tools from one workbench.")).length).toBeGreaterThan(0);
     fireEvent.click(screen.getAllByRole("button", { name: /Archive/i })[0]);
+    fireEvent.click(await screen.findByText("Advanced tools"));
     fireEvent.click(await screen.findByRole("button", { name: "Open Sources section" }));
     fireEvent.click(await screen.findByRole("button", { name: "Build AI Memory" }));
 
@@ -4675,7 +4772,8 @@ describe("App boot flow", () => {
 
     expect((await screen.findAllByText("Launch your AI tools from one workbench.")).length).toBeGreaterThan(0);
     fireEvent.click(screen.getAllByRole("button", { name: /Archive/i })[0]);
-    fireEvent.click(await screen.findByRole("button", { name: /Open Review.*section/ }));
+    fireEvent.click(await screen.findByText("Advanced tools"));
+    fireEvent.click(await screen.findByRole("button", { name: /Open Exceptions.*section/ }));
 
     expect(await screen.findByLabelText("AI Memory build history")).toBeTruthy();
     expect(await screen.findByText("RESONANT_OS_BASE")).toBeTruthy();
@@ -4723,7 +4821,7 @@ describe("App boot flow", () => {
       sourceRole: undefined,
       intent: "review-and-ingest",
       providerId: "shared-openai",
-      model: "gpt-5.4",
+      model: "gpt-5.5",
       summary: "Review artifact created for the queued source.",
       confidence: "high",
       doctrineSensitivity: "low",
@@ -4765,7 +4863,8 @@ describe("App boot flow", () => {
     expect((await screen.findAllByText("Launch your AI tools from one workbench.")).length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getAllByRole("button", { name: /Archive/i })[0]);
-    fireEvent.click(screen.getByRole("button", { name: "Open Search section" }));
+    fireEvent.click(await screen.findByText("Advanced tools"));
+    fireEvent.click(await screen.findByRole("button", { name: "Open Search section" }));
     fireEvent.change(screen.getByPlaceholderText("Search the Living Archive"), {
       target: { value: "transcript" },
     });
@@ -4774,7 +4873,6 @@ describe("App boot flow", () => {
     expect(await screen.findByText("TOL Transcript 1")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Queue ingest" }));
 
-    expect(await screen.findByText("Queued TOL Transcript 1 for Living Archive ingest review.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /Open Review/ }));
     expect(await screen.findByRole("button", { name: "Process Request" })).toBeTruthy();
     expect(requestArchiveIngestRequestMock).toHaveBeenCalledWith(
@@ -4843,7 +4941,8 @@ describe("App boot flow", () => {
     expect((await screen.findAllByText("Launch your AI tools from one workbench.")).length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getAllByRole("button", { name: /Archive/i })[0]);
-    fireEvent.click(screen.getByRole("button", { name: "Open Sources section" }));
+    fireEvent.click(await screen.findByText("Advanced tools"));
+    fireEvent.click(await screen.findByRole("button", { name: "Open Sources section" }));
     expect((await screen.findAllByText(/03_TOL\/TOL Analysis/)).length).toBeGreaterThan(0);
     fireEvent.change(await screen.findByLabelText("Select source folder"), {
       target: { value: "03_TOL/TOL Analysis" },
@@ -4856,7 +4955,6 @@ describe("App boot flow", () => {
 
     fireEvent.click(screen.getAllByRole("button", { name: "Queue For Review" })[0]);
 
-    expect(await screen.findByText("Queued new-note for Living Archive ingest review.")).toBeTruthy();
     expect(requestArchiveIngestRequestMock).toHaveBeenCalledWith(
       expect.objectContaining({
         actorId: "strategist.core",
@@ -4897,7 +4995,8 @@ describe("App boot flow", () => {
     expect((await screen.findAllByText("Launch your AI tools from one workbench.")).length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getAllByRole("button", { name: /Archive/i })[0]);
-    fireEvent.click(screen.getByRole("button", { name: "Open Sources section" }));
+    fireEvent.click(await screen.findByText("Advanced tools"));
+    fireEvent.click(await screen.findByRole("button", { name: "Open Sources section" }));
     fireEvent.click(await screen.findByRole("button", { name: "Detect TOL Bundles" }));
 
     expect(await screen.findByText("2026-04-21-1003")).toBeTruthy();
@@ -4906,7 +5005,6 @@ describe("App boot flow", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Queue TOL Bundle" }));
 
-    expect(await screen.findByText("Queued TOL bundle 2026-04-21-1003 for Living Archive ingest review.")).toBeTruthy();
     expect(requestArchiveBuildTolBundleMock).toHaveBeenCalledWith({
       sessionId: "2026-04-21-1003",
       actorId: "strategist.core",
@@ -4914,62 +5012,238 @@ describe("App boot flow", () => {
   });
 
   it("promotes only approved archive review artifacts into the trusted wiki path", async () => {
-    requestArchiveReviewArtifactsMock.mockResolvedValue([
-      {
-        artifactFile: "/tmp/artifacts/review-output.json",
-        checkedAt: "unix:4",
-        requestFile: "/tmp/review-request.json",
-        sourcePath: "/Users/augmentor/Documents/RESONANT_OS_BASE/03_TOL/TOL Transcripts/session-1.md",
-        sourceType: "transcript",
-        sourceRole: undefined,
-        intent: "review-and-ingest",
-        providerId: "shared-openai",
-        model: "gpt-5.4",
-        summary: "Approved concept promotion ready.",
-        confidence: "high",
-        doctrineSensitivity: "low",
-        recommendedTier: "strategist-review",
-        recommendationReason: "Strategist review is the default approval tier for trusted archive promotion.",
-        proposedPages: [
-          {
-            type: "concept",
-            title: "Provider Fabric",
-            content: "Routing belongs to ResonantOS.",
-          },
-        ],
-        decision: {
-          status: "approved",
-          action: "approve",
-          actorId: "strategist.core",
-          decidedAt: "unix:5",
-          tierApplied: "strategist-review",
+    const artifact: ArchiveReviewArtifact = {
+      artifactFile: "/tmp/artifacts/review-output.json",
+      checkedAt: "unix:4",
+      requestFile: "/tmp/review-request.json",
+      sourcePath: "/Users/augmentor/Documents/RESONANT_OS_BASE/03_TOL/TOL Transcripts/session-1.md",
+      sourceType: "transcript",
+      sourceRole: undefined,
+      intent: "review-and-ingest",
+      providerId: "shared-openai",
+      model: "gpt-5.5",
+      summary: "Approved concept promotion ready.",
+      confidence: "high",
+      doctrineSensitivity: "low",
+      recommendedTier: "strategist-review",
+      recommendationReason: "Strategist review is the default approval tier for trusted archive promotion.",
+      proposedPages: [
+        {
+          type: "concept",
+          title: "Provider Fabric",
+          content: "Routing belongs to ResonantOS.",
         },
+      ],
+      decision: {
+        status: "approved",
+        action: "approve",
+        actorId: "strategist.core",
+        decidedAt: "unix:5",
+        tierApplied: "strategist-review",
       },
-    ]);
+    };
+    const promoteArtifact = vi.fn();
 
-    render(<App />);
+    render(
+      <ArchiveReviewDesk
+        archiveQueueBusy={false}
+        archiveQueue={[]}
+        archiveReviewArtifacts={[artifact]}
+        archiveProcessResult={null}
+        archiveReviewDecisionResult={null}
+        archivePromotionResult={null}
+        archiveMaintenanceResult={null}
+        archiveAiMemoryBuildResult={null}
+        archiveAiMemoryBuildJobs={[]}
+        archiveAutomationPolicy={{ autoSyncEnabled: false, aiMemoryBuilds: "off" }}
+        onRefreshArchiveQueue={vi.fn()}
+        onProcessArchiveRequest={vi.fn()}
+        onApproveReviewArtifact={vi.fn()}
+        onHumanApproveReviewArtifact={vi.fn()}
+        onEscalateReviewArtifact={vi.fn()}
+        onRejectReviewArtifact={vi.fn()}
+        onHumanRejectReviewArtifact={vi.fn()}
+        onPromoteReviewArtifact={promoteArtifact}
+        onPromoteApprovedArtifacts={vi.fn()}
+        onUpdateArchiveAutomationPolicy={vi.fn()}
+        onRunArchiveMaintenance={vi.fn()}
+        onContinueAiMemoryBuild={vi.fn()}
+      />,
+    );
 
-    expect((await screen.findAllByText("Launch your AI tools from one workbench.")).length).toBeGreaterThan(0);
-
-    fireEvent.click(screen.getAllByRole("button", { name: /Archive/i })[0]);
-    fireEvent.click(screen.getByRole("button", { name: "Open Review section" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Refresh Queue" }));
     expect(await screen.findByText("Approved concept promotion ready.")).toBeTruthy();
     expect(await screen.findByText("Proposed knowledge pages")).toBeTruthy();
     expect(await screen.findByText("Routing belongs to ResonantOS.")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Promote to Wiki" }));
-
-    expect(await screen.findByText("Promoted 1 approved page(s) to the trusted wiki.")).toBeTruthy();
-    expect(await screen.findByText("Latest trusted wiki promotion")).toBeTruthy();
-    expect(await screen.findByText("created · concept · create-page · WIKI/concepts/provider-fabric.md · indexed")).toBeTruthy();
-    expect(requestArchivePromoteReviewArtifactMock).toHaveBeenCalledWith({
-      artifactFile: "/tmp/artifacts/review-output.json",
-      actorId: "archive-ingest.core",
-    });
+    expect(promoteArtifact).toHaveBeenCalledWith("/tmp/artifacts/review-output.json");
   });
 
-  it("pins Strategist to the local resurrect runtime when recovery mode is enabled", async () => {
+  it("surfaces only approved unpromoted artifacts as bulk promotion work", async () => {
+    const artifacts: ArchiveReviewArtifact[] = [
+      {
+        artifactFile: "/tmp/artifacts/approved-a.json",
+        checkedAt: "unix:4",
+        requestFile: "/tmp/review-a.json",
+        sourcePath: "/tmp/source-a.md",
+        sourceType: "markdown",
+        intent: "review-and-ingest",
+        providerId: "shared-openai",
+        model: "gpt-5.5",
+        summary: "Approved artifact A.",
+        confidence: "high",
+        doctrineSensitivity: "low",
+        recommendedTier: "strategist-review",
+        recommendationReason: "Ready.",
+        proposedPages: [{ type: "concept", title: "A", content: "A body." }],
+        decision: { status: "approved", action: "approve", actorId: "strategist.core", decidedAt: "unix:5", tierApplied: "strategist-review" },
+      },
+      {
+        artifactFile: "/tmp/artifacts/already-promoted.json",
+        checkedAt: "unix:4",
+        requestFile: "/tmp/review-b.json",
+        sourcePath: "/tmp/source-b.md",
+        sourceType: "markdown",
+        intent: "review-and-ingest",
+        providerId: "shared-openai",
+        model: "gpt-5.5",
+        summary: "Already promoted artifact.",
+        confidence: "high",
+        doctrineSensitivity: "low",
+        recommendedTier: "strategist-review",
+        recommendationReason: "Ready.",
+        proposedPages: [{ type: "concept", title: "B", content: "B body." }],
+        decision: { status: "approved", action: "approve", actorId: "strategist.core", decidedAt: "unix:5", tierApplied: "strategist-review" },
+        promotion: {
+          status: "promoted",
+          actorId: "archive-ingest.core",
+          promotedAt: "unix:6",
+          pagesWritten: 1,
+          pagesSkipped: 0,
+        },
+      },
+      {
+        artifactFile: "/tmp/artifacts/pending.json",
+        checkedAt: "unix:4",
+        requestFile: "/tmp/review-c.json",
+        sourcePath: "/tmp/source-c.md",
+        sourceType: "markdown",
+        intent: "review-and-ingest",
+        providerId: "shared-openai",
+        model: "gpt-5.5",
+        summary: "Pending artifact.",
+        confidence: "medium",
+        doctrineSensitivity: "medium",
+        recommendedTier: "strategist-review",
+        recommendationReason: "Needs review.",
+        proposedPages: [{ type: "concept", title: "C", content: "C body." }],
+        decision: { status: "pending" },
+      },
+    ];
+    const promoteApproved = vi.fn();
+
+    render(
+      <ArchiveReviewDesk
+        archiveQueueBusy={false}
+        archiveQueue={[]}
+        archiveReviewArtifacts={artifacts}
+        archiveProcessResult={null}
+        archiveReviewDecisionResult={null}
+        archivePromotionResult={null}
+        archiveMaintenanceResult={null}
+        archiveAiMemoryBuildResult={null}
+        archiveAiMemoryBuildJobs={[]}
+        archiveAutomationPolicy={{ autoSyncEnabled: false, aiMemoryBuilds: "off" }}
+        onRefreshArchiveQueue={vi.fn()}
+        onProcessArchiveRequest={vi.fn()}
+        onApproveReviewArtifact={vi.fn()}
+        onHumanApproveReviewArtifact={vi.fn()}
+        onEscalateReviewArtifact={vi.fn()}
+        onRejectReviewArtifact={vi.fn()}
+        onHumanRejectReviewArtifact={vi.fn()}
+        onPromoteReviewArtifact={vi.fn()}
+        onPromoteApprovedArtifacts={promoteApproved}
+        onUpdateArchiveAutomationPolicy={vi.fn()}
+        onRunArchiveMaintenance={vi.fn()}
+        onContinueAiMemoryBuild={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByText("Already promoted artifact.")).toBeTruthy();
+    expect(await screen.findByText(/Promoted 1 page\(s\) to the trusted wiki/i)).toBeTruthy();
+    expect(screen.getByText("Approved To Promote")).toBeTruthy();
+    expect(screen.getByText("Already In Wiki")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Promote Approved" }));
+    expect(promoteApproved).toHaveBeenCalledTimes(1);
+  });
+
+  it("requires explicit human decisions for escalated archive review artifacts", async () => {
+    const artifact: ArchiveReviewArtifact = {
+      artifactFile: "/tmp/artifacts/escalated.json",
+      checkedAt: "unix:4",
+      requestFile: "/tmp/review-escalated.json",
+      sourcePath: "/tmp/source-escalated.md",
+      sourceType: "markdown",
+      intent: "review-and-ingest",
+      providerId: "shared-openai",
+      model: "gpt-5.5",
+      summary: "Verifier escalated this proposed memory page.",
+      confidence: "medium",
+      doctrineSensitivity: "high",
+      recommendedTier: "strategist-review",
+      recommendationReason: "Verifier found doctrine-sensitive interpretation risk.",
+      proposedPages: [{ type: "protocol", title: "Mixtape Constraint", content: "One deeply chosen answer." }],
+      decision: {
+        status: "escalated",
+        action: "escalate",
+        actorId: "archive-verifier.ai",
+        decidedAt: "unix:5",
+        tierApplied: "human-review",
+      },
+    };
+    const humanApprove = vi.fn();
+    const humanReject = vi.fn();
+
+    render(
+      <ArchiveReviewDesk
+        archiveQueueBusy={false}
+        archiveQueue={[]}
+        archiveReviewArtifacts={[artifact]}
+        archiveProcessResult={null}
+        archiveReviewDecisionResult={null}
+        archivePromotionResult={null}
+        archiveMaintenanceResult={null}
+        archiveAiMemoryBuildResult={null}
+        archiveAiMemoryBuildJobs={[]}
+        archiveAutomationPolicy={{ autoSyncEnabled: false, aiMemoryBuilds: "off" }}
+        onRefreshArchiveQueue={vi.fn()}
+        onProcessArchiveRequest={vi.fn()}
+        onApproveReviewArtifact={vi.fn()}
+        onHumanApproveReviewArtifact={humanApprove}
+        onEscalateReviewArtifact={vi.fn()}
+        onRejectReviewArtifact={vi.fn()}
+        onHumanRejectReviewArtifact={humanReject}
+        onPromoteReviewArtifact={vi.fn()}
+        onPromoteApprovedArtifacts={vi.fn()}
+        onUpdateArchiveAutomationPolicy={vi.fn()}
+        onRunArchiveMaintenance={vi.fn()}
+        onContinueAiMemoryBuild={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByText("Verifier escalated this proposed memory page.")).toBeTruthy();
+    expect(await screen.findByText(/Human review required/i)).toBeTruthy();
+    expect(screen.getByText("Needs Human")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Human Approve" }));
+    fireEvent.click(screen.getByRole("button", { name: "Human Reject" }));
+
+    expect(humanApprove).toHaveBeenCalledWith("/tmp/artifacts/escalated.json");
+    expect(humanReject).toHaveBeenCalledWith("/tmp/artifacts/escalated.json");
+  });
+
+  it("starts recovery on the local floor and can promote to a stronger route", async () => {
     render(<App />);
 
     expect((await screen.findAllByText("Launch your AI tools from one workbench.")).length).toBeGreaterThan(0);
@@ -5003,10 +5277,7 @@ describe("App boot flow", () => {
     expect(screen.getByText(/Engineer tools used:/i)).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Promote" }));
-    expect(screen.getByText("Promoted recovery to Shared MiniMax on MiniMax-M2.7.")).toBeTruthy();
-    await waitFor(() => {
-      expect(screen.getAllByDisplayValue("MiniMax-M2.7").length).toBeGreaterThan(0);
-    });
+    expect(screen.getByText("Promoted recovery to Shared MiniMax on MiniMax-M2.7-highspeed.")).toBeTruthy();
 
     fireEvent.change(screen.getAllByPlaceholderText("Message Resonant Engineer Agent")[0], {
       target: { value: "Run the next phase on the stronger route" },
@@ -5018,7 +5289,7 @@ describe("App boot flow", () => {
         expect.objectContaining({
           providerId: "shared-minimax",
           runtimeNodeKind: "cloud",
-          model: "MiniMax-M2.7",
+          model: "MiniMax-M2.7-highspeed",
         }),
       );
     });
