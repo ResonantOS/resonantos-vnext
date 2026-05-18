@@ -51,9 +51,9 @@ describe("strategist provider service routing", () => {
     const resolved = resolveStrategistChatRoute(degradedState);
 
     expect(resolved.provider?.id).toBe("gx10-local-llama");
-    expect(resolved.runtimeNode?.id).toBe("node-gx10-gemma");
+    expect(resolved.runtimeNode?.id).toBe("node-gx10-qwen");
     expect(resolved.decision.executionAdapterId).toBe("cloud-openai-compatible");
-    expect(resolved.model).toBe("gemma-4-26B-A4B-it-UD-Q4_K_M.gguf");
+    expect(resolved.model).toBe("Qwen3.6-27B-Q4_K_M.gguf");
     expect(resolved.decision.resolutionReason).toBe("fallback-in-policy");
   });
 
@@ -165,7 +165,7 @@ describe("workload strategy routing", () => {
     expect(resolved.provider?.id).toBe("shared-openai");
     expect(resolved.runtimeNode?.id).toBe("node-openai-cloud");
     expect(resolved.decision.executionAdapterId).toBe("cloud-openai-compatible");
-    expect(resolved.model).toBe("gpt-4o");
+    expect(resolved.model).toBe("gpt-5.5");
   });
 
   it("hard-stops archive ingest when strategy-approved cloud routes are unavailable", () => {

@@ -1,0 +1,41 @@
+{
+  "id": "addon.insight-engine",
+  "name": "Insight Engine",
+  "version": "0.1.0",
+  "author": "ResonantOS",
+  "category": "knowledge",
+  "sdkVersion": "0.1.0",
+  "description": "Cross-document pattern analysis and proactive insight generation powered by LLM reasoning over Living Archive content.",
+  "runtimeType": "local-service",
+  "surfaces": [
+    {
+      "type": "panel",
+      "id": "insight-panel",
+      "label": "Insights",
+      "description": "Displays proactive insights and pattern analysis results derived from Living Archive content.",
+      "entryPoint": "insight-panel"
+    }
+  ],
+  "requestedCapabilities": [
+    { "capability": "archive-read", "granted": false, "scope": "workspace", "revocationBehavior": "hard-stop" },
+    { "capability": "providers", "granted": false, "scope": "self", "revocationBehavior": "degrade" }
+  ],
+  "providerRequirements": {
+    "sharedProfiles": [],
+    "supportsPrivateCredentials": false
+  },
+  "archiveIntegration": {
+    "readScopes": ["living-archive/context"],
+    "intakeWriteScopes": [],
+    "canRequestIngest": false,
+    "canWriteKnowledgePages": false
+  },
+  "health": {
+    "strategy": "provider-ready"
+  },
+  "installHooks": {},
+  "compatibility": {
+    "shellVersion": "^0.1.0",
+    "platforms": ["macOS", "windows", "linux"]
+  }
+}

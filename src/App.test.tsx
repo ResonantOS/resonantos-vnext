@@ -3347,7 +3347,9 @@ describe("App boot flow", () => {
       providerRouting: {
         ...noStreamingState.providerRouting,
         executionAdapters: noStreamingState.providerRouting.executionAdapters.map((adapter) =>
-          adapter.id === "cloud-minimax-compatible" ? { ...adapter, supportsStreaming: false, supportsAbort: false } : adapter,
+          adapter.id === "cloud-minimax-compatible" || adapter.id === "cloud-openai-compatible"
+            ? { ...adapter, supportsStreaming: false, supportsAbort: false }
+            : adapter,
         ),
       },
     });
@@ -4730,7 +4732,7 @@ describe("App boot flow", () => {
           actorId: "strategist.core",
           maintenance: expect.objectContaining({
             providerId: "shared-openai",
-            model: "gpt-4o",
+            model: "gpt-5.5",
             maxRequests: 6,
             autoPromote: true,
           }),
@@ -4790,7 +4792,7 @@ describe("App boot flow", () => {
           actorId: "strategist.core",
           maintenance: expect.objectContaining({
             providerId: "shared-openai",
-            model: "gpt-4o",
+            model: "gpt-5.5",
             maxRequests: 6,
             autoPromote: true,
           }),
@@ -4890,7 +4892,7 @@ describe("App boot flow", () => {
         requestFile: "/tmp/review-request.json",
         providerId: "shared-openai",
         runtimeNodeId: "node-openai-cloud",
-        model: "gpt-4o",
+        model: "gpt-5.5",
       }),
     );
   });

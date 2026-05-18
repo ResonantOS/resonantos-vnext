@@ -1,0 +1,1 @@
+/Users/dr.tom/resonantos-vnext/crates/resonator-control/target/debug/libresonator_control.rlib: /Users/dr.tom/resonantos-vnext/crates/resonator-control/src/diagnostic.rs /Users/dr.tom/resonantos-vnext/crates/resonator-control/src/error.rs /Users/dr.tom/resonantos-vnext/crates/resonator-control/src/lib.rs /Users/dr.tom/resonantos-vnext/crates/resonator-control/src/macos.rs
