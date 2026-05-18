@@ -1,0 +1,14 @@
+/Users/dr.tom/resonantos-vnext/crates/resonator-control/target/debug/deps/serde-3ebe075689ae4e63.d: /Users/dr.tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /Users/dr.tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /Users/dr.tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /Users/dr.tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /Users/dr.tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /Users/dr.tom/resonantos-vnext/crates/resonator-control/target/debug/build/serde-0e8e8a817c3d4882/out/private.rs
+
+/Users/dr.tom/resonantos-vnext/crates/resonator-control/target/debug/deps/libserde-3ebe075689ae4e63.rlib: /Users/dr.tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /Users/dr.tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /Users/dr.tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /Users/dr.tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /Users/dr.tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /Users/dr.tom/resonantos-vnext/crates/resonator-control/target/debug/build/serde-0e8e8a817c3d4882/out/private.rs
+
+/Users/dr.tom/resonantos-vnext/crates/resonator-control/target/debug/deps/libserde-3ebe075689ae4e63.rmeta: /Users/dr.tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /Users/dr.tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /Users/dr.tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /Users/dr.tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /Users/dr.tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /Users/dr.tom/resonantos-vnext/crates/resonator-control/target/debug/build/serde-0e8e8a817c3d4882/out/private.rs
+
+/Users/dr.tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs:
+/Users/dr.tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs:
+/Users/dr.tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs:
+/Users/dr.tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs:
+/Users/dr.tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs:
+/Users/dr.tom/resonantos-vnext/crates/resonator-control/target/debug/build/serde-0e8e8a817c3d4882/out/private.rs:
+
+# env-dep:OUT_DIR=/Users/dr.tom/resonantos-vnext/crates/resonator-control/target/debug/build/serde-0e8e8a817c3d4882/out
