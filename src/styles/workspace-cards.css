@@ -864,3 +864,82 @@
   border: 1px solid rgba(96, 165, 250, 0.2);
   background: rgba(96, 165, 250, 0.06);
 }
+
+/* ── Token gate (cloud auth wall) ─────────────────────────────────────── */
+
+.token-gate-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+  background:
+    radial-gradient(circle at 50% 20%, rgba(99, 102, 241, 0.18), transparent 26rem),
+    rgba(8, 7, 6, 0.90);
+  backdrop-filter: blur(18px);
+}
+
+.token-gate-card {
+  display: grid;
+  gap: 1rem;
+  width: min(480px, 100%);
+  padding: 1.75rem;
+  border: 1px solid rgba(99, 102, 241, 0.24);
+  border-radius: 28px;
+  background:
+    linear-gradient(150deg, rgba(32, 29, 26, 0.98), rgba(18, 16, 14, 0.98)),
+    var(--bg-secondary);
+  box-shadow: var(--shadow);
+}
+
+.token-gate-card h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.token-gate-desc,
+.token-gate-hint {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.token-gate-hint {
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+
+.token-gate-form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.token-gate-input {
+  width: 100%;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255, 248, 236, 0.04);
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  font-family: var(--font-mono, monospace);
+  letter-spacing: 0.1em;
+  box-sizing: border-box;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.token-gate-input:focus {
+  border-color: rgba(99, 102, 241, 0.5);
+}
+
+.token-gate-input:disabled {
+  opacity: 0.6;
+}
+
+.token-gate-error {
+  margin: 0;
+  color: rgba(248, 113, 113, 0.9);
+  font-size: 0.875rem;
+}

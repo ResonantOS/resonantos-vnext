@@ -12,9 +12,9 @@ describe("strategist provider service routing", () => {
     const state = buildDefaultState([]);
     const resolved = resolveStrategistChatRoute(state);
 
-    expect(resolved.provider?.id).toBe("shared-minimax");
-    expect(resolved.runtimeNode?.id).toBe("node-minimax-cloud");
-    expect(resolved.decision.executionAdapterId).toBe("cloud-minimax-compatible");
+    expect(resolved.provider?.id).toBe("shared-openai");
+    expect(resolved.runtimeNode?.id).toBe("node-openai-cloud");
+    expect(resolved.decision.executionAdapterId).toBe("cloud-openai-compatible");
     expect(resolved.executionAdapter?.supportsStreaming).toBe(true);
     expect(resolved.executionAdapter?.supportsAbort).toBe(true);
     expect(resolved.decision.resolutionReason).toBe("primary-healthy");
@@ -150,7 +150,7 @@ describe("workload strategy routing", () => {
     expect(resolved.provider?.id).toBe("shared-openai");
     expect(resolved.runtimeNode?.id).toBe("node-openai-cloud");
     expect(resolved.decision.executionAdapterId).toBe("cloud-openai-compatible");
-    expect(resolved.model).toBe("gpt-5.4");
+    expect(resolved.model).toBe("gpt-4o");
   });
 
   it("hard-stops archive ingest when strategy-approved cloud routes are unavailable", () => {

@@ -4633,7 +4633,7 @@ describe("App boot flow", () => {
           actorId: "strategist.core",
           maintenance: expect.objectContaining({
             providerId: "shared-openai",
-            model: "gpt-5.4",
+            model: "gpt-4o",
             maxRequests: 6,
             autoPromote: true,
           }),
@@ -4692,7 +4692,7 @@ describe("App boot flow", () => {
           actorId: "strategist.core",
           maintenance: expect.objectContaining({
             providerId: "shared-openai",
-            model: "gpt-5.4",
+            model: "gpt-4o",
             maxRequests: 6,
             autoPromote: true,
           }),
@@ -4792,7 +4792,7 @@ describe("App boot flow", () => {
         requestFile: "/tmp/review-request.json",
         providerId: "shared-openai",
         runtimeNodeId: "node-openai-cloud",
-        model: "gpt-5.4",
+        model: "gpt-4o",
       }),
     );
   });

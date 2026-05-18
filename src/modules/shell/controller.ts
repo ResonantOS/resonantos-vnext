@@ -17,6 +17,7 @@ import {
   requestLocalRuntimeStatus,
   requestRecoveryRouteCandidates,
 } from "../../core/runtime";
+import { isWebMode } from "../../core/web-transport";
 import { recommendedGrantCapabilities, recommendedSystemSlotManifests } from "./system-slots";
 
 export type BootedShellState = {
@@ -32,6 +33,17 @@ export const loadInitialShellState = async (): Promise<BootedShellState> => {
   const state = await hydrateState(bundled, sideloaded);
   const credentialStatuses = await loadProviderCredentialStatuses();
   const nextState = applyProviderCredentialStatuses(state, credentialStatuses);
+
+  // In web/cloud mode, force strategist to use shared-openai regardless of any
+  // persisted state that might still reference shared-minimax.
+  if (isWebMode()) {
+    nextState.agents = nextState.agents.map((agent) =>
+      agent.id === "strategist.core"
+        ? { ...agent, providerProfileId: "shared-openai", fallbackProviderProfileId: "shared-openai" }
+        : agent,
+    );
+  }
+
   if (!nextState.recoverySession.active) {
     nextState.uiPreferences.activeSection = "overview";
   }

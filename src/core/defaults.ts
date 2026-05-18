@@ -309,7 +309,7 @@ export const modelStrategy: ModelStrategyState = {
       rule: "Try the main fast route first, then premium cloud, then remote or local fallback.",
       orderedRoutes: [
         { providerProfileId: "shared-minimax", runtimeNodeId: "node-minimax-cloud", model: "MiniMax-M2.7", costPosture: "subscription", note: "Default fast route for Augmentor and the Engineer Agent." },
-        { providerProfileId: "shared-openai", runtimeNodeId: "node-openai-cloud", model: "gpt-5.4", costPosture: "subscription", note: "Premium fallback for demanding moments." },
+        { providerProfileId: "shared-openai", runtimeNodeId: "node-openai-cloud", model: "gpt-4o", costPosture: "subscription", note: "Premium fallback for demanding moments." },
       ],
       lastResortRoute: {
         providerProfileId: "shared-local",
@@ -339,7 +339,7 @@ export const modelStrategy: ModelStrategyState = {
       label: "Archive Premium Chain",
       rule: "Archive interpretation should stay premium-first and hard-stop before dropping below acceptable quality.",
       orderedRoutes: [
-        { providerProfileId: "shared-openai", runtimeNodeId: "node-openai-cloud", model: "gpt-5.4", costPosture: "subscription", note: "Preferred ingest quality route." },
+        { providerProfileId: "shared-openai", runtimeNodeId: "node-openai-cloud", model: "gpt-4o", costPosture: "subscription", note: "Preferred ingest quality route." },
         { providerProfileId: "shared-minimax", runtimeNodeId: "node-minimax-cloud", model: "MiniMax-M2.7", costPosture: "subscription", note: "Temporary fallback if premium route is unavailable." },
       ],
     },
@@ -413,8 +413,8 @@ export const agents: AgentDefinition[] = [
     displayName: "Augmentor",
     trustTier: "core",
     workspaceBehavior: "primary",
-    providerProfileId: "shared-minimax",
-    fallbackProviderProfileId: "shared-openai",
+    providerProfileId: "shared-openai",
+    fallbackProviderProfileId: "shared-minimax",
     archiveReadScopes: ["constitution", "protocols", "living-archive", "session-memory"],
     archiveIntakeWriteScopes: [],
     canWriteKnowledgePages: false,

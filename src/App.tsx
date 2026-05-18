@@ -44,6 +44,8 @@ import type {
 } from "./core/contracts";
 import { resolveMemoryProviderBroker } from "./core/memory-provider";
 import { routedProviderLabel } from "./core/provider-service";
+import { isWebMode } from "./core/web-transport";
+import { TokenGate } from "./components/TokenGate";
 import {
   createDesktopBrowserToolRunner,
   openFloatingChatWindow,
@@ -271,6 +273,9 @@ const errorMessageOf = (error: unknown, fallback: string): string =>
 export function App() {
   const surfaceMode = appSurfaceMode();
   const isFloatingChatSurface = surfaceMode === "floating-chat";
+  const [tokenReady, setTokenReady] = useState(
+    () => !isWebMode() || Boolean(localStorage.getItem("ros_api_token")),
+  );
   const [loadState, setLoadState] = useState<LoadState>({ phase: "loading" });
   const currentReadyStateRef = useRef<ResonantShellState | null>(null);
   const [search, setSearch] = useState("");
@@ -362,6 +367,7 @@ export function App() {
   const selectableChatModelKey = selectableChatModelsForSelection.join("\u0000");
 
   useEffect(() => {
+    if (!tokenReady) return;
     void (async () => {
       try {
         const booted = await loadInitialShellState();
@@ -379,9 +385,10 @@ export function App() {
         });
       }
     })();
-  }, []);
+  }, [tokenReady]);
 
   useEffect(() => {
+    if (!tokenReady) return;
     let cancelled = false;
     let unlisten: (() => void) | null = null;
     void subscribeRuntimeStateUpdates((nextState) => {
@@ -405,7 +412,7 @@ export function App() {
       cancelled = true;
       unlisten?.();
     };
-  }, []);
+  }, [tokenReady]);
 
   useEffect(() => {
     if (loadState.phase !== "ready" || !loadState.state.uiPreferences.chatSidebarOpen) {
@@ -561,6 +568,10 @@ export function App() {
     }
     void refreshArchiveQueue();
   }, [loadState, archiveQueueBusy, archiveQueue.length]);
+
+  if (!tokenReady) {
+    return <TokenGate onConnected={() => setTokenReady(true)} />;
+  }
 
   if (loadState.phase === "loading") {
     return (

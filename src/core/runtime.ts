@@ -2,6 +2,7 @@
 // Intent citation: docs/architecture/ADR-006-addon-runtime-sdk.md
 
 import { invoke } from "@tauri-apps/api/core";
+import { isWebMode, webInvoke } from "./web-transport";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import type {
@@ -160,6 +161,10 @@ export const loadProviderCredentialStatuses = async (): Promise<Record<string, b
   if (hasTauri()) {
     return (await invoke("load_provider_secret_statuses")) as Record<string, boolean>;
   }
+  if (isWebMode()) {
+    // In web mode, the server holds the OpenAI key — mark shared-openai as configured.
+    return { "shared-openai": true };
+  }
   return {};
 };
 
@@ -186,6 +191,9 @@ export const requestProviderServiceChatCompletion = async (input: {
 }): Promise<string> => {
   if (hasTauri()) {
     return (await invoke("provider_service_chat_completion", input)) as string;
+  }
+  if (isWebMode()) {
+    return webInvoke<string>("provider_service_chat_completion", input);
   }
   throw new Error("Real Strategist chat is available only in the desktop shell.");
 };
@@ -216,6 +224,13 @@ export const requestProviderServiceChatCompletionStream = async (
   onEvent: (event: ProviderChatStreamEvent) => void,
 ): Promise<string> => {
   if (!hasTauri()) {
+    if (isWebMode()) {
+      // Web mode: proxy to non-streaming endpoint and simulate stream events.
+      const result = await webInvoke<string>("provider_service_chat_completion", input);
+      onEvent({ runId: input.runId, type: "chunk", content: result });
+      onEvent({ runId: input.runId, type: "completed", content: result });
+      return result;
+    }
     throw new Error("Streaming Strategist chat is available only in the desktop shell.");
   }
 
@@ -238,6 +253,9 @@ export const abortProviderServiceChatCompletion = async (runId: string): Promise
 export const requestLocalRuntimeStatus = async (targetModel?: string): Promise<LocalRuntimeStatus> => {
   if (hasTauri()) {
     return (await invoke("local_runtime_status", { targetModel })) as LocalRuntimeStatus;
+  }
+  if (isWebMode()) {
+    return webInvoke<LocalRuntimeStatus>("local_runtime_status", { targetModel });
   }
   throw new Error("Local runtime diagnostics are available only in the desktop shell.");
 };
@@ -726,6 +744,9 @@ export const requestBrowserOpenUrl = async (url: string, viewport?: BrowserViewp
   if (hasTauri()) {
     return (await invoke("browser_open_url", { request: { url, ...viewport } })) as BrowserOpenUrlResult;
   }
+  if (isWebMode()) {
+    return webInvoke<BrowserOpenUrlResult>("browser_open_url", { request: { url, ...viewport } });
+  }
   throw new Error("Chromium Browser engine is available only in the desktop shell.");
 };
 
@@ -733,12 +754,18 @@ export const requestBrowserEngineStatus = async (): Promise<BrowserEngineStatus>
   if (hasTauri()) {
     return (await invoke("browser_engine_status")) as BrowserEngineStatus;
   }
+  if (isWebMode()) {
+    return webInvoke<BrowserEngineStatus>("browser_engine_status");
+  }
   throw new Error("Chromium Browser engine status is available only in the desktop shell.");
 };
 
 export const requestBrowserInstallEngine = async (): Promise<BrowserEngineInstallResult> => {
   if (hasTauri()) {
     return (await invoke("browser_install_engine")) as BrowserEngineInstallResult;
+  }
+  if (isWebMode()) {
+    return webInvoke<BrowserEngineInstallResult>("browser_install_engine");
   }
   throw new Error("Chromium Browser engine install is available only in the desktop shell.");
 };
@@ -842,12 +869,18 @@ export const requestBrowserStartSession = async (url: string, viewport?: Browser
   if (hasTauri()) {
     return (await invoke("browser_start_session", { request: { url, ...viewport } })) as BrowserOpenUrlResult;
   }
+  if (isWebMode()) {
+    return webInvoke<BrowserOpenUrlResult>("browser_start_session", { request: { url, ...viewport } });
+  }
   throw new Error("Chromium Browser engine is available only in the desktop shell.");
 };
 
 export const requestBrowserSessionOpenUrl = async (sessionId: string, url: string, viewport?: BrowserViewportInput): Promise<BrowserOpenUrlResult> => {
   if (hasTauri()) {
     return (await invoke("browser_session_open_url", { request: { sessionId, url, ...viewport } })) as BrowserOpenUrlResult;
+  }
+  if (isWebMode()) {
+    return webInvoke<BrowserOpenUrlResult>("browser_session_open_url", { request: { sessionId, url, ...viewport } });
   }
   throw new Error("Chromium Browser engine is available only in the desktop shell.");
 };
@@ -856,12 +889,18 @@ export const requestBrowserSessionScreenshot = async (sessionId: string, viewpor
   if (hasTauri()) {
     return (await invoke("browser_session_screenshot", { request: { sessionId, ...viewport } })) as BrowserOpenUrlResult;
   }
+  if (isWebMode()) {
+    return webInvoke<BrowserOpenUrlResult>("browser_session_screenshot", { request: { sessionId, ...viewport } });
+  }
   throw new Error("Chromium Browser engine is available only in the desktop shell.");
 };
 
 export const requestBrowserSessionReadPage = async (sessionId: string): Promise<BrowserReadPageResult> => {
   if (hasTauri()) {
     return (await invoke("browser_session_read_page", { request: { sessionId } })) as BrowserReadPageResult;
+  }
+  if (isWebMode()) {
+    return webInvoke<BrowserReadPageResult>("browser_session_read_page", { request: { sessionId } });
   }
   throw new Error("Chromium Browser engine is available only in the desktop shell.");
 };
@@ -874,6 +913,9 @@ export const requestBrowserSessionClick = async (
 ): Promise<BrowserInteractionResult> => {
   if (hasTauri()) {
     return (await invoke("browser_session_click", { request: { sessionId, x, y, ...viewport } })) as BrowserInteractionResult;
+  }
+  if (isWebMode()) {
+    return webInvoke<BrowserInteractionResult>("browser_session_click", { request: { sessionId, x, y, ...viewport } });
   }
   throw new Error("Chromium Browser click control is available only in the desktop shell.");
 };
@@ -893,6 +935,9 @@ export const requestBrowserSessionScroll = async (
 export const requestBrowserCloseSession = async (sessionId: string): Promise<BrowserCloseSessionResult> => {
   if (hasTauri()) {
     return (await invoke("browser_close_session", { request: { sessionId } })) as BrowserCloseSessionResult;
+  }
+  if (isWebMode()) {
+    return webInvoke<BrowserCloseSessionResult>("browser_close_session", { request: { sessionId } });
   }
   throw new Error("Chromium Browser engine is available only in the desktop shell.");
 };
@@ -928,6 +973,11 @@ export const requestBrowserHostCommand = async (command: BrowserToolCommand): Pr
       request: { method, params: params ?? {}, humanApproved: Boolean(humanApproved) },
     })) as BrowserToolResult;
   }
+  if (isWebMode()) {
+    const { type, params, humanApproved } = command;
+    const method = type === "start" ? "browser.start" : type === "open_url" ? "browser.open_url" : type === "close" ? "browser.close_session" : "browser.health";
+    return webInvoke<BrowserToolResult>("browser_host_command", { request: { method, params: params ?? {}, humanApproved: Boolean(humanApproved) } });
+  }
   throw new Error("Governed Browser host commands are available only in the desktop shell.");
 };
 
@@ -959,6 +1009,11 @@ export const requestBrowserVisibleHostCommand = async (command: BrowserToolComma
     return (await invoke("browser_visible_host_command", {
       request: { method, params: params ?? {}, humanApproved: Boolean(humanApproved) },
     })) as BrowserToolResult;
+  }
+  if (isWebMode()) {
+    const { type, params, humanApproved } = command;
+    const method = type === "start" ? "browser.start" : type === "open_url" ? "browser.open_url" : type === "close" ? "browser.close_session" : "browser.health";
+    return webInvoke<BrowserToolResult>("browser_visible_host_command", { request: { method, params: params ?? {}, humanApproved: Boolean(humanApproved) } });
   }
   throw new Error("Visible Browser v2 host commands are available only in the desktop shell.");
 };

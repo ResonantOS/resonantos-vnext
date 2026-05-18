@@ -2,6 +2,10 @@ mod archive_service;
 mod browser_host_service;
 mod browser_native_service;
 mod browser_service;
+mod camofox_integration;
+mod camofox_overlay_macos;
+mod camofox_service;
+mod marionette_bridge;
 mod delegation_service;
 mod hermes_service;
 mod host_state;
@@ -12,6 +16,7 @@ mod paperclip_service;
 mod provider_service;
 mod recovery_service;
 mod terminal_service;
+mod resonator_service;
 
 use std::collections::HashMap;
 use std::env;
@@ -428,6 +433,89 @@ fn obsidian_archive_note(
 fn obsidian_vault_index(request: ObsidianVaultIndexRequest) -> Result<ObsidianVaultIndex, String> {
     index_obsidian_vault(request)
 }
+
+// ---------------------------------------------------------------------------
+// CamoFox commands
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+fn camofox_start(profile: Option<String>) -> Result<u32, String> {
+    let profile_path = profile.map(PathBuf::from);
+    camofox_service::ensure_running(profile_path)
+}
+
+#[tauri::command]
+fn camofox_stop() -> Result<(), String> {
+    camofox_service::stop()
+}
+
+#[tauri::command]
+fn camofox_navigate(url: String) -> Result<(), String> {
+    camofox_service::navigate(&url)
+}
+
+#[tauri::command]
+fn camofox_screenshot() -> Result<String, String> {
+    camofox_service::screenshot()
+}
+
+#[tauri::command]
+fn camofox_health() -> Result<bool, String> {
+    camofox_service::health_check()
+}
+
+#[tauri::command]
+fn camofox_connect_wallet() -> Result<String, String> {
+    camofox_service::connect_wallet()
+}
+
+#[tauri::command]
+fn camofox_show(
+    app: AppHandle,
+    request: BrowserNativeWebviewRequest,
+) -> Result<BrowserNativeWebviewResult, String> {
+    assert_addon_capabilities(
+        &app,
+        "addon.browser",
+        &["network", "ui-embedding", "browser-control"],
+    )?;
+    camofox_integration::camofox_browser_show(&request)
+}
+
+#[tauri::command]
+fn camofox_resize(
+    app: AppHandle,
+    request: BrowserNativeWebviewBoundsRequest,
+) -> Result<BrowserNativeWebviewResult, String> {
+    assert_addon_capabilities(&app, "addon.browser", &["ui-embedding", "browser-control"])?;
+    camofox_integration::camofox_browser_resize(&request)
+}
+
+#[tauri::command]
+fn camofox_hide(app: AppHandle) -> Result<BrowserNativeWebviewResult, String> {
+    assert_addon_capabilities(&app, "addon.browser", &["ui-embedding", "browser-control"])?;
+    camofox_integration::camofox_browser_hide()
+}
+
+#[tauri::command]
+fn camofox_scroll(delta_x: i32, delta_y: i32) -> Result<(), String> {
+    camofox_service::scroll(delta_x, delta_y)
+}
+
+#[tauri::command]
+fn camofox_inject_resonant_context() -> Result<(), String> {
+    let sdk = include_str!("../../src/sdk/resonant-context/resonant-context.js");
+    camofox_service::inject_resonant_context(sdk)
+}
+
+#[tauri::command]
+fn browser_get_context() -> Result<serde_json::Value, String> {
+    camofox_service::read_context_snapshot()
+}
+
+// ---------------------------------------------------------------------------
+// Chromium browser commands
+// ---------------------------------------------------------------------------
 
 #[tauri::command]
 fn browser_engine_status() -> BrowserEngineStatus {
@@ -1330,7 +1418,24 @@ pub fn run() {
             provider_service_chat_completion,
             provider_service_chat_completion_stream,
             provider_service_abort_chat_completion,
-            archive_ingest_probe
+            archive_ingest_probe,
+            camofox_start,
+            camofox_stop,
+            camofox_navigate,
+            camofox_screenshot,
+            camofox_health,
+            camofox_connect_wallet,
+            camofox_show,
+            camofox_resize,
+            camofox_hide,
+            camofox_scroll,
+            camofox_inject_resonant_context,
+            browser_get_context,
+            resonator_service::resonator_capability_manifest,
+            resonator_service::resonator_screen_capture,
+            resonator_service::resonator_mouse_click,
+            resonator_service::resonator_key_type,
+            resonator_service::resonator_key_combo
         ])
         .run(tauri::generate_context!())
         .expect("error while running ResonantOS vNext");

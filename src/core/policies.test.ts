@@ -168,11 +168,11 @@ describe("manifest rebase", () => {
 });
 
 describe("provider defaults", () => {
-  it("routes the Strategist to MiniMax first and OpenAI second", () => {
+  it("routes the Strategist to OpenAI first and MiniMax second", () => {
     const state = buildDefaultState([]);
     const strategist = state.agents.find((agent) => agent.id === "strategist.core");
-    expect(strategist?.providerProfileId).toBe("shared-minimax");
-    expect(strategist?.fallbackProviderProfileId).toBe("shared-openai");
+    expect(strategist?.providerProfileId).toBe("shared-openai");
+    expect(strategist?.fallbackProviderProfileId).toBe("shared-minimax");
     expect(state.providers[0]?.primaryModel).toBe("MiniMax-M2.7");
   });
 

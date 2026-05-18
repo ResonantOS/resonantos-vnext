@@ -643,10 +643,28 @@ fn find_chromium_binary() -> Option<PathBuf> {
         }
     }
 
-    let candidates = [
+    // M7 fix: platform-conditional candidate paths for macOS, Windows, and Linux.
+    #[cfg(target_os = "macos")]
+    let candidates: &[&str] = &[
         "/Applications/Chromium.app/Contents/MacOS/Chromium",
         "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
         "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+    ];
+    #[cfg(target_os = "windows")]
+    let candidates: &[&str] = &[
+        "C:/Program Files/Google/Chrome/Application/chrome.exe",
+        "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe",
+        "C:/Program Files/Chromium/Application/chrome.exe",
+        "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
+    ];
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    let candidates: &[&str] = &[
+        "/usr/bin/chromium-browser",
+        "/usr/bin/chromium",
+        "/usr/bin/google-chrome-stable",
+        "/usr/bin/google-chrome",
+        "/usr/bin/microsoft-edge-stable",
+        "/snap/bin/chromium",
     ];
     for candidate in candidates {
         let path = PathBuf::from(candidate);
@@ -659,7 +677,16 @@ fn find_chromium_binary() -> Option<PathBuf> {
         .map(PathBuf::from)
         .or_else(|_| env::var("USERPROFILE").map(PathBuf::from))
         .ok()?;
+    // Playwright cache location varies by platform.
+    #[cfg(target_os = "macos")]
     let playwright_cache = home.join("Library").join("Caches").join("ms-playwright");
+    #[cfg(target_os = "windows")]
+    let playwright_cache = env::var("LOCALAPPDATA")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| home.join("AppData").join("Local"))
+        .join("ms-playwright");
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    let playwright_cache = home.join(".cache").join("ms-playwright");
     find_browser_binary_under(&playwright_cache, 5)
 }
 
