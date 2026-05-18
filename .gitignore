@@ -47,3 +47,10 @@ tmp/
 .idea/
 .vscode/
 *.swp
+crates/*/target/
+
+# Build artifacts
+crates/*/target/
+*.bak
+TASK*.md
+src-tauri/src/TASK*.md

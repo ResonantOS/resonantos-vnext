@@ -173,7 +173,7 @@ describe("provider defaults", () => {
     const strategist = state.agents.find((agent) => agent.id === "strategist.core");
     expect(strategist?.providerProfileId).toBe("shared-openai");
     expect(strategist?.fallbackProviderProfileId).toBe("shared-minimax");
-    expect(state.providers[0]?.primaryModel).toBe("MiniMax-M2.7");
+    expect(state.providers[0]?.primaryModel).toBe("MiniMax-M2.7-highspeed");
   });
 
   it("maps live provider diagnostics back into routing health", () => {

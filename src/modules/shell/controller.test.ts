@@ -23,7 +23,7 @@ describe("shell boot controller", () => {
     runtimeMocks.loadProviderCredentialStatuses.mockResolvedValue([]);
   });
 
-  it("preserves the persisted active workspace instead of forcing Home on boot", async () => {
+  it("resets to the overview section on boot regardless of persisted active section", async () => {
     const state = buildDefaultState([]);
     state.uiPreferences.activeSection = "archive";
     runtimeMocks.hydrateState.mockResolvedValue(state);
@@ -31,6 +31,6 @@ describe("shell boot controller", () => {
     const { loadInitialShellState } = await import("./controller");
     const booted = await loadInitialShellState();
 
-    expect(booted.state.uiPreferences.activeSection).toBe("archive");
+    expect(booted.state.uiPreferences.activeSection).toBe("overview");
   });
 });
