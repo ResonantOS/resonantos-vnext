@@ -46,7 +46,7 @@ export async function webInvoke<T>(
  * Returns a handle with send() for commands and onFrame() for JPEG frames.
  */
 export function createBrowserStream(sessionId: string, onFrame: (jpeg: ArrayBuffer) => void) {
-  const wsBase = API_BASE!.replace(/^https?/, (m) => (m === "https" ? "wss" : "ws"));
+  const wsBase = API_BASE!.replace(/^https?/, (m: string) => (m === "https" ? "wss" : "ws"));
   const token = _authToken ?? localStorage.getItem("ros_api_token");
   const ws = new WebSocket(`${wsBase}/ws/screen/${sessionId}?token=${token}`);
   ws.binaryType = "arraybuffer";
