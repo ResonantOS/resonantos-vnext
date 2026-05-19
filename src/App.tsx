@@ -45,6 +45,7 @@ import type {
 import { resolveMemoryProviderBroker } from "./core/memory-provider";
 import { routedProviderLabel } from "./core/provider-service";
 import { isWebMode } from "./core/web-transport";
+import { checkPi5Health } from "./core/pi5-connection";
 import { TokenGate } from "./components/TokenGate";
 import {
   createDesktopBrowserToolRunner,
@@ -292,6 +293,9 @@ const errorMessageOf = (error: unknown, fallback: string): string =>
 export function App() {
   const surfaceMode = appSurfaceMode();
   const isFloatingChatSurface = surfaceMode === "floating-chat";
+  const [pi5Health, setPi5Health] = useState<{ok: boolean; latency?: number} | null>(null);
+  const [pi5HealthTimer, setPi5HealthTimer] = useState(0);
+
   const [tokenReady, setTokenReady] = useState(
     () => !isWebMode() || Boolean(localStorage.getItem("ros_api_token")),
   );
@@ -405,6 +409,27 @@ export function App() {
       }
     })();
   }, [tokenReady]);
+
+  // Pi5 connection health check (split-mode only)
+  useEffect(() => {
+    if (!isWebMode()) return;
+    void (async () => {
+      const h = await checkPi5Health();
+      setPi5Health(h);
+    })();
+    const id = setInterval(() => {
+      setPi5HealthTimer(t => t + 1);
+    }, 10_000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    if (!isWebMode() || !pi5HealthTimer) return;
+    void (async () => {
+      const h = await checkPi5Health();
+      setPi5Health(h);
+    })();
+  }, [pi5HealthTimer]);
 
   useEffect(() => {
     if (!tokenReady) return;
@@ -1927,6 +1952,28 @@ export function App() {
           </span>
         </div>
         <div className="system-status-strip">
+          {isWebMode() && (
+            <span
+              title={`Pi5: ${pi5Health ? (pi5Health.ok ? `connected (${pi5Health.latency}ms)` : "offline") : "checking..."}`}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "4px",
+                fontSize: "11px",
+                opacity: 0.8,
+                marginRight: "8px",
+              }}
+            >
+              <span style={{
+                width: "7px",
+                height: "7px",
+                borderRadius: "50%",
+                background: !pi5Health ? "#aaa" : pi5Health.ok ? "#3c3" : "#c33",
+                flexShrink: 0,
+              }} />
+              <span style={{ color: "#ccc" }}>Pi5</span>
+            </span>
+          )}
           <button
             type="button"
             className="system-icon-button"

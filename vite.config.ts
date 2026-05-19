@@ -1,6 +1,8 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
+const PI5_IP = process.env.VITE_PI5_TAILNET_IP ?? "127.0.0.1";
+
 export default defineConfig({
   plugins: [react()],
   build: {
@@ -28,9 +30,22 @@ export default defineConfig({
     },
   },
   server: {
-    host: "127.0.0.1",
+    host: "0.0.0.0",
     port: 1430,
     strictPort: true,
+    cors: { origin: "*", methods: ["GET", "POST", "OPTIONS"] },
+    proxy: {
+      "/invoke": {
+        target: `http://${PI5_IP}:1431`,
+        changeOrigin: true,
+        secure: false,
+      },
+      "/ws": {
+        target: `http://${PI5_IP}:1431`,
+        ws: true,
+        changeOrigin: true,
+      },
+    },
     watch: {
       ignored: [
         "**/addons/resonant-browser-native/build/**",

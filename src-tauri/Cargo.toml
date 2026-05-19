@@ -24,7 +24,14 @@ serde_json = "1"
 sha2 = "0.10"
 tauri = { version = "2", features = ["unstable"] }
 tauri-plugin-dialog = "2"
+tokio = { version = "1", features = ["rt-multi-thread", "time"] }
 tracing = "0.1"
 tungstenite = "0.24"
+axum = "0.8"
+tower-http = { version = "0.6", features = ["cors"] }
+hyper = { version = "1.6", features = ["http1"] }
+hyper-util = { version = "0.1", features = ["http1", "tokio"] }
+http-body-util = "0.1"
+bytes = "1"
 resonator-control = { path = "../crates/resonator-control" }
 base64 = "0.22"

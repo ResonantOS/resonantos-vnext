@@ -1,3 +1,5 @@
+mod http_server;
+mod compute_service;
 mod archive_service;
 mod browser_host_service;
 mod browser_native_service;
@@ -1419,10 +1421,101 @@ async fn archive_ingest_probe(
     .await
 }
 
+/// HTTP command dispatcher for split-mode: maps invoke commands to tauri command handlers.
+fn http_dispatch_command(command: &str, args: serde_json::Value, app_handle: Option<&tauri::AppHandle>) -> Result<serde_json::Value, String> {
+    use serde::Deserialize;
+    // Commands that don't need AppHandle (pure computations)
+    match command {
+        "local_runtime_status" => {
+            #[derive(Deserialize)]
+            struct R { target_model: Option<String> }
+            let r = serde_json::from_value::<R>(args).map_err(|e| e.to_string())?;
+            let r = provider_service::query_local_runtime_status(r.target_model);
+            serde_json::to_value(r).map_err(|e| e.to_string())
+        }
+        "browser_engine_status" => {
+            let _ = serde_json::from_value::<serde::de::IgnoredAny>(args).map_err(|e| e.to_string())?;
+            let r = browser_service::query_browser_engine_status();
+            serde_json::to_value(r).map_err(|e| e.to_string())
+        }
+        "camofox_health" => {
+            let _ = serde_json::from_value::<serde::de::IgnoredAny>(args).map_err(|e| e.to_string())?;
+            let r = camofox_service::health_check();
+            serde_json::to_value(r).map_err(|e| e.to_string())
+        }
+        "compute_local_passive_diagnostics" => {
+            let _ = serde_json::from_value::<serde::de::IgnoredAny>(args).map_err(|e| e.to_string())?;
+            let r = compute_service::query_local_passive_diagnostics();
+            serde_json::to_value(r).map_err(|e| e.to_string())
+        }
+        _ => {
+            // Commands that need AppHandle
+            let app = app_handle.ok_or_else(|| "AppHandle not available".to_string())?;
+            match command {
+                "load_runtime_state" => {
+                    let _ = serde_json::from_value::<serde::de::IgnoredAny>(args).map_err(|e| e.to_string())?;
+                    let r = crate::load_runtime_state(app.clone());
+                    serde_json::to_value(r).map_err(|e| e.to_string())
+                }
+                "save_runtime_state" => {
+                    #[derive(Deserialize)]
+                    struct R { state: serde_json::Value }
+                    let R { state } = serde_json::from_value(args).map_err(|e| e.to_string())?;
+                    let r = crate::save_runtime_state(app.clone(), state);
+                    serde_json::to_value(r).map_err(|e| e.to_string())
+                }
+                "delegation_create_task_workspace" => {
+                    #[derive(Deserialize)]
+                    struct R { request: delegation_service::CreateTaskWorkspaceRequest }
+                    let r = serde_json::from_value::<R>(args).map_err(|e| e.to_string())?;
+                    let r = crate::delegation_create_task_workspace(app.clone(), r.request);
+                    serde_json::to_value(r).map_err(|e| e.to_string())
+                }
+                "delegation_list_task_workspaces" => {
+                    let _ = serde_json::from_value::<serde::de::IgnoredAny>(args).map_err(|e| e.to_string())?;
+                    let r = crate::delegation_list_task_workspaces(app.clone());
+                    serde_json::to_value(r).map_err(|e| e.to_string())
+                }
+                "delegation_read_task_workspace" => {
+                    #[derive(Deserialize)]
+                    struct R { request: delegation_service::ReadTaskWorkspaceRequest }
+                    let r = serde_json::from_value::<R>(args).map_err(|e| e.to_string())?;
+                    let r = crate::delegation_read_task_workspace(app.clone(), r.request);
+                    serde_json::to_value(r).map_err(|e| e.to_string())
+                }
+                "delegation_finish_task_workspace" => {
+                    #[derive(Deserialize)]
+                    struct R { request: delegation_service::FinishTaskWorkspaceRequest }
+                    let r = serde_json::from_value::<R>(args).map_err(|e| e.to_string())?;
+                    let r = crate::delegation_finish_task_workspace(app.clone(), r.request);
+                    serde_json::to_value(r).map_err(|e| e.to_string())
+                }
+                _ => Err(format!("unknown command: {}", command)),
+            }
+        }
+    }
+}
+
 pub fn run() {
     let _ = prepare_native_browser_application_if_available();
+    let http_port: u16 = std::env::var("PI5_HTTP_PORT")
+        .unwrap_or_else(|_| "1431".to_string())
+        .parse()
+        .unwrap_or(1431);
+    http_server::set_dispatcher(http_dispatch_command);
+    tracing::info!("split-mode HTTP dispatcher registered, server will spawn on port {}", http_port);
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .setup(move |app| {
+            http_server::set_app_handle(app.handle().clone());
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+                http_server::spawn_http_server(http_port);
+                tracing::info!("split-mode HTTP server spawned on port {}", http_port);
+            });
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             load_runtime_state,
             save_runtime_state,

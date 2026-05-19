@@ -3,7 +3,10 @@
  * Activated when VITE_API_BASE env var is set and Tauri is not present.
  */
 
-const API_BASE = import.meta.env.VITE_API_BASE as string | undefined;
+import { getPi5Config } from "./config";
+
+const { httpApiBase } = getPi5Config();
+export const API_BASE = import.meta.env.VITE_API_BASE ?? httpApiBase;
 
 export const isWebMode = (): boolean =>
   typeof window !== "undefined" &&
