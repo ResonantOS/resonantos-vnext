@@ -1,0 +1,27 @@
+[Unit]
+Description=ResonantOS vNext API Server
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/ros-server
+EnvironmentFile=/var/www/ros-server/.env
+ExecStart=/usr/bin/node dist/src/index.js
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ros-server
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/www/ros-server/data
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

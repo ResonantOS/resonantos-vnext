@@ -1,0 +1,38 @@
+{
+  "name": "ros-server",
+  "version": "0.1.0",
+  "description": "ResonantOS vNext auth + API proxy backend",
+  "main": "dist/src/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/src/index.js",
+    "dev": "tsc --watch & node --watch dist/src/index.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^11.10.0",
+    "cors": "^2.8.5",
+    "express": "^4.18.3",
+    "express-rate-limit": "^7.2.0",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "uuid": "^9.0.1",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/node": "^20.12.0",
+    "@types/uuid": "^9.0.8",
+    "typescript": "^5.4.5",
+    "vitest": "^1.5.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

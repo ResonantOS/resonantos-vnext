@@ -385,6 +385,16 @@ export function App() {
   );
   const selectableChatModelKey = selectableChatModelsForSelection.join("\u0000");
 
+  // Handle 401 events from web-transport interceptor — clear auth, show LoginGate
+  useEffect(() => {
+    if (!isWebMode()) return;
+    const handler = () => {
+      setTokenReady(false);
+    };
+    window.addEventListener("ros:unauthorized", handler);
+    return () => window.removeEventListener("ros:unauthorized", handler);
+  }, []);
+
   useEffect(() => {
     if (!tokenReady) return;
     void (async () => {

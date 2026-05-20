@@ -943,3 +943,128 @@
   color: rgba(248, 113, 113, 0.9);
   font-size: 0.875rem;
 }
+
+/* ─── LoginGate Extensions ───────────────────────────────────────────────── */
+
+.login-gate-card {
+  gap: 1.25rem;
+}
+
+.auth-tabs {
+  display: flex;
+  gap: 0.25rem;
+  background: rgba(255, 248, 236, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.25rem;
+}
+
+.auth-tab-btn {
+  flex: 1;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.auth-tab-btn:hover {
+  background: rgba(255, 248, 236, 0.06);
+  color: var(--text-primary);
+}
+
+.auth-tab-btn.active {
+  background: rgba(99, 102, 241, 0.18);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.auth-form {
+  display: grid;
+  gap: 0.875rem;
+}
+
+.auth-field-group {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.auth-field-group label {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.auth-field-error {
+  color: rgba(248, 113, 113, 0.9);
+  font-size: 0.8rem;
+  margin: 0;
+}
+
+.input-error {
+  border-color: rgba(248, 113, 113, 0.5) !important;
+}
+
+.auth-password-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.auth-password-wrapper .token-gate-input {
+  padding-right: 3.5rem;
+}
+
+.auth-toggle-password {
+  position: absolute;
+  right: 0.75rem;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 0.25rem;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+
+.auth-toggle-password:hover {
+  opacity: 1;
+}
+
+.invite-hint {
+  font-size: 0.775rem;
+  color: var(--text-secondary);
+  opacity: 0.7;
+}
+
+.auth-footer-link {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin: 0;
+  text-align: center;
+}
+
+.auth-link-btn {
+  background: none;
+  border: none;
+  color: rgba(99, 102, 241, 0.9);
+  font-size: inherit;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.auth-link-btn:hover {
+  color: rgba(129, 132, 255, 1);
+}
+
+.token-gate-input[type="email"],
+.token-gate-input[type="text"] {
+  letter-spacing: normal;
+  font-family: var(--font-sans, sans-serif);
+}
