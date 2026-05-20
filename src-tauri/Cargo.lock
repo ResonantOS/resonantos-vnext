@@ -2995,6 +2995,7 @@ name = "resonantos_vnext"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "chrono",
  "futures-util",
  "libloading 0.8.9",
  "portable-pty",
@@ -3007,6 +3008,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
+ "tokio",
  "tracing",
  "tungstenite",
 ]

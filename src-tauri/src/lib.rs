@@ -5,6 +5,7 @@ mod browser_service;
 mod camofox_integration;
 mod camofox_overlay_macos;
 mod camofox_service;
+mod compute_service;
 mod marionette_bridge;
 mod delegation_service;
 mod hermes_service;
