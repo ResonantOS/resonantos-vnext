@@ -536,6 +536,8 @@ pub fn execute_browser_native_webview_show(
     let window = app
         .get_window("main")
         .ok_or_else(|| "Main ResonantOS window was not found.".to_string())?;
+    // Raise and focus the main window so it stays on top of child webviews.
+    let _ = window.set_focus();
     let webview = WebviewBuilder::new(
         NATIVE_BROWSER_WEBVIEW_LABEL,
         WebviewUrl::External(parsed_url),
@@ -548,6 +550,10 @@ pub fn execute_browser_native_webview_show(
             LogicalSize::new(bounds.2, bounds.3),
         )
         .map_err(|error| format!("Failed to create native Browser webview: {error}"))?;
+    // Prevent the child webview from always staying on top of the main window.
+    if let Some(webview) = app.get_webview(NATIVE_BROWSER_WEBVIEW_LABEL) {
+        let _ = webview.window().set_always_on_top(false);
+    }
 
     Ok(BrowserNativeWebviewResult {
         label: NATIVE_BROWSER_WEBVIEW_LABEL.to_string(),

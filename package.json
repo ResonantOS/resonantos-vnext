@@ -17,7 +17,7 @@
     "browser-native:build": "node scripts/build-native-browser.mjs",
     "browser-native:build:required": "node scripts/build-native-browser.mjs --required",
     "tauri": "tauri",
-    "tauri:dev": "tauri dev",
+    "tauri:dev": "GDK_BACKEND=x11 WEBKIT_DISABLE_COMPOSITING_MODE=1 GSK_RENDERER=cairo tauri dev",
     "tauri:build": "npm run browser-native:build && tauri build"
   },
   "dependencies": {
