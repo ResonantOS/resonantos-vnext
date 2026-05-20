@@ -1,0 +1,115 @@
+{
+  "id": "addon.architecture-canvas",
+  "name": "Architecture Canvas",
+  "version": "0.1.0",
+  "author": "Resonant Alpha",
+  "category": "tool",
+  "sdkVersion": "0.1.0",
+  "description": "Infinite visual workspace showing fleet nodes, protocol stack, services, cognitive gates, and data flow connections. Inspired by Higsfield Canvas node-based pipelines and DeepSeek 'Thinking With Visual Primitives' spatial anchoring.",
+  "runtimeType": "local-service",
+  "surfaces": [
+    {
+      "id": "canvas-workspace",
+      "type": "embedded-pane",
+      "label": "Architecture Canvas",
+      "description": "Interactive infinite canvas showing the full ResonantOS architecture: fleet machines, protocol stack, services, cognitive gates, and verification pipeline with visual data flow connections."
+    }
+  ],
+  "requestedCapabilities": [
+    {
+      "capability": "ui-embedding",
+      "granted": false,
+      "scope": "system",
+      "revocationBehavior": "hide-surface"
+    },
+    {
+      "capability": "network",
+      "granted": false,
+      "scope": "self",
+      "revocationBehavior": "degrade"
+    }
+  ],
+  "provenance": {
+    "tier": "curated-signed",
+    "verificationState": "verified",
+    "signed": true,
+    "signer": "ResonantOS bundled catalog"
+  },
+  "runtimeIsolation": {
+    "boundary": "host-mediated-service",
+    "supportsDegradedMode": true,
+    "requiresReviewedGrant": false
+  },
+  "grantPresets": [
+    {
+      "id": "architecture-canvas-default",
+      "label": "Architecture Canvas",
+      "description": "Allows the Architecture Canvas add-on to render an embedded workspace showing system architecture visualization.",
+      "grants": [
+        {
+          "capability": "ui-embedding",
+          "granted": true,
+          "scope": "system",
+          "revocationBehavior": "hide-surface"
+        },
+        {
+          "capability": "network",
+          "granted": true,
+          "scope": "self",
+          "revocationBehavior": "degrade"
+        }
+      ]
+    }
+  ],
+  "providerRequirements": {
+    "sharedProfiles": [],
+    "supportsPrivateCredentials": false
+  },
+  "archiveIntegration": {
+    "readScopes": [],
+    "intakeWriteScopes": [],
+    "canRequestIngest": false,
+    "canWriteKnowledgePages": false
+  },
+  "health": {
+    "strategy": "local-daemon"
+  },
+  "tools": [
+    {
+      "name": "canvas.get_architecture",
+      "description": "Return the current architecture layout including fleet status, active services, and protocol connections as structured data.",
+      "requiredCapabilities": ["network"],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "enum": ["fleet", "protocols", "services", "gates", "verification", "all"]
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "nodes": { "type": "array" },
+          "connections": { "type": "array" },
+          "timestamp": { "type": "string" }
+        }
+      },
+      "audit": {
+        "logRequest": true,
+        "logResult": false,
+        "artifactTypes": []
+      },
+      "requiresHumanApproval": false
+    }
+  ],
+  "installHooks": {
+    "onInstall": "register-canvas-workspace",
+    "onEnable": "enable-canvas-service"
+  },
+  "compatibility": {
+    "shellVersion": "^0.1.0",
+    "platforms": ["macOS", "linux", "windows"]
+  }
+}
