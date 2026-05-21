@@ -2,6 +2,13 @@
 
 This folder is the documentation entrypoint for the current codebase.
 
+## Navigation
+
+- [REPO_INDEX.md](./REPO_INDEX.md)
+  - map of the visible repo structure for contributors and agents
+- [ARCHITECTURE.md](./ARCHITECTURE.md)
+  - first-pass architecture overview based on the current codebase
+
 ## Read First
 
 - [PROJECT_STATUS.md](./PROJECT_STATUS.md)
@@ -60,6 +67,14 @@ This folder is the documentation entrypoint for the current codebase.
   - active feature backlog and recent extraction progress
 - [product/UX-001-resonantos-app-shell.md](./product/UX-001-resonantos-app-shell.md)
   - UI/UX source of truth for the app-shell, launcher, collapsible rails, embedded add-on workspace, and full-screen mode
+- [specs/README.md](./specs/README.md)
+  - proposed future specs for add-on manifests, capability grants, provider model, and more
+- [adr/README.md](./adr/README.md)
+  - ADR template, lifecycle, and guidance on when to write one
+- [audits/README.md](./audits/README.md)
+  - audit lanes, template, and guidance on structured codebase review
+- [agent-workflows/README.md](./agent-workflows/README.md)
+  - repo-local conventions for AI-assisted development
 
 ## What These Documents Answer
 
@@ -108,6 +123,10 @@ This folder is the documentation entrypoint for the current codebase.
 - `What UI/UX experience are we building?`
   - `product/UX-001-resonantos-app-shell.md`
 
+## Disclaimer
+
+These documents describe the current understanding of the codebase. They must not overstate release readiness. Claims about what the system *does* require evidence (test output, runtime proof, or an audit snapshot). Claims about what the system *will do* are plans, not guarantees.
+
 ## Usage Rule
 
 When a new structural decision is made, add or update an ADR before the codebase drifts.
@@ -115,5 +134,6 @@ When a new structural decision is made, add or update an ADR before the codebase
 When a refactor changes ownership or service boundaries, update these in the same change:
 
 - `architecture/MODULE_MAP.md`
+- `ARCHITECTURE.md`
 - `FEATURE_BACKLOG.md`
 - the relevant ADR if the rule itself changed
