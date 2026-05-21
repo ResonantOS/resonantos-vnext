@@ -74,7 +74,11 @@ export const appendUserMessage = (
   state: ResonantShellState,
   threadId: string,
   content: string,
-): ResonantShellState => appendMessage(state, threadId, "user", "You", content.trim());
+): ResonantShellState => {
+  // Defensive: coerce to string to prevent runtime crashes if content is unexpectedly non-string
+  const safeContent = typeof content === "string" ? content : String(content ?? "");
+  return appendMessage(state, threadId, "user", "You", safeContent.trim());
+};
 
 export const appendAssistantMessage = (
   state: ResonantShellState,
@@ -89,7 +93,9 @@ export const appendAssistantMessage = (
       : thread?.owningAgentId && thread.owningAgentId !== "strategist.core"
         ? state.agents.find((agent) => agent.id === thread.owningAgentId)?.displayName ?? "Agent"
       : strategistDisplayName(state);
-  return appendMessage(state, threadId, "assistant", author, content.trim(), metadata);
+  // Defensive: coerce to string to prevent runtime crashes if content is unexpectedly non-string
+  const safeContent = typeof content === "string" ? content : String(content ?? "");
+  return appendMessage(state, threadId, "assistant", author, safeContent.trim(), metadata);
 };
 
 export const updateConversationMessage = (

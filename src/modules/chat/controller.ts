@@ -137,7 +137,7 @@ const hermesPromptFromThread = (
     "Living Archive context, when present, is host-mediated and read-only. It is evidence for this turn only, not permission to mutate the archive.",
     archiveContext ? formatArchiveContextForPrompt(archiveContext) : "",
     "",
-    `User: ${[...thread.messages].reverse().find((message) => message.role === "user")?.content.trim() ?? ""}`,
+    `User: ${((): string => { const m = [...thread.messages].reverse().find((message) => message.role === "user"); const c = m?.content; return typeof c === "string" ? c.trim() : ""; })()}`,
   ]
     .filter(Boolean)
     .join("\n");

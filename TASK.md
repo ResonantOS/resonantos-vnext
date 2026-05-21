@@ -1,92 +1,63 @@
-# Task: ROS vNext Browser — Resonator Toggle + Resonant Context Integration
+# Task: Port Runtime Adapter Layer + Resolve Open Issues
 
 ## Context
-ResonantOS vNext Tauri app. Two features to add to the browser workspace.
+Port the Runtime Adapter Layer (903 lines TypeScript) from the analog6 research repo into resonantos-vnext as production code. Also resolve 3 remaining open GitHub issues.
 
-### Feature 1: Resonator On/Off Toggle Button
-The Resonator crate (`crates/resonator-control/`) is already built and tested (16/16 tests pass). It provides screen capture, click/type forwarding, key combos, and accessibility probes. The Tauri service (`src-tauri/src/resonator_service.rs`, 207 lines) already exposes IPC commands.
-
-**What needs to happen:**
-- Add a toggle button (⚡ icon or similar) to the browser toolbar/bookmarks bar in `src/modules/browser/BrowserWorkspace.tsx`
-- When Resonator is ON: enable click-forwarding through the CamoFox screenshot viewport (capture click coordinates on the `<img>` tag, translate to screen coordinates, forward via `invoke('resonator_click')`)
-- When Resonator is ON: forward keyboard events via `invoke('resonator_type')` or `invoke('resonator_key_combo')`
-- When Resonator is ON: enable scroll forwarding (translate mousewheel events to CamoFox page scroll via Marionette)
-- When Resonator is OFF: normal browsing (no forwarding)
-- Visual indicator: green dot when ON, grey when OFF
-- The toggle state persists in React component state (no need for persistence across sessions yet)
-
-**Files to modify:**
-- `src/modules/browser/BrowserWorkspace.tsx` — Add toggle UI + forwarding logic
-- Potentially add `resonator_scroll` Tauri command to `src-tauri/src/resonator_service.rs` if it doesn't exist
-
-**Available Tauri commands (already registered):**
-- `resonator_screen_capture` → `ScreenCaptureResult { png_base64, width, height }`
-- `resonator_click` → takes `ClickRequest { x, y, button? }`
-- `resonator_type` → takes `TypeRequest { text }`
-- `resonator_key_combo` → takes `KeyComboRequest { keys: Vec<String> }`
-- `resonator_capability_manifest` → probes system capabilities
-
-### Feature 2: Resonant Context SDK Integration
-The Resonant Context SDK (`~/.openclaw/workspace/matchsire-patches/resonant-context-sdk/`, 831 lines JS) is already built and deployed on matchsire.com. It provides:
-- **ViewportObserver** — tracks visible sections, dwell time, active overlays
-- **FormObserver** — captures form field state and changes
-- **NavigationTracker** — logs page navigations with timestamps
-- **InteractionTracker** — records clicks, scrolls, keyboard events
-- **ContextBridge** — aggregates all signals into a structured context snapshot
-
-**What needs to happen:**
-- Copy `resonant-context-sdk/dist/resonant-context.js` into the vNext project (e.g. `public/resonant-context.js` or `src/sdk/resonant-context/`)
-- When CamoFox is the active browser backend AND Resonator is ON, inject the SDK into the CamoFox page via Marionette's `WebDriver:ExecuteScript`
-- Create a React hook or component (`useResonantContext`) that periodically polls the context snapshot from CamoFox via Marionette
-- Display a small context indicator in the browser toolbar showing what the SDK is tracking (e.g. "📍 Viewing: Swap Form | Dwell: 12s")
-- Make the context data available via a new Tauri command `browser_get_context` that returns the latest snapshot
-- The context pipeline: SDK in CamoFox page → Marionette reads snapshot → Tauri IPC → React UI → AI prompt injection (future)
-
-**Files to create/modify:**
-- `src/modules/browser/BrowserWorkspace.tsx` — Add context indicator + polling
-- `src/sdk/resonant-context/` — Copy SDK files here
-- `src-tauri/src/browser_service.rs` or new file — Add `browser_get_context` command
-- `src-tauri/src/camofox_service.rs` — Add method to inject SDK script and read context via Marionette
+## Source Files (already written, copy + adapt)
+- Source: `/Users/dr.tom/.openclaw/workspace/analog6/src/runtime-adapter/types.ts` (290 lines)
+- Source: `/Users/dr.tom/.openclaw/workspace/analog6/src/runtime-adapter/native-adapter.ts` (340 lines)
+- Source: `/Users/dr.tom/.openclaw/workspace/analog6/src/runtime-adapter/registry.ts` (225 lines)
+- Source: `/Users/dr.tom/.openclaw/workspace/analog6/src/runtime-adapter/index.ts` (48 lines)
 
 ## Specification
 
-### Resonator Toggle
-1. In `BrowserWorkspace.tsx`, add a button next to the CamoFox/Chromium toggle:
-   ```tsx
-   <button onClick={toggleResonator} title={resonatorOn ? "Resonator ON" : "Resonator OFF"}>
-     {resonatorOn ? "⚡" : "⚡"} {/* green vs grey styling */}
-   </button>
-   ```
-2. Add event handlers on the screenshot `<img>` element:
-   - `onClick` → translate to Marionette click coordinates
-   - `onKeyDown` → forward keystrokes
-   - `onWheel` → forward scroll
-3. Coordinate translation: `img` display dimensions vs actual CamoFox viewport dimensions
+### Part 1: Port Runtime Adapter into vNext
 
-### Resonant Context
-1. Inject SDK into CamoFox page after navigation:
-   ```rust
-   // In camofox_service.rs
-   pub fn inject_resonant_context(script: &str) -> Result<(), String> {
-       // Execute script via Marionette
-   }
-   ```
-2. Read context snapshot:
-   ```rust
-   pub fn read_context_snapshot() -> Result<serde_json::Value, String> {
-       // Execute: return window.__resonantContext?.snapshot()
-   }
-   ```
-3. React polling hook every 2 seconds when Resonator is ON
+**Target directory:** `src/core/runtime-adapter/`
 
-## Test Command
+Copy the 4 source files into `src/core/runtime-adapter/`. The code is already clean TypeScript — no modifications needed to the core logic. But:
+
+1. Copy all 4 files verbatim into `src/core/runtime-adapter/`
+2. Add a barrel re-export in `src/core/runtime-adapter/index.ts` (already exists in source)
+3. Write comprehensive tests in `src/core/runtime-adapter/runtime-adapter.test.ts` covering:
+   - NativeRuntimeAdapter: connect/disconnect lifecycle, healthCheck always healthy, executeTool with the not-wired seam error, event emission (onEvent/offEvent), timeout handling, error classification (TRANSIENT/PERMANENT/SECURITY/RUNTIME_DOWN), retry logic with exponential backoff
+   - RuntimeAdapterRegistryImpl: register/deregister, cannot deregister native, getAdapter tier-based routing with health fallback, getById throws on missing, listAdapters, refreshHealth, updateHealth, size/has helpers
+4. Ensure all tests pass with `npx vitest run`
+5. Do NOT modify `src/core/runtime.ts` — the adapter is a standalone module that will be wired later
+
+### Part 2: Close Issue #6 — Dashboard icons not sizing correctly
+
+Review `src/ui/icons/resonant-icons.tsx`. If icons have hardcoded dimensions or missing viewBox attributes, fix them. Icons should use `currentColor` for fill/stroke and accept className/size props for external sizing. Check App.test.tsx for any icon-related test assertions. If no actual bug is reproducible from the code, add a comment noting the fix and we'll close the issue.
+
+### Part 3: Address Issue #11 — Missing tokio dependency
+
+Check `src-tauri/Cargo.toml` for tokio dependency. If tokio is missing and the Rust code uses async/await (it uses Tauri 2 which requires tokio), verify the build compiles. If tokio is already pulled in transitively via tauri, document that in a comment. The issue may be stale — verify by running `cargo check` in `src-tauri/`.
+
+### Part 4: Issue #10 — Runtime Adapter Layer
+
+This issue requests exactly what Part 1 implements. After Part 1 is complete, this issue is resolved.
+
+## Test Commands
 ```bash
-cd ~/resonantos-vnext
-npm run build  # Must compile clean
-npm test        # Must not regress (194+ tests passing)
+cd /Users/dr.tom/resonantos-vnext
+npx vitest run
+# All tests must pass (currently 260, should be 260+ after new tests)
+```
+
+```bash
+cd /Users/dr.tom/resonantos-vnext/src-tauri
+cargo check 2>&1 | tail -5
+# Must compile clean
 ```
 
 ## Scope
-- 3-4 files modified
-- ~200-300 lines of new code
-- No breaking changes to existing functionality
+- 5 new files in `src/core/runtime-adapter/` (4 source + 1 test)
+- Possible small fix in `src/ui/icons/resonant-icons.tsx`
+- Possible Cargo.toml annotation
+- No changes to existing `src/core/runtime.ts`
+
+## IMPORTANT
+- This goes to the community TOMORROW. Code must be clean, professional, well-documented.
+- All existing 260 tests must continue passing.
+- New tests must be thorough — this is a core infrastructure module.
+- EXECUTE the plan. Do not just analyze it.
