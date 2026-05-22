@@ -23,8 +23,8 @@ This map defines which folder owns which feature area so contributors do not kee
   - stable capability, service protocol, and tool contract exports
   - authority consistency checks for archive scopes, provider profiles, and embedded UI capabilities
   - replacement-slot capability validation for `chat-interface` and `memory-provider`
-  - architecture reference: `docs/architecture/ADR-018-addon-sdk-v0.md`
-  - no-lock-in kernel/add-on reference: `docs/architecture/ADR-026-minimal-kernel-replaceable-default-addons.md`
+  - architecture reference: `docs/adr/ADR-018-addon-sdk-v0.md`
+  - no-lock-in kernel/add-on reference: `docs/adr/ADR-026-minimal-kernel-replaceable-default-addons.md`
 
 - `src/components/`
   - small reusable shell-level presentational primitives
@@ -36,7 +36,7 @@ This map defines which folder owns which feature area so contributors do not kee
   - provider secret storage
   - add-on manifest validation/install persistence
   - host-side add-on capability gate helper used by privileged IPC commands
-  - migration target: Portable User State Root resolution and encrypted secure vault mediation from `docs/architecture/ADR-022-portable-user-state-secure-vault.md`
+  - migration target: Portable User State Root resolution and encrypted secure vault mediation from `docs/adr/ADR-022-portable-user-state-secure-vault.md`
 
 - `src-tauri/src/obsidian_service.rs`
   - Obsidian V1 vault bridge host boundary
@@ -52,7 +52,7 @@ This map defines which folder owns which feature area so contributors do not kee
   - optional OpenCode add-on host boundary
   - detects `opencode` without making it a core dependency
   - launches/stops scoped `opencode web` or `opencode serve` sessions after add-on grants
-  - architecture reference: `docs/architecture/ADR-021-opencode-addon-hosted-service.md`
+  - architecture reference: `docs/adr/ADR-021-opencode-addon-hosted-service.md`
 
 - `src-tauri/src/paperclip_service.rs`
   - optional Paperclip add-on host boundary
@@ -63,7 +63,7 @@ This map defines which folder owns which feature area so contributors do not kee
   - planned next bridge: list companies, agents, and issues through a host-mediated API connector
   - planned next bridge: map ResonantOS Delegation Packets to Paperclip issues
   - planned next bridge: collect Paperclip artifacts into Living Archive intake only
-  - architecture reference: `docs/architecture/ADR-028-paperclip-addon-organizational-runtime.md`
+  - architecture reference: `docs/adr/ADR-028-paperclip-addon-organizational-runtime.md`
 
 - `src-tauri/src/browser_service.rs`
   - Browser add-on host boundary
@@ -71,7 +71,7 @@ This map defines which folder owns which feature area so contributors do not kee
   - Chromium engine install/status checks through the host command boundary
   - persistent CDP sessions for open URL, read title/final URL, refresh screenshot evidence, read page text/links, close session, and return audit events
   - rejects local `file:` URLs until Browser has an explicit filesystem capability policy
-  - capability-facing architecture reference: `docs/architecture/ADR-017-resonant-browser-addon.md`
+  - capability-facing architecture reference: `docs/adr/ADR-017-resonant-browser-addon.md`
 
 - `src-tauri/src/delegation_service.rs`
   - execution-free task workspace creation
@@ -145,7 +145,7 @@ This map defines which folder owns which feature area so contributors do not kee
   - chat execution controller
   - chat thread mutation controller for branching, deleting, editing, pinning, compaction, agent switching, and interruption
   - explicit Augmentor-to-Engineer delegation workspace creation and start bridge
-  - planned context budget and compaction UI from `docs/architecture/ADR-016-context-memory-compaction.md`
+  - planned context budget and compaction UI from `docs/adr/ADR-016-context-memory-compaction.md`
   - scoped Living Archive context retrieval for Strategist turns
   - chat-to-archive intake capture controller
   - composer attachment and dictation controller
@@ -159,7 +159,7 @@ This map defines which folder owns which feature area so contributors do not kee
   - active browser-only center workspace surface
   - controlled Chromium evidence surface with URL bar, refresh, close, status, and error overlays
   - capability-gated network/UI embedding/browser-control state
-  - Browser engine action reference: `docs/architecture/ADR-017-resonant-browser-addon.md`
+  - Browser engine action reference: `docs/adr/ADR-017-resonant-browser-addon.md`
 
 - `src/modules/paperclip/`
   - Paperclip optional add-on workspace
@@ -167,7 +167,7 @@ This map defines which folder owns which feature area so contributors do not kee
   - center workspace embedded Paperclip UI
   - capability-gated local network and UI embedding state
   - V0 connector-only surface; setup/install automation must go through the Engineer runbook until reviewed host setup commands are implemented
-  - organizational runtime reference: `docs/architecture/ADR-028-paperclip-addon-organizational-runtime.md`
+  - organizational runtime reference: `docs/adr/ADR-028-paperclip-addon-organizational-runtime.md`
 
 - `src/modules/archive/archive.css`
   - Living Archive workspace, review, search, reader, and import styling
@@ -218,7 +218,7 @@ This map defines which folder owns which feature area so contributors do not kee
     - V1 live mode proxies `RESONANTOS_MEMORY_SERVICE_URL` / `--memory-service-url` to the host-mediated `POST /memory/{operation}` contract
     - portable fallback points at `ResonantOS_User/Memory` through `RESONANTOS_MEMORY_ROOT` or `--memory-root`
     - cannot write trusted AI Memory wiki pages directly; portable writes are restricted to intake and review-request artifacts, while live trusted promotion must go through approved host review artifacts
-    - architecture reference: `docs/architecture/ADR-029-living-archive-mcp-bridge.md`
+    - architecture reference: `docs/adr/ADR-029-living-archive-mcp-bridge.md`
   - `examples/living-archive-memory-service.mjs`
     - loopback HTTP memory service for the portable `ResonantOS_User/Memory` folder
     - implements the V1 `POST /memory/{operation}` contract for status/search/read/intake/ingest-request/review-listing/lint
@@ -238,9 +238,9 @@ This map defines which folder owns which feature area so contributors do not kee
   - archive runtime/search/read/queue/approval controller
   - background sync controller that runs source scan, queueing, maintenance, promotion, navigation refresh, and lint through the active memory-provider broker
   - Audio2TOL intake analysis reference for the optional Audio2TOL add-on bridge: `docs/architecture/AUDIO2TOL_INTAKE_ANALYSIS.md`
-  - memory domain architecture reference: `docs/architecture/ADR-013-living-archive-memory-domains.md`
-  - system architecture memory reference: `docs/architecture/ADR-014-system-architecture-memory.md`
-  - portable user-state root reference: `docs/architecture/ADR-022-portable-user-state-secure-vault.md`
+  - memory domain architecture reference: `docs/adr/ADR-013-living-archive-memory-domains.md`
+  - system architecture memory reference: `docs/adr/ADR-014-system-architecture-memory.md`
+  - portable user-state root reference: `docs/adr/ADR-022-portable-user-state-secure-vault.md`
 
 - `src/modules/addons/`
   - add-on catalog
@@ -259,7 +259,7 @@ This map defines which folder owns which feature area so contributors do not kee
   - recent Obsidian intake history and focused review-desk navigation
   - planned ADR-019 Obsidian workspace shell should split into `ObsidianWorkspace`, `ObsidianVaultTree`, `ObsidianEditor`, `ObsidianPreview`, and `ObsidianMetadataPanel`
   - add-on install/grant controller
-  - delegation target metadata reference: `docs/architecture/ADR-015-delegation-fabric-addon-catalog-native-tools.md`
+  - delegation target metadata reference: `docs/adr/ADR-015-delegation-fabric-addon-catalog-native-tools.md`
   - planned launcher integration for opening installed add-ons in the center workspace
 
 - `src/modules/obsidian/`

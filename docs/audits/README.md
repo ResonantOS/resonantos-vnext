@@ -93,4 +93,4 @@ Run an audit when:
 
 ---
 
-*Existing audit snapshots can be found in `docs/architecture/` (e.g., `ARCHITECTURE_AUDIT_2026-04-26.md`, `ALPHA_PREVIEW_AUDIT_2026-04-28.md`). New audits should live in this directory (`docs/audits/`).*
+*Existing audit snapshots can be found in this directory (`docs/audits/`), including `ARCHITECTURE_AUDIT_2026-04-26.md` and `ALPHA_PREVIEW_AUDIT_2026-04-28.md`.*

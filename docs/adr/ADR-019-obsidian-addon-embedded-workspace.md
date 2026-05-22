@@ -193,8 +193,8 @@ Ownership should be split:
 - V1 sections: `src/modules/addons/ObsidianAddonSections.tsx`
 - V1 model helpers: `src/modules/addons/obsidian-addon-model.ts`
 - Manifest: `public/addons/obsidian.json`
-- Memory domain standard: `docs/architecture/ADR-013-living-archive-memory-domains.md`
-- Add-on SDK: `docs/architecture/ADR-018-addon-sdk-v0.md`
+- Memory domain standard: `docs/adr/ADR-013-living-archive-memory-domains.md`
+- Add-on SDK: `docs/adr/ADR-018-addon-sdk-v0.md`
 - Official Obsidian URI reference: `https://help.obsidian.md/uri`
 - Tauri webview API reference: `https://v2.tauri.app/reference/javascript/api/namespacewebview/`
 - Tauri sidecar reference: `https://tauri.app/develop/sidecar/`

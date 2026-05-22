@@ -2,7 +2,7 @@
 
 Status: planned add-on skill  
 Applies to: `addon.paperclip`  
-Intent citation: `docs/architecture/ADR-028-paperclip-addon-organizational-runtime.md`
+Intent citation: `docs/adr/ADR-028-paperclip-addon-organizational-runtime.md`
 
 ## Skill Objective
 

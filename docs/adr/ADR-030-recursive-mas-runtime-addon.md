@@ -289,7 +289,7 @@ Useful archive workflows:
 
 Initial planned runbook:
 
-`docs/architecture/addon-runbooks/recursive-mas/ENGINEER_SETUP.md`
+`docs/templates/runbooks/recursive-mas/ENGINEER_SETUP.md`
 
 ## Augmentor Skill
 
@@ -297,7 +297,7 @@ Initial planned runbook:
 
 Initial planned skill:
 
-`docs/architecture/addon-skills/recursive-mas/AUGMENTOR_SKILL.md`
+`docs/templates/agents/recursive-mas/AUGMENTOR_SKILL.md`
 
 ## Add-on Manifest Shape
 

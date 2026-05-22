@@ -186,7 +186,7 @@ Rules:
 - Privileged setup actions require audit logging.
 - Human approval is required before install, filesystem mutation, service launch, provider/profile wiring, or external account mutation unless a future signed enterprise policy explicitly grants otherwise.
 
-Template: `docs/architecture/ADDON_ENGINEER_SETUP_RUNBOOK_TEMPLATE.md`
+Template: `docs/templates/runbooks/ADDON_ENGINEER_SETUP_RUNBOOK_TEMPLATE.md`
 
 ### Augmentor Skill Contract
 
@@ -222,7 +222,7 @@ Rules:
 - Skills that create tasks must produce Delegation Packets or equivalent host-owned task contracts.
 - Add-on skills should make the add-on easier to use without hiding provider cost, external-risk, archive, or approval boundaries from the human.
 
-Template: `docs/architecture/ADDON_AUGMENTOR_SKILL_TEMPLATE.md`
+Template: `docs/templates/addons/ADDON_AUGMENTOR_SKILL_TEMPLATE.md`
 
 ### Agent Add-on Operating Contracts
 
@@ -290,7 +290,7 @@ Recommended baseline for a local agent add-on:
 }
 ```
 
-Template: `docs/architecture/ADDON_AGENT_CONTRACT_TEMPLATE.md`
+Template: `docs/templates/addons/ADDON_AGENT_CONTRACT_TEMPLATE.md`
 
 ### Service Contract
 

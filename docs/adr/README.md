@@ -8,9 +8,9 @@ ADRs are not implementation docs. They record decisions, not how-to guides. They
 
 ## Where ADRs Live
 
-Existing ADRs are in `docs/architecture/`, named `ADR-NNN-<slug>.md`. There are 30+ ADRs covering platform stack, modular codebase, chat rail, provider fabric, add-on SDK, Living Archive, wallet security, recovery, compute fabric, and more.
+Existing ADRs are in this directory (`docs/adr/`), named `ADR-NNN-<slug>.md`. There are 32 ADRs covering platform stack, modular codebase, chat rail, provider fabric, add-on SDK, Living Archive, wallet security, recovery, compute fabric, and more.
 
-New ADRs should follow the same naming convention and live alongside existing ADRs in `docs/architecture/`.
+New ADRs should follow the same naming convention and live alongside existing ADRs in `docs/adr/`.
 
 ## When to Write an ADR
 

@@ -26,18 +26,36 @@ A map of the visible repository structure for contributors and agents navigating
 - **Contents observed:** `.gitkeep` placeholder; build artifacts are gitignored.
 - **Inspect for:** browser build artifacts after a `npm run browser-native:build` run.
 
+## `crates`
+
+- **Path:** `crates/`
+- **Likely responsibility:** Rust workspace crates.
+- **Contents observed:** `resonator-control/` — desktop control foundation for macOS backend.
+- **Inspect for:** Rust-level desktop control integrations.
+
 ## `docs`
 
 - **Path:** `docs/`
-- **Likely responsibility:** Primary documentation surface — architecture decisions, project status, product specs, feature backlog, and agent workflows.
+- **Likely responsibility:** Primary documentation surface.
 - **Key contents observed:**
-  - `README.md` — docs entrypoint.
+  - `README.md` — docs entrypoint with navigation and reading order.
+  - `ARCHITECTURE.md` — current system behavior overview.
   - `PROJECT_STATUS.md` — implementation checkpoint and known gaps.
   - `FEATURE_BACKLOG.md` — active feature backlog.
-  - `architecture/` — 30+ ADRs, module map, system diagrams, architecture audits, add-on templates, and operator KB.
+  - `DOCUMENT_AUTHORITY_MODEL.md` — authority lanes and conflict resolution.
+  - `KNOWLEDGE_RECONSTRUCTION_PLAN.md` — identified gaps, overlaps, and consolidation candidates.
+  - `REPO_INDEX.md` — this file.
+  - `adr/` — 32 Architecture Decision Records (ADR-001 through ADR-032).
+  - `architecture/` — system topology docs: CODEMAP, MODULE_MAP, SYSTEM_BOUNDARIES, RUNTIME_SURFACES, VNEXT_SYSTEM_DIAGRAM, AUDIO2TOL_INTAKE_ANALYSIS, OPERATOR_KNOWLEDGE_BASE.
+  - `templates/` — reusable documentation templates (addons, agents, runbooks, audits).
+  - `audits/` — audit snapshots and audit process guidance.
   - `product/` — UX specs (app shell, glocal discovery, icon system).
+  - `specs/` — formal specifications (currently a README stub).
+  - `sdk/` — SDK documentation (Memory Provider SDK).
+  - `agent-workflows/` — AI-assisted development conventions and docs refactor guardrails.
   - `working/` — session context for reloadable working memory.
-- **Inspect for:** current-state documentation, architectural decisions, and guidance for contributors.
+  - `legacy/` — historical documents preserved for context (reports, QA, planning, experiments).
+- **Inspect for:** current-state documentation, architectural decisions, historical context, and guidance for contributors.
 
 ## `examples`
 
@@ -47,7 +65,7 @@ A map of the visible repository structure for contributors and agents navigating
   - `living-archive-mcp.mjs` / `living-archive-mcp.test.mjs` — MCP bridge example and tests.
   - `living-archive-memory-service.mjs` / `living-archive-memory-service.test.mjs` — local memory service example and tests.
   - `reference-memory-service.mjs` — reference memory service implementation.
-  - `addons/` — example add-on manifests (Needs verification).
+  - `addons/` — example add-on manifests.
 - **Inspect for:** patterns for integrating with the Living Archive, MCP clients, and memory service consumers.
 
 ## `public`
@@ -55,9 +73,9 @@ A map of the visible repository structure for contributors and agents navigating
 - **Path:** `public/`
 - **Likely responsibility:** Static assets served by the frontend dev server and bundled with the Tauri app.
 - **Key contents observed:**
-  - `addons/` — public add-on catalog manifests loaded at runtime (24+ manifest JSON files).
+  - `addons/` — public add-on catalog manifests loaded at runtime (20+ manifest JSON files).
   - `icons/` — app and add-on icons.
-- **Inspect for:** the add-on catalog registry, default add-on manifests, and capability declarations visible to the shell.
+- **Inspect for:** the add-on catalog registry, default add-on manifests, and capability declarations.
 
 ## `scripts`
 
@@ -69,6 +87,12 @@ A map of the visible repository structure for contributors and agents navigating
   - `setup-camofox.sh` — Camofox browser integration setup.
 - **Inspect for:** build pipeline entrypoints and environment setup.
 
+## `server`
+
+- **Path:** `server/`
+- **Likely responsibility:** Hosted Express.js auth + API proxy backend (separate from the desktop app).
+- **Inspect for:** companion service architecture, auth flow, API proxying.
+
 ## `src`
 
 - **Path:** `src/`
@@ -77,11 +101,10 @@ A map of the visible repository structure for contributors and agents navigating
   - `main.tsx` — application entrypoint.
   - `App.tsx` / `App.test.tsx` — root application component and tests.
   - `components/` — shared UI components (LoginGate, Panel, TokenGate).
-  - `core/` — core runtime: chat engine, compute fabric, context memory, contracts, defaults, delegation, logician, memory provider, model strategy, policies, provider service, runtime, web transport.
+  - `core/` — core runtime: chat engine, compute fabric, context memory, contracts (2,749 line type system), defaults, delegation, logician, memory provider, model strategy, policies, provider service, runtime (Tauri IPC wrappers), web transport.
   - `modules/` — feature modules: addons, archive, browser, chat, compute, delegation, hermes, insight-engine, obsidian, opencode, overview, paperclip, recovery, settings, shell, strategist, terminal.
   - `sdk/` — add-on SDK surface and resonant-context.
   - `styles/` — CSS modules and global styles.
-  - `ui/` — UI primitives (Needs verification).
 - **Inspect for:** frontend architecture, add-on workspace hosting, provider routing, and the runtime adapter pattern.
 
 ## `src-tauri`
@@ -89,28 +112,32 @@ A map of the visible repository structure for contributors and agents navigating
 - **Path:** `src-tauri/`
 - **Likely responsibility:** Tauri v2 Rust backend — the native shell, host services, and IPC boundary.
 - **Key contents observed:**
-  - `Cargo.toml` — Rust crate manifest; depends on tauri 2, rusqlite, reqwest, tokio, tungstenite, portable-pty, sha2, resonator-control.
-  - `tauri.conf.json` — Tauri app configuration.
+  - `Cargo.toml` — Rust crate manifest.
   - `src/main.rs` — Rust entrypoint.
-  - `src/lib.rs` — Tauri command registration and plugin setup.
-  - `src/` — host services: archive_service, browser_host_service, browser_native_service, browser_service, camofox_service, compute_service, delegation_service, hermes_service, host_state, marionette_bridge, memory_service, obsidian_service, opencode_service, paperclip_service, provider_service, recovery_service, resonator_service, telegram_service, terminal_service.
+  - `src/lib.rs` — Tauri command registration (~85 commands, 1,560 lines).
+  - `src/` — host services: archive_service, browser_service, browser_native_service, camofox_service, compute_service, delegation_service, hermes_service, host_state, memory_service, obsidian_service, opencode_service, paperclip_service, provider_service, recovery_service, terminal_service, and more.
   - `capabilities/` — Tauri capability declarations.
   - `icons/` — platform app icons.
-  - `tests/` — Rust integration tests (Needs verification).
 - **Inspect for:** the Rust host boundary, IPC commands, native service implementations, and capability/permission model.
+
+## `tests`
+
+- **Path:** `tests/`
+- **Likely responsibility:** Shell-level integration tests.
+- **Inspect for:** end-to-end test scenarios.
 
 ## Root Configuration Files
 
-| File | Likely Responsibility |
-|------|----------------------|
-| `package.json` | Node.js project manifest, scripts, dependencies (React 19, Tauri CLI, Vite, Vitest, Playwright, CodeMirror, xterm). |
+| File | Responsibility |
+|------|---------------|
+| `package.json` | Node.js project manifest, scripts, dependencies (React 19, Tauri CLI, Vite, Vitest, Playwright). |
 | `tsconfig.json` | TypeScript compiler configuration. |
 | `vite.config.ts` | Vite bundler configuration for the React frontend. |
 | `index.html` | HTML entry point for the Vite dev server / Tauri webview. |
-| `rust-toolchain.toml` | Rust toolchain version pinning. |
+| `rust-toolchain.toml` | Rust toolchain version pin (1.94.1). |
 | `AGENTS.md` | Agent instructions — branch workflow, validation commands, commit policy. |
-| `README.md` | Project-level README. |
+| `README.md` | Project-level README — onboarding, scope, quick start. |
 
 ---
 
-*This index reflects the repo as observed. Entries marked "Needs verification" indicate areas not yet fully inspected. Update this file when new top-level directories are added or when responsibilities change.*
+*This index reflects the repo as observed after the 2026-05-22 documentation normalization pass. Entries marked "Needs verification" indicate areas not yet fully inspected. Update this file when new top-level directories are added or when responsibilities change.*

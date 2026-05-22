@@ -15,8 +15,8 @@ Code files that implement non-trivial product behavior should include a short ci
 
 Examples:
 
-- `// Intent citation: docs/architecture/ADR-002-modular-codebase.md`
-- `// UX citation: docs/architecture/ADR-004-chat-rail.md`
+- `// Intent citation: docs/adr/ADR-002-modular-codebase.md`
+- `// UX citation: docs/adr/ADR-004-chat-rail.md`
 
 Purpose:
 

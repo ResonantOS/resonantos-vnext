@@ -2,7 +2,7 @@
 
 Status: planned experimental add-on runbook  
 Applies to: `addon.recursive-mas`  
-Intent citation: `docs/architecture/ADR-030-recursive-mas-runtime-addon.md`
+Intent citation: `docs/adr/ADR-030-recursive-mas-runtime-addon.md`
 
 ## Setup Objective
 

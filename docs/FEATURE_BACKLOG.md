@@ -333,7 +333,7 @@ Last updated: 2026-05-05
   - verification state is shown directly in the monitor
   - follow-up controls route back through Augmentor instead of silently promoting worker output
 - Revised Resonant Browser direction on 2026-04-27:
-  - updated `docs/architecture/ADR-017-resonant-browser-addon.md` to require a live internal Chromium-class browser
+  - updated `docs/adr/ADR-017-resonant-browser-addon.md` to require a live internal Chromium-class browser
   - explicitly rejected the screenshot/CDP prototype as the Browser UI foundation
   - kept the bundled Browser manifest, grants, and delegation metadata as the add-on contract shell
   - replaced the screenshot UI with a live Tauri child WebView so the user can actually browse inside the center workspace
@@ -350,8 +350,8 @@ Last updated: 2026-05-05
 - Build add-on launcher UX from `docs/product/UX-001-resonantos-app-shell.md`.
 - Continue Delegation Monitor with artifact previews and explicit archive-intake review requests for approved results.
 - Add center-workspace app opening state for installed add-ons.
-- Build Resonant Notes from `docs/architecture/ADR-019-obsidian-addon-embedded-workspace.md` and ADR-020:
-  - `docs/architecture/ADR-020-resonant-notes-clean-room-workspace.md` defines the clean-room Resonant Notes direction
+- Build Resonant Notes from `docs/adr/ADR-019-obsidian-addon-embedded-workspace.md` and ADR-020:
+  - `docs/adr/ADR-020-resonant-notes-clean-room-workspace.md` defines the clean-room Resonant Notes direction
   - central vault workspace now has a first shell with note list, editor, preview toggle, dirty-state, and audited save
   - workspace connect gate now grants required access and opens the native vault picker before loading notes
   - explicit save/audit command now starts with conservative `obsidian_write_note`

@@ -171,7 +171,7 @@ The runbook must:
 - use ResonantOS provider profile references rather than raw provider secrets by default
 - produce a setup or repair report and audit log
 
-Initial planned runbook: `docs/architecture/addon-runbooks/paperclip/ENGINEER_SETUP.md`
+Initial planned runbook: `docs/templates/runbooks/paperclip/ENGINEER_SETUP.md`
 
 ## Augmentor Organizational Skill
 
@@ -192,7 +192,7 @@ The Paperclip Augmentor skill must guide Augmentor through:
 
 The skill must not let Augmentor silently create an organization. The human approves the high-level architecture first, then approves implementation.
 
-Initial planned skill: `docs/architecture/addon-skills/paperclip/AUGMENTOR_SKILL.md`
+Initial planned skill: `docs/templates/agents/paperclip/AUGMENTOR_SKILL.md`
 
 ## Add-on Manifest Shape
 
@@ -209,8 +209,8 @@ The first manifest should declare:
 - permissions: explicit grants listed above
 - delegation metadata: supported as an organizational runtime, not a direct worker
 - archive integration: intake-only
-- engineer setup runbook: `docs/architecture/addon-runbooks/paperclip/ENGINEER_SETUP.md`
-- augmentor skill: `docs/architecture/addon-skills/paperclip/AUGMENTOR_SKILL.md`
+- engineer setup runbook: `docs/templates/runbooks/paperclip/ENGINEER_SETUP.md`
+- augmentor skill: `docs/templates/agents/paperclip/AUGMENTOR_SKILL.md`
 
 ## Delegation Mapping
 

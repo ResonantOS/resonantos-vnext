@@ -8,56 +8,66 @@ This folder is the documentation entrypoint for the current codebase.
   - map of the visible repo structure for contributors and agents
 - [ARCHITECTURE.md](./ARCHITECTURE.md)
   - first-pass architecture overview based on the current codebase
+- [DOCUMENT_AUTHORITY_MODEL.md](./DOCUMENT_AUTHORITY_MODEL.md)
+  - which documents serve as truth for which concerns
+- [KNOWLEDGE_RECONSTRUCTION_PLAN.md](./KNOWLEDGE_RECONSTRUCTION_PLAN.md)
+  - identified gaps, overlaps, and consolidation candidates
 
 ## Read First
 
 - [PROJECT_STATUS.md](./PROJECT_STATUS.md)
   - current implementation checkpoint, known gaps, guardrails, and recommended next work
+- [architecture/CODEMAP.md](./architecture/CODEMAP.md)
+  - repo topology, high-risk zones, extension points, agent safety constraints
 - [architecture/MODULE_MAP.md](./architecture/MODULE_MAP.md)
   - current ownership map for modules and shell composition
+- [architecture/SYSTEM_BOUNDARIES.md](./architecture/SYSTEM_BOUNDARIES.md)
+  - architecture seams, IPC boundaries, trust surfaces, isolation assumptions
+- [architecture/RUNTIME_SURFACES.md](./architecture/RUNTIME_SURFACES.md)
+  - frontend, Tauri, addon, provider, and persistence surface catalog
 - [architecture/VNEXT_SYSTEM_DIAGRAM.md](./architecture/VNEXT_SYSTEM_DIAGRAM.md)
   - current system diagrams, implemented capability map, under-construction areas, and next engineering sequence
-- [architecture/ARCHITECTURE_AUDIT_2026-04-26.md](./architecture/ARCHITECTURE_AUDIT_2026-04-26.md)
+- [audits/ARCHITECTURE_AUDIT_2026-04-26.md](./audits/ARCHITECTURE_AUDIT_2026-04-26.md)
   - current modularity checkpoint, validation snapshot, and next refactor risks
-- [architecture/ADR-001-platform-stack.md](./architecture/ADR-001-platform-stack.md)
+- [adr/ADR-001-platform-stack.md](./adr/ADR-001-platform-stack.md)
   - platform and language choices
-- [architecture/ADR-002-modular-codebase.md](./architecture/ADR-002-modular-codebase.md)
+- [adr/ADR-002-modular-codebase.md](./adr/ADR-002-modular-codebase.md)
   - module structure and anti-monolith rules
-- [architecture/ADR-003-engineering-standards.md](./architecture/ADR-003-engineering-standards.md)
+- [adr/ADR-003-engineering-standards.md](./adr/ADR-003-engineering-standards.md)
   - standards for code citations, testing, security, and cross-platform behavior
-- [architecture/ADR-004-chat-rail.md](./architecture/ADR-004-chat-rail.md)
+- [adr/ADR-004-chat-rail.md](./adr/ADR-004-chat-rail.md)
   - UX and product rules for the Strategist chat rail
-- [architecture/ADR-005-provider-fabric-routing.md](./architecture/ADR-005-provider-fabric-routing.md)
+- [adr/ADR-005-provider-fabric-routing.md](./adr/ADR-005-provider-fabric-routing.md)
   - provider fabric, runtime nodes, centralized routing, and fallback/recovery
-- [architecture/ADR-006-addon-runtime-sdk.md](./architecture/ADR-006-addon-runtime-sdk.md)
+- [adr/ADR-006-addon-runtime-sdk.md](./adr/ADR-006-addon-runtime-sdk.md)
   - add-on provenance, signing, capability grants, and runtime isolation
-- [architecture/ADR-007-living-archive-boundaries.md](./architecture/ADR-007-living-archive-boundaries.md)
+- [adr/ADR-007-living-archive-boundaries.md](./adr/ADR-007-living-archive-boundaries.md)
   - archive read/write/ingest boundaries and Strategist-owned knowledge writes
-- [architecture/ADR-008-wallet-web3-security.md](./architecture/ADR-008-wallet-web3-security.md)
+- [adr/ADR-008-wallet-web3-security.md](./adr/ADR-008-wallet-web3-security.md)
   - wallet custody tiers, signing rules, and add-on restrictions
-- [architecture/ADR-009-rust-service-ipc-boundary.md](./architecture/ADR-009-rust-service-ipc-boundary.md)
+- [adr/ADR-009-rust-service-ipc-boundary.md](./adr/ADR-009-rust-service-ipc-boundary.md)
   - privileged service ownership and host/UI boundary rules
-- [architecture/ADR-010-recovery-ladder.md](./architecture/ADR-010-recovery-ladder.md)
+- [adr/ADR-010-recovery-ladder.md](./adr/ADR-010-recovery-ladder.md)
   - staged recovery flow, better-brain restoration, and Engineer promotion policy
-- [architecture/ADR-011-living-archive-host-service.md](./architecture/ADR-011-living-archive-host-service.md)
+- [adr/ADR-011-living-archive-host-service.md](./adr/ADR-011-living-archive-host-service.md)
   - real Living Archive host boundary over config, wiki pages, SQLite stats, intake, review queue, and ingest-review processing
-- [architecture/ADR-012-living-archive-approval-policy.md](./architecture/ADR-012-living-archive-approval-policy.md)
+- [adr/ADR-012-living-archive-approval-policy.md](./adr/ADR-012-living-archive-approval-policy.md)
   - tiered approval policy so trusted archive promotion defaults to Strategist review, not blanket human review
-- [architecture/ADR-013-living-archive-memory-domains.md](./architecture/ADR-013-living-archive-memory-domains.md)
+- [adr/ADR-013-living-archive-memory-domains.md](./adr/ADR-013-living-archive-memory-domains.md)
   - Human Knowledge, External Knowledge, AI Memory, Mixed Library staging, and canonical import rules
-- [architecture/ADR-014-system-architecture-memory.md](./architecture/ADR-014-system-architecture-memory.md)
+- [adr/ADR-014-system-architecture-memory.md](./adr/ADR-014-system-architecture-memory.md)
   - host-owned ResonantOS architecture memory available before user knowledge intake
-- [architecture/ADR-015-delegation-fabric-addon-catalog-native-tools.md](./architecture/ADR-015-delegation-fabric-addon-catalog-native-tools.md)
+- [adr/ADR-015-delegation-fabric-addon-catalog-native-tools.md](./adr/ADR-015-delegation-fabric-addon-catalog-native-tools.md)
   - Delegation Packets, native tool fabric, initial add-on catalog, and LangGraph/Mangle policy split
-- [architecture/ADR-016-context-memory-compaction.md](./architecture/ADR-016-context-memory-compaction.md)
+- [adr/ADR-016-context-memory-compaction.md](./adr/ADR-016-context-memory-compaction.md)
   - host-owned context compaction, raw transcript preservation, structured compact state, and provider-aware context budgets
-- [architecture/ADR-023-addon-repository-registry-model.md](./architecture/ADR-023-addon-repository-registry-model.md)
+- [adr/ADR-023-addon-repository-registry-model.md](./adr/ADR-023-addon-repository-registry-model.md)
   - add-on repository ownership, registry promotion, curation, sideloading, and alpha add-on policy
-- [architecture/ADR-026-minimal-kernel-replaceable-default-addons.md](./architecture/ADR-026-minimal-kernel-replaceable-default-addons.md)
+- [adr/ADR-026-minimal-kernel-replaceable-default-addons.md](./adr/ADR-026-minimal-kernel-replaceable-default-addons.md)
   - minimal kernel, replaceable Augmentor Chat, replaceable Living Archive, and no-lock-in default add-on rules
-- [architecture/ADR-027-living-archive-llm-wiki-compliance.md](./architecture/ADR-027-living-archive-llm-wiki-compliance.md)
+- [adr/ADR-027-living-archive-llm-wiki-compliance.md](./adr/ADR-027-living-archive-llm-wiki-compliance.md)
   - Living Archive / LLM Wiki compliance, background sync, verifier approval, semantic lint, repair queueing, and V1 completion baseline
-- [architecture/ADR-029-living-archive-mcp-bridge.md](./architecture/ADR-029-living-archive-mcp-bridge.md)
+- [adr/ADR-029-living-archive-mcp-bridge.md](./adr/ADR-029-living-archive-mcp-bridge.md)
   - scoped Living Archive MCP bridge, local memory service, portable fallback, and external-client memory boundaries
 - [ALPHA_DISTRIBUTION.md](./ALPHA_DISTRIBUTION.md)
   - internal alpha build workflow, platform artifacts, signing status, privacy boundary, and reviewer instructions
@@ -75,6 +85,12 @@ This folder is the documentation entrypoint for the current codebase.
   - audit lanes, template, and guidance on structured codebase review
 - [agent-workflows/README.md](./agent-workflows/README.md)
   - repo-local conventions for AI-assisted development
+- [agent-workflows/DOCS_REFACTOR_GUARDRAILS.md](./agent-workflows/DOCS_REFACTOR_GUARDRAILS.md)
+  - safety guardrails for documentation reorganization
+- [templates/README.md](./templates/README.md)
+  - reusable documentation templates (addons, agents, runbooks, audits)
+- [legacy/README.md](./legacy/README.md)
+  - historical documents preserved for context
 
 ## What These Documents Answer
 
@@ -86,6 +102,8 @@ This folder is the documentation entrypoint for the current codebase.
   - `ADR-003`
 - `Which module owns what?`
   - `MODULE_MAP`
+- `Where is everything in the repo?`
+  - `CODEMAP`, `REPO_INDEX`
 - `How does ResonantOS vNext work end to end, and what is working vs under construction?`
   - `VNEXT_SYSTEM_DIAGRAM`
 - `How do providers, add-ons, archive, wallets, and IPC work?`
@@ -114,6 +132,14 @@ This folder is the documentation entrypoint for the current codebase.
   - `ADR-029`
 - `How do we build and share the internal alpha on macOS, Windows, and Linux?`
   - `ALPHA_DISTRIBUTION`
+- `Which document is authoritative for which concern?`
+  - `DOCUMENT_AUTHORITY_MODEL`
+- `What documentation gaps and overlaps exist?`
+  - `KNOWLEDGE_RECONSTRUCTION_PLAN`
+- `What boundaries and trust surfaces exist?`
+  - `SYSTEM_BOUNDARIES`
+- `What code actually executes at runtime?`
+  - `RUNTIME_SURFACES`
 - `What should a future compacted/new session reload first?`
   - `working/SESSION_CONTEXT_2026-04-25.md`
 - `What exists now, what is missing, and what should we do next?`

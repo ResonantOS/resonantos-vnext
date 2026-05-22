@@ -44,7 +44,7 @@ The add-on manifests are included as catalog entries so reviewers can inspect di
 
 ## Portable User-State Boundary
 
-The intended private-data boundary is the Portable User State Root from `docs/architecture/ADR-022-portable-user-state-secure-vault.md`.
+The intended private-data boundary is the Portable User State Root from `docs/adr/ADR-022-portable-user-state-secure-vault.md`.
 
 Default shape:
 

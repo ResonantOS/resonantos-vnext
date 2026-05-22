@@ -258,18 +258,18 @@ The ONLY communication path between frontend and native is Tauri's `invoke()` br
 ### If you are a new contributor:
 1. Read `README.md` — project scope and structure.
 2. Read `docs/ARCHITECTURE.md` — first-pass architecture overview.
-3. Read `docs/architecture/ADR-001-platform-stack.md` — platform choices.
+3. Read `docs/adr/ADR-001-platform-stack.md` — platform choices.
 4. Read `src/core/contracts.ts` — the type system (skimming is fine).
 5. Run `npm run tauri:dev` to see the app.
 
 ### If you are an addon developer:
-1. Read `docs/architecture/ADR-006-addon-runtime-sdk.md` and `ADR-018-addon-sdk-v0.md`.
+1. Read `docs/adr/ADR-006-addon-runtime-sdk.md` and `ADR-018-addon-sdk-v0.md`.
 2. Read `src/sdk/addons/contracts.ts` — SDK types.
 3. Study `public/addons/` — existing manifest examples.
 4. Study `examples/` — reference implementations.
 
 ### If you are working on the Rust host:
-1. Read `docs/architecture/ADR-009-rust-service-ipc-boundary.md`.
+1. Read `docs/adr/ADR-009-rust-service-ipc-boundary.md`.
 2. Read `src-tauri/src/lib.rs` — command surface.
 3. Read `src-tauri/src/host_state.rs` — state, secrets, capability gates.
 4. Read the specific service module for your area.
@@ -309,7 +309,7 @@ The ONLY communication path between frontend and native is Tauri's `invoke()` br
 | New system slot | `src/modules/shell/system-slots.ts` | ADR-026 defines replaceable slots. |
 | New capability | `src/core/contracts.ts` `Capability` union + `src/sdk/addons/contracts.ts` `ADDON_CAPABILITIES` | Requires Rust-side enforcement in `host_state.rs`. |
 | New SDK export | `src/sdk/addons/index.ts` | Keep the public SDK surface narrow. |
-| New ADR | `docs/architecture/ADR-XXX-*.md` | Follow ADR template in `docs/adr/README.md`. |
+| New ADR | `docs/adr/ADR-XXX-*.md` | Follow ADR template in `docs/adr/README.md`. |
 
 ---
 
@@ -327,7 +327,7 @@ The following items are marked "Needs verification" because direct runtime evide
 | `ui/` directory referenced in REPO_INDEX | `src/ui/` | REPO_INDEX mentions `src/ui/` but the directory contains only `icons/resonant-icons.tsx`. Is this still accurate? |
 | Rust integration tests | `src-tauri/tests/` | REPO_INDEX mentions this directory but it was not observed. Confirmed absent — tests may be in `src-tauri/src/` as inline `#[cfg(test)]` modules. |
 | Camofox vs Chromium browser path consolidation | `src-tauri/src/camofox_*` vs `browser_*` | Two browser integration paths exist. Are both maintained, or is one being deprecated? |
-| Recursive MAS addon implementation | `docs/architecture/ADR-030-recursive-mas-runtime-addon.md`, `examples/addons/recursive-mas.json` | ADR exists, manifest stub exists, but runtime implementation is unclear. |
+| Recursive MAS addon implementation | `docs/adr/ADR-030-recursive-mas-runtime-addon.md`, `examples/addons/recursive-mas.json` | ADR exists, manifest stub exists, but runtime implementation is unclear. |
 | OpenClaw addon status | `public/addons/openclaw.json` | Manifest exists but this is the legacy Alpha product. Is this addon actively maintained? |
 
 ---
