@@ -2,7 +2,7 @@
 
 ## Status
 
-**Proposed.** This ADR records the intake decision for Campaign Runner integration with ResonantOS. Campaign Runner exists as an external tool; this ADR defines the integration boundary, not the tool itself.
+**Superseded by ADR-035.** This ADR recorded the initial intake classification for Campaign Runner. ADR-035 (`existing-campaign-runner-integration`) supersedes it with the final integration decision based on source code inspection and fit-gap review. This ADR is retained for historical context — it captures the initial classification as an external tool, which was correct, but the detailed integration posture is now in ADR-035.
 
 ## Context
 

@@ -190,7 +190,10 @@ These directories should be added to `.gitignore` patterns if ResonantOS does no
 ## Related Docs
 
 - **External:** https://github.com/Resonant-Jones/Campaign-Runner — Campaign Runner source.
-- `docs/adr/ADR-033-campaign-runner-intake.md` — ADR intake for Campaign Runner.
+- `docs/specs/campaign-runner/FIT_GAP_REVIEW.md` — Detailed fit-gap analysis.
+- `docs/specs/campaign-runner/INSTALLATION_PLAN.md` — Minimal and deferred installation paths.
+- `docs/adr/ADR-035-existing-campaign-runner-integration.md` — Integration decision record.
+- `docs/adr/ADR-033-campaign-runner-intake.md` — Initial intake (superseded by ADR-035).
 - `docs/adr/ADR-034-agent-context-management-intake.md` — Companion ADR for context management.
 - `docs/adr/ADR-015-delegation-fabric-addon-catalog-native-tools.md` — Delegation Fabric.
 - `docs/adr/ADR-016-context-memory-compaction.md` — Context memory layers.
@@ -203,8 +206,11 @@ These directories should be added to `.gitignore` patterns if ResonantOS does no
 
 ## Validation Required Before Any Integration Work
 
-- [ ] Decision on whether Campaign Runner output directories should be gitignored or committed.
-- [ ] Confirmation that Campaign Runner state files do not conflict with ResonantOS state persistence.
+- [x] Decision on whether Campaign Runner output directories should be gitignored or committed. **→ `docs/_audits/` and `docs/_campaign_runs/` gitignored. `docs/Campaign/` and `docs/tasks/` committed.**
+- [x] Confirmation that Campaign Runner state files do not conflict with ResonantOS state persistence. **→ No conflict: separate directories, separate formats.**
 - [ ] Review of Campaign Runner's schema-validated campaign/task format against Delegation Packet format.
 - [ ] Decision on whether Living Archive intake of Campaign Runner artifacts is desired.
-- [ ] Confirmation that Campaign Runner's provider invocation (direct codex/claude calls) is acceptable alongside ResonantOS provider fabric.
+- [x] Confirmation that Campaign Runner's provider invocation (direct codex/claude calls) is acceptable alongside ResonantOS provider fabric. **→ Acceptable. Campaign Runner is a dev tool; provider fabric is a runtime system. Separate concerns.**
+- [x] Fit-gap review completed: `docs/specs/campaign-runner/FIT_GAP_REVIEW.md`
+- [x] Installation plan documented: `docs/specs/campaign-runner/INSTALLATION_PLAN.md`
+- [x] Integration decision recorded: `docs/adr/ADR-035-existing-campaign-runner-integration.md`
