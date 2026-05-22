@@ -49,6 +49,14 @@ tmp/
 *.swp
 crates/*/target/
 
+# Campaign Runner operational output (transient sidecar artifacts)
+# Campaign/task markdown is intentionally gitignored — promote into
+# authoritative docs (ADRs, specs, audits, architecture) before committing.
+docs/_audits/
+docs/_campaign_runs/
+docs/Campaign/
+docs/tasks/
+
 # Build artifacts
 crates/*/target/
 *.bak
