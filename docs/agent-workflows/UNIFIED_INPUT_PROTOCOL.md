@@ -4,6 +4,8 @@
 
 **Draft.** Companion intake to ADR-034 (Agent Context Management) and `docs/specs/agent-context-management/README.md`. No runtime implementation exists. This document defines the convention for what context an AI agent receives at session start.
 
+**Campaign Runner compatibility:** Campaign Runner's task `activation_prompt` field serves a similar purpose — it provides the execution context for a single task. Campaign Runner's format is a subset of this protocol: task objective, file scope, tests, and constraints. This protocol provides additional layers (campaign context, repo context, prior decisions, etc.) that Campaign Runner could adopt if tighter integration is desired.
+
 ---
 
 ## Purpose

@@ -58,6 +58,16 @@ ADR-016 is not replaced or superseded. Agent Context Management extends it with 
 - Context handoff artifacts are append-only. Corrections are new entries, not edits.
 - Provider switches must not cause context loss. Context is assembled from structured layers, not from a single provider's opaque state.
 
+### Compatibility with Campaign Runner
+
+Campaign Runner (ADR-033) is an external deterministic audit-to-campaign execution runner. It constructs task activation prompts and receives task results in a format that is compatible with, but not identical to, the Unified Input Protocol and Context Handoff Contract.
+
+- Campaign Runner's `activation_prompt` field per task is a mini unified input packet: it includes task objective, file scope, test commands, and constraints.
+- Campaign Runner's task result format (`task_result.schema.json`: status, summary, tests_ran, notes) is a subset of the Context Handoff Contract.
+- Campaign Runner's campaign-level markdown provides the campaign context that the Unified Input Protocol includes.
+
+These conventions do not require Campaign Runner to adopt the full protocol. They ensure that when Campaign Runner IS used alongside ResonantOS, the context formats are mutually intelligible.
+
 ### Future Scope (if conventions prove insufficient)
 
 If agent context management conventions prove valuable but insufficient for programmatic enforcement:
@@ -93,6 +103,7 @@ No implementation evidence exists yet (this is an intake decision). Evidence wil
 - [ ] Session recovery from archived context layers works for at least one common scenario.
 - [ ] Information boundary rules prevent a documented example of context leakage.
 - [ ] Compaction triggers preserve decisions and open tasks through a simulated long conversation.
+- [x] Campaign Runner task prompt/result format is compatible with the Unified Input Protocol and Context Handoff Contract. Verified by inspection of `task_file_template.md`, `activation_prompt.md.tmpl`, and `task_result.schema.json` in the Campaign Runner repo.
 
 ## Alternatives Considered
 

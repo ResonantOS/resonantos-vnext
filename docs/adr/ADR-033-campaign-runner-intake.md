@@ -1,97 +1,130 @@
-# ADR-033: Campaign Runner — Intake Decision
+# ADR-033: Campaign Runner — Integration Intake
 
 ## Status
 
-**Proposed.** This ADR records the intake decision for Campaign Runner before implementation begins. It is not an acceptance of implementation scope — it is a boundary-setting document.
+**Proposed.** This ADR records the intake decision for Campaign Runner integration with ResonantOS. Campaign Runner exists as an external tool; this ADR defines the integration boundary, not the tool itself.
 
 ## Context
 
-ResonantOS currently supports structured delegation through the Delegation Fabric (ADR-015), context memory compaction (ADR-016), and organizational runtime through Paperclip (ADR-028). However, no existing mechanism provides a first-class pattern for coordinating multiple Delegation Packets across sessions into a coherent, multi-step body of work.
+Campaign Runner (package name: `codex_runner`) is a deterministic audit-to-campaign execution runner maintained as a standalone Python CLI tool in a separate repository:
 
-A "campaign" — a bounded, multi-step effort with a defined goal, sub-tasks, decision tracking, and artifact collection — is a recurring pattern in AI-assisted development. Humans naturally think in campaigns ("build the authentication system," "migrate to the new provider API," "audit the addon security surface"). Agents need structured support for this pattern.
+**Repo:** https://github.com/Resonant-Jones/Campaign-Runner
+**Version:** `0.1.0a0` (private-alpha friend-share)
+**License:** Private-alpha. Not public open source.
 
-The legacy `TASK.md` pattern (from the pre-vNext era) proved that high-quality delegation requires context, scope, and a clear return protocol. The Delegation Fabric improved on `TASK.md` by adding structured enrichment from System Architecture Memory, Living Archive context, and policy. Campaign Runner extends this further: from single-task delegation to multi-task campaign coordination.
+Campaign Runner operates on a target repository as an external process. It:
+1. Runs a "mega audit" of the target repo via a provider (codex or claude) — Stage A.
+2. Compiles the audit into a campaign set (campaigns with tasks) — Stage B.
+3. Executes tasks from the selected campaign via a provider — Stage C.
+
+It is deterministic: clean-git-only, schema-validated, scope-guarded. It writes campaign/task/audit artifacts into the target repo's `docs/` directory and manages state in `docs/_campaign_runs/state/`.
+
+ResonantOS currently has no integration with Campaign Runner. No ResonantOS code references it. No ResonantOS addon wraps it. This ADR defines the integration posture.
 
 ## Decision
 
-**Campaign Runner will be introduced as an agent workflow convention with a documented path to becoming an optional addon if runtime state tracking proves necessary.**
+**Campaign Runner is an external tool. ResonantOS will integrate with it through filesystem output and documented conventions, not through in-process embedding or Tauri command wrapping.**
 
-### V1 Scope (Convention)
+### Integration Posture
 
-1. A campaign is defined as a markdown file at `campaigns/<slug>.md` in the repo root or user-state root.
-2. The campaign file declares: goal, scope, constraints, success criteria, sub-tasks (as Delegation Packet stubs), status per sub-task, decision log, artifact references.
-3. Augmentor reads the campaign file at session start (via unified input protocol) to understand active campaigns.
-4. Augmentor decomposes campaign sub-tasks into Delegation Packets using the existing Delegation Fabric.
-5. Completed sub-tasks update the campaign file with results and artifact pointers.
-6. A completed campaign produces a summary suitable for Living Archive intake.
+1. **Filesystem integration** — Campaign Runner writes campaign/task/audit files into the ResonantOS repo. ResonantOS reads these files through existing mechanisms (Living Archive intake, Delegation Fabric, System Architecture Memory).
+2. **No embedding** — Campaign Runner is NOT wrapped as a Tauri command, NOT invoked from the Rust host, NOT bundled as a dependency.
+3. **No reimplementation** — Campaign Runner's deterministic runner, state machine, and schema validation are NOT reimplemented inside ResonantOS.
+4. **Optional** — Campaign Runner is a tool that MAY be used with ResonantOS repos. It is not required for ResonantOS development, build, or operation.
 
-### Future Scope (Addon)
+### Filesystem Conventions
 
-If the convention pattern proves valuable but insufficient:
+When Campaign Runner is used with the ResonantOS repo, these directories exist:
 
-1. `addon.campaign-runner` manifests as an `orchestration`-category addon, similar to Paperclip.
-2. Campaign state moves from markdown files to structured persistence (SQLite or host-mediated state).
-3. A workspace UI provides campaign overview, sub-task status dashboard, and artifact browser.
-4. Campaign Runner integrates with Paperclip for organizational tracking and with the Compute Fabric for long-running sub-task execution.
+```
+resonantos-vnext/
+├── docs/
+│   ├── _audits/           # Per-audit prompts, outputs, run inputs
+│   ├── _campaign_runs/    # Per-run metadata and state machine
+│   │   └── state/
+│   │       ├── state.json           # Campaign/task state
+│   │       └── state_transitions.jsonl  # Append-only transition log
+│   ├── Campaign/          # Materialized campaign markdown docs
+│   │   └── CAMPAIGN_<date>_<SLUG>_<seq>.md
+│   └── tasks/             # Materialized task markdown docs
+│       └── <slug>_<date>_<seq>/
+│           └── TASK_<slug>_<date>.md
+```
 
-### Binding Rules
+These directories do NOT conflict with ResonantOS documentation conventions. `_audits/` and `_campaign_runs/` are operational artifacts (recommend `.gitignore`). `Campaign/` and `tasks/` are documentation artifacts suitable for Living Archive intake and version control.
 
-- Campaign Runner is NOT a kernel service. It must be disableable and replaceable (ADR-026).
-- Campaign Runner does NOT replace the Delegation Fabric. It decomposes campaigns INTO Delegation Packets.
-- Campaign Runner does NOT route model calls or choose providers. Provider fabric remains the routing authority (ADR-005).
-- Campaign Runner does NOT bypass Living Archive ingestion approval (ADR-012).
-- Campaign Runner does NOT hold secrets or manage credentials.
-- Campaign Runner may declare capability needs (`agent-delegation`, `archive-intake-write`) if it becomes an addon.
-- Campaign Runner must not duplicate Paperclip's organizational tracking. If Paperclip is active, Campaign Runner should integrate, not compete.
+### Relationship to Existing Systems
+
+| ResonantOS System | Relationship |
+|-------------------|-------------|
+| Delegation Fabric (ADR-015) | Campaign Runner tasks are NOT Delegation Packets, but they are semantically similar. Campaign Runner tasks could be mapped to Delegation Packets if automated execution is desired. |
+| Living Archive (ADR-007, 011, 012, 013) | Campaign Runner output (campaign summaries, completed task artifacts, audit reports) are candidates for Living Archive intake through the existing ingestion pipeline. |
+| System Architecture Memory (ADR-014) | Campaign Runner audit output could feed System Architecture Memory, giving Augmentor awareness of repo structure and risk areas. |
+| Provider Fabric (ADR-005) | Campaign Runner invokes providers directly (codex, claude). It does NOT route through ResonantOS provider fabric. This is a known boundary — future integration could add fabric routing. |
+| Compute Fabric (ADR-032) | Campaign Runner task execution could be delegated to Compute Fabric nodes for isolation or GPU access. Low priority. |
+| Agent Workflow Conventions | Campaign Runner task activation prompts are compatible with the Unified Input Protocol (separate intake). The Context Handoff Contract could be used for task-to-task handoff within a campaign. |
+| Minimal Kernel (ADR-026) | Campaign Runner is NOT a kernel service. It is completely external. |
+
+### What ResonantOS Must NOT Do
+
+- Embed Campaign Runner as a subprocess managed by the Rust host.
+- Wrap Campaign Runner in a `#[tauri::command]`.
+- Parse Campaign Runner state files from Rust or TypeScript (use intake pipeline instead).
+- Add Campaign Runner as a dependency (Python package vs Node/Rust project).
+- Reimplement Campaign Runner's deterministic runner in TypeScript or Rust.
+- Require Campaign Runner for ResonantOS development or build.
 
 ## Consequences
 
 ### Positive
 
-- Provides a first-class pattern for multi-step AI-assisted work that is currently handled ad hoc.
-- Reduces human re-briefing overhead across sessions.
-- Creates a natural unit for Living Archive intake (campaign summary + artifacts).
-- Aligns with the Delegation Fabric investment — campaigns are composition over delegation.
-- Convention-first approach minimizes implementation risk.
+- Provides a structured, deterministic audit-and-plan tool that can be used with ResonantOS repos without coupling.
+- Campaign Runner output enriches the Living Archive with structured repo analysis.
+- Campaign/task model aligns conceptually with the Delegation Fabric, creating a natural mapping path.
+- Zero runtime risk — Campaign Runner is external and optional.
 
 ### Negative
 
-- Another document pattern for contributors to learn.
-- Risk of over-formalization: simple tasks should not require campaign overhead.
-- Campaign files may go stale if agents don't maintain them.
-- Potential confusion with Paperclip's organizational tracking if boundaries are not clear.
+- Two separate provider invocation paths (Campaign Runner direct vs ResonantOS provider fabric). Credential management is duplicated.
+- Campaign Runner state and ResonantOS state are separate. No automatic synchronization.
+- Potential confusion about whether Campaign Runner is "part of" ResonantOS. This ADR is the authoritative boundary statement.
+- Campaign Runner's output directories (`_audits/`, `_campaign_runs/`) add clutter to the docs folder if not gitignored.
 
 ## Evidence
 
-No implementation evidence exists yet (this is an intake decision). Evidence will be collected during V1 convention testing:
+Campaign Runner exists as a working tool. Evidence comes from its own repository, not from ResonantOS integration:
 
-- [ ] Campaign markdown format is usable by agents without human hand-holding.
-- [ ] Campaign state survives context compaction without data loss.
-- [ ] Campaign decomposition into Delegation Packets produces correct `TASK.md` artifacts.
-- [ ] Campaign summaries are suitable for Living Archive intake.
+- [x] Campaign Runner repo: https://github.com/Resonant-Jones/Campaign-Runner
+- [x] Schema-validated campaign/task model: `campaign_set.schema.json`, `task_result.schema.json`
+- [x] Deterministic runner implementation: `src/codex_runner/runner.py` (~2,090 lines)
+- [x] Provider-agnostic: supports codex and claude
+- [x] State machine: `state.json` + `state_transitions.jsonl`
+- [ ] Campaign Runner has been run against the ResonantOS repo (not yet verified).
+- [ ] Campaign Runner output has been ingested into the Living Archive (not yet attempted).
 
 ## Alternatives Considered
 
 | Alternative | Why Rejected |
 |-------------|-------------|
-| Add Paperclip-only campaign tracking. | Paperclip is an optional addon. Campaigns should work without it. Convention-first is more portable. |
-| Extend Delegation Packets to support multi-step campaigns natively. | Delegation Packets are single-task. Composition (campaign of packets) is cleaner than extension. |
-| Make Campaign Runner a core runtime service. | Violates ADR-026 minimal kernel principle. Campaigns are not essential for shell operation. |
-| Do nothing — let agents handle campaigns ad hoc. | Current ad hoc approach causes context loss, repeated re-briefing, and missed handoffs. |
+| Embed Campaign Runner as a ResonantOS addon. | Campaign Runner is a Python CLI tool. Wrapping it in a Tauri addon adds complexity without benefit. Filesystem integration is simpler and more robust. |
+| Reimplement Campaign Runner in Rust inside the Tauri host. | Massive duplication of effort. Campaign Runner's value is as a standalone deterministic runner. Reimplementation would diverge. |
+| Require Campaign Runner for ResonantOS development. | Violates the optional tool principle. Contributors should not need Python + codex/claude to work on the repo. |
+| Ignore Campaign Runner — no integration. | Misses the opportunity to feed structured repo analysis into the Living Archive and System Architecture Memory. |
 
 ## Drift Watch
 
 What future change would make this ADR stale?
 
-- If Paperclip evolves to natively support campaign-level tracking, the convention may become redundant.
-- If the Delegation Fabric adds native multi-step support, campaign decomposition may need rethinking.
-- If a new addon or external tool provides superior campaign tracking, Campaign Runner should integrate rather than compete.
-- If the unified input protocol (separate intake) evolves to include campaign context natively, the convention format may need updating.
+- If Campaign Runner adds a provider fabric adapter that routes through ResonantOS, the credential boundary needs revisiting.
+- If Campaign Runner tasks are automatically mapped to Delegation Packets, the integration moves from convention to code.
+- If ResonantOS adds its own deterministic campaign runner (unlikely given this ADR's non-reimplementation stance), this ADR would be superseded.
+- If Campaign Runner's output format changes incompatibly, intake pipeline mappings need updating.
 
 ## Docs to Update If Accepted
 
-- [ ] `docs/specs/campaign-runner/README.md` — implementation intake (companion to this ADR).
-- [ ] `docs/agent-workflows/README.md` — add campaign runner convention reference.
-- [ ] `docs/agent-workflows/UNIFIED_INPUT_PROTOCOL.md` — include campaign context in input packet.
-- [ ] `docs/FEATURE_BACKLOG.md` — track V1 convention implementation.
-- [ ] `docs/PROJECT_STATUS.md` — note Campaign Runner as planned convention.
+- [x] `docs/specs/campaign-runner/README.md` — integration intake (companion to this ADR).
+- [ ] `docs/agent-workflows/UNIFIED_INPUT_PROTOCOL.md` — note Campaign Runner compatibility.
+- [ ] `docs/agent-workflows/CONTEXT_HANDOFF_CONTRACT.md` — note Campaign Runner compatibility.
+- [ ] `docs/FEATURE_BACKLOG.md` — track Living Archive intake integration.
+- [ ] `docs/PROJECT_STATUS.md` — note Campaign Runner as external integration.
+- [ ] `.gitignore` — optionally add `docs/_audits/` and `docs/_campaign_runs/`.

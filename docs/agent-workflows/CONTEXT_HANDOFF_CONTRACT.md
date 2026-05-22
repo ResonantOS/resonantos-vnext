@@ -4,6 +4,8 @@
 
 **Draft.** Companion intake to ADR-034 (Agent Context Management) and `docs/specs/agent-context-management/README.md`. No runtime implementation exists. This document defines the convention for what a worker agent must produce when returning results to a delegator.
 
+**Campaign Runner compatibility:** Campaign Runner's task result format (`task_result.schema.json`: `status`, `summary`, `tests_ran`, `notes`) is a subset of this contract. Campaign Runner tasks return structured JSON; this contract provides the human/agent-readable handoff that could wrap or supplement the JSON result. The Runner also appends `## Implementation Receipt` and `## Completion Summary` blocks to task artifacts that serve a similar function to this contract's verification evidence and next-agent context sections.
+
 ---
 
 ## Purpose

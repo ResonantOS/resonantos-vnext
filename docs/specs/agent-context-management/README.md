@@ -165,11 +165,12 @@ At minimum, a handoff should include:
 - `docs/adr/ADR-016-context-memory-compaction.md` — Context memory layers.
 - `docs/adr/ADR-015-delegation-fabric-addon-catalog-native-tools.md` — Delegation Fabric.
 - `docs/adr/ADR-014-system-architecture-memory.md` — System Architecture Memory.
+- `docs/adr/ADR-033-campaign-runner-intake.md` — Campaign Runner integration intake.
 - `docs/adr/ADR-034-agent-context-management-intake.md` — Companion ADR intake.
 - `docs/agent-workflows/UNIFIED_INPUT_PROTOCOL.md` — Unified input protocol.
 - `docs/agent-workflows/CONTEXT_HANDOFF_CONTRACT.md` — Context handoff contract.
 - `docs/agent-workflows/README.md` — Agent workflow conventions.
-- `docs/specs/campaign-runner/README.md` — Companion intake for Campaign Runner.
+- `docs/specs/campaign-runner/README.md` — Campaign Runner integration intake.
 
 ---
 
