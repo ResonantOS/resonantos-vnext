@@ -4,17 +4,18 @@
 
 | Field | Value |
 |-------|-------|
-| **Task ID** | `<TASK-XXX>` |
-| **Task Slug** | `<task_slug>` |
-| **Campaign ID** | `<YYYY-MM-DD::slug::seq3>` |
-| **Campaign Slug** | `<campaign_slug>` |
-| **Run ID** | `<run_id>` |
+| **Task ID** (`task_id`) | `<TASK-XXX>` |
+| **Task Slug** (`task_slug`) | `<task_slug>` |
+| **Campaign ID** (`campaign_id`) | `<YYYY-MM-DD::slug::seq3>` |
+| **Campaign Slug** (`campaign_slug`) | `<campaign_slug>` |
+| **Run ID** (`run_id`) | `<run_id>` |
 | **Area** | `<backend | frontend | fullstack | docs | tooling | security | testing | other>` |
 | **Risk** | `HIGH` | `MED` | `LOW` |
 
 ## Backend
 
 - **Provider:** `<codex | claude>`
+- **Backend version:** `<version | unknown>`
 - **Model:** `<model_id | unknown>`
 
 ## Result
@@ -100,6 +101,8 @@ $ <test command>
 
 - **Next Task ID:** `<TASK-XXX>`
 - **Next Task Slug:** `<task_slug>`
+- **Next backend (if changed):** `<provider | unchanged>`
+- **Next model (if changed):** `<model_id | unchanged>`
 - **Estimated remaining:** `<N>` tasks
 
 ---

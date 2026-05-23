@@ -4,21 +4,22 @@
 
 | Field | Value |
 |-------|-------|
-| **Campaign ID** | `<YYYY-MM-DD::slug::seq3>` |
-| **Campaign Slug** | `<slug>` |
+| **Campaign ID** (`campaign_id`) | `<YYYY-MM-DD::slug::seq3>` |
+| **Campaign Slug** (`campaign_slug`) | `<slug>` |
 | **Campaign Title** | `<human-readable title>` |
-| **Operator** | `<name or role>` |
+| **Operator** (`operator`) | `<name or role>` |
 | **Started** | `<YYYY-MM-DD HH:MM UTC>` |
 | **Completed** | `<YYYY-MM-DD HH:MM UTC>` |
 | **Total Tasks** | `<N>` |
-| **Passes** | `<N>` |
+| **Passes** (`passes`) | `<N>` |
 
 ## Backend
 
 - **Provider:** `<codex | claude | manual>`
-- **Audit model:** `<model_id | unknown>`
-- **Compiler model:** `<model_id | unknown>`
-- **Task model:** `<model_id | unknown>`
+- **Backend version:** `<version | unknown>`
+- **Audit model** (`model_audit`): `<model_id | unknown>`
+- **Compiler model** (`model_compiler`): `<model_id | unknown>`
+- **Task model** (`model_task`): `<model_id | unknown>`
 
 <!-- If multiple providers were used, replace the above with: -->
 

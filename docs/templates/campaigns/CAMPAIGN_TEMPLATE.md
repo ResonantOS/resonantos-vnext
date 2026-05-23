@@ -4,19 +4,21 @@
 
 | Field | Value |
 |-------|-------|
-| **Campaign ID** | `<YYYY-MM-DD::slug::seq3>` |
-| **Campaign Slug** | `<slug>` |
-| **Status** | `planning` |
-| **Operator** | `<name or role>` |
-| **Created** | `<YYYY-MM-DD HH:MM UTC>` |
-| **Depends On** | `<campaign_id or none>` |
+| **Campaign ID** (`campaign_id`) | `<YYYY-MM-DD::slug::seq3>` |
+| **Campaign Slug** (`campaign_slug`) | `<slug>` |
+| **Status** (`status`) | `planning` |
+| **Passes** (`passes`) | `<N>` |
+| **Operator** (`operator`) | `<name or role>` |
+| **Created** (`created_at`) | `<YYYY-MM-DD HH:MM UTC>` |
+| **Depends On** (`depends_on`) | `<campaign_id or none>` |
 
 ## Backend
 
 - **Provider:** `<codex | claude | manual>`
-- **Audit model:** `<model_id | unknown>`
-- **Compiler model:** `<model_id | unknown>`
-- **Task model:** `<model_id | unknown>`
+- **Backend version:** `<version | unknown>`
+- **Audit model** (`model_audit`): `<model_id | unknown>`
+- **Compiler model** (`model_compiler`): `<model_id | unknown>`
+- **Task model** (`model_task`): `<model_id | unknown>`
 - **Configuration:** `<path to settings or inline summary>`
 
 ## Goal
