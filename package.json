@@ -15,6 +15,7 @@
     "test:browser-first": "node --test browser-first/test/*.test.mjs",
     "test:browser-first-live": "node browser-first/test/agent-control-live.mjs",
     "browser-first:dev": "npm run browser-native:build:required && node browser-first/host/run-browser-first.mjs",
+    "browser-first:install": "npm run browser-native:build:required && node scripts/install-browser-first-app.mjs",
     "test:electron-host": "node --test electron-host/test/*.test.mjs",
     "electron-host:smoke": "node electron-host/run-smoke.mjs",
     "electron-host:rust-ipc": "node electron-host/rust-core-ipc-smoke.mjs",

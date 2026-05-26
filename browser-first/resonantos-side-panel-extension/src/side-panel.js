@@ -65,8 +65,36 @@ let browserJobs = [];
 let activeJobId = null;
 let jobMonitorCollapsed = true;
 let contextDockExpanded = false;
+let composerUndoStack = [""];
+let composerUndoApplying = false;
 
 const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+const resetComposerUndoStack = (value = commandInput.value) => {
+  composerUndoStack = [String(value ?? "")];
+};
+
+const pushComposerUndoSnapshot = (value = commandInput.value) => {
+  if (composerUndoApplying) return;
+  const snapshot = String(value ?? "");
+  if (composerUndoStack.at(-1) === snapshot) return;
+  composerUndoStack = [...composerUndoStack, snapshot].slice(-80);
+};
+
+const undoComposerInput = () => {
+  const current = commandInput.value;
+  if (composerUndoStack.at(-1) !== current) {
+    pushComposerUndoSnapshot(current);
+  }
+  if (composerUndoStack.length <= 1) return;
+  composerUndoStack = composerUndoStack.slice(0, -1);
+  const previous = composerUndoStack.at(-1) ?? "";
+  composerUndoApplying = true;
+  commandInput.value = previous;
+  commandInput.setSelectionRange(previous.length, previous.length);
+  commandInput.dispatchEvent(new Event("input", { bubbles: true }));
+  composerUndoApplying = false;
+};
 
 const composerSelection = () => ({
   start: commandInput.selectionStart ?? commandInput.value.length,
@@ -74,6 +102,7 @@ const composerSelection = () => ({
 });
 
 const replaceComposerSelection = (text) => {
+  pushComposerUndoSnapshot();
   const { start, end } = composerSelection();
   commandInput.setRangeText(String(text ?? ""), start, end, "end");
   commandInput.dispatchEvent(new Event("input", { bubbles: true }));
@@ -110,7 +139,9 @@ const handleComposerClipboardShortcut = async (event) => {
     if (selectedText) {
       replaceComposerSelection("");
     } else {
+      pushComposerUndoSnapshot();
       commandInput.value = "";
+      commandInput.dispatchEvent(new Event("input", { bubbles: true }));
     }
     return true;
   }
@@ -646,6 +677,7 @@ const editMessage = (id) => {
   const message = messages.find((item) => item.id === id);
   if (!message || message.role !== "user") return;
   commandInput.value = message.content;
+  resetComposerUndoStack(message.content);
   commandInput.focus();
   setStatus("Editing");
 };
@@ -2502,6 +2534,11 @@ commandInput.addEventListener("keydown", (event) => {
     return;
   }
   const shortcutKey = event.key.toLowerCase();
+  if ((event.metaKey || event.ctrlKey) && !event.altKey && shortcutKey === "z") {
+    event.preventDefault();
+    undoComposerInput();
+    return;
+  }
   if ((event.metaKey || event.ctrlKey) && !event.altKey && ["x", "c", "v"].includes(shortcutKey)) {
     void handleComposerClipboardShortcut(event);
     return;
@@ -2520,6 +2557,10 @@ commandInput.addEventListener("keydown", (event) => {
   }
 });
 
+commandInput.addEventListener("input", () => {
+  pushComposerUndoSnapshot();
+});
+
 commandForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (turnBusy) {
@@ -2533,6 +2574,7 @@ commandForm.addEventListener("submit", async (event) => {
   try {
     await addMessage("user", value);
     commandInput.value = "";
+    resetComposerUndoStack("");
     await respondToCommand(value);
   } finally {
     setTurnBusy(false);

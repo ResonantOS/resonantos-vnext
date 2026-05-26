@@ -157,6 +157,8 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(script, /commandInput\.addEventListener\("keydown"/);
   assert.match(script, /commandForm\.requestSubmit\(\)/);
   assert.match(script, /event\.metaKey/);
+  assert.match(script, /undoComposerInput/);
+  assert.match(script, /shortcutKey === "z"/);
   assert.match(script, /forkFromMessage/);
   assert.match(script, /editMessage/);
   assert.match(script, /saveMessageToArchive/);
@@ -212,11 +214,14 @@ test("browser layer can read active tab context without raw privileged access", 
 test("browser-first host is a runnable app path, not documentation-only scaffolding", async () => {
   const packageJson = await readJson(path.join(repoRoot, "package.json"));
   const launcher = await readText(path.join(browserFirstRoot, "host", "run-browser-first.mjs"));
+  const installer = await readText(path.join(repoRoot, "scripts", "install-browser-first-app.mjs"));
   const nativeHost = await readText(
     path.join(repoRoot, "addons", "resonant-browser-native", "native_host", "src", "resonant_browser_native_host.cc"),
   );
 
   assert.match(packageJson.scripts["browser-first:dev"], /run-browser-first\.mjs/);
+  assert.match(packageJson.scripts["browser-first:install"], /install-browser-first-app\.mjs/);
+  assert.match(installer, /ResonantOS Browser\.app/);
   assert.match(launcher, /--resonantos-browser-first/);
   assert.match(launcher, /resonantos-side-panel-extension/);
   assert.match(launcher, /bfnaelmomeimhlpmgjnjophhpkkoljpa/);
@@ -252,6 +257,9 @@ test("browser-first host is a runnable app path, not documentation-only scaffold
   assert.match(launcher, /keystroke \\"a\\" using \{option down, shift down\}/);
   assert.match(nativeHost, /resonantos-browser-first/);
   assert.match(nativeHost, /resonantos-remote-debugging-port/);
+  assert.match(nativeHost, /CefKeyboardHandler/);
+  assert.match(nativeHost, /EVENTFLAG_COMMAND_DOWN/);
+  assert.match(nativeHost, /windows_key_code == 'Q'/);
   assert.match(nativeHost, /browser\.first\.started/);
   assert.match(nativeHost, /resonantos-user-data-dir/);
 });

@@ -276,13 +276,19 @@ try {
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "v", metaKey: true, bubbles: true, cancelable: true }));
     await new Promise((resolve) => setTimeout(resolve, 0));
     const afterMetaV = { submitted, clipboardText, value: input.value };
+    input.value = "undo baseline";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.value = "undo baseline plus";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "z", metaKey: true, bubbles: true, cancelable: true }));
+    const afterMetaZ = { submitted, value: input.value };
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", shiftKey: true, bubbles: true, cancelable: true }));
     const afterShiftEnter = { submitted, value: input.value };
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true, cancelable: true }));
     const afterMetaEnter = { submitted, value: input.value };
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
     form.requestSubmit = originalRequestSubmit;
-    return { afterMetaA, afterMetaC, afterMetaX, afterMetaV, afterShiftEnter, afterMetaEnter, submitted };
+    return { afterMetaA, afterMetaC, afterMetaX, afterMetaV, afterMetaZ, afterShiftEnter, afterMetaEnter, submitted };
   })()`)).result.value;
   assert(shortcutState.afterMetaA.selectionStart === 0, `Command+A should select from start: ${JSON.stringify(shortcutState)}`);
   assert(shortcutState.afterMetaA.selectionEnd === shortcutState.afterMetaA.value.length, `Command+A should select full composer text: ${JSON.stringify(shortcutState)}`);
@@ -291,6 +297,7 @@ try {
   assert(shortcutState.afterMetaX.clipboardText === "first", `Command+X should cut selected composer text: ${JSON.stringify(shortcutState)}`);
   assert(shortcutState.afterMetaX.value === " line", `Command+X should remove selected composer text: ${JSON.stringify(shortcutState)}`);
   assert(shortcutState.afterMetaV.value === "first line", `Command+V should paste at the composer cursor: ${JSON.stringify(shortcutState)}`);
+  assert(shortcutState.afterMetaZ.value === "undo baseline", `Command+Z should undo the last composer edit: ${JSON.stringify(shortcutState)}`);
   assert(!shortcutState.afterShiftEnter.submitted, `Shift+Enter should not submit: ${JSON.stringify(shortcutState)}`);
   assert(!shortcutState.afterMetaEnter.submitted, `Command-modified Enter should not submit: ${JSON.stringify(shortcutState)}`);
   assert(shortcutState.submitted, `Enter should submit the composer: ${JSON.stringify(shortcutState)}`);

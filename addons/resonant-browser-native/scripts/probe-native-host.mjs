@@ -10,6 +10,7 @@ const bridgeMacSourcePath = path.join(root, "native_host", "src", "resonant_brow
 const bridgeSourcePath = path.join(root, "native_host", "src", "resonant_browser_native_bridge.cc");
 const bridgeHeaderPath = path.join(root, "native_host", "include", "resonant_browser_native_bridge.h");
 const cmakePath = path.join(root, "native_host", "CMakeLists.txt");
+const infoPlistTemplatePath = path.join(root, "native_host", "mac", "Info.plist.in");
 
 const contract = JSON.parse(await readFile(contractPath, "utf8"));
 const source = `${await readFile(sourcePath, "utf8")}\n${await readFile(macSourcePath, "utf8")}\n${await readFile(
@@ -19,6 +20,7 @@ const source = `${await readFile(sourcePath, "utf8")}\n${await readFile(macSourc
 const bridgeSource = await readFile(bridgeSourcePath, "utf8");
 const bridgeHeader = await readFile(bridgeHeaderPath, "utf8");
 const cmake = await readFile(cmakePath, "utf8");
+const infoPlistTemplate = await readFile(infoPlistTemplatePath, "utf8");
 
 const requiredSourceMarkers = [
   "enable-chrome-runtime",
@@ -37,6 +39,8 @@ const requiredSourceMarkers = [
   "browser.native.bridge_probe",
   "browser.native.extension.pin",
   "browser.native.wallet.confirmation_state",
+  "CefKeyboardHandler",
+  "EVENTFLAG_COMMAND_DOWN",
   "resonant_browser_native_prepare_macos_application_json",
   "resonant_browser_native_initialize_json",
   "resonant_browser_native_attach_macos_ns_view_json",
@@ -71,6 +75,14 @@ if (!cmake.includes("CEF_ROOT")) {
 
 if (!cmake.includes("MACOSX_BUNDLE")) {
   failures.push("Native host CMake project must declare a macOS bundle target.");
+}
+
+if (!infoPlistTemplate.includes("<string>ResonantBrowserNativeHost</string>")) {
+  failures.push("Native host Info.plist must declare the concrete app executable.");
+}
+
+if (!infoPlistTemplate.includes("<string>ResonantOS Browser</string>")) {
+  failures.push("Native host Info.plist must declare the installable app name.");
 }
 
 for (const marker of ["CEF_HELPER_APP_SUFFIXES", "process_helper_mac.cc", "COPY_MAC_FRAMEWORK"]) {

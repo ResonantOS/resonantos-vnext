@@ -24,6 +24,7 @@
 #include "include/cef_client.h"
 #include "include/cef_command_line.h"
 #include "include/cef_display_handler.h"
+#include "include/cef_keyboard_handler.h"
 #include "include/cef_request_context.h"
 #include "include/cef_task.h"
 #include "include/wrapper/cef_helpers.h"
@@ -168,12 +169,14 @@ class OpenAugmentorSidePanelTask final : public CefTask {
 
 class ResonantBrowserClient final : public CefClient,
                                     public CefDisplayHandler,
+                                    public CefKeyboardHandler,
                                     public CefLifeSpanHandler,
                                     public CefLoadHandler {
  public:
   ResonantBrowserClient() = default;
 
   CefRefPtr<CefDisplayHandler> GetDisplayHandler() override { return this; }
+  CefRefPtr<CefKeyboardHandler> GetKeyboardHandler() override { return this; }
   CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override { return this; }
   CefRefPtr<CefLoadHandler> GetLoadHandler() override { return this; }
 
@@ -184,6 +187,28 @@ class ResonantBrowserClient final : public CefClient,
 
   bool DoClose(CefRefPtr<CefBrowser> browser) override {
     CEF_REQUIRE_UI_THREAD();
+    return false;
+  }
+
+  bool OnPreKeyEvent(CefRefPtr<CefBrowser> browser,
+                     const CefKeyEvent& event,
+                     CefEventHandle os_event,
+                     bool* is_keyboard_shortcut) override {
+    CEF_REQUIRE_UI_THREAD();
+    (void)browser;
+    (void)os_event;
+    if (event.type == KEYEVENT_RAWKEYDOWN &&
+        (event.modifiers & EVENTFLAG_COMMAND_DOWN) != 0 &&
+        (event.modifiers & EVENTFLAG_ALT_DOWN) == 0 &&
+        (event.modifiers & EVENTFLAG_CONTROL_DOWN) == 0 &&
+        (event.modifiers & EVENTFLAG_SHIFT_DOWN) == 0 &&
+        (event.windows_key_code == 'Q' || event.windows_key_code == 'q')) {
+      if (is_keyboard_shortcut) {
+        *is_keyboard_shortcut = true;
+      }
+      CefQuitMessageLoop();
+      return true;
+    }
     return false;
   }
 
