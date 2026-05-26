@@ -16,9 +16,18 @@ const hostBinary = path.join(
   "ResonantBrowserNativeHost",
 );
 const resonantExtensionId = "cdpdmmalhmokbfcfgogoepnjplaakgnl";
-const fixturePort = 18997;
-const debugPort = 9333;
-const bridgePort = 47773;
+async function freeLoopbackPort() {
+  const server = http.createServer();
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  const port = typeof address === "object" && address ? address.port : 0;
+  await new Promise((resolve) => server.close(resolve));
+  return port;
+}
+
+const fixturePort = await freeLoopbackPort();
+const debugPort = await freeLoopbackPort();
+const bridgePort = await freeLoopbackPort();
 
 class CdpClient {
   constructor(url) {
@@ -122,7 +131,7 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-async function waitForDebugPort() {
+async function waitForDebugPort(getHostLogs = () => "") {
   for (let index = 0; index < 60; index += 1) {
     try {
       return await fetch(`http://127.0.0.1:${debugPort}/json/version`).then((response) => response.json());
@@ -130,7 +139,7 @@ async function waitForDebugPort() {
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
   }
-  throw new Error("Browser debug port did not become available.");
+  throw new Error(`Browser debug port ${debugPort} did not become available. Host logs:\n${getHostLogs()}`);
 }
 
 async function openExtensionPanel() {
@@ -220,7 +229,7 @@ host.stdout.on("data", (chunk) => { hostLogs += chunk.toString(); });
 host.stderr.on("data", (chunk) => { hostLogs += chunk.toString(); });
 
 try {
-  await waitForDebugPort();
+  await waitForDebugPort(() => hostLogs);
   const panelTarget = await openExtensionPanel();
   const targets = await browserTargets();
   const fixtureTarget = targets.find((target) => target.url.startsWith(`http://127.0.0.1:${fixturePort}/`));
@@ -331,12 +340,21 @@ try {
   })`)).result.value;
   assert(dockCollapsedState.siteHidden && dockCollapsedState.jobsHidden, `Site/jobs panels should be hidden by default: ${JSON.stringify(dockCollapsedState)}`);
   await evaluate(panel, `document.querySelector("#context-toggle").click()`);
-  const sitePanelState = (await evaluate(panel, `({
+  const sitePanelState = await waitForPageCondition(panel, `(() => {
+    const state = {
+      visible: !document.querySelector("#site-permission-panel").hidden,
+      host: document.querySelector("#site-permission-host").textContent,
+      mode: document.querySelector("#site-permission-mode").value
+    };
+    return state.visible && state.host === "127.0.0.1" ? state : false;
+  })()`, "site permission panel binding");
+  assert(sitePanelState.visible && sitePanelState.host === "127.0.0.1", `Site permission panel not bound: ${JSON.stringify(sitePanelState)}`);
+  const sitePanelMode = (await evaluate(panel, `({
     visible: !document.querySelector("#site-permission-panel").hidden,
     host: document.querySelector("#site-permission-host").textContent,
     mode: document.querySelector("#site-permission-mode").value
   })`)).result.value;
-  assert(sitePanelState.visible && sitePanelState.host === "127.0.0.1", `Site permission panel not bound: ${JSON.stringify(sitePanelState)}`);
+  assert(sitePanelMode.mode, `Site permission panel mode missing: ${JSON.stringify(sitePanelMode)}`);
   await submitControlCommand(panel, `/capabilities`);
   await waitForPanelText(panel, /What Augmentor can do now:/, "capabilities command");
   await submitControlCommand(panel, `/site block`);

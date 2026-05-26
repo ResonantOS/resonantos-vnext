@@ -4,7 +4,12 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { spawn } from "node:child_process";
-import http from "node:http";
+import {
+  createBridgeToken,
+  runBridgeAuthSelfTest,
+  startBridgeServer,
+  writeBridgeConfig,
+} from "./bridge-server.mjs";
 
 const repoRoot = path.resolve(import.meta.dirname, "..", "..");
 const hostBinary = path.join(
@@ -22,6 +27,7 @@ const defaultProfile = path.join(os.homedir(), "ResonantOS_User", "BrowserFirst"
 const phantomExtensionId = "bfnaelmomeimhlpmgjnjophhpkkoljpa";
 const resonantExtensionId = "cdpdmmalhmokbfcfgogoepnjplaakgnl";
 const defaultBridgePort = 47773;
+const resonantExtensionOrigin = `chrome-extension://${resonantExtensionId}`;
 
 function parseArgs(argv) {
   const parsed = new Map();
@@ -251,38 +257,6 @@ function decodeXmlEntities(value) {
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'");
-}
-
-function readJsonBody(request) {
-  return new Promise((resolve, reject) => {
-    let body = "";
-    request.setEncoding("utf8");
-    request.on("data", (chunk) => {
-      body += chunk;
-      if (body.length > 1_000_000) {
-        reject(new Error("Request body is too large."));
-        request.destroy();
-      }
-    });
-    request.on("end", () => {
-      try {
-        resolve(body.trim() ? JSON.parse(body) : {});
-      } catch (error) {
-        reject(error);
-      }
-    });
-    request.on("error", reject);
-  });
-}
-
-function writeJson(response, status, payload) {
-  response.writeHead(status, {
-    "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type",
-    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-  });
-  response.end(JSON.stringify(payload));
 }
 
 async function executeBridgeChat(payload) {
@@ -1033,82 +1007,34 @@ async function executeSystemStatus() {
   };
 }
 
-async function startBridgeServer(port) {
-  const server = http.createServer(async (request, response) => {
-    try {
-      if (request.method === "OPTIONS") {
-        writeJson(response, 204, {});
-        return;
-      }
-      if (request.method === "GET" && request.url === "/status") {
-        writeJson(response, 200, { ok: true, ...(await executeSystemStatus()) });
-        return;
-      }
-      if (request.method === "POST" && request.url === "/augmentor/chat") {
-        const payload = await readJsonBody(request);
-        const result = await executeBridgeChat(payload);
-        writeJson(response, 200, { ok: true, ...result });
-        return;
-      }
-      if (request.method === "POST" && request.url === "/augmentor/inline") {
-        const payload = await readJsonBody(request);
-        const result = await executeInlineAssistant(payload);
-        writeJson(response, 200, { ok: true, ...result });
-        return;
-      }
-      if (request.method === "POST" && request.url === "/augmentor/control-plan") {
-        const payload = await readJsonBody(request);
-        const result = await executeControlPlan(payload);
-        writeJson(response, 200, { ok: true, ...result });
-        return;
-      }
-      if (request.method === "POST" && request.url === "/augmentor/next-action") {
-        const payload = await readJsonBody(request);
-        const result = await executeNextAction(payload);
-        writeJson(response, 200, { ok: true, ...result });
-        return;
-      }
-      if (request.method === "GET" && request.url === "/memory/status") {
-        writeJson(response, 200, { ok: true, ...(await executeMemoryStatus()) });
-        return;
-      }
-      if (request.method === "POST" && request.url === "/memory/search") {
-        writeJson(response, 200, { ok: true, ...(await executeMemorySearch(await readJsonBody(request))) });
-        return;
-      }
-      if (request.method === "POST" && request.url === "/archive/intake") {
-        writeJson(response, 200, { ok: true, ...(await executeArchiveIntake(await readJsonBody(request))) });
-        return;
-      }
-      if (request.method === "GET" && request.url === "/addons/status") {
-        writeJson(response, 200, { ok: true, ...(await executeAddonsStatus()) });
-        return;
-      }
-      if (request.method === "POST" && request.url === "/web/news") {
-        writeJson(response, 200, { ok: true, ...(await executeNewsSearch(await readJsonBody(request))) });
-        return;
-      }
-      if (request.method === "POST" && request.url === "/addons/delegate") {
-        writeJson(response, 200, { ok: true, ...(await executeDelegationRecord(await readJsonBody(request))) });
-        return;
-      }
-      if (request.method === "POST" && request.url === "/goals") {
-        writeJson(response, 200, { ok: true, ...(await executeGoalRecord(await readJsonBody(request))) });
-        return;
-      }
-      writeJson(response, 404, { ok: false, error: "Unknown browser-first bridge route." });
-    } catch (error) {
-      writeJson(response, 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
-    }
-  });
-  await new Promise((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(port, "127.0.0.1", resolve);
-  });
-  return server;
-}
+const bridgeRoutes = [
+  { method: "GET", path: "/status", handler: executeSystemStatus },
+  { method: "POST", path: "/augmentor/chat", handler: executeBridgeChat },
+  { method: "POST", path: "/augmentor/inline", handler: executeInlineAssistant },
+  { method: "POST", path: "/augmentor/control-plan", handler: executeControlPlan },
+  { method: "POST", path: "/augmentor/next-action", handler: executeNextAction },
+  { method: "GET", path: "/memory/status", handler: executeMemoryStatus },
+  { method: "POST", path: "/memory/search", handler: executeMemorySearch },
+  { method: "POST", path: "/archive/intake", handler: executeArchiveIntake },
+  { method: "GET", path: "/addons/status", handler: executeAddonsStatus },
+  { method: "POST", path: "/web/news", handler: executeNewsSearch },
+  { method: "POST", path: "/addons/delegate", handler: executeDelegationRecord },
+  { method: "POST", path: "/goals", handler: executeGoalRecord },
+];
 
 const args = parseArgs(process.argv.slice(2));
+const bridgeToken = args.get("bridge-token") ?? process.env.RESONANTOS_BROWSER_FIRST_BRIDGE_TOKEN ?? createBridgeToken();
+
+if (args.get("bridge-auth-self-test") === "true") {
+  const result = await runBridgeAuthSelfTest({
+    port: Number(args.get("bridge-port") ?? 0),
+    bridgeToken,
+    extensionOrigin: resonantExtensionOrigin,
+  });
+  console.log(JSON.stringify(result, null, 2));
+  process.exit(result.ok ? 0 : 1);
+}
+
 const url = args.get("url") ?? "https://resonantos.com";
 const profileDir = path.resolve(args.get("profile") ?? process.env.RESONANTOS_BROWSER_FIRST_PROFILE ?? defaultProfile);
 const autoOpenSidePanel = args.get("auto-open-side-panel") !== "false";
@@ -1128,6 +1054,7 @@ if (!existsSync(path.join(resonantExtension, "manifest.json"))) {
 
 await mkdir(profileDir, { recursive: true });
 await removeCachedUnpackedExtension(profileDir, resonantExtensionId);
+const bridgeConfigPath = await writeBridgeConfig({ extensionRoot: resonantExtension, bridgePort, bridgeToken });
 
 const extensionDirs = [resonantExtension];
 const phantomExtension = findPhantomExtension();
@@ -1136,7 +1063,12 @@ if (phantomExtension) {
 }
 
 await seedPinnedExtensions(profileDir, [resonantExtensionId, phantomExtension ? phantomExtensionId : null]);
-const bridgeServer = await startBridgeServer(bridgePort);
+const bridgeServer = await startBridgeServer({
+  port: bridgePort,
+  bridgeToken,
+  extensionOrigin: resonantExtensionOrigin,
+  routes: bridgeRoutes,
+});
 
 const hostArgs = [
   "--resonantos-browser-first",
@@ -1147,7 +1079,7 @@ const hostArgs = [
 ];
 
 console.log("Launching ResonantOS Browser-First host");
-console.log(JSON.stringify({ hostBinary, url, profileDir, extensionDirs, phantomLoaded: Boolean(phantomExtension), pinnedExtensions: [resonantExtensionId, phantomExtension ? phantomExtensionId : null].filter(Boolean), bridgeUrl: `http://127.0.0.1:${bridgePort}`, remoteDebuggingPort: remoteDebuggingPort ?? "ephemeral" }, null, 2));
+console.log(JSON.stringify({ hostBinary, url, profileDir, extensionDirs, phantomLoaded: Boolean(phantomExtension), pinnedExtensions: [resonantExtensionId, phantomExtension ? phantomExtensionId : null].filter(Boolean), bridgeUrl: `http://127.0.0.1:${bridgePort}`, bridgeConfigPath, remoteDebuggingPort: remoteDebuggingPort ?? "ephemeral" }, null, 2));
 
 const child = spawn(hostBinary, hostArgs, {
   cwd: repoRoot,

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
 import path from "node:path";
 import test from "node:test";
 
@@ -65,6 +66,7 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   const background = await readText(path.join(extensionRoot, "src", "background.js"));
 
   assert.match(panel, /Message Augmentor/);
+  assert.match(panel, /bridge-config\.generated\.js/);
   assert.match(panel, /control-monitor/);
   assert.match(panel, /context-dock"[^>]+hidden/);
   assert.match(panel, /context-toggle/);
@@ -87,7 +89,9 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(script, /currentWindow: true/);
   assert.match(script, /summarizeSnapshot/);
   assert.match(script, /saveIntake/);
-  assert.match(script, /BRIDGE_URL = "http:\/\/127\.0\.0\.1:47773"/);
+  assert.match(script, /BRIDGE_URL = BRIDGE_CONFIG\.bridgeUrl \?\? "http:\/\/127\.0\.0\.1:47773"/);
+  assert.match(script, /__RESONANTOS_BRIDGE_CONFIG__/);
+  assert.match(script, /X-ResonantOS-Bridge-Token/);
   assert.match(script, /jobMonitorCollapsed = true/);
   assert.match(script, /\/augmentor\/chat/);
   assert.match(script, /\/archive\/intake/);
@@ -214,6 +218,7 @@ test("browser layer can read active tab context without raw privileged access", 
 test("browser-first host is a runnable app path, not documentation-only scaffolding", async () => {
   const packageJson = await readJson(path.join(repoRoot, "package.json"));
   const launcher = await readText(path.join(browserFirstRoot, "host", "run-browser-first.mjs"));
+  const bridgeServer = await readText(path.join(browserFirstRoot, "host", "bridge-server.mjs"));
   const installer = await readText(path.join(repoRoot, "scripts", "install-browser-first-app.mjs"));
   const nativeHost = await readText(
     path.join(repoRoot, "addons", "resonant-browser-native", "native_host", "src", "resonant_browser_native_host.cc"),
@@ -230,6 +235,13 @@ test("browser-first host is a runnable app path, not documentation-only scaffold
   assert.match(launcher, /auto-open-side-panel/);
   assert.match(launcher, /remote-debugging-port/);
   assert.match(launcher, /resonantos-remote-debugging-port/);
+  assert.match(launcher, /createBridgeToken/);
+  assert.match(launcher, /writeBridgeConfig/);
+  assert.match(launcher, /startBridgeServer/);
+  assert.match(bridgeServer, /bridge-config\.generated\.js/);
+  assert.match(bridgeServer, /X-ResonantOS-Bridge-Token/);
+  assert.match(bridgeServer, /Unauthorized browser-first bridge request/);
+  assert.doesNotMatch(bridgeServer, /Access-Control-Allow-Origin": "\*"/);
   assert.match(launcher, /provider-secrets\.json/);
   assert.match(launcher, /\/augmentor\/chat/);
   assert.match(launcher, /\/augmentor\/inline/);
@@ -262,4 +274,28 @@ test("browser-first host is a runnable app path, not documentation-only scaffold
   assert.match(nativeHost, /windows_key_code == 'Q'/);
   assert.match(nativeHost, /browser\.first\.started/);
   assert.match(nativeHost, /resonantos-user-data-dir/);
+});
+
+test("browser-first bridge rejects unauthenticated localhost requests", () => {
+  const result = spawnSync(
+    "node",
+    [
+      path.join(browserFirstRoot, "host", "run-browser-first.mjs"),
+      "--bridge-auth-self-test=true",
+      "--bridge-token=test-token",
+      "--bridge-port=0",
+    ],
+    {
+      cwd: repoRoot,
+      encoding: "utf8",
+      timeout: 10_000,
+    },
+  );
+
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.ok, true);
+  assert.equal(payload.unauthorizedStatus, 401);
+  assert.equal(payload.wrongTokenStatus, 401);
+  assert.equal(payload.authorizedStatus, 200);
 });

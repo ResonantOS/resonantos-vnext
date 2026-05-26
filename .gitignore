@@ -43,6 +43,9 @@ yarn-error.log*
 coverage/
 tmp/
 
+# Browser-first generated session material
+browser-first/resonantos-side-panel-extension/src/bridge-config.generated.js
+
 # IDE/editor local state
 .idea/
 .vscode/

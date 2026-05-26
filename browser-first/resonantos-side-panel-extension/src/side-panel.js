@@ -37,7 +37,9 @@ const approvalTrustSiteButton = document.querySelector("#approval-trust-site");
 const approvalDenyButton = document.querySelector("#approval-deny");
 const approvalDelegateButton = document.querySelector("#approval-delegate");
 
-const BRIDGE_URL = "http://127.0.0.1:47773";
+const BRIDGE_CONFIG = globalThis.__RESONANTOS_BRIDGE_CONFIG__ ?? {};
+const BRIDGE_URL = BRIDGE_CONFIG.bridgeUrl ?? "http://127.0.0.1:47773";
+const BRIDGE_TOKEN = BRIDGE_CONFIG.bridgeToken ?? "";
 const STORAGE_KEYS = {
   messages: "augmentorBrowserMessages",
   forks: "augmentorBrowserForks",
@@ -537,9 +539,13 @@ const persistChatState = async () => {
 };
 
 const bridgeRequest = async (route, options = {}) => {
+  const headers = options.body ? { "Content-Type": "application/json" } : {};
+  if (BRIDGE_TOKEN) {
+    headers["X-ResonantOS-Bridge-Token"] = BRIDGE_TOKEN;
+  }
   const response = await fetch(`${BRIDGE_URL}${route}`, {
     method: options.method ?? "GET",
-    headers: options.body ? { "Content-Type": "application/json" } : undefined,
+    headers,
     body: options.body ? JSON.stringify(options.body) : undefined
   });
   const payload = await response.json().catch(() => ({}));
@@ -1068,7 +1074,9 @@ const sendContentAction = async (payload) => {
     ...payload
   };
   const firstAttempt = await sendContentActionToFrames(tab.id, message);
-  if (firstAttempt?.ok || !/receiving end|connection/i.test(firstAttempt?.error ?? "")) {
+  const shouldInjectContentScript = !firstAttempt?.ok &&
+    /receiving end|connection|No readable frame returned page context/i.test(firstAttempt?.error ?? "");
+  if (firstAttempt?.ok || !shouldInjectContentScript) {
     return firstAttempt;
   }
   if (chrome.scripting?.executeScript) {

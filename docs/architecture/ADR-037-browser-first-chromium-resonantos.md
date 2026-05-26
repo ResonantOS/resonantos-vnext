@@ -41,6 +41,9 @@ Comet’s public documentation describes Comet as Chromium-based and Chrome-exte
 - Phantom Wallet must run in the same browser profile and browser chrome as the human’s active tab.
 - Wallet approvals, signatures, seed/export flows, password-manager actions, and public submissions remain human-only approval gates.
 - AI control must use typed, auditable browser tools. No raw CDP, raw filesystem, raw extension, or raw credential access is exposed to add-ons or chat commands.
+- The browser-to-ResonantOS bridge must not accept unauthenticated localhost requests. The preview implementation uses a per-session bridge token and restricted CORS.
+- Production wallet/DAO release requires replacing the preview localhost token bridge with native messaging, signed IPC, or an equivalent authenticated browser-shell channel. This is a **P1 pre-release security gate**, not optional cleanup.
+- The preview token bridge may be used for local development and internal testing, but it must be labelled as insufficient against same-user local malware.
 
 ## Product Shape
 
@@ -93,6 +96,20 @@ Phase 3 moves privileged ResonantOS services behind native host boundaries:
 - add-on service manager
 - wallet/signing audit monitor
 - typed browser tools exposed to Augmentor
+- native messaging or signed IPC for the browser-to-host bridge before public wallet/DAO readiness
+
+## Current Preview Bridge
+
+The current browser-first preview launches a local bridge server on loopback and writes a per-session bridge config for the bundled ResonantOS side-panel extension.
+
+Binding rules for this preview bridge:
+
+- every non-`OPTIONS` bridge route must require `X-ResonantOS-Bridge-Token`
+- requests without the correct token must return `401`
+- bridge responses must not use wildcard CORS
+- generated bridge config is session material and must not be committed
+- the bridge token reduces accidental and web-origin localhost abuse, but it is not a defense against malware already running as the same OS user
+- public wallet/DAO readiness remains blocked until native messaging, signed IPC, or an equivalent authenticated browser-shell channel replaces this preview bridge
 
 ## Required Interfaces
 
@@ -132,6 +149,8 @@ The browser-first product is not complete until deterministic tests prove:
 - wallet connection and signing requests are surfaced as human approval gates
 - Augmentor can read and navigate the active tab through typed tools
 - Augmentor cannot approve/sign/export/reveal wallet material
+- unauthenticated localhost requests to the browser bridge are rejected
+- production bridge traffic uses native messaging, signed IPC, or an equivalent authenticated browser-shell channel before wallet/DAO release
 - Living Archive and add-ons receive scoped browser artifacts only through mediated APIs
 - macOS, Windows, and Linux builds are reproducible
 

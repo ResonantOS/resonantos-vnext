@@ -161,6 +161,14 @@ This map defines which folder owns which feature area so contributors do not kee
   - capability-gated network/UI embedding/browser-control state
   - Browser engine action reference: `docs/architecture/ADR-017-resonant-browser-addon.md`
 
+- `browser-first/`
+  - browser-first Chromium product preview from `docs/architecture/ADR-037-browser-first-chromium-resonantos.md`
+  - `host/run-browser-first.mjs` owns browser-first launch orchestration, extension discovery, route registration, and host process lifecycle
+  - `host/bridge-server.mjs` owns loopback bridge authentication, JSON routing, generated side-panel bridge config, and bridge auth self-test
+  - `resonantos-side-panel-extension/` owns the Augmentor browser side-panel UI, page content bridge, and browser-control extension layer
+  - generated `resonantos-side-panel-extension/src/bridge-config.generated.js` is session material and must not be committed
+  - preview bridge rule: per-session token is acceptable for internal testing, but ADR-037 requires native messaging, signed IPC, or equivalent authenticated browser-shell IPC before public wallet/DAO readiness
+
 - `src/modules/paperclip/`
   - Paperclip optional add-on workspace
   - local endpoint status and connection controls
