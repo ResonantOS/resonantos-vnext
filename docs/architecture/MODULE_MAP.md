@@ -171,6 +171,7 @@ This map defines which folder owns which feature area so contributors do not kee
   - `resonantos-side-panel-extension/src/lib/approval-policy.js` owns planner/next-action sanitization and human approval boundary classification
   - `resonantos-side-panel-extension/src/lib/agent-control-planner.js` owns pure Agent Control step labels, deterministic plan generation, dedupe, and fallback next-action selection
   - `resonantos-side-panel-extension/src/lib/agent-control-runner.js` owns the dependency-injected observe/decide/act/verify Agent Control loop and approval continuation/denial flow
+  - `resonantos-side-panel-extension/src/lib/browser-page-actions.js` owns dependency-injected browser page actions: tab selection, navigation, search, frame reads, content-script injection fallback, click/type/scroll/form operations, and page summarization
   - generated `resonantos-side-panel-extension/src/bridge-config.generated.js` is session material and must not be committed
   - preview bridge rule: per-session token is acceptable for internal testing, but ADR-037 requires native messaging, signed IPC, or equivalent authenticated browser-shell IPC before public wallet/DAO readiness
 

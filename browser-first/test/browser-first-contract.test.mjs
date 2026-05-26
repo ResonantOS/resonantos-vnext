@@ -68,6 +68,7 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   const approvalPolicy = await readText(path.join(extensionRoot, "src", "lib", "approval-policy.js"));
   const agentControlPlanner = await readText(path.join(extensionRoot, "src", "lib", "agent-control-planner.js"));
   const agentControlRunner = await readText(path.join(extensionRoot, "src", "lib", "agent-control-runner.js"));
+  const pageActions = await readText(path.join(extensionRoot, "src", "lib", "browser-page-actions.js"));
   const background = await readText(path.join(extensionRoot, "src", "background.js"));
 
   assert.match(panel, /Message Augmentor/);
@@ -91,8 +92,8 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.doesNotMatch(background, /chrome\.tabs\.create/);
   assert.doesNotMatch(background, /chrome\.tabs\.onUpdated/);
   assert.match(script, /isReadableBrowserTab/);
-  assert.match(script, /currentWindow: true/);
-  assert.match(script, /summarizeSnapshot/);
+  assert.match(pageActions, /currentWindow: true/);
+  assert.match(pageActions, /summarizeSnapshot/);
   assert.match(script, /saveIntake/);
   assert.match(script, /createBridgeClient/);
   assert.match(bridgeClient, /bridgeUrl = config\.bridgeUrl \?\? "http:\/\/127\.0\.0\.1:47773"/);
@@ -134,11 +135,11 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(script, /sitePermissionMode\.addEventListener/);
   assert.match(script, /resolveTabMention/);
   assert.match(script, /augmentorInlineDraft/);
-  assert.match(script, /searchBrowser/);
-  assert.match(script, /typeIntoActivePage/);
-  assert.match(script, /clickActivePageText/);
-  assert.match(script, /scrollActivePage/);
-  assert.match(script, /detectActivePageForms/);
+  assert.match(pageActions, /searchBrowser/);
+  assert.match(pageActions, /typeIntoActivePage/);
+  assert.match(pageActions, /clickActivePageText/);
+  assert.match(pageActions, /scrollActivePage/);
+  assert.match(pageActions, /detectActivePageForms/);
   assert.match(script, /controlledTabId/);
   assert.match(script, /switch_tab/);
   assert.match(agentControlPlanner, /List open tabs/);
@@ -163,13 +164,13 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(script, /delegateControlIssue/);
   assert.match(agentControlRunner, /Agent Control Mode started/);
   assert.match(script, /explainStructuredPageEditBoundary/);
-  assert.match(script, /bing\.com\/news\/search/);
-  assert.match(script, /\/web\/news/);
+  assert.match(pageActions, /bing\.com\/news\/search/);
+  assert.match(pageActions, /\/web\/news/);
   assert.match(script, /turnBusy/);
   assert.match(script, /setActivity/);
-  assert.match(script, /openBrowserUrl/);
-  assert.match(script, /chrome\.tabs\.update/);
-  assert.match(script, /chrome\.tabs\.create/);
+  assert.match(pageActions, /openBrowserUrl/);
+  assert.match(pageActions, /chrome\.tabs\.update/);
+  assert.match(pageActions, /chrome\.tabs\.create/);
   assert.match(script, /copyMessage/);
   assert.match(script, /commandInput\.addEventListener\("keydown"/);
   assert.match(script, /commandForm\.requestSubmit\(\)/);
@@ -187,6 +188,7 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
 test("browser layer can read active tab context without raw privileged access", async () => {
   const content = await readText(path.join(extensionRoot, "src", "content.js"));
   const panel = await readText(path.join(extensionRoot, "src", "side-panel.js"));
+  const pageActions = await readText(path.join(extensionRoot, "src", "lib", "browser-page-actions.js"));
 
   assert.match(content, /read_page/);
   assert.match(content, /click_text/);
@@ -219,11 +221,11 @@ test("browser layer can read active tab context without raw privileged access", 
   assert.match(content, /approvalRequired/);
   assert.match(content, /document\.body\?\.innerText/);
   assert.match(content, /phantomSolana/);
-  assert.match(panel, /chrome\.tabs\.sendMessage/);
-  assert.match(panel, /chrome\.scripting/);
-  assert.match(panel, /executeScript/);
-  assert.match(panel, /chrome\.webNavigation/);
-  assert.match(panel, /mergeFrameSnapshots/);
+  assert.match(pageActions, /chrome\.tabs\.sendMessage/);
+  assert.match(pageActions, /chrome\.scripting/);
+  assert.match(pageActions, /executeScript/);
+  assert.match(pageActions, /chrome\.webNavigation/);
+  assert.match(pageActions, /mergeFrameSnapshots/);
   assert.doesNotMatch(content, /eval\(/);
   assert.doesNotMatch(panel, /eval\(/);
 });
