@@ -1,4 +1,6 @@
 const controlRefAttribute = "data-resonantos-control-ref";
+const inlineAssistantId = "resonantos-inline-assistant";
+const inlineButtonId = "resonantos-inline-button";
 let nextControlRef = 1;
 
 const ensureControlRef = (element) => {
@@ -274,6 +276,222 @@ const scrollPage = ({ direction = "down", amount = 720 } = {}) => {
     maxScrollY: Math.max(0, document.documentElement.scrollHeight - window.innerHeight)
   };
 };
+
+const inlineStyles = `
+  #${inlineButtonId}, #${inlineAssistantId} { all: initial; color-scheme: dark; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; z-index: 2147483647; }
+  #${inlineButtonId} { position: fixed; display: none; border: 1px solid rgba(36,209,143,.42); border-radius: 999px; background: rgba(5, 12, 9, .94); color: #eafff4; box-shadow: 0 16px 44px rgba(0,0,0,.32); padding: 8px 10px; font: 700 12px/1 ui-sans-serif, system-ui; cursor: pointer; }
+  #${inlineAssistantId} { position: fixed; display: none; width: min(390px, calc(100vw - 24px)); max-height: min(460px, calc(100vh - 24px)); overflow: auto; border: 1px solid rgba(36,209,143,.28); border-radius: 18px; background: linear-gradient(145deg, rgba(8,20,14,.98), rgba(4,8,7,.98)); color: #effaf2; box-shadow: 0 28px 90px rgba(0,0,0,.42); padding: 12px; }
+  #${inlineAssistantId} .ros-inline-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px; }
+  #${inlineAssistantId} strong { font: 800 13px/1.2 ui-sans-serif, system-ui; color:#effaf2; }
+  #${inlineAssistantId} textarea { all: unset; display:block; box-sizing:border-box; width:100%; min-height:54px; margin: 0 0 9px; border:1px solid rgba(255,255,255,.09); border-radius:12px; background: rgba(255,255,255,.045); color:#effaf2; font: 12px/1.38 ui-sans-serif, system-ui; padding:9px; white-space:pre-wrap; }
+  #${inlineAssistantId} button { all: unset; border-radius: 999px; color: #b9cbc0; cursor: pointer; font: 800 11px/1 ui-sans-serif, system-ui; padding: 7px 9px; }
+  #${inlineAssistantId} button:hover { background: rgba(255,255,255,.08); color:#fff; }
+  #${inlineAssistantId} .ros-inline-actions { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
+  #${inlineAssistantId} .ros-inline-result { white-space: pre-wrap; color:#dce9df; font: 12px/1.45 ui-sans-serif, system-ui; background: rgba(255,255,255,.045); border-radius: 12px; padding: 10px; }
+`;
+
+const ensureInlineAssistantUi = () => {
+  if (!document.getElementById("resonantos-inline-styles")) {
+    const style = document.createElement("style");
+    style.id = "resonantos-inline-styles";
+    style.textContent = inlineStyles;
+    document.documentElement.append(style);
+  }
+  let button = document.getElementById(inlineButtonId);
+  if (!button) {
+    button = document.createElement("button");
+    button.id = inlineButtonId;
+    button.type = "button";
+    button.textContent = "Augmentor";
+    button.addEventListener("mousedown", (event) => event.preventDefault());
+    button.addEventListener("click", () => showInlinePanel("summarize"));
+    document.documentElement.append(button);
+  }
+  let panel = document.getElementById(inlineAssistantId);
+  if (!panel) {
+    panel = document.createElement("section");
+    panel.id = inlineAssistantId;
+    panel.innerHTML = `
+      <div class="ros-inline-head">
+        <strong>Augmentor Inline</strong>
+        <button type="button" data-action="close">Close</button>
+      </div>
+      <textarea class="ros-inline-prompt" placeholder="Optional custom instruction for the selected text"></textarea>
+      <div class="ros-inline-actions">
+        <button type="button" data-action="custom">Ask</button>
+        <button type="button" data-action="summarize">Summarize</button>
+        <button type="button" data-action="explain">Explain</button>
+        <button type="button" data-action="fact-check">Fact-check</button>
+        <button type="button" data-action="translate">Translate</button>
+        <button type="button" data-action="rewrite">Rewrite</button>
+        <button type="button" data-action="send">Send to side panel</button>
+        <button type="button" data-action="insert">Insert</button>
+      </div>
+      <div class="ros-inline-result">Select text, then choose an action.</div>
+    `;
+    panel.addEventListener("mousedown", (event) => event.preventDefault());
+    panel.addEventListener("click", (event) => {
+      const action = event.target?.dataset?.action;
+      if (!action) return;
+      if (action === "close") {
+        panel.style.display = "none";
+        return;
+      }
+      void runInlineAction(action);
+    });
+    document.documentElement.append(panel);
+  }
+  return { button, panel };
+};
+
+const currentSelectionDetails = () => {
+  const selection = window.getSelection();
+  const text = selection?.toString?.().trim() ?? "";
+  if (!text) return null;
+  const range = selection.getRangeAt(0);
+  const rect = range.getBoundingClientRect();
+  const active = document.activeElement;
+  return {
+    text,
+    rect,
+    editable: Boolean(active && isEditable(active)),
+    activeRef: active && isEditable(active) ? ensureControlRef(active) : ""
+  };
+};
+
+const currentSitePermission = async () => {
+  const key = location.hostname.replace(/^www\./, "");
+  const stored = await chrome.storage?.local?.get?.("augmentorSitePermissions").catch(() => ({}));
+  return stored?.augmentorSitePermissions?.[key] ?? "ask-before-action";
+};
+
+const positionInlineButton = () => {
+  void currentSitePermission().then((mode) => {
+    if (mode === "blocked") {
+      const { button, panel } = ensureInlineAssistantUi();
+      button.style.display = "none";
+      panel.style.display = "none";
+      return;
+    }
+    const details = currentSelectionDetails();
+    const { button } = ensureInlineAssistantUi();
+    if (!details || details.text.length < 2 || details.rect.width === 0) {
+      button.style.display = "none";
+      return;
+    }
+    button.style.left = `${Math.min(window.innerWidth - 112, Math.max(8, details.rect.left))}px`;
+    button.style.top = `${Math.min(window.innerHeight - 42, Math.max(8, details.rect.bottom + 8))}px`;
+    button.style.display = "block";
+  });
+};
+
+const positionInlineButtonSync = () => {
+  const details = currentSelectionDetails();
+  const { button } = ensureInlineAssistantUi();
+  if (!details || details.text.length < 2 || details.rect.width === 0) {
+    button.style.display = "none";
+    return;
+  }
+  button.style.left = `${Math.min(window.innerWidth - 112, Math.max(8, details.rect.left))}px`;
+  button.style.top = `${Math.min(window.innerHeight - 42, Math.max(8, details.rect.bottom + 8))}px`;
+  button.style.display = "block";
+};
+
+const showInlinePanel = (initialAction = "summarize") => {
+  const details = currentSelectionDetails();
+  const { panel, button } = ensureInlineAssistantUi();
+  if (!details) return;
+  panel.dataset.selection = details.text;
+  panel.dataset.activeRef = details.activeRef;
+  panel.style.left = button.style.left || "12px";
+  panel.style.top = `${Math.min(window.innerHeight - 220, Math.max(8, details.rect.bottom + 12))}px`;
+  panel.style.display = "block";
+  void runInlineAction(initialAction);
+};
+
+const localInlineResult = (action, text) => {
+  const clipped = String(text ?? "").replace(/\s+/g, " ").trim().slice(0, 800);
+  if (action === "custom") return `Apply the custom instruction to this selected text:\n${clipped}`;
+  if (action === "rewrite") return clipped.replace(/\bteh\b/gi, "the").replace(/\bi\b/g, "I");
+  if (action === "fact-check") return `Fact-check this claim with primary sources before relying on it:\n${clipped}`;
+  if (action === "translate") return `Translation requires the configured model. Selected text:\n${clipped}`;
+  if (action === "explain") return `Explanation:\n${clipped}`;
+  return `Summary:\n${clipped}`;
+};
+
+const runInlineAction = async (action) => {
+  const { panel } = ensureInlineAssistantUi();
+  const result = panel.querySelector(".ros-inline-result");
+  const selection = panel.dataset.selection || currentSelectionDetails()?.text || "";
+  if (!selection) {
+    result.textContent = "No selected text is available.";
+    return;
+  }
+  if (action === "send") {
+    await chrome.storage?.local?.set?.({
+      augmentorInlineDraft: {
+        selection,
+        url: location.href,
+        title: document.title,
+        createdAt: new Date().toISOString()
+      }
+    }).catch(() => undefined);
+    result.textContent = "Sent selected context to the Augmentor side panel.";
+    return;
+  }
+  if (action === "insert") {
+    const active = elementByControlRef(panel.dataset.activeRef);
+    if (!active || !isEditable(active)) {
+      result.textContent = "Insertion is only available when the selection came from an editable field.";
+      return;
+    }
+    setNativeValue(active, result.textContent || selection);
+    result.textContent = "Inserted into the active field.";
+    return;
+  }
+  result.textContent = "Thinking...";
+  try {
+    const prompt = panel.querySelector(".ros-inline-prompt")?.value?.trim() ?? "";
+    const response = await fetch("http://127.0.0.1:47773/augmentor/inline", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action,
+        prompt,
+        selection,
+        pageContext: `${document.title}\n${location.href}\n${document.body?.innerText?.slice(0, 3000) ?? ""}`
+      })
+    });
+    const payload = await response.json();
+    result.textContent = payload?.reply || localInlineResult(action, selection);
+  } catch {
+    result.textContent = localInlineResult(action, selection);
+  }
+};
+
+document.addEventListener("selectionchange", () => {
+  window.clearTimeout(globalThis.__resonantosInlineSelectionTimer);
+  globalThis.__resonantosInlineSelectionTimer = window.setTimeout(positionInlineButton, 120);
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    const { button, panel } = ensureInlineAssistantUi();
+    button.style.display = "none";
+    panel.style.display = "none";
+  }
+});
+
+chrome.storage?.onChanged?.addListener((changes, area) => {
+  if (area !== "local" || !changes.augmentorSitePermissions) return;
+  void currentSitePermission().then((mode) => {
+    if (mode === "blocked") {
+      const { button, panel } = ensureInlineAssistantUi();
+      button.style.display = "none";
+      panel.style.display = "none";
+    }
+  });
+});
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!message || message.channel !== "resonantos.browser_first.content") {

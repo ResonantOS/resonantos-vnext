@@ -185,6 +185,16 @@ async function waitForComposerReady(panel, label) {
   throw new Error(`${label} did not return composer readiness. Panel text:\n${text}`);
 }
 
+async function waitForPageCondition(page, expression, label) {
+  for (let index = 0; index < 80; index += 1) {
+    const value = (await evaluate(page, expression)).result.value;
+    if (value) return value;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  const text = (await evaluate(page, "document.body.innerText")).result.value;
+  throw new Error(`${label} did not become true. Page text:\n${text}`);
+}
+
 const server = http.createServer((request, response) => {
   response.writeHead(200, { "content-type": "text/html" });
   response.end(request.url === "/calendar" ? calendarHtml : fixtureHtml);
@@ -231,6 +241,54 @@ try {
   })`);
 
   await evaluate(panel, `chrome.storage.local.clear(); document.querySelector("#transcript").replaceChildren();`);
+  await evaluate(panel, `document.querySelector("#read-page").click()`);
+  await waitForPanelText(panel, /Page context attached:/, "initial content script attachment");
+  await evaluate(page, `(() => {
+    const paragraph = document.querySelector("p");
+    const range = document.createRange();
+    range.selectNodeContents(paragraph);
+    const selection = getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new Event("selectionchange"));
+    return true;
+  })()`);
+  await waitForPageCondition(page, `document.querySelector("#resonantos-inline-button")?.style.display === "block"`, "inline assistant button");
+  await evaluate(page, `document.querySelector("#resonantos-inline-button").click()`);
+  const inlineSummary = await waitForPageCondition(page, `document.querySelector("#resonantos-inline-assistant .ros-inline-result")?.innerText.includes("Summary")`, "inline assistant summary");
+  assert(inlineSummary, "Inline assistant did not produce a summary.");
+  const inlinePromptPresent = (await evaluate(page, `Boolean(document.querySelector("#resonantos-inline-assistant .ros-inline-prompt"))`)).result.value;
+  assert(inlinePromptPresent, "Inline Assistant custom prompt input is missing.");
+  await evaluate(page, `document.querySelector('#resonantos-inline-assistant [data-action="send"]').click()`);
+  await waitForPanelText(panel, /Inline Assistant context received\./, "inline send to side panel");
+  const sitePanelState = (await evaluate(panel, `({
+    visible: !document.querySelector("#site-permission-panel").hidden,
+    host: document.querySelector("#site-permission-host").textContent,
+    mode: document.querySelector("#site-permission-mode").value
+  })`)).result.value;
+  assert(sitePanelState.visible && sitePanelState.host === "127.0.0.1", `Site permission panel not bound: ${JSON.stringify(sitePanelState)}`);
+  await submitControlCommand(panel, `/capabilities`);
+  await waitForPanelText(panel, /What Augmentor can do now:/, "capabilities command");
+  await submitControlCommand(panel, `/site block`);
+  await waitForPanelText(panel, /Set 127\.0\.0\.1 Assistant permission to blocked/, "site block command");
+  const blockedSiteMode = (await evaluate(panel, `document.querySelector("#site-permission-mode").value`)).result.value;
+  assert(blockedSiteMode === "blocked", `Site permission select did not reflect blocked mode: ${blockedSiteMode}`);
+  await evaluate(page, `(() => {
+    const paragraph = document.querySelector("p");
+    const range = document.createRange();
+    range.selectNodeContents(paragraph);
+    const selection = getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new Event("selectionchange"));
+    return true;
+  })()`);
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  const inlineBlocked = (await evaluate(page, `document.querySelector("#resonantos-inline-button")?.style.display !== "block"`)).result.value;
+  assert(inlineBlocked, "Site block did not hide Inline Assistant.");
+  await submitControlCommand(panel, `/site ask`);
+  await waitForPanelText(panel, /Set 127\.0\.0\.1 Assistant permission to ask-before-action/, "site ask command");
+
   await evaluate(panel, `(() => { globalThis.__resonantosNextActionOverride = async ({ snapshot, history }) => ({
     source: "test-next-action",
     thought: "Verify iframe context is visible to the browser-control loop.",

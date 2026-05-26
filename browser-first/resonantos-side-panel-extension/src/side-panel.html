@@ -16,6 +16,19 @@
           <small id="activity-detail">Preparing task...</small>
         </div>
       </section>
+      <section id="site-permission-panel" class="site-permission-panel" aria-label="Current site assistant permission" hidden>
+        <div>
+          <span class="eyebrow">Current Site</span>
+          <strong id="site-permission-host">No readable page</strong>
+          <small id="site-permission-note">Choose how much browser help Augmentor may use here.</small>
+        </div>
+        <select id="site-permission-mode" aria-label="Current site permission">
+          <option value="blocked">Blocked</option>
+          <option value="read-only">Read only</option>
+          <option value="ask-before-action">Ask before action</option>
+          <option value="trusted-for-safe-actions">Trusted safe actions</option>
+        </select>
+      </section>
       <section id="control-monitor" class="control-monitor" aria-live="polite" hidden>
         <div class="control-monitor-header">
           <div>

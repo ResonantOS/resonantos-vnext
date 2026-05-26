@@ -32,6 +32,7 @@ test("ResonantOS browser layer is packaged as a Chromium side-panel extension", 
   assert.equal(manifest.key.length > 100, true);
   assert.ok(manifest.permissions.includes("sidePanel"));
   assert.ok(manifest.permissions.includes("activeTab"));
+  assert.ok(manifest.permissions.includes("history"));
   assert.ok(manifest.permissions.includes("scripting"));
   assert.ok(manifest.permissions.includes("tabs"));
   assert.ok(manifest.permissions.includes("webNavigation"));
@@ -63,6 +64,8 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(panel, /Message Augmentor/);
   assert.match(panel, /control-monitor/);
   assert.match(panel, /approval-card/);
+  assert.match(panel, /site-permission-panel/);
+  assert.match(panel, /trusted-for-safe-actions/);
   assert.doesNotMatch(panel, /I.m here in the browser side bar/);
   assert.doesNotMatch(panel, /Current page/);
   assert.match(panel, /Connected model/);
@@ -93,6 +96,13 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(script, /parseFormsIntent/);
   assert.match(script, /parseControlIntent/);
   assert.match(script, /parseAutonomousBrowserActionIntent/);
+  assert.match(script, /runHistorySearchCommand/);
+  assert.match(script, /runSitePermissionCommand/);
+  assert.match(script, /runCapabilitiesCommand/);
+  assert.match(script, /renderSitePermissionPanel/);
+  assert.match(script, /sitePermissionMode\.addEventListener/);
+  assert.match(script, /resolveTabMention/);
+  assert.match(script, /augmentorInlineDraft/);
   assert.match(script, /searchBrowser/);
   assert.match(script, /typeIntoActivePage/);
   assert.match(script, /clickActivePageText/);
@@ -153,6 +163,11 @@ test("browser layer can read active tab context without raw privileged access", 
   assert.match(content, /describeForms/);
   assert.match(content, /controls: candidateClickElements/);
   assert.match(content, /data-resonantos-control-ref/);
+  assert.match(content, /resonantos-inline-assistant/);
+  assert.match(content, /ros-inline-prompt/);
+  assert.match(content, /data-action="custom"/);
+  assert.match(content, /currentSitePermission/);
+  assert.match(content, /augmentorInlineDraft/);
   assert.match(content, /ensureControlRef/);
   assert.match(content, /clickControlRef/);
   assert.match(content, /fields: Array\.from/);
@@ -187,6 +202,9 @@ test("browser-first host is a runnable app path, not documentation-only scaffold
   assert.match(launcher, /resonantos-remote-debugging-port/);
   assert.match(launcher, /provider-secrets\.json/);
   assert.match(launcher, /\/augmentor\/chat/);
+  assert.match(launcher, /\/augmentor\/inline/);
+  assert.match(launcher, /executeInlineAssistant/);
+  assert.match(launcher, /customInstruction/);
   assert.match(launcher, /\/augmentor\/control-plan/);
   assert.match(launcher, /\/augmentor\/next-action/);
   assert.match(launcher, /executeNextAction/);

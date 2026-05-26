@@ -14,6 +14,10 @@ const modelSelect = document.querySelector("#model-select");
 const thinkingDepthSelect = document.querySelector("#thinking-depth");
 const dictateButton = document.querySelector("#dictate-button");
 const connectionLine = document.querySelector("#connection-line");
+const sitePermissionPanel = document.querySelector("#site-permission-panel");
+const sitePermissionHost = document.querySelector("#site-permission-host");
+const sitePermissionNote = document.querySelector("#site-permission-note");
+const sitePermissionMode = document.querySelector("#site-permission-mode");
 const controlMonitor = document.querySelector("#control-monitor");
 const controlMonitorTitle = document.querySelector("#control-monitor-title");
 const controlMonitorStatus = document.querySelector("#control-monitor-status");
@@ -32,7 +36,8 @@ const STORAGE_KEYS = {
   forks: "augmentorBrowserForks",
   model: "augmentorModel",
   thinkingDepth: "augmentorThinkingDepth",
-  attachments: "augmentorBrowserAttachments"
+  attachments: "augmentorBrowserAttachments",
+  sitePermissions: "augmentorSitePermissions"
 };
 const MAX_HISTORY_MESSAGES = 16;
 
@@ -193,6 +198,54 @@ const setContextMeter = (snapshot) => {
   const textLength = snapshot?.text?.length ?? 0;
   const roughPercent = Math.min(99, Math.max(0, Math.round(textLength / 900)));
   contextMeter.textContent = `${roughPercent}%`;
+};
+
+const siteKeyForUrl = (url) => {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+};
+
+const sitePermissions = async () => {
+  const result = await chrome.storage?.local?.get?.(STORAGE_KEYS.sitePermissions).catch(() => ({}));
+  return result?.[STORAGE_KEYS.sitePermissions] ?? {};
+};
+
+const permissionForUrl = async (url) => {
+  const key = siteKeyForUrl(url);
+  if (!key) return "ask-before-action";
+  return (await sitePermissions())[key] ?? "ask-before-action";
+};
+
+const setSitePermission = async (url, mode) => {
+  const key = siteKeyForUrl(url);
+  if (!key) throw new Error("No site is active.");
+  const permissions = await sitePermissions();
+  permissions[key] = mode;
+  await chrome.storage?.local?.set?.({ [STORAGE_KEYS.sitePermissions]: permissions });
+  return { key, mode };
+};
+
+const sitePermissionDescription = (mode) => {
+  if (mode === "blocked") return "Augmentor cannot read or operate this site.";
+  if (mode === "read-only") return "Augmentor can read context but cannot click, type, or scroll.";
+  if (mode === "trusted-for-safe-actions") return "Safe actions can run; wallet, login, payment, and public submit still require approval.";
+  return "Augmentor asks before risky actions and blocks sensitive actions by default.";
+};
+
+const renderSitePermissionPanel = async (tab = null) => {
+  const current = tab ?? await activeTab();
+  if (!isReadableBrowserTab(current)) {
+    sitePermissionPanel.hidden = true;
+    return;
+  }
+  const mode = await permissionForUrl(current.url);
+  sitePermissionPanel.hidden = false;
+  sitePermissionHost.textContent = siteKeyForUrl(current.url);
+  sitePermissionMode.value = mode;
+  sitePermissionNote.textContent = sitePermissionDescription(mode);
 };
 
 const renderAttachments = () => {
@@ -752,6 +805,13 @@ const sendContentAction = async (payload) => {
   if (!tab?.id || !isReadableBrowserTab(tab)) {
     return { ok: false, error: "No normal web page is active for this browser action." };
   }
+  const siteMode = await permissionForUrl(tab.url);
+  if (siteMode === "blocked") {
+    return { ok: false, error: `Assistant is blocked on ${siteKeyForUrl(tab.url)}.` };
+  }
+  if (siteMode === "read-only" && payload.type !== "read_page" && payload.type !== "detect_forms") {
+    return { ok: false, error: `Assistant actions are read-only on ${siteKeyForUrl(tab.url)}.` };
+  }
   const message = {
     channel: "resonantos.browser_first.content",
     ...payload
@@ -857,7 +917,36 @@ const refreshTabContext = async () => {
   const tab = await activeTab();
   const label = tab?.title || tab?.url || "No page context";
   readButton.title = `Attach/read current page: ${label}`;
+  await renderSitePermissionPanel(tab);
   setStatus("Ready");
+  return tab;
+};
+
+const resolveTabMention = async (message) => {
+  const match = /@([a-z0-9][a-z0-9 .:_-]{0,80})/i.exec(String(message ?? ""));
+  if (!match) return null;
+  const raw = match[1].trim().replace(/[.,;!?]+$/g, "");
+  const tabs = (await chrome.tabs.query({}).catch(() => [])).filter(isReadableBrowserTab);
+  if (/^tab\s+\d+$/i.test(raw)) {
+    const index = Number(/\d+/.exec(raw)?.[0] ?? "0") - 1;
+    return tabs[index] ?? null;
+  }
+  const needle = raw.toLowerCase();
+  return tabs.find((tab) =>
+    String(tab.title ?? "").toLowerCase().includes(needle) ||
+    String(tab.url ?? "").toLowerCase().includes(needle)
+  ) ?? null;
+};
+
+const bindMentionedTab = async (message) => {
+  const tab = await resolveTabMention(message);
+  if (!tab?.id) return null;
+  controlledTabId = tab.id;
+  await chrome.tabs.update(tab.id, { active: true }).catch(() => undefined);
+  lastSnapshot = null;
+  setContextMeter(null);
+  await renderSitePermissionPanel(tab);
+  await addMessage("system", `Using @tab context: ${tab.title || tab.url}`);
   return tab;
 };
 
@@ -1052,6 +1141,26 @@ const runStatusCommand = async () => {
   );
 };
 
+const runSitePermissionCommand = async (body) => {
+  const normalized = String(body ?? "").trim();
+  const tab = await activeTab();
+  if (!normalized || /^status$/i.test(normalized)) {
+    const mode = tab?.url ? await permissionForUrl(tab.url) : "unknown";
+    await addMessage("system", `Current site permission: ${tab?.url ? siteKeyForUrl(tab.url) : "no site"} · ${mode}`);
+    return;
+  }
+  const mode = /\b(blocked|block)\b/i.test(normalized)
+    ? "blocked"
+    : /\b(read-only|readonly|read only)\b/i.test(normalized)
+      ? "read-only"
+      : /\b(trusted)\b/i.test(normalized)
+        ? "trusted-for-safe-actions"
+        : "ask-before-action";
+  const result = await setSitePermission(tab?.url, mode);
+  await renderSitePermissionPanel(tab);
+  await addMessage("system", `Set ${result.key} Assistant permission to ${result.mode}.`);
+};
+
 const runMemorySearchCommand = async (body) => {
   const query = body.trim();
   setActivity("retrieving", "Searching Living Archive", query);
@@ -1064,6 +1173,54 @@ const runMemorySearchCommand = async (body) => {
     result.matches.length
       ? `Living Archive matches for "${result.query}":\n${result.matches.map((match) => `- ${match.title} (${match.path})\n  ${match.excerpt}`).join("\n")}`
       : `No Living Archive wiki match found for "${result.query}".`
+  );
+};
+
+const runHistorySearchCommand = async (body) => {
+  const query = String(body ?? "").trim();
+  if (!query) {
+    await addMessage("system", "Use `/history <query>` to search local browser history metadata.");
+    return;
+  }
+  if (!chrome.history?.search) {
+    await addMessage("system", "Browser history search is not available in this runtime.");
+    return;
+  }
+  setActivity("retrieving", "Searching browser history", query);
+  const results = await chrome.history.search({
+    text: query,
+    maxResults: 8,
+    startTime: Date.now() - 1000 * 60 * 60 * 24 * 90
+  }).catch(() => []);
+  await addMessage(
+    "system",
+    results.length
+      ? `Browser history matches for "${query}":\n${results.map((item) => `- ${item.title || item.url}\n  ${item.url}`).join("\n")}`
+      : `No browser history match found for "${query}".`
+  );
+  setStatus("Ready");
+  setActivity("completed", "History search complete", `${results.length} matches`);
+};
+
+const runCapabilitiesCommand = async () => {
+  const tab = await activeTab();
+  const mode = tab?.url ? await permissionForUrl(tab.url) : "unknown";
+  const host = tab?.url ? siteKeyForUrl(tab.url) : "no readable page";
+  await addMessage(
+    "system",
+    [
+      "What Augmentor can do now:",
+      `- Current site: ${host} · ${mode}`,
+      "- Read visible page text, controls, fields, frames, and page metadata.",
+      "- Open/search pages, switch tabs, click visible safe controls, type into editable fields, and scroll.",
+      "- Use Inline Assistant on selected text and send selected context into chat.",
+      "- Search local browser history metadata with `/history <query>`.",
+      "- Save page/context artifacts into ResonantOS intake.",
+      "",
+      "Hard boundaries:",
+      "- Wallet signing, payment, login, credential autofill, and public submission require human approval.",
+      "- Blocked sites disable reading and page actions. Read-only sites disable actions but still allow context reading."
+    ].join("\n")
   );
 };
 
@@ -1763,6 +1920,7 @@ const runBrowserCommand = async (body) => {
 };
 
 const respondToCommand = async (value) => {
+  await bindMentionedTab(value);
   const slash = /^\/([a-z]+)(?:\s+([\s\S]*))?$/i.exec(value.trim());
   if (slash) {
     const name = slash[1].toLowerCase();
@@ -1779,8 +1937,20 @@ const respondToCommand = async (value) => {
       await runStatusCommand();
       return;
     }
+    if (name === "site") {
+      await runSitePermissionCommand(body);
+      return;
+    }
     if (name === "memory") {
       await runMemorySearchCommand(body);
+      return;
+    }
+    if (name === "history") {
+      await runHistorySearchCommand(body);
+      return;
+    }
+    if (name === "capabilities" || name === "permissions") {
+      await runCapabilitiesCommand();
       return;
     }
     if (name === "browser") {
@@ -1895,6 +2065,21 @@ const hydrateChatSettings = async () => {
   updateConnectionLine();
 };
 
+const consumeInlineDraft = async (draft) => {
+  if (!draft?.selection) return;
+  await addMessage(
+    "system",
+    [
+      "Inline Assistant context received.",
+      draft.title ? `Page: ${draft.title}` : "",
+      draft.url ? `URL: ${draft.url}` : "",
+      "",
+      String(draft.selection).slice(0, 4000)
+    ].filter(Boolean).join("\n")
+  );
+  await chrome.storage?.local?.remove?.("augmentorInlineDraft").catch(() => undefined);
+};
+
 attachFileButton.addEventListener("click", () => fileInput.click());
 fileInput.addEventListener("change", () => void attachFiles(fileInput.files));
 readButton.addEventListener("click", () => void readActivePage());
@@ -1902,6 +2087,26 @@ saveIntakeButton.addEventListener("click", () => void saveIntake());
 approvalApproveButton.addEventListener("click", () => void approvePendingControlStep());
 approvalDenyButton.addEventListener("click", () => void denyPendingControlStep());
 approvalDelegateButton.addEventListener("click", () => void delegateControlIssue());
+sitePermissionMode.addEventListener("change", async () => {
+  const tab = await activeTab();
+  const result = await setSitePermission(tab?.url, sitePermissionMode.value);
+  await renderSitePermissionPanel(tab);
+  await addMessage("system", `Set ${result.key} Assistant permission to ${result.mode}.`);
+});
+chrome.storage?.onChanged?.addListener((changes, area) => {
+  if (area === "local" && changes.augmentorInlineDraft?.newValue) {
+    void consumeInlineDraft(changes.augmentorInlineDraft.newValue);
+  }
+  if (area === "local" && changes[STORAGE_KEYS.sitePermissions]) {
+    void renderSitePermissionPanel();
+  }
+});
+chrome.tabs?.onActivated?.addListener(() => void refreshTabContext());
+chrome.tabs?.onUpdated?.addListener((tabId, changeInfo) => {
+  if (changeInfo.status === "complete" && (!controlledTabId || controlledTabId === tabId)) {
+    void refreshTabContext();
+  }
+});
 modelSelect.addEventListener("change", () => void persistChatState().then(updateConnectionLine));
 thinkingDepthSelect.addEventListener("change", () => void persistChatState());
 dictateButton.addEventListener("click", () => {
@@ -1930,7 +2135,11 @@ commandForm.addEventListener("submit", async (event) => {
   }
 });
 
-hydrateChatSettings().then(() => refreshTabContext()).catch((error) => {
+hydrateChatSettings().then(async () => {
+  await refreshTabContext();
+  const draft = await chrome.storage?.local?.get?.("augmentorInlineDraft").catch(() => ({}));
+  await consumeInlineDraft(draft?.augmentorInlineDraft);
+}).catch((error) => {
   setStatus("Context failed");
   void addMessage("system", `I could not read the active tab context: ${String(error)}`);
 });

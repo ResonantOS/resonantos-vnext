@@ -336,6 +336,102 @@ async function executeBridgeChat(payload) {
   };
 }
 
+async function executeInlineAssistant(payload) {
+  const action = String(payload.action ?? "summarize").trim().toLowerCase();
+  const prompt = String(payload.prompt ?? "").trim().slice(0, 1200);
+  const selection = String(payload.selection ?? "").trim().slice(0, 8000);
+  const pageContext = String(payload.pageContext ?? "").trim().slice(0, 4000);
+  if (!selection) {
+    throw new Error("Inline Assistant requires selected text.");
+  }
+  if (action === "custom" && !prompt) {
+    return {
+      reply: "Add a custom instruction, then press Ask.",
+      providerId: "local-fallback",
+      model: "local-inline-fallback",
+      usage: null,
+    };
+  }
+  const route = providerRouteForModel(payload.model);
+  const secrets = await readProviderSecrets();
+  const apiKey = secrets[route.providerId];
+  if (!apiKey) {
+    return {
+      reply: fallbackInlineAssistant({ action, selection, prompt }),
+      providerId: "local-fallback",
+      model: "local-inline-fallback",
+      usage: null,
+    };
+  }
+  const systemPrompt = [
+    "You are Augmentor Inline Assistant inside the ResonantOS browser.",
+    "Answer only the selected text task. Be concise and useful.",
+    "Do not execute browser actions, make purchases, submit forms, access credentials, or claim you changed the page.",
+    "For fact-checking, separate verified-looking claims from uncertainty and suggest what should be checked next.",
+  ].join("\n");
+  const userPrompt = JSON.stringify({
+    action,
+    customInstruction: prompt || null,
+    selectedText: selection,
+    pageContext,
+  });
+  const response = await fetch(`${route.apiBaseUrl.replace(/\/$/, "")}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: route.wireModel,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      ...(route.providerType === "openai" ? { reasoning_effort: payload.thinkingDepth ?? "minimal" } : {}),
+    }),
+  });
+  const responsePayload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    return {
+      reply: fallbackInlineAssistant({ action, selection, prompt }),
+      providerId: "local-fallback",
+      model: "local-inline-fallback",
+      usage: { providerError: responsePayload?.error?.message ?? `HTTP ${response.status}` },
+    };
+  }
+  const reply = sanitizeAssistantContent(route.providerType, extractAssistantContent(responsePayload));
+  return {
+    reply: reply || fallbackInlineAssistant({ action, selection, prompt }),
+    providerId: route.providerId,
+    model: payload.model || route.wireModel,
+    usage: responsePayload?.usage ?? null,
+  };
+}
+
+function fallbackInlineAssistant({ action, selection, prompt = "" }) {
+  const text = String(selection ?? "").replace(/\s+/g, " ").trim();
+  const clipped = text.length > 700 ? `${text.slice(0, 700)}...` : text;
+  if (action === "custom") {
+    return `Custom instruction queued for configured model:\n${prompt}\n\nSelected text:\n${clipped}`;
+  }
+  if (action === "translate") {
+    return `Translation needs the configured model. Selected text:\n\n${clipped}`;
+  }
+  if (action === "rewrite" || action === "improve") {
+    return clipped.replace(/\bteh\b/gi, "the").replace(/\bi\b/g, "I");
+  }
+  if (action === "define") {
+    return `Definition context needed. Selected phrase: ${clipped}`;
+  }
+  if (action === "fact-check") {
+    return `Fact-check queue:\n- Claim to verify: ${clipped}\n- Check primary sources before relying on this.`;
+  }
+  if (action === "explain") {
+    return `Plain-language explanation:\n${clipped}`;
+  }
+  return `Summary:\n${clipped}`;
+}
+
 function extractJsonObject(value) {
   const text = String(value ?? "").trim();
   if (!text) {
@@ -939,6 +1035,12 @@ async function startBridgeServer(port) {
       if (request.method === "POST" && request.url === "/augmentor/chat") {
         const payload = await readJsonBody(request);
         const result = await executeBridgeChat(payload);
+        writeJson(response, 200, { ok: true, ...result });
+        return;
+      }
+      if (request.method === "POST" && request.url === "/augmentor/inline") {
+        const payload = await readJsonBody(request);
+        const result = await executeInlineAssistant(payload);
         writeJson(response, 200, { ok: true, ...result });
         return;
       }
