@@ -1,6 +1,8 @@
 const controlRefAttribute = "data-resonantos-control-ref";
 const inlineAssistantId = "resonantos-inline-assistant";
 const inlineButtonId = "resonantos-inline-button";
+const controlOverlayId = "resonantos-control-overlay";
+const controlToastId = "resonantos-control-toast";
 let nextControlRef = 1;
 
 const ensureControlRef = (element) => {
@@ -64,6 +66,68 @@ const pageSnapshot = () => ({
   }
 });
 
+const ensureControlOverlay = () => {
+  if (!document.getElementById("resonantos-control-overlay-styles")) {
+    const style = document.createElement("style");
+    style.id = "resonantos-control-overlay-styles";
+    style.textContent = `
+      #${controlOverlayId}, #${controlToastId} { all: initial; color-scheme: dark; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; z-index: 2147483646; pointer-events: none; }
+      #${controlOverlayId} { position: fixed; inset: 0; display: none; border: 2px solid rgba(36,209,143,.78); box-shadow: inset 0 0 46px rgba(36,209,143,.18), 0 0 40px rgba(36,209,143,.22); background:
+        repeating-linear-gradient(90deg, rgba(36,209,143,.10) 0 2px, transparent 2px 11px),
+        repeating-linear-gradient(0deg, rgba(36,209,143,.07) 0 1px, transparent 1px 13px); opacity: .92; }
+      #${controlOverlayId}[data-state="active"] { display:block; animation: ros-control-scan 1.3s steps(14) infinite; }
+      #${controlOverlayId}[data-state="done"] { display:block; border-color: rgba(117,255,187,.72); animation: ros-control-fade .8s ease-out forwards; }
+      #${controlOverlayId}[data-state="blocked"] { display:block; border-color: rgba(255,121,91,.9); box-shadow: inset 0 0 46px rgba(255,121,91,.16), 0 0 40px rgba(255,121,91,.2); animation: ros-control-fade 1.1s ease-out forwards; }
+      #${controlOverlayId}::before, #${controlOverlayId}::after { content:""; position:absolute; left:0; right:0; height:18px; background: linear-gradient(90deg, transparent, rgba(36,209,143,.58), transparent); filter: blur(.4px); }
+      #${controlOverlayId}::before { top:0; }
+      #${controlOverlayId}::after { bottom:0; }
+      #${controlToastId} { position: fixed; left: 50%; bottom: 18px; display:none; max-width: min(520px, calc(100vw - 28px)); transform: translateX(-50%); border: 1px solid rgba(36,209,143,.38); border-radius: 999px; background: rgba(4,12,8,.92); color:#dfffea; box-shadow: 0 18px 58px rgba(0,0,0,.38); font: 800 12px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 10px 14px; text-align:center; }
+      #${controlToastId}[data-state="active"], #${controlToastId}[data-state="done"], #${controlToastId}[data-state="blocked"] { display:block; }
+      #${controlToastId}[data-state="blocked"] { border-color: rgba(255,121,91,.5); color:#ffd9d1; }
+      .resonantos-control-target { outline: 2px solid rgba(36,209,143,.9) !important; outline-offset: 4px !important; box-shadow: 0 0 0 6px rgba(36,209,143,.16), 0 0 34px rgba(36,209,143,.38) !important; }
+      @keyframes ros-control-scan { 0% { clip-path: polygon(0 0,100% 0,100% 100%,0 100%); filter: brightness(1); } 50% { filter: brightness(1.45); } 100% { filter: brightness(1); } }
+      @keyframes ros-control-fade { 0% { opacity:.9; } 100% { opacity:0; } }
+    `;
+    document.documentElement.append(style);
+  }
+  let overlay = document.getElementById(controlOverlayId);
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = controlOverlayId;
+    document.documentElement.append(overlay);
+  }
+  let toast = document.getElementById(controlToastId);
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = controlToastId;
+    document.documentElement.append(toast);
+  }
+  return { overlay, toast };
+};
+
+const pulseControlOverlay = ({ state = "active", label = "Augmentor is operating this page", target = null } = {}) => {
+  const { overlay, toast } = ensureControlOverlay();
+  const now = Date.now();
+  if (!target && state === "active" && Number(toast.dataset.lockedUntil || 0) > now) {
+    return;
+  }
+  overlay.dataset.state = state;
+  toast.dataset.state = state;
+  toast.textContent = label;
+  document.querySelectorAll(".resonantos-control-target").forEach((element) => element.classList.remove("resonantos-control-target"));
+  if (target?.classList) {
+    target.classList.add("resonantos-control-target");
+    toast.dataset.lockedUntil = String(now + 1800);
+    window.setTimeout(() => target.classList.remove("resonantos-control-target"), 1500);
+  }
+  if (state !== "active") {
+    window.setTimeout(() => {
+      if (overlay.dataset.state === state) overlay.dataset.state = "";
+      if (toast.dataset.state === state) toast.dataset.state = "";
+    }, 1300);
+  }
+};
+
 const describeForms = () => ({
   forms: Array.from(document.querySelectorAll("form"))
     .slice(0, 20)
@@ -110,7 +174,9 @@ const isHardRestrictedElement = (element, fallbackText = "") => {
 };
 
 const clickElement = (element, { userApproved = false, fallbackText = "" } = {}) => {
+  pulseControlOverlay({ state: "active", label: `Clicking ${visibleText(element) || fallbackText}`, target: element });
   if (isHardRestrictedElement(element, fallbackText)) {
+    pulseControlOverlay({ state: "blocked", label: "Blocked: human-only action", target: element });
     return {
       ok: false,
       approvalRequired: true,
@@ -119,6 +185,7 @@ const clickElement = (element, { userApproved = false, fallbackText = "" } = {})
     };
   }
   if (isSubmitLikeElement(element) && !userApproved) {
+    pulseControlOverlay({ state: "blocked", label: "Approval required for public action", target: element });
     return {
       ok: false,
       approvalRequired: true,
@@ -141,6 +208,7 @@ const clickElement = (element, { userApproved = false, fallbackText = "" } = {})
     element.dispatchEvent(new EventConstructor(eventName, eventOptions));
   }
   element.click();
+  pulseControlOverlay({ state: "done", label: `Clicked ${visibleText(element).slice(0, 80) || fallbackText}`, target: element });
   return {
     ok: true,
     ref: ensureControlRef(element),
@@ -253,11 +321,13 @@ const typeIntoPage = ({ text, field = "", ref = "", submit = false, userApproved
   if (!element) {
     return { ok: false, error: "No editable field was found on this page." };
   }
+  pulseControlOverlay({ state: "active", label: `Typing into ${field || visibleText(element) || element.getAttribute("aria-label") || "field"}`, target: element });
   element.scrollIntoView({ block: "center", inline: "center", behavior: "auto" });
   element.focus();
   setNativeValue(element, value);
   if (submit) {
     if (!isSearchLikeEditable(element) && !userApproved) {
+      pulseControlOverlay({ state: "blocked", label: "Approval required to submit this field", target: element });
       return {
         ok: false,
         approvalRequired: true,
@@ -269,6 +339,7 @@ const typeIntoPage = ({ text, field = "", ref = "", submit = false, userApproved
     element.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", code: "Enter", bubbles: true, cancelable: true }));
     element.form?.requestSubmit?.();
   }
+  pulseControlOverlay({ state: "done", label: `Typed ${value.slice(0, 80)}`, target: element });
   return {
     ok: true,
     ref: ensureControlRef(element),
@@ -280,6 +351,7 @@ const typeIntoPage = ({ text, field = "", ref = "", submit = false, userApproved
 };
 
 const scrollPage = ({ direction = "down", amount = 720 } = {}) => {
+  pulseControlOverlay({ state: "active", label: `Scrolling ${direction}` });
   const normalized = String(direction || "down").toLowerCase();
   const viewport = Math.max(320, window.innerHeight || 720);
   const magnitude = Math.max(120, Math.min(4000, Number(amount) || viewport));
@@ -288,6 +360,7 @@ const scrollPage = ({ direction = "down", amount = 720 } = {}) => {
   if (normalized === "top") deltaY = -document.documentElement.scrollHeight;
   if (normalized === "bottom") deltaY = document.documentElement.scrollHeight;
   window.scrollBy({ top: deltaY, left: 0, behavior: "auto" });
+  pulseControlOverlay({ state: "done", label: `Scrolled ${normalized}` });
   return {
     ok: true,
     direction: normalized,
@@ -518,6 +591,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (message.type === "read_page") {
+    pulseControlOverlay({ state: "active", label: "Reading page context" });
+    window.setTimeout(() => pulseControlOverlay({ state: "done", label: "Page context captured" }), 300);
     sendResponse({ ok: true, snapshot: pageSnapshot() });
     return true;
   }

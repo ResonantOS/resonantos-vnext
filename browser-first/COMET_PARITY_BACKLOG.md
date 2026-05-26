@@ -20,6 +20,7 @@ Intent: keep the browser-first ResonantOS work aligned with the AI-browser capab
 - `/capabilities` permission summary for the current page.
 - Local browser history metadata search through `/history`.
 - Durable Browser Jobs v1: persistent job registry, visible job monitor, `/jobs`, `/pause`, `/resume`, and `/cancel`.
+- Agent Control visual overlay v1: Matrix-style green perimeter, in-page action toast, and highlighted clicked/typed targets.
 - Shopping/search/cart-style flows with safety stops.
 - Wallet, payment, login, credential, and public submit boundaries.
 

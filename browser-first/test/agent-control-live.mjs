@@ -345,6 +345,13 @@ try {
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
   assert(bookingState.slot === "Tuesday 10:00", `Variant booking prompt failed: ${JSON.stringify(bookingState)}`);
+  const overlayAfterClick = (await evaluate(page, `({
+    overlayPresent: Boolean(document.querySelector("#resonantos-control-overlay")),
+    toastText: document.querySelector("#resonantos-control-toast")?.textContent ?? "",
+    highlighted: Boolean(document.querySelector(".resonantos-control-target"))
+  })`)).result.value;
+  assert(overlayAfterClick.overlayPresent, `Agent control overlay was not injected: ${JSON.stringify(overlayAfterClick)}`);
+  assert(overlayAfterClick.highlighted || /Clicked|Clicking|Tuesday|Reading page context/i.test(overlayAfterClick.toastText), `Agent control overlay did not expose action feedback: ${JSON.stringify(overlayAfterClick)}`);
   await waitForComposerReady(panel, "variant booking prompt");
 
   await evaluate(panel, `(() => { globalThis.__resonantosNextActionOverride = async ({ snapshot, history }) => {

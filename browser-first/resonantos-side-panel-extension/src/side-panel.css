@@ -343,13 +343,42 @@ textarea:disabled {
   padding-left: 2px;
 }
 
+.control-step-list li::marker {
+  color: rgba(36, 209, 143, 0.58);
+}
+
 .control-step-list li[data-state="active"] {
   color: var(--accent);
   font-weight: 800;
 }
 
+.control-step-list li[data-state="active"]::after {
+  content: " working";
+  display: inline-block;
+  margin-left: 6px;
+  border: 1px solid rgba(36, 209, 143, 0.26);
+  border-radius: 999px;
+  color: rgba(36, 209, 143, 0.92);
+  font-size: 0.52rem;
+  letter-spacing: 0.06em;
+  padding: 2px 5px;
+  text-transform: uppercase;
+  animation: activity-pulse 1.4s ease-out infinite;
+}
+
 .control-step-list li[data-state="completed"] {
   color: rgba(238, 247, 240, 0.9);
+}
+
+.control-step-list li[data-state="completed"]::after {
+  content: " done";
+  display: inline-block;
+  margin-left: 6px;
+  color: rgba(117, 255, 187, 0.72);
+  font-size: 0.52rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .control-step-list li[data-state="blocked"],
