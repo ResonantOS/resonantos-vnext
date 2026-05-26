@@ -18,6 +18,7 @@ import { createMessageActionController } from "./lib/message-action-controller.j
 import { createMonitorRenderers } from "./lib/monitor-renderers.js";
 import { createSidePanelCommandRouter } from "./lib/side-panel-command-router.js";
 import { createSidePanelRenderers } from "./lib/side-panel-renderers.js";
+import { createSitePermissionStore } from "./lib/site-permission-store.js";
 import { createTabContextController } from "./lib/tab-context-controller.js";
 
 const readButton = document.querySelector("#read-page");
@@ -182,33 +183,13 @@ const setContextMeter = (snapshot) => {
   contextMeter.textContent = `${roughPercent}%`;
 };
 
-const siteKeyForUrl = (url) => {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return "";
-  }
-};
-
-const sitePermissions = async () => {
-  const result = await chrome.storage?.local?.get?.(STORAGE_KEYS.sitePermissions).catch(() => ({}));
-  return result?.[STORAGE_KEYS.sitePermissions] ?? {};
-};
-
-const permissionForUrl = async (url) => {
-  const key = siteKeyForUrl(url);
-  if (!key) return "ask-before-action";
-  return (await sitePermissions())[key] ?? "ask-before-action";
-};
-
-const setSitePermission = async (url, mode) => {
-  const key = siteKeyForUrl(url);
-  if (!key) throw new Error("No site is active.");
-  const permissions = await sitePermissions();
-  permissions[key] = mode;
-  await chrome.storage?.local?.set?.({ [STORAGE_KEYS.sitePermissions]: permissions });
-  return { key, mode };
-};
+const sitePermissionStore = createSitePermissionStore({
+  storage: chrome.storage?.local,
+  sitePermissionStorageKey: STORAGE_KEYS.sitePermissions
+});
+const permissionForUrl = sitePermissionStore.permissionForUrl;
+const setSitePermission = sitePermissionStore.setSitePermission;
+const siteKeyForUrl = sitePermissionStore.siteKeyForUrl;
 
 const renderSitePermissionPanel = async (tab = null) => {
   await monitorRenderers.renderSitePermissionPanel(tab);

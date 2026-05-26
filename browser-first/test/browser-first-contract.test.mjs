@@ -83,6 +83,7 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   const sidePanelRenderers = await readText(path.join(extensionRoot, "src", "lib", "side-panel-renderers.js"));
   const monitorRenderers = await readText(path.join(extensionRoot, "src", "lib", "monitor-renderers.js"));
   const commandRouter = await readText(path.join(extensionRoot, "src", "lib", "side-panel-command-router.js"));
+  const sitePermissionStore = await readText(path.join(extensionRoot, "src", "lib", "site-permission-store.js"));
   const tabContextController = await readText(path.join(extensionRoot, "src", "lib", "tab-context-controller.js"));
   const background = await readText(path.join(extensionRoot, "src", "background.js"));
 
@@ -143,6 +144,11 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(sidePanelRenderers, /renderMessages/);
   assert.match(sidePanelRenderers, /renderAttachments/);
   assert.match(sidePanelRenderers, /flashCopied/);
+  assert.match(script, /createSitePermissionStore/);
+  assert.match(sitePermissionStore, /siteKeyForUrl/);
+  assert.match(sitePermissionStore, /permissionForUrl/);
+  assert.match(sitePermissionStore, /setSitePermission/);
+  assert.match(sitePermissionStore, /ask-before-action/);
   assert.match(script, /createMonitorRenderers/);
   assert.match(monitorRenderers, /sitePermissionDescription/);
   assert.match(monitorRenderers, /renderSitePermissionPanel/);

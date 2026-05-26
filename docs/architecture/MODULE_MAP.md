@@ -184,6 +184,7 @@ This map defines which folder owns which feature area so contributors do not kee
   - `resonantos-side-panel-extension/src/lib/control-step-executor.js` owns Agent Control step execution for tab listing/switching, page reads, open/search, click/type/scroll/form actions, waits, and unknown-step rejection
   - `resonantos-side-panel-extension/src/lib/message-action-controller.js` owns message mutation actions, archive-save from messages, stats reporting, regeneration dispatch, clipboard copy feedback, and file attachment import/clear behavior
   - `resonantos-side-panel-extension/src/lib/side-panel-renderers.js` owns dependency-injected message and attachment rendering, action icons, copy flash feedback, and role labels
+  - `resonantos-side-panel-extension/src/lib/site-permission-store.js` owns site key normalization, persisted site permission reads/writes, invalid URL rejection, and safe default permission fallback
   - `resonantos-side-panel-extension/src/lib/monitor-renderers.js` owns dependency-injected status dock rendering for site permissions, browser jobs, control runs, artifacts, and approval prompts
   - `resonantos-side-panel-extension/src/lib/tab-context-controller.js` owns dependency-injected `@tab` resolution, controlled-tab binding, inline assistant draft consumption, tab/storage listeners, and initial tab-context hydration
   - `resonantos-side-panel-extension/src/lib/side-panel-command-router.js` owns side-panel command dispatch for slash commands, natural browser intents, wallet boundaries, and chat fallback
