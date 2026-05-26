@@ -166,6 +166,9 @@ This map defines which folder owns which feature area so contributors do not kee
   - `host/run-browser-first.mjs` owns browser-first launch orchestration, extension discovery, route registration, and host process lifecycle
   - `host/bridge-server.mjs` owns loopback bridge authentication, JSON routing, generated side-panel bridge config, and bridge auth self-test
   - `resonantos-side-panel-extension/` owns the Augmentor browser side-panel UI, page content bridge, and browser-control extension layer
+  - `resonantos-side-panel-extension/src/lib/bridge-client.js` owns authenticated loopback bridge calls from the extension UI
+  - `resonantos-side-panel-extension/src/lib/browser-command-parser.js` owns pure natural-language browser command parsing and URL/query normalization
+  - `resonantos-side-panel-extension/src/lib/approval-policy.js` owns planner/next-action sanitization and human approval boundary classification
   - generated `resonantos-side-panel-extension/src/bridge-config.generated.js` is session material and must not be committed
   - preview bridge rule: per-session token is acceptable for internal testing, but ADR-037 requires native messaging, signed IPC, or equivalent authenticated browser-shell IPC before public wallet/DAO readiness
 

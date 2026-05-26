@@ -1,3 +1,26 @@
+import {
+  approvalBoundaryForStep,
+  sanitizeNextActionDecision,
+  sanitizePlannerPlan,
+} from "./lib/approval-policy.js";
+import {
+  normalizeBrowserUrl,
+  normalizeSearchQuery,
+  parseAmazonShoppingTask,
+  parseAutonomousBrowserActionIntent,
+  parseClickIntent,
+  parseControlIntent,
+  parseFormsIntent,
+  parseNaturalBrowserIntent,
+  parseNaturalSearchIntent,
+  parseQuotedText,
+  parseReadPageIntent,
+  parseScrollIntent,
+  parseStructuredPageEditIntent,
+  parseTypeIntent
+} from "./lib/browser-command-parser.js";
+import { createBridgeClient } from "./lib/bridge-client.js";
+
 const readButton = document.querySelector("#read-page");
 const attachFileButton = document.querySelector("#attach-file");
 const fileInput = document.querySelector("#file-input");
@@ -37,9 +60,7 @@ const approvalTrustSiteButton = document.querySelector("#approval-trust-site");
 const approvalDenyButton = document.querySelector("#approval-deny");
 const approvalDelegateButton = document.querySelector("#approval-delegate");
 
-const BRIDGE_CONFIG = globalThis.__RESONANTOS_BRIDGE_CONFIG__ ?? {};
-const BRIDGE_URL = BRIDGE_CONFIG.bridgeUrl ?? "http://127.0.0.1:47773";
-const BRIDGE_TOKEN = BRIDGE_CONFIG.bridgeToken ?? "";
+const bridgeRequest = createBridgeClient();
 const STORAGE_KEYS = {
   messages: "augmentorBrowserMessages",
   forks: "augmentorBrowserForks",
@@ -165,10 +186,6 @@ const MODEL_LABELS = {
 const supportsThinkingDepth = (model) => model.startsWith("gpt-5.");
 
 const isReadableBrowserTab = (tab) => typeof tab?.url === "string" && /^https?:\/\//i.test(tab.url);
-const browserIntentVerbs = /\b(open|go\s+to|go\s+on|navi\w*(?:\s+to)?|visit|load|browse(?:\s+to)?|take\s+me\s+to|show\s+me|bring\s+up|pull\s+up)\b/i;
-const browserTargetPattern = /\b((?:https?:\/\/)?(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/[^\s"'<>)]*)?)/i;
-const searchIntentVerbs = /\b(search|find|look\s+up|research|news|latest|internet|web)\b/i;
-
 const setStatus = (label) => {
   statusLabel = label;
   updateConnectionLine();
@@ -538,23 +555,6 @@ const persistChatState = async () => {
   }).catch(() => undefined);
 };
 
-const bridgeRequest = async (route, options = {}) => {
-  const headers = options.body ? { "Content-Type": "application/json" } : {};
-  if (BRIDGE_TOKEN) {
-    headers["X-ResonantOS-Bridge-Token"] = BRIDGE_TOKEN;
-  }
-  const response = await fetch(`${BRIDGE_URL}${route}`, {
-    method: options.method ?? "GET",
-    headers,
-    body: options.body ? JSON.stringify(options.body) : undefined
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || !payload.ok) {
-    throw new Error(payload?.error ?? `Bridge request failed with HTTP ${response.status}.`);
-  }
-  return payload;
-};
-
 const messageLabel = (role) => {
   if (role === "user") return "You";
   if (role === "system") return "System";
@@ -761,200 +761,6 @@ const activeTab = async () => {
     controlledTabId = fallback.id;
   }
   return fallback;
-};
-
-const normalizeBrowserUrl = (target) => {
-  const trimmed = String(target ?? "").trim().replace(/[.,;:!?]+$/, "");
-  if (!trimmed) {
-    throw new Error("Browser navigation requires a URL or domain.");
-  }
-  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
-  const url = new URL(withProtocol);
-  if (!["http:", "https:"].includes(url.protocol)) {
-    throw new Error("Only http and https browser navigation is supported.");
-  }
-  return url.toString();
-};
-
-const parseNaturalBrowserIntent = (message) => {
-  const normalized = message.trim();
-  if (/^\//.test(normalized) || !browserIntentVerbs.test(normalized)) {
-    return null;
-  }
-  const target = browserTargetPattern.exec(normalized)?.[1];
-  if (!target) {
-    return null;
-  }
-  return { action: "open", target };
-};
-
-const quotedTextPattern = /["“”'‘’]([^"“”'‘’]{1,280})["“”'‘’]/;
-
-const parseQuotedText = (message) => quotedTextPattern.exec(String(message ?? ""))?.[1]?.trim() ?? "";
-
-const parseQuotedTexts = (message) =>
-  Array.from(String(message ?? "").matchAll(/["“”'‘’]([^"“”'‘’]{1,280})["“”'‘’]/g))
-    .map((match) => match[1]?.trim())
-    .filter(Boolean);
-
-const parseTypeIntent = (message) => {
-  const normalized = String(message ?? "").trim();
-  if (/^\//.test(normalized) || !/\b(type|write|enter|put|insert)\b/i.test(normalized)) {
-    return null;
-  }
-  const quotedTexts = parseQuotedTexts(normalized);
-  const text = quotedTexts.at(-1) ?? "";
-  if (!text) {
-    return null;
-  }
-  const submit = /\b(search bar|google|search field|address bar|submit|press enter|hit enter)\b/i.test(normalized);
-  return { text, submit };
-};
-
-const parseClickIntent = (message) => {
-  const normalized = String(message ?? "").trim();
-  if (/^\//.test(normalized) || !/\b(click|press|tap|select|open)\b/i.test(normalized)) {
-    return null;
-  }
-  const quotedTexts = parseQuotedTexts(normalized);
-  const text = quotedTexts[0] ?? "";
-  if (!text) {
-    return null;
-  }
-  return { text };
-};
-
-const parseReadPageIntent = (message) => {
-  const normalized = String(message ?? "").trim();
-  if (/^\//.test(normalized)) {
-    return null;
-  }
-  return (
-    /\b(read|scan|summari[sz]e|inspect|look at|understand|see|view|access)\b/i.test(normalized) ||
-    /\b(can you|do you)\s+(see|view|access)\b/i.test(normalized)
-  ) &&
-    /\b(this|current|active|the|open)\s+(page|website|webpage|site|tab|browser|window)\b/i.test(normalized)
-    ? { action: "read_page" }
-    : null;
-};
-
-const parseStructuredPageEditIntent = (message) => {
-  const normalized = String(message ?? "").trim();
-  if (/^\//.test(normalized) || !/\b(add|edit|update|write|insert|change|replace)\b/i.test(normalized)) {
-    return null;
-  }
-  if (!/\b(doc|document|sheet|spreadsheet|page|row|line|cell|google\s+(sheet|doc|docs|sheets))\b/i.test(normalized)) {
-    return null;
-  }
-  return { action: "structured_page_edit", instruction: normalized };
-};
-
-const parseScrollIntent = (message) => {
-  const normalized = String(message ?? "").trim();
-  if (/^\//.test(normalized) || !/\b(scroll|move)\b/i.test(normalized)) {
-    return null;
-  }
-  const direction = /\b(up|top)\b/i.test(normalized)
-    ? /\btop\b/i.test(normalized) ? "top" : "up"
-    : /\b(bottom|end)\b/i.test(normalized) ? "bottom" : "down";
-  return { direction };
-};
-
-const parseFormsIntent = (message) => {
-  const normalized = String(message ?? "").trim();
-  if (/^\//.test(normalized)) {
-    return null;
-  }
-  return /\b(form|forms|field|fields|input|inputs)\b/i.test(normalized) &&
-    /\b(detect|inspect|find|show|list|what)\b/i.test(normalized)
-    ? { action: "detect_forms" }
-    : null;
-};
-
-const parseControlIntent = (message) => {
-  const normalized = String(message ?? "").trim();
-  if (/^\//.test(normalized)) {
-    return null;
-  }
-  const match = /\b(take control|control the browser|use the browser|operate the browser|do this in the browser)\b[:\s-]*([\s\S]*)/i.exec(normalized);
-  if (!match) {
-    return null;
-  }
-  return { goal: (match[2] || normalized).trim() };
-};
-
-const parseAutonomousBrowserActionIntent = (message) => {
-  const normalized = String(message ?? "").trim();
-  if (/^\//.test(normalized)) {
-    return null;
-  }
-  const shoppingIntent = /\b(amazon|amazon\.it|cart|chart|basket|carrello|buy|shop|shopping|product|pringles|nvidia|rtx|5090)\b/i.test(normalized) &&
-    /\b(go\s+to|open|find|search|look\s+for|add|put|select|choose|click)\b/i.test(normalized);
-  const browserTaskVerbs = /\b(book|schedule|arrange|reserve|fill|complete|submit|click|press|tap|select|choose|pick|open|find|search|scroll|read|inspect|look at|navigate|go to|visit|add|put)\b/i;
-  const browserObjectHints = /\b(call|meeting|appointment|booking|calendar|form|page|site|website|tab|browser|button|field|slot|time|date|news|internet|web|amazon|shop|shopping|product|cart|chart|basket|carrello)\b/i;
-  if (shoppingIntent) {
-    return { goal: normalized };
-  }
-  if (!browserTaskVerbs.test(normalized) || !browserObjectHints.test(normalized)) {
-    return null;
-  }
-  return { goal: normalized };
-};
-
-const normalizeSearchQuery = (message) => {
-  const cleaned = String(message ?? "")
-    .replace(/\b(can you|please|could you|would you)\b/gi, " ")
-    .replace(/\b(search|find|look\s+up|research|on the internet|on internet|online|web|the web|some)\b/gi, " ")
-    .replace(/[?.!]+$/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (!cleaned || /^news$/i.test(cleaned) || /^latest news$/i.test(cleaned)) {
-    return "top stories";
-  }
-  return cleaned;
-};
-
-const parseNaturalSearchIntent = (message) => {
-  const normalized = message.trim();
-  if (/^\//.test(normalized) || !searchIntentVerbs.test(normalized)) {
-    return null;
-  }
-  if (/\b(amazon|cart|chart|basket|carrello|shop|shopping|product)\b/i.test(normalized)) {
-    return null;
-  }
-  if (browserTargetPattern.test(normalized) && browserIntentVerbs.test(normalized)) {
-    return null;
-  }
-  const wantsNews = /\b(news|latest)\b/i.test(normalized);
-  return {
-    action: wantsNews ? "news" : "search",
-    query: normalizeSearchQuery(normalized)
-  };
-};
-
-const parseAmazonShoppingTask = (message) => {
-  const normalized = String(message ?? "").trim();
-  if (!/\b(amazon|amazon\.it|cart|chart|basket|carrello)\b/i.test(normalized)) {
-    return null;
-  }
-  let query = normalized
-    .replace(/\b(can you|please|could you|would you|ok now|now)\b/gi, " ")
-    .replace(/\b(go\s+to|open|visit|navigate\s+to|find|search|look\s+for|me|on|in|amazon(?:\.it)?|some|then|and|add|put|it|them|to|the|cart|chart|basket|carrello)\b/gi, " ")
-    .replace(/[?.!]+$/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (!query && /\b(nvidia|5090|rtx)\b/i.test(normalized)) {
-    query = "nvidia 5090";
-  }
-  if (!query && /\bpringles\b/i.test(normalized)) {
-    query = "pringles";
-  }
-  const base = "https://www.amazon.it";
-  return {
-    query,
-    wantsCart: /\b(add|put).{0,30}\b(cart|chart|basket|carrello)\b/i.test(normalized),
-    url: query ? `${base}/s?k=${encodeURIComponent(query)}` : base
-  };
 };
 
 const openBrowserUrl = async (target) => {
@@ -1618,126 +1424,9 @@ const planControlSteps = (goal) => {
   return dedupeControlSteps(steps).slice(0, 8);
 };
 
-const restrictedPlannerText = /\b(seed|private key|password|passphrase|wallet|phantom|sign|signature|approve|buy|sell|swap|stake|unstake|bridge|mint|claim|pay|payment|checkout|login|delete|remove|destroy|credential|2fa|otp|transfer)\b/i;
-const hardApprovalBoundaryText = /\b(seed|private key|password|passphrase|wallet|phantom|sign|signature|approve|buy|sell|swap|stake|unstake|bridge|mint|claim|pay|payment|checkout|login|delete|remove|destroy|credential|2fa|otp|transfer)\b/i;
-const publicSubmitBoundaryText = /\b(submit|publish|post|share|send|save|confirm)\b/i;
-
-const approvalBoundaryForStep = (step, reason = "") => {
-  const haystack = [
-    step?.type,
-    step?.text,
-    step?.field,
-    step?.target,
-    step?.query,
-    reason
-  ].filter(Boolean).join(" ").toLowerCase();
-  if (hardApprovalBoundaryText.test(haystack)) return "hard";
-  if (publicSubmitBoundaryText.test(haystack)) return "public-submit";
-  return "safe";
-};
-
-const sanitizePlannerUrl = (target) => {
-  const trimmed = String(target ?? "").trim().replace(/[.,;:!?]+$/, "");
-  const url = new URL(/^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
-  if (!["http:", "https:"].includes(url.protocol)) {
-    throw new Error("Planner can only open http and https pages.");
-  }
-  return url.toString();
-};
-
-const sanitizedPlannerText = (value, label, max = 280) => {
-  const text = String(value ?? "").trim();
-  if (!text) throw new Error(`Planner step is missing ${label}.`);
-  return text.slice(0, max);
-};
-
-const sanitizePlannerStep = (step) => {
-  const type = String(step?.type ?? "").trim().toLowerCase();
-  if (type === "inspect" || type === "read") return { type: "read" };
-  if (type === "forms") return { type: "forms" };
-  if (type === "tabs") return { type: "tabs" };
-  if (type === "switch_tab") {
-    const tabId = Number(step.tabId ?? step.id);
-    if (!Number.isInteger(tabId) || tabId < 0) throw new Error("Switch-tab step requires a numeric tabId.");
-    return { type: "switch_tab", tabId };
-  }
-  if (type === "open") {
-    const sanitized = { type: "open", target: sanitizePlannerUrl(step.target ?? step.url) };
-    if (restrictedPlannerText.test(sanitized.target)) throw new Error("Planner requested a restricted target.");
-    return sanitized;
-  }
-  if (type === "search") {
-    return {
-      type: "search",
-      action: step.action === "news" ? "news" : "search",
-      query: sanitizedPlannerText(step.query, "query", 220)
-    };
-  }
-  if (type === "click") {
-    const sanitized = {
-      type: "click",
-      text: step.text ? sanitizedPlannerText(step.text, "text") : "",
-      ref: step.ref ? sanitizedPlannerText(step.ref, "ref", 80) : ""
-    };
-    if (!sanitized.text && !sanitized.ref) throw new Error("Planner click step requires text or ref.");
-    if (restrictedPlannerText.test(sanitized.text)) throw new Error("Planner requested a restricted click.");
-    return sanitized;
-  }
-  if (type === "type") {
-    const sanitized = {
-      type: "type",
-      text: sanitizedPlannerText(step.text, "text", 600),
-      field: step.field ? sanitizedPlannerText(step.field, "field", 160) : "",
-      ref: step.ref ? sanitizedPlannerText(step.ref, "ref", 80) : "",
-      submit: Boolean(step.submit)
-    };
-    if (restrictedPlannerText.test(sanitized.text)) {
-      throw new Error("Planner requested restricted typing.");
-    }
-    return sanitized;
-  }
-  if (type === "scroll") {
-    return { type: "scroll", direction: ["up", "down", "top", "bottom"].includes(step.direction) ? step.direction : "down" };
-  }
-  if (type === "wait") {
-    return { type: "wait", ms: Math.min(5000, Math.max(250, Number(step.ms ?? 1000) || 1000)) };
-  }
-  throw new Error(`Unsupported planner step type: ${type || "missing"}.`);
-};
-
-const sanitizePlannerPlan = (plan) => {
-  if (!plan || typeof plan !== "object") {
-    throw new Error("Planner response must be an object.");
-  }
-  const needsApproval = Boolean(plan.needsApproval);
-  const approvalReason = plan.approvalReason ? String(plan.approvalReason).slice(0, 500) : null;
-  if (needsApproval) {
-    return {
-      source: plan.source ?? "llm",
-      summary: String(plan.summary ?? "Planner stopped before a restricted action.").slice(0, 500),
-      steps: [],
-      needsApproval,
-      approvalReason: approvalReason ?? "Planner requested human approval."
-    };
-  }
-  const steps = (Array.isArray(plan.steps) ? plan.steps : [])
-    .slice(0, 8)
-    .map(sanitizePlannerStep);
-  if (!steps.length) {
-    throw new Error("Planner returned no executable steps.");
-  }
-  return {
-    source: plan.source ?? "llm",
-    summary: String(plan.summary ?? "Browser control plan").slice(0, 500),
-    steps: dedupeControlSteps(steps),
-    needsApproval: false,
-    approvalReason: null
-  };
-};
-
 const requestControlPlan = async (goal, snapshot) => {
   if (typeof globalThis.__resonantosControlPlannerOverride === "function") {
-    return sanitizePlannerPlan(await globalThis.__resonantosControlPlannerOverride({ goal, snapshot }));
+    return sanitizePlannerPlan(await globalThis.__resonantosControlPlannerOverride({ goal, snapshot }), { dedupeControlSteps });
   }
   const result = await bridgeRequest("/augmentor/control-plan", {
     method: "POST",
@@ -1751,35 +1440,7 @@ const requestControlPlan = async (goal, snapshot) => {
   return sanitizePlannerPlan({
     source: "llm",
     ...result.plan
-  });
-};
-
-const sanitizeNextActionDecision = (decision) => {
-  if (!decision || typeof decision !== "object") {
-    throw new Error("Next-action response must be an object.");
-  }
-  const status = String(decision.status ?? "continue").trim().toLowerCase();
-  if (!["continue", "done", "needs_approval", "blocked"].includes(status)) {
-    throw new Error(`Unsupported next-action status: ${status || "missing"}.`);
-  }
-  const base = {
-    source: String(decision.source ?? "llm").slice(0, 80),
-    thought: String(decision.thought ?? "").trim().slice(0, 500),
-    status,
-    action: null,
-    approvalReason: decision.approvalReason ? String(decision.approvalReason).trim().slice(0, 700) : null,
-    doneSummary: decision.doneSummary ? String(decision.doneSummary).trim().slice(0, 700) : null
-  };
-  if (status === "done") {
-    return { ...base, doneSummary: base.doneSummary || base.thought || "The browser task is complete." };
-  }
-  if (status === "needs_approval" || status === "blocked") {
-    return { ...base, approvalReason: base.approvalReason || base.thought || "The browser task cannot continue safely." };
-  }
-  return {
-    ...base,
-    action: sanitizePlannerStep(decision.action)
-  };
+  }, { dedupeControlSteps });
 };
 
 const deterministicNextAction = (goal, snapshot, history) => {
