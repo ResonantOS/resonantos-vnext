@@ -1,14 +1,5 @@
-import {
-  approvalBoundaryForStep,
-  sanitizeNextActionDecision,
-  sanitizePlannerPlan,
-} from "./lib/approval-policy.js";
-import {
-  controlStepLabel,
-  dedupeControlSteps,
-  deterministicNextAction,
-  planControlSteps
-} from "./lib/agent-control-planner.js";
+import { approvalBoundaryForStep } from "./lib/approval-policy.js";
+import { controlStepLabel } from "./lib/agent-control-planner.js";
 import { createAgentControlRunner } from "./lib/agent-control-runner.js";
 import { createAppCommandHandlers } from "./lib/app-command-handlers.js";
 import { normalizeBrowserUrl, normalizeSearchQuery, parseQuotedText } from "./lib/browser-command-parser.js";
@@ -18,6 +9,7 @@ import { createBridgeClient } from "./lib/bridge-client.js";
 import { createChatSessionStore } from "./lib/chat-session-store.js";
 import { createChatTurnController } from "./lib/chat-turn-controller.js";
 import { createComposerController } from "./lib/composer-controller.js";
+import { createControlPlanningService } from "./lib/control-planning-service.js";
 import { createMessageActionController } from "./lib/message-action-controller.js";
 import { createMonitorRenderers } from "./lib/monitor-renderers.js";
 import { createSidePanelCommandRouter } from "./lib/side-panel-command-router.js";
@@ -472,83 +464,14 @@ const explainStructuredPageEditBoundary = async (instruction) => {
   );
 };
 
-const requestControlPlan = async (goal, snapshot) => {
-  if (typeof globalThis.__resonantosControlPlannerOverride === "function") {
-    return sanitizePlannerPlan(await globalThis.__resonantosControlPlannerOverride({ goal, snapshot }), { dedupeControlSteps });
-  }
-  const result = await bridgeRequest("/augmentor/control-plan", {
-    method: "POST",
-    body: {
-      goal,
-      model: modelSelect.value,
-      thinkingDepth: thinkingDepthSelect.value,
-      pageSnapshot: snapshot ?? null
-    }
-  });
-  return sanitizePlannerPlan({
-    source: "llm",
-    ...result.plan
-  }, { dedupeControlSteps });
-};
-
-const requestNextControlAction = async ({ goal, snapshot, history }) => {
-  if (typeof globalThis.__resonantosNextActionOverride === "function") {
-    try {
-      return sanitizeNextActionDecision(await globalThis.__resonantosNextActionOverride({ goal, snapshot, history }));
-    } catch (error) {
-      return {
-        source: "test-override",
-        status: "blocked",
-        thought: "The proposed browser action crossed a safety boundary.",
-        action: null,
-        approvalReason: error instanceof Error ? error.message : String(error),
-        doneSummary: null
-      };
-    }
-  }
-  try {
-    const result = await bridgeRequest("/augmentor/next-action", {
-      method: "POST",
-      body: {
-        goal,
-        model: modelSelect.value,
-        thinkingDepth: thinkingDepthSelect.value,
-        pageSnapshot: snapshot ?? null,
-        history
-      }
-    });
-    return sanitizeNextActionDecision({
-      source: "llm",
-      ...result.decision
-    });
-  } catch (error) {
-    const fallback = deterministicNextAction(goal, snapshot, history);
-    return fallback.status === "blocked" && !history.length
-      ? {
-          ...fallback,
-          approvalReason: `${fallback.approvalReason ?? "No safe fallback is available."} Planner error: ${error instanceof Error ? error.message : String(error)}`
-        }
-      : fallback;
-  }
-};
-
-const planAgentControlSteps = async (goal) => {
-  const snapshotResponse = await readActivePage({ announce: false }).catch(() => null);
-  const snapshot = snapshotResponse?.snapshot ?? lastSnapshot;
-  try {
-    const plan = await requestControlPlan(goal, snapshot);
-    return plan;
-  } catch (error) {
-    const fallbackSteps = planControlSteps(goal);
-    return {
-      source: "deterministic-fallback",
-      summary: `Planner unavailable; using deterministic control parser. ${error instanceof Error ? error.message : String(error)}`,
-      steps: fallbackSteps,
-      needsApproval: false,
-      approvalReason: null
-    };
-  }
-};
+const controlPlanningService = createControlPlanningService({
+  bridgeRequest,
+  getLastSnapshot: () => lastSnapshot,
+  getModel: () => modelSelect.value,
+  getThinkingDepth: () => thinkingDepthSelect.value,
+  readActivePage
+});
+const requestNextControlAction = controlPlanningService.requestNextControlAction;
 
 const executeControlStep = async (step) => {
   if (step.type === "inspect" || step.type === "read") {
