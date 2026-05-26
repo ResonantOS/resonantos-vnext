@@ -130,6 +130,11 @@ export function parseAutonomousBrowserActionIntent(message) {
   if (/^\//.test(normalized)) {
     return null;
   }
+  const hasPlainBrowserTarget = browserTargetPattern.test(normalized) && browserIntentVerbs.test(normalized);
+  const hasWorkAfterNavigation = /\b(find|search|look\s+for|add|put|select|choose|click|compare|buy|shop|book|fill|complete|submit|scroll|read|inspect)\b/i.test(normalized);
+  if (hasPlainBrowserTarget && !hasWorkAfterNavigation) {
+    return null;
+  }
   const shoppingIntent = /\b(amazon|amazon\.it|cart|chart|basket|carrello|buy|shop|shopping|product|pringles|nvidia|rtx|5090)\b/i.test(normalized) &&
     /\b(go\s+to|open|find|search|look\s+for|add|put|select|choose|click)\b/i.test(normalized);
   const browserTaskVerbs = /\b(book|schedule|arrange|reserve|fill|complete|submit|click|press|tap|select|choose|pick|open|find|search|scroll|read|inspect|look at|navigate|go to|visit|add|put)\b/i;

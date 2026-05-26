@@ -96,6 +96,7 @@ test("side panel command router dispatches natural browser intents before chat",
   await harness.router.respondToCommand("show form fields");
   await harness.router.respondToCommand("go to resonantos.com/dao");
   await harness.router.respondToCommand("find latest AI news on the internet");
+  await harness.router.respondToCommand("go to amazon.it and find me a rtx5090");
 
   assert.deepEqual(harness.calls.filter((call) => call[0] !== "bind").map((call) => call[0]), [
     "control",
@@ -105,8 +106,10 @@ test("side panel command router dispatches natural browser intents before chat",
     "scroll",
     "forms",
     "open",
-    "search"
+    "search",
+    "control"
   ]);
+  assert.deepEqual(harness.calls.at(-1), ["control", "go to amazon.it and find me a rtx5090"]);
 });
 
 test("side panel command router gates wallet terms and falls back to chat", async () => {

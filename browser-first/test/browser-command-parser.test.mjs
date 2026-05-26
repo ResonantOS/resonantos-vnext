@@ -52,6 +52,10 @@ test("browser command parser detects autonomous browser work and search work", (
   assert.deepEqual(parseAutonomousBrowserActionIntent("go to amazon.it and find jeans under 50 euro"), {
     goal: "go to amazon.it and find jeans under 50 euro",
   });
+  assert.deepEqual(parseAutonomousBrowserActionIntent("go to amazon.it and find me a rtx5090"), {
+    goal: "go to amazon.it and find me a rtx5090",
+  });
+  assert.equal(parseAutonomousBrowserActionIntent("go to amazon.it"), null);
   assert.deepEqual(parseNaturalSearchIntent("find latest AI news on the internet"), {
     action: "news",
     query: "latest AI news",

@@ -54,14 +54,14 @@ export function createSidePanelCommandRouter(handlers) {
     const structuredEditIntent = parseStructuredPageEditIntent(value);
     if (structuredEditIntent) return handlers.explainStructuredPageEditBoundary(structuredEditIntent.instruction);
 
-    const browserIntent = parseNaturalBrowserIntent(value);
-    if (browserIntent) return handlers.openBrowserUrl(browserIntent.target);
-
     const searchIntent = parseNaturalSearchIntent(value);
     if (searchIntent) return handlers.searchBrowser(searchIntent);
 
     const autonomousBrowserActionIntent = parseAutonomousBrowserActionIntent(value);
     if (autonomousBrowserActionIntent) return handlers.runControlCommand(autonomousBrowserActionIntent.goal);
+
+    const browserIntent = parseNaturalBrowserIntent(value);
+    if (browserIntent) return handlers.openBrowserUrl(browserIntent.target);
 
     if (/^\/(read|context)\b/i.test(value) || /^\/(summari[sz]e)\b/i.test(value)) {
       return handlers.summarizeSnapshot();
