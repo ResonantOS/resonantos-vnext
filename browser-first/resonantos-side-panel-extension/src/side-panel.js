@@ -27,6 +27,7 @@ import {
 } from "./lib/browser-command-parser.js";
 import { createBrowserPageActions } from "./lib/browser-page-actions.js";
 import { createBridgeClient } from "./lib/bridge-client.js";
+import { createChatSessionStore } from "./lib/chat-session-store.js";
 
 const readButton = document.querySelector("#read-page");
 const attachFileButton = document.querySelector("#attach-file");
@@ -83,9 +84,6 @@ const MAX_BROWSER_JOBS = 40;
 
 let lastSnapshot = null;
 let statusLabel = "Ready";
-let messages = [];
-let forks = [];
-let attachments = [];
 let turnBusy = false;
 let activityTimer = null;
 let currentControlRun = null;
@@ -191,6 +189,20 @@ const MODEL_LABELS = {
 };
 
 const supportsThinkingDepth = (model) => model.startsWith("gpt-5.");
+const chatSessionStore = createChatSessionStore({
+  storage: chrome.storage?.local,
+  storageKeys: STORAGE_KEYS,
+  getModel: () => modelSelect.value,
+  getThinkingDepth: () => thinkingDepthSelect.value,
+  setModel: (model) => {
+    modelSelect.value = model;
+  },
+  setThinkingDepth: (depth) => {
+    thinkingDepthSelect.value = depth;
+  },
+  isAllowedModel: (model) => [...modelSelect.options].some((option) => option.value === model),
+  isAllowedThinkingDepth: (depth) => [...thinkingDepthSelect.options].some((option) => option.value === depth)
+});
 
 const isReadableBrowserTab = (tab) => typeof tab?.url === "string" && /^https?:\/\//i.test(tab.url);
 const setStatus = (label) => {
@@ -525,6 +537,7 @@ const updateBrowserJob = async (jobId, patch) => {
 const currentJob = () => browserJobs.find((job) => job.id === activeJobId) ?? null;
 
 const renderAttachments = () => {
+  const attachments = chatSessionStore.getAttachments();
   attachmentStrip.replaceChildren();
   attachmentStrip.hidden = attachments.length === 0;
   attachments.forEach((attachment) => {
@@ -537,9 +550,9 @@ const renderAttachments = () => {
     remove.textContent = "×";
     remove.title = `Remove ${attachment.name}`;
     remove.addEventListener("click", () => {
-      attachments = attachments.filter((item) => item.id !== attachment.id);
-      renderAttachments();
-      void persistChatState();
+      void chatSessionStore.removeAttachment(attachment.id).then(() => {
+        renderAttachments();
+      });
     });
     chip.append(label, remove);
     attachmentStrip.append(chip);
@@ -547,20 +560,11 @@ const renderAttachments = () => {
 };
 
 const clearAttachments = async () => {
-  attachments = [];
+  await chatSessionStore.clearAttachments();
   renderAttachments();
-  await persistChatState();
 };
 
-const persistChatState = async () => {
-  await chrome.storage?.local?.set?.({
-    [STORAGE_KEYS.messages]: messages,
-    [STORAGE_KEYS.forks]: forks,
-    [STORAGE_KEYS.model]: modelSelect.value,
-    [STORAGE_KEYS.thinkingDepth]: thinkingDepthSelect.value,
-    [STORAGE_KEYS.attachments]: attachments
-  }).catch(() => undefined);
-};
+const persistChatState = () => chatSessionStore.persist();
 
 const messageLabel = (role) => {
   if (role === "user") return "You";
@@ -593,7 +597,7 @@ const actionButton = (action, label, title, onClick) => {
 
 const renderMessages = () => {
   transcript.replaceChildren();
-  messages.forEach((message) => {
+  chatSessionStore.getMessages().forEach((message) => {
     const article = document.createElement("article");
     article.className = `message ${message.role}`;
     article.dataset.messageId = message.id;
@@ -632,25 +636,14 @@ const renderMessages = () => {
 };
 
 const addMessage = async (role, content, { persist = true, usage = null } = {}) => {
-  const text = String(content ?? "").trim();
-  if (!text) return null;
-  const message = {
-    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    role,
-    content: text,
-    usage,
-    createdAt: new Date().toISOString()
-  };
-  messages = [...messages, message];
+  const message = await chatSessionStore.addMessage(role, content, { persist, usage });
+  if (!message) return null;
   renderMessages();
-  if (persist) {
-    await persistChatState();
-  }
   return message;
 };
 
 const copyMessage = async (id) => {
-  const message = messages.find((item) => item.id === id);
+  const message = chatSessionStore.findMessage(id);
   if (!message) return;
   await navigator.clipboard?.writeText?.(message.content).catch(() => undefined);
   const button = transcript.querySelector(`[data-message-id="${CSS.escape(id)}"] .message-action[data-action="copy"]`);
@@ -664,30 +657,20 @@ const copyMessage = async (id) => {
 };
 
 const forkFromMessage = async (id) => {
-  const index = messages.findIndex((item) => item.id === id);
-  if (index < 0) return;
-  const fork = {
-    id: `fork-${Date.now()}`,
-    sourceMessageId: id,
-    createdAt: new Date().toISOString(),
-    messages: messages.slice(0, index + 1)
-  };
-  forks = [...forks, fork];
-  messages = fork.messages.map((message) => ({ ...message }));
+  const fork = await chatSessionStore.forkFromMessage(id);
+  if (!fork) return;
   renderMessages();
-  await persistChatState();
   setStatus("Forked");
 };
 
 const deleteMessage = async (id) => {
-  messages = messages.filter((message) => message.id !== id);
+  await chatSessionStore.deleteMessage(id);
   renderMessages();
-  await persistChatState();
   setStatus("Deleted");
 };
 
 const editMessage = (id) => {
-  const message = messages.find((item) => item.id === id);
+  const message = chatSessionStore.findMessage(id);
   if (!message || message.role !== "user") return;
   commandInput.value = message.content;
   resetComposerUndoStack(message.content);
@@ -696,7 +679,7 @@ const editMessage = (id) => {
 };
 
 const saveMessageToArchive = async (id) => {
-  const message = messages.find((item) => item.id === id);
+  const message = chatSessionStore.findMessage(id);
   if (!message) return;
   setStatus("Saving");
   try {
@@ -718,7 +701,7 @@ const saveMessageToArchive = async (id) => {
 };
 
 const showMessageStats = async (id) => {
-  const message = messages.find((item) => item.id === id);
+  const message = chatSessionStore.findMessage(id);
   if (!message?.usage) {
     await addMessage("system", "No generation telemetry is available for this message.");
     return;
@@ -727,17 +710,13 @@ const showMessageStats = async (id) => {
 };
 
 const regenerateFromMessage = async (id) => {
-  const index = messages.findIndex((item) => item.id === id);
-  if (index < 0) return;
-  const userIndex = messages.slice(0, index).findLastIndex((message) => message.role === "user");
-  if (userIndex < 0) {
+  const userMessage = await chatSessionStore.trimToPreviousUserMessage(id);
+  if (!userMessage) {
     await addMessage("system", "No previous user message is available for regeneration.");
     return;
   }
-  messages = messages.slice(0, userIndex + 1);
   renderMessages();
-  await persistChatState();
-  await respondToCommand(messages[userIndex].content);
+  await respondToCommand(userMessage.content);
 };
 
 const browserPageActions = createBrowserPageActions({
@@ -828,10 +807,9 @@ const attachFiles = async (fileList) => {
       content
     });
   }
-  attachments = [...attachments, ...nextAttachments];
+  await chatSessionStore.addAttachments(nextAttachments);
   fileInput.value = "";
   renderAttachments();
-  await persistChatState();
   setStatus("Attached");
 };
 
@@ -883,6 +861,7 @@ const pageContextForBridge = () => {
 };
 
 const bridgeChat = async () => {
+  const attachments = chatSessionStore.getAttachments();
   return bridgeRequest("/augmentor/chat", {
     method: "POST",
     body: {
@@ -890,7 +869,7 @@ const bridgeChat = async () => {
       thinkingDepth: thinkingDepthSelect.value,
       pageContext: pageContextForBridge(),
       runtimeContext: attachments.length ? `Composer attachments:\n${attachments.map((item) => `- ${item.name}: ${item.content ?? item.summary}`).join("\n")}` : null,
-      messages: messages
+      messages: chatSessionStore.getMessages()
         .filter((message) => ["user", "assistant"].includes(message.role))
         .slice(-MAX_HISTORY_MESSAGES)
         .map((message) => ({ role: message.role, content: message.content }))
@@ -1592,22 +1571,7 @@ const respondToCommand = async (value) => {
 };
 
 const hydrateChatSettings = async () => {
-  const settings = await chrome.storage?.local?.get?.([
-    STORAGE_KEYS.messages,
-    STORAGE_KEYS.forks,
-    STORAGE_KEYS.model,
-    STORAGE_KEYS.thinkingDepth,
-    STORAGE_KEYS.attachments
-  ]).catch(() => ({}));
-  if (settings?.[STORAGE_KEYS.model] && [...modelSelect.options].some((option) => option.value === settings[STORAGE_KEYS.model])) {
-    modelSelect.value = settings[STORAGE_KEYS.model];
-  }
-  if (settings?.[STORAGE_KEYS.thinkingDepth] && [...thinkingDepthSelect.options].some((option) => option.value === settings[STORAGE_KEYS.thinkingDepth])) {
-    thinkingDepthSelect.value = settings[STORAGE_KEYS.thinkingDepth];
-  }
-  messages = Array.isArray(settings?.[STORAGE_KEYS.messages]) ? settings[STORAGE_KEYS.messages].filter((message) => ["user", "assistant", "system"].includes(message?.role)) : [];
-  forks = Array.isArray(settings?.[STORAGE_KEYS.forks]) ? settings[STORAGE_KEYS.forks] : [];
-  attachments = Array.isArray(settings?.[STORAGE_KEYS.attachments]) ? settings[STORAGE_KEYS.attachments] : [];
+  await chatSessionStore.hydrate();
   renderMessages();
   renderAttachments();
   updateConnectionLine();

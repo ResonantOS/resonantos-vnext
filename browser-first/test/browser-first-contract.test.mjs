@@ -69,6 +69,7 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   const agentControlPlanner = await readText(path.join(extensionRoot, "src", "lib", "agent-control-planner.js"));
   const agentControlRunner = await readText(path.join(extensionRoot, "src", "lib", "agent-control-runner.js"));
   const pageActions = await readText(path.join(extensionRoot, "src", "lib", "browser-page-actions.js"));
+  const chatSessionStore = await readText(path.join(extensionRoot, "src", "lib", "chat-session-store.js"));
   const background = await readText(path.join(extensionRoot, "src", "background.js"));
 
   assert.match(panel, /Message Augmentor/);
@@ -95,6 +96,11 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(pageActions, /currentWindow: true/);
   assert.match(pageActions, /summarizeSnapshot/);
   assert.match(script, /saveIntake/);
+  assert.match(script, /createChatSessionStore/);
+  assert.match(chatSessionStore, /forkFromMessage/);
+  assert.match(chatSessionStore, /trimToPreviousUserMessage/);
+  assert.match(chatSessionStore, /addAttachments/);
+  assert.match(chatSessionStore, /hydrate/);
   assert.match(script, /createBridgeClient/);
   assert.match(bridgeClient, /bridgeUrl = config\.bridgeUrl \?\? "http:\/\/127\.0\.0\.1:47773"/);
   assert.match(bridgeClient, /__RESONANTOS_BRIDGE_CONFIG__/);
