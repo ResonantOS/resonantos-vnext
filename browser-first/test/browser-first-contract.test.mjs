@@ -67,6 +67,7 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   const commandParser = await readText(path.join(extensionRoot, "src", "lib", "browser-command-parser.js"));
   const approvalPolicy = await readText(path.join(extensionRoot, "src", "lib", "approval-policy.js"));
   const agentControlPlanner = await readText(path.join(extensionRoot, "src", "lib", "agent-control-planner.js"));
+  const agentControlRunner = await readText(path.join(extensionRoot, "src", "lib", "agent-control-runner.js"));
   const background = await readText(path.join(extensionRoot, "src", "background.js"));
 
   assert.match(panel, /Message Augmentor/);
@@ -144,8 +145,8 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(agentControlPlanner, /planControlSteps/);
   assert.match(script, /requestControlPlan/);
   assert.match(script, /requestNextControlAction/);
-  assert.match(script, /continueControlLoop/);
-  assert.match(script, /observe-act-verify-loop/);
+  assert.match(agentControlRunner, /continueControlLoop/);
+  assert.match(agentControlRunner, /observe-act-verify-loop/);
   assert.match(approvalPolicy, /sanitizePlannerStep/);
   assert.match(approvalPolicy, /sanitizeNextActionDecision/);
   assert.match(approvalPolicy, /sanitizePlannerPlan/);
@@ -154,13 +155,13 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(script, /__resonantosControlPlannerOverride/);
   assert.match(script, /__resonantosNextActionOverride/);
   assert.match(script, /executeControlStep/);
-  assert.match(script, /runControlCommand/);
+  assert.match(agentControlRunner, /runControlCommand/);
   assert.match(script, /renderControlMonitor/);
-  assert.match(script, /approvePendingControlStep/);
-  assert.match(script, /denyPendingControlStep/);
+  assert.match(agentControlRunner, /approvePendingControlStep/);
+  assert.match(agentControlRunner, /denyPendingControlStep/);
   assert.match(script, /saveControlReportToArchive/);
   assert.match(script, /delegateControlIssue/);
-  assert.match(script, /Agent Control Mode started/);
+  assert.match(agentControlRunner, /Agent Control Mode started/);
   assert.match(script, /explainStructuredPageEditBoundary/);
   assert.match(script, /bing\.com\/news\/search/);
   assert.match(script, /\/web\/news/);
