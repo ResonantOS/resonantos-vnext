@@ -1,3 +1,20 @@
+export function controlResultSummary(result = {}) {
+  if (!result?.ok) {
+    if (result?.approvalRequired) return result?.error ?? "human approval required";
+    return result?.error ?? "action failed";
+  }
+  if (result.clickedText) return `clicked "${String(result.clickedText).slice(0, 80)}"`;
+  if (result.typedText) return result.submitted ? `typed and submitted "${String(result.typedText).slice(0, 80)}"` : `typed "${String(result.typedText).slice(0, 80)}"`;
+  if (result.url) return `opened ${result.url}`;
+  if (result.query) return `searched "${String(result.query).slice(0, 80)}"`;
+  if (result.direction) return `scrolled ${result.direction}`;
+  if (result.snapshot?.title || result.snapshot?.url) return `read ${result.snapshot.title || result.snapshot.url}`;
+  if (Array.isArray(result.tabs)) return `checked ${result.tabs.length} tabs`;
+  if (Array.isArray(result.forms)) return `found ${result.forms.length} forms`;
+  if (result.waitedMs) return `waited ${result.waitedMs}ms`;
+  return "completed";
+}
+
 export function createAgentControlRunner(deps) {
   const {
     addMessage,
@@ -97,7 +114,7 @@ export function createAgentControlRunner(deps) {
           const reason = result?.approvalRequired
             ? "Stopped because this step requires human approval."
             : `Stopped because this step failed: ${result?.error ?? "unknown error"}`;
-          updateControlStep(stepIndex, result?.approvalRequired ? "blocked" : "failed", result?.error ?? "unknown error");
+          updateControlStep(stepIndex, result?.approvalRequired ? "blocked" : "failed", controlResultSummary(result));
           finishControlRun(status);
           setStatus(result?.approvalRequired ? "Needs approval" : "Control blocked");
           setActivity("failed", "Control mode blocked", controlStepLabel(step));
@@ -121,7 +138,7 @@ export function createAgentControlRunner(deps) {
           }
           return { ok: false, results, approvalRequired: Boolean(result?.approvalRequired) };
         }
-        updateControlStep(stepIndex, "completed");
+        updateControlStep(stepIndex, "completed", controlResultSummary(result));
         await sleep(350);
       }
 
@@ -192,7 +209,7 @@ export function createAgentControlRunner(deps) {
     const result = await executeControlStep(step);
     results.push({ step, result });
     if (!result?.ok) {
-      updateControlStep(approval.stepIndex, result?.approvalRequired ? "blocked" : "failed", result?.error ?? "unknown error");
+      updateControlStep(approval.stepIndex, result?.approvalRequired ? "blocked" : "failed", controlResultSummary(result));
       finishControlRun(result?.approvalRequired ? "approval" : "blocked");
       setStatus(result?.approvalRequired ? "Needs approval" : "Control blocked");
       setActivity("failed", "Control mode blocked", controlStepLabel(step));
@@ -200,7 +217,7 @@ export function createAgentControlRunner(deps) {
       await saveControlReportToArchive(results, result?.approvalRequired ? "approval-required" : "blocked");
       return;
     }
-    updateControlStep(approval.stepIndex, "completed", "approved once");
+    updateControlStep(approval.stepIndex, "completed", controlResultSummary(result));
     const history = [
       ...(approval.history ?? []),
       {

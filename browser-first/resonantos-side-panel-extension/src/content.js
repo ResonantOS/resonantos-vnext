@@ -72,20 +72,20 @@ const ensureControlOverlay = () => {
     style.id = "resonantos-control-overlay-styles";
     style.textContent = `
       #${controlOverlayId}, #${controlToastId} { all: initial; color-scheme: dark; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; z-index: 2147483646; pointer-events: none; }
-      #${controlOverlayId} { position: fixed; inset: 0; display: none; border: 3px solid rgba(36,209,143,.92); box-shadow: inset 0 0 96px rgba(36,209,143,.30), inset 0 0 180px rgba(36,209,143,.16), 0 0 70px rgba(36,209,143,.34); background:
-        radial-gradient(circle at 12% 18%, rgba(36,209,143,.20), transparent 26%),
-        radial-gradient(circle at 88% 82%, rgba(36,209,143,.18), transparent 28%),
-        linear-gradient(90deg, rgba(36,209,143,.30), transparent 13%, transparent 87%, rgba(36,209,143,.30)),
-        linear-gradient(0deg, rgba(36,209,143,.26), transparent 16%, transparent 84%, rgba(36,209,143,.26)),
+      #${controlOverlayId} { position: fixed; inset: 0; display: none; border: 4px solid rgba(36,209,143,.98); box-shadow: inset 0 0 118px rgba(36,209,143,.38), inset 0 0 220px rgba(36,209,143,.22), 0 0 86px rgba(36,209,143,.42); background:
+        radial-gradient(circle at 12% 18%, rgba(36,209,143,.25), transparent 30%),
+        radial-gradient(circle at 88% 82%, rgba(36,209,143,.22), transparent 32%),
+        linear-gradient(90deg, rgba(36,209,143,.38), transparent 18%, transparent 82%, rgba(36,209,143,.38)),
+        linear-gradient(0deg, rgba(36,209,143,.34), transparent 20%, transparent 80%, rgba(36,209,143,.34)),
         repeating-linear-gradient(90deg, rgba(36,209,143,.16) 0 3px, transparent 3px 13px),
         repeating-linear-gradient(0deg, rgba(36,209,143,.12) 0 2px, transparent 2px 15px); opacity: .98; }
       #${controlOverlayId}[data-state="active"], #${controlOverlayId}[data-session="active"] { display:block; animation: ros-control-wave 1.7s steps(18) infinite, ros-control-pixel 3.4s linear infinite; }
       #${controlOverlayId}[data-state="done"] { display:block; border-color: rgba(117,255,187,.72); animation: ros-control-fade .8s ease-out forwards; }
       #${controlOverlayId}[data-state="blocked"] { display:block; border-color: rgba(255,121,91,.9); box-shadow: inset 0 0 46px rgba(255,121,91,.16), 0 0 40px rgba(255,121,91,.2); animation: ros-control-fade 1.1s ease-out forwards; }
-      #${controlOverlayId}::before, #${controlOverlayId}::after { content:""; position:absolute; left:-35%; right:-35%; height:54px; background: linear-gradient(90deg, transparent, rgba(36,209,143,.18), rgba(36,209,143,.74), rgba(36,209,143,.18), transparent); filter: blur(1.2px); }
+      #${controlOverlayId}::before, #${controlOverlayId}::after { content:""; position:absolute; left:-35%; right:-35%; height:76px; background: linear-gradient(90deg, transparent, rgba(36,209,143,.22), rgba(36,209,143,.88), rgba(36,209,143,.22), transparent); filter: blur(1.2px); }
       #${controlOverlayId}::before { top:0; box-shadow: 0 42px 90px rgba(36,209,143,.22); }
       #${controlOverlayId}::after { bottom:0; box-shadow: 0 -42px 90px rgba(36,209,143,.22); }
-      #${controlOverlayId} .ros-control-left, #${controlOverlayId} .ros-control-right { position:absolute; top:-25%; bottom:-25%; width:64px; background: linear-gradient(180deg, transparent, rgba(36,209,143,.66), transparent); filter: blur(1.4px); opacity:.82; }
+      #${controlOverlayId} .ros-control-left, #${controlOverlayId} .ros-control-right { position:absolute; top:-25%; bottom:-25%; width:92px; background: linear-gradient(180deg, transparent, rgba(36,209,143,.78), transparent); filter: blur(1.4px); opacity:.9; }
       #${controlOverlayId} .ros-control-left { left:0; }
       #${controlOverlayId} .ros-control-right { right:0; }
       #${controlOverlayId}[data-session="active"] .ros-control-left { animation: ros-control-side 1.9s linear infinite; }

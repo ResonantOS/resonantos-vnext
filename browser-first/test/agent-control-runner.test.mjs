@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { controlStepLabel } from "../resonantos-side-panel-extension/src/lib/agent-control-planner.js";
-import { createAgentControlRunner } from "../resonantos-side-panel-extension/src/lib/agent-control-runner.js";
+import {
+  controlResultSummary,
+  createAgentControlRunner
+} from "../resonantos-side-panel-extension/src/lib/agent-control-runner.js";
 
 function createHarness(overrides = {}) {
   const events = [];
@@ -101,7 +104,16 @@ test("agent control runner completes an observe-act-verify loop", async () => {
   assert.equal(result.ok, true);
   assert.equal(harness.getControlRun().status, "completed");
   assert.deepEqual(harness.getControlRun().steps.map((step) => step.state), ["completed"]);
+  assert.deepEqual(harness.getControlRun().steps.map((step) => step.note), ['clicked "Next"']);
   assert.ok(harness.events.some((event) => event[0] === "message" && /Agent Control Mode completed/.test(event[2])));
+});
+
+test("agent control runner summarizes browser action results for the timeline", () => {
+  assert.equal(controlResultSummary({ ok: true, clickedText: "Continue" }), 'clicked "Continue"');
+  assert.equal(controlResultSummary({ ok: true, typedText: "pizza", submitted: true }), 'typed and submitted "pizza"');
+  assert.equal(controlResultSummary({ ok: true, direction: "down" }), "scrolled down");
+  assert.equal(controlResultSummary({ ok: false, approvalRequired: true, error: "Submit requires approval." }), "Submit requires approval.");
+  assert.equal(controlResultSummary({ ok: false }), "action failed");
 });
 
 test("agent control runner starts a control job and records the run shell", async () => {
@@ -146,6 +158,7 @@ test("agent control runner can approve or deny a pending step through injected s
 
   assert.equal(approvalHarness.getControlRun().status, "completed");
   assert.equal(approvalHarness.getControlRun().steps[0].state, "completed");
+  assert.equal(approvalHarness.getControlRun().steps[0].note, 'clicked "Submit"');
 
   const denyHarness = createHarness();
   denyHarness.getControlRun().steps.push({ type: "click", text: "Submit", state: "blocked" });

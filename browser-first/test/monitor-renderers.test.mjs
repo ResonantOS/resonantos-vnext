@@ -3,6 +3,7 @@ import test from "node:test";
 import { JSDOM } from "jsdom";
 
 import {
+  controlRunProgress,
   createMonitorRenderers,
   sitePermissionDescription
 } from "../resonantos-side-panel-extension/src/lib/monitor-renderers.js";
@@ -97,6 +98,20 @@ test("monitor renderers describe site permission modes", () => {
   assert.match(sitePermissionDescription("ask-before-action"), /asks before risky actions/);
 });
 
+test("monitor renderers calculate control run progress", () => {
+  assert.deepEqual(controlRunProgress({
+    status: "running",
+    steps: [{ state: "completed" }, { state: "active" }, { state: "pending" }]
+  }), {
+    active: 1,
+    activeLabel: "step 2/3",
+    blocked: -1,
+    completed: 1,
+    label: "running · step 2/3",
+    total: 3
+  });
+});
+
 test("monitor renderers hide control monitor when no run exists", () => {
   const harness = createHarness();
 
@@ -126,9 +141,15 @@ test("monitor renderers render control steps, artifacts, and approval boundaries
   assert.equal(harness.dom.window.document.querySelector("#control").hidden, false);
   assert.equal(harness.dom.window.document.querySelector("#control-title").textContent, "find product");
   assert.equal(harness.dom.window.document.querySelector("#control-status").dataset.status, "approval");
-  assert.deepEqual([...harness.dom.window.document.querySelectorAll("#control-steps li")].map((item) => item.textContent), [
-    "1. read - saw page",
-    "2. Click button"
+  assert.equal(harness.dom.window.document.querySelector("#control-status").textContent, "approval · blocked at 2/2");
+  assert.deepEqual([...harness.dom.window.document.querySelectorAll("#control-steps li")].map((item) => ({
+    index: item.dataset.index,
+    state: item.dataset.state,
+    text: item.querySelector(".control-step-main").textContent,
+    note: item.querySelector(".control-step-note")?.textContent ?? ""
+  })), [
+    { index: "1", state: "completed", text: "read", note: "saw page" },
+    { index: "2", state: "blocked", text: "Click button", note: "" }
   ]);
   assert.match(harness.dom.window.document.querySelector("#control-artifacts").textContent, /report: \/tmp\/report\.md/);
   assert.equal(harness.dom.window.document.querySelector("#approval").hidden, false);

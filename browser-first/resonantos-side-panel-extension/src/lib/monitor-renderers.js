@@ -5,6 +5,24 @@ export function sitePermissionDescription(mode) {
   return "Augmentor asks before risky actions and blocks sensitive actions by default.";
 }
 
+export function controlRunProgress(run) {
+  const steps = Array.isArray(run?.steps) ? run.steps : [];
+  const total = steps.length;
+  const completed = steps.filter((step) => step.state === "completed").length;
+  const active = steps.findIndex((step) => step.state === "active");
+  const blocked = steps.findIndex((step) => ["blocked", "failed"].includes(step.state));
+  const status = run?.status ?? "idle";
+  const activeLabel = active >= 0 ? `step ${active + 1}/${total || 1}` : blocked >= 0 ? `blocked at ${blocked + 1}/${total || 1}` : `${completed}/${total || 0}`;
+  return {
+    active,
+    activeLabel,
+    blocked,
+    completed,
+    label: `${status} · ${activeLabel}`,
+    total
+  };
+}
+
 export function createMonitorRenderers({
   activeTab,
   approvalBoundaryForStep,
@@ -51,14 +69,27 @@ export function createMonitorRenderers({
       return;
     }
     controlMonitor.hidden = false;
+    const progress = controlRunProgress(currentControlRun);
+    controlMonitor.dataset.status = currentControlRun.status;
+    controlMonitor.dataset.activeStep = progress.active >= 0 ? String(progress.active + 1) : "";
     controlMonitorTitle.textContent = currentControlRun.goal;
-    controlMonitorStatus.textContent = currentControlRun.status;
+    controlMonitorStatus.textContent = progress.label;
     controlMonitorStatus.dataset.status = currentControlRun.status;
     controlStepList.replaceChildren();
     currentControlRun.steps.forEach((step, index) => {
       const item = document.createElement("li");
       item.dataset.state = step.state ?? "pending";
-      item.textContent = `${index + 1}. ${controlStepLabel(step)}${step.note ? ` - ${step.note}` : ""}`;
+      item.dataset.index = String(index + 1);
+      const main = document.createElement("span");
+      main.className = "control-step-main";
+      main.textContent = controlStepLabel(step);
+      item.append(main);
+      if (step.note) {
+        const note = document.createElement("small");
+        note.className = "control-step-note";
+        note.textContent = step.note;
+        item.append(note);
+      }
       controlStepList.append(item);
     });
     if (currentControlRun.artifacts?.length) {
