@@ -72,15 +72,24 @@ const ensureControlOverlay = () => {
     style.id = "resonantos-control-overlay-styles";
     style.textContent = `
       #${controlOverlayId}, #${controlToastId} { all: initial; color-scheme: dark; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; z-index: 2147483646; pointer-events: none; }
-      #${controlOverlayId} { position: fixed; inset: 0; display: none; border: 2px solid rgba(36,209,143,.78); box-shadow: inset 0 0 46px rgba(36,209,143,.18), 0 0 40px rgba(36,209,143,.22); background:
-        repeating-linear-gradient(90deg, rgba(36,209,143,.10) 0 2px, transparent 2px 11px),
-        repeating-linear-gradient(0deg, rgba(36,209,143,.07) 0 1px, transparent 1px 13px); opacity: .92; }
+      #${controlOverlayId} { position: fixed; inset: 0; display: none; border: 3px solid rgba(36,209,143,.92); box-shadow: inset 0 0 96px rgba(36,209,143,.30), inset 0 0 180px rgba(36,209,143,.16), 0 0 70px rgba(36,209,143,.34); background:
+        radial-gradient(circle at 12% 18%, rgba(36,209,143,.20), transparent 26%),
+        radial-gradient(circle at 88% 82%, rgba(36,209,143,.18), transparent 28%),
+        linear-gradient(90deg, rgba(36,209,143,.30), transparent 13%, transparent 87%, rgba(36,209,143,.30)),
+        linear-gradient(0deg, rgba(36,209,143,.26), transparent 16%, transparent 84%, rgba(36,209,143,.26)),
+        repeating-linear-gradient(90deg, rgba(36,209,143,.16) 0 3px, transparent 3px 13px),
+        repeating-linear-gradient(0deg, rgba(36,209,143,.12) 0 2px, transparent 2px 15px); opacity: .98; }
       #${controlOverlayId}[data-state="active"], #${controlOverlayId}[data-session="active"] { display:block; animation: ros-control-wave 1.7s steps(18) infinite, ros-control-pixel 3.4s linear infinite; }
       #${controlOverlayId}[data-state="done"] { display:block; border-color: rgba(117,255,187,.72); animation: ros-control-fade .8s ease-out forwards; }
       #${controlOverlayId}[data-state="blocked"] { display:block; border-color: rgba(255,121,91,.9); box-shadow: inset 0 0 46px rgba(255,121,91,.16), 0 0 40px rgba(255,121,91,.2); animation: ros-control-fade 1.1s ease-out forwards; }
-      #${controlOverlayId}::before, #${controlOverlayId}::after { content:""; position:absolute; left:0; right:0; height:18px; background: linear-gradient(90deg, transparent, rgba(36,209,143,.58), transparent); filter: blur(.4px); }
-      #${controlOverlayId}::before { top:0; }
-      #${controlOverlayId}::after { bottom:0; }
+      #${controlOverlayId}::before, #${controlOverlayId}::after { content:""; position:absolute; left:-35%; right:-35%; height:54px; background: linear-gradient(90deg, transparent, rgba(36,209,143,.18), rgba(36,209,143,.74), rgba(36,209,143,.18), transparent); filter: blur(1.2px); }
+      #${controlOverlayId}::before { top:0; box-shadow: 0 42px 90px rgba(36,209,143,.22); }
+      #${controlOverlayId}::after { bottom:0; box-shadow: 0 -42px 90px rgba(36,209,143,.22); }
+      #${controlOverlayId} .ros-control-left, #${controlOverlayId} .ros-control-right { position:absolute; top:-25%; bottom:-25%; width:64px; background: linear-gradient(180deg, transparent, rgba(36,209,143,.66), transparent); filter: blur(1.4px); opacity:.82; }
+      #${controlOverlayId} .ros-control-left { left:0; }
+      #${controlOverlayId} .ros-control-right { right:0; }
+      #${controlOverlayId}[data-session="active"] .ros-control-left { animation: ros-control-side 1.9s linear infinite; }
+      #${controlOverlayId}[data-session="active"] .ros-control-right { animation: ros-control-side 1.9s linear infinite reverse; }
       #${controlOverlayId}[data-session="active"]::before { animation: ros-control-edge 1.6s linear infinite; }
       #${controlOverlayId}[data-session="active"]::after { animation: ros-control-edge 1.6s linear infinite reverse; }
       #${controlToastId} { position: fixed; left: 50%; bottom: 18px; display:none; max-width: min(520px, calc(100vw - 28px)); transform: translateX(-50%); border: 1px solid rgba(36,209,143,.38); border-radius: 999px; background: rgba(4,12,8,.92); color:#dfffea; box-shadow: 0 18px 58px rgba(0,0,0,.38); font: 800 12px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 10px 14px; text-align:center; }
@@ -89,7 +98,8 @@ const ensureControlOverlay = () => {
       .resonantos-control-target { outline: 2px solid rgba(36,209,143,.9) !important; outline-offset: 4px !important; box-shadow: 0 0 0 6px rgba(36,209,143,.16), 0 0 34px rgba(36,209,143,.38) !important; }
       @keyframes ros-control-wave { 0% { clip-path: polygon(0 0,100% 0,100% 100%,0 100%); filter: brightness(1); } 50% { filter: brightness(1.48) saturate(1.24); } 100% { filter: brightness(1); } }
       @keyframes ros-control-pixel { 0% { background-position: 0 0, 0 0; } 100% { background-position: 44px 0, 0 52px; } }
-      @keyframes ros-control-edge { 0% { transform: translateX(-35%); opacity:.2; } 45% { opacity:.86; } 100% { transform: translateX(35%); opacity:.2; } }
+      @keyframes ros-control-edge { 0% { transform: translateX(-18%); opacity:.28; } 45% { opacity:1; } 100% { transform: translateX(18%); opacity:.28; } }
+      @keyframes ros-control-side { 0% { transform: translateY(-18%); opacity:.32; } 45% { opacity:1; } 100% { transform: translateY(18%); opacity:.32; } }
       @keyframes ros-control-fade { 0% { opacity:.9; } 100% { opacity:0; } }
     `;
     document.documentElement.append(style);
@@ -98,6 +108,7 @@ const ensureControlOverlay = () => {
   if (!overlay) {
     overlay = document.createElement("div");
     overlay.id = controlOverlayId;
+    overlay.innerHTML = `<span class="ros-control-left"></span><span class="ros-control-right"></span>`;
     document.documentElement.append(overlay);
   }
   let toast = document.getElementById(controlToastId);
@@ -115,7 +126,8 @@ const pulseControlOverlay = ({ state = "active", label = "Augmentor is operating
   if (!target && state === "active" && Number(toast.dataset.lockedUntil || 0) > now) {
     return;
   }
-  overlay.dataset.state = state;
+  const sessionActive = overlay.dataset.session === "active";
+  overlay.dataset.state = sessionActive && state !== "blocked" ? "active" : state;
   toast.dataset.state = state;
   toast.textContent = label;
   document.querySelectorAll(".resonantos-control-target").forEach((element) => element.classList.remove("resonantos-control-target"));
@@ -126,7 +138,7 @@ const pulseControlOverlay = ({ state = "active", label = "Augmentor is operating
   }
   if (state !== "active") {
     window.setTimeout(() => {
-      if (overlay.dataset.state === state) overlay.dataset.state = overlay.dataset.session === "active" ? "active" : "";
+      if (overlay.dataset.state === state || overlay.dataset.session === "active") overlay.dataset.state = overlay.dataset.session === "active" ? "active" : "";
       if (toast.dataset.state === state) {
         if (toast.dataset.session === "active") {
           toast.dataset.state = "active";
