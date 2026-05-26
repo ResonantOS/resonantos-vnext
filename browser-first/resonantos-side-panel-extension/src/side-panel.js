@@ -2407,7 +2407,16 @@ dictateButton.addEventListener("click", () => {
 });
 
 commandInput.addEventListener("keydown", (event) => {
-  if (event.isComposing || event.metaKey || event.ctrlKey || event.altKey) {
+  if (event.isComposing) {
+    return;
+  }
+  const shortcutKey = event.key.toLowerCase();
+  if ((event.metaKey || event.ctrlKey) && !event.altKey && shortcutKey === "a") {
+    event.preventDefault();
+    commandInput.select();
+    return;
+  }
+  if (event.metaKey || event.ctrlKey || event.altKey) {
     return;
   }
   if (event.key === "Enter" && !event.shiftKey) {
