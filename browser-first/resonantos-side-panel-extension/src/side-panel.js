@@ -22,6 +22,7 @@ import { createMessageActionController } from "./lib/message-action-controller.j
 import { createMonitorRenderers } from "./lib/monitor-renderers.js";
 import { createSidePanelCommandRouter } from "./lib/side-panel-command-router.js";
 import { createSidePanelRenderers } from "./lib/side-panel-renderers.js";
+import { createTabContextController } from "./lib/tab-context-controller.js";
 
 const readButton = document.querySelector("#read-page");
 const attachFileButton = document.querySelector("#attach-file");
@@ -416,33 +417,23 @@ monitorRenderers = createMonitorRenderers({
   updateContextDockVisibility
 });
 
-const resolveTabMention = async (message) => {
-  const match = /@([a-z0-9][a-z0-9 .:_-]{0,80})/i.exec(String(message ?? ""));
-  if (!match) return null;
-  const raw = match[1].trim().replace(/[.,;!?]+$/g, "");
-  const tabs = (await chrome.tabs.query({}).catch(() => [])).filter(isReadableBrowserTab);
-  if (/^tab\s+\d+$/i.test(raw)) {
-    const index = Number(/\d+/.exec(raw)?.[0] ?? "0") - 1;
-    return tabs[index] ?? null;
-  }
-  const needle = raw.toLowerCase();
-  return tabs.find((tab) =>
-    String(tab.title ?? "").toLowerCase().includes(needle) ||
-    String(tab.url ?? "").toLowerCase().includes(needle)
-  ) ?? null;
-};
-
-const bindMentionedTab = async (message) => {
-  const tab = await resolveTabMention(message);
-  if (!tab?.id) return null;
-  controlledTabId = tab.id;
-  await chrome.tabs.update(tab.id, { active: true }).catch(() => undefined);
-  lastSnapshot = null;
-  setContextMeter(null);
-  await renderSitePermissionPanel(tab);
-  await addMessage("system", `Using @tab context: ${tab.title || tab.url}`);
-  return tab;
-};
+const tabContextController = createTabContextController({
+  addMessage,
+  chrome,
+  getControlledTabId: () => controlledTabId,
+  isReadableBrowserTab,
+  refreshTabContext,
+  renderSitePermissionPanel,
+  setContextMeter,
+  setControlledTabId: (tabId) => {
+    controlledTabId = tabId;
+  },
+  setLastSnapshot: (snapshot) => {
+    lastSnapshot = snapshot;
+  },
+  sitePermissionStorageKey: STORAGE_KEYS.sitePermissions
+});
+const bindMentionedTab = tabContextController.bindMentionedTab;
 
 const saveIntake = async () => {
   const response = lastSnapshot ? { ok: true, snapshot: lastSnapshot } : await readActivePage({ announce: false });
@@ -921,21 +912,6 @@ const hydrateChatSettings = async () => {
   updateConnectionLine();
 };
 
-const consumeInlineDraft = async (draft) => {
-  if (!draft?.selection) return;
-  await addMessage(
-    "system",
-    [
-      "Inline Assistant context received.",
-      draft.title ? `Page: ${draft.title}` : "",
-      draft.url ? `URL: ${draft.url}` : "",
-      "",
-      String(draft.selection).slice(0, 4000)
-    ].filter(Boolean).join("\n")
-  );
-  await chrome.storage?.local?.remove?.("augmentorInlineDraft").catch(() => undefined);
-};
-
 attachFileButton.addEventListener("click", () => fileInput.click());
 fileInput.addEventListener("change", () => void messageActions.attachFiles(fileInput.files));
 readButton.addEventListener("click", () => void readActivePage());
@@ -961,20 +937,7 @@ sitePermissionMode.addEventListener("change", async () => {
   setActivity("completed", "Site permission updated", `${result.key} · ${result.mode}`);
   clearActivitySoon(1600);
 });
-chrome.storage?.onChanged?.addListener((changes, area) => {
-  if (area === "local" && changes.augmentorInlineDraft?.newValue) {
-    void consumeInlineDraft(changes.augmentorInlineDraft.newValue);
-  }
-  if (area === "local" && changes[STORAGE_KEYS.sitePermissions]) {
-    void renderSitePermissionPanel();
-  }
-});
-chrome.tabs?.onActivated?.addListener(() => void refreshTabContext());
-chrome.tabs?.onUpdated?.addListener((tabId, changeInfo) => {
-  if (changeInfo.status === "complete" && (!controlledTabId || controlledTabId === tabId)) {
-    void refreshTabContext();
-  }
-});
+tabContextController.bindBrowserListeners();
 modelSelect.addEventListener("change", () => void persistChatState().then(updateConnectionLine));
 thinkingDepthSelect.addEventListener("change", () => void persistChatState());
 dictateButton.addEventListener("click", () => {
@@ -1008,9 +971,7 @@ commandForm.addEventListener("submit", async (event) => {
 
 hydrateChatSettings().then(async () => {
   await loadBrowserJobs();
-  await refreshTabContext();
-  const draft = await chrome.storage?.local?.get?.("augmentorInlineDraft").catch(() => ({}));
-  await consumeInlineDraft(draft?.augmentorInlineDraft);
+  await tabContextController.hydrateInitialContext();
 }).catch((error) => {
   setStatus("Context failed");
   void addMessage("system", `I could not read the active tab context: ${String(error)}`);

@@ -78,6 +78,7 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   const sidePanelRenderers = await readText(path.join(extensionRoot, "src", "lib", "side-panel-renderers.js"));
   const monitorRenderers = await readText(path.join(extensionRoot, "src", "lib", "monitor-renderers.js"));
   const commandRouter = await readText(path.join(extensionRoot, "src", "lib", "side-panel-command-router.js"));
+  const tabContextController = await readText(path.join(extensionRoot, "src", "lib", "tab-context-controller.js"));
   const background = await readText(path.join(extensionRoot, "src", "background.js"));
 
   assert.match(panel, /Message Augmentor/);
@@ -142,6 +143,12 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(monitorRenderers, /renderSitePermissionPanel/);
   assert.match(monitorRenderers, /renderJobMonitor/);
   assert.match(monitorRenderers, /renderControlMonitor/);
+  assert.match(script, /createTabContextController/);
+  assert.match(tabContextController, /resolveTabMention/);
+  assert.match(tabContextController, /bindMentionedTab/);
+  assert.match(tabContextController, /consumeInlineDraft/);
+  assert.match(tabContextController, /bindBrowserListeners/);
+  assert.match(tabContextController, /hydrateInitialContext/);
   assert.match(script, /createBridgeClient/);
   assert.match(bridgeClient, /bridgeUrl = config\.bridgeUrl \?\? "http:\/\/127\.0\.0\.1:47773"/);
   assert.match(bridgeClient, /__RESONANTOS_BRIDGE_CONFIG__/);
@@ -185,8 +192,8 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(script, /augmentorBrowserJobs/);
   assert.match(script, /renderSitePermissionPanel/);
   assert.match(script, /sitePermissionMode\.addEventListener/);
-  assert.match(script, /resolveTabMention/);
-  assert.match(script, /augmentorInlineDraft/);
+  assert.match(tabContextController, /resolveTabMention/);
+  assert.match(tabContextController, /augmentorInlineDraft/);
   assert.match(pageActions, /searchBrowser/);
   assert.match(pageActions, /typeIntoActivePage/);
   assert.match(pageActions, /clickActivePageText/);

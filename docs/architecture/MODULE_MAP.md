@@ -180,6 +180,7 @@ This map defines which folder owns which feature area so contributors do not kee
   - `resonantos-side-panel-extension/src/lib/message-action-controller.js` owns message mutation actions, archive-save from messages, stats reporting, regeneration dispatch, clipboard copy feedback, and file attachment import/clear behavior
   - `resonantos-side-panel-extension/src/lib/side-panel-renderers.js` owns dependency-injected message and attachment rendering, action icons, copy flash feedback, and role labels
   - `resonantos-side-panel-extension/src/lib/monitor-renderers.js` owns dependency-injected status dock rendering for site permissions, browser jobs, control runs, artifacts, and approval prompts
+  - `resonantos-side-panel-extension/src/lib/tab-context-controller.js` owns dependency-injected `@tab` resolution, controlled-tab binding, inline assistant draft consumption, tab/storage listeners, and initial tab-context hydration
   - `resonantos-side-panel-extension/src/lib/side-panel-command-router.js` owns side-panel command dispatch for slash commands, natural browser intents, wallet boundaries, and chat fallback
   - generated `resonantos-side-panel-extension/src/bridge-config.generated.js` is session material and must not be committed
   - preview bridge rule: per-session token is acceptable for internal testing, but ADR-037 requires native messaging, signed IPC, or equivalent authenticated browser-shell IPC before public wallet/DAO readiness
