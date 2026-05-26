@@ -16,6 +16,7 @@ import { createBrowserJobStore } from "./lib/browser-job-store.js";
 import { createBrowserPageActions } from "./lib/browser-page-actions.js";
 import { createBridgeClient } from "./lib/bridge-client.js";
 import { createChatSessionStore } from "./lib/chat-session-store.js";
+import { createChatTurnController } from "./lib/chat-turn-controller.js";
 import { createComposerController } from "./lib/composer-controller.js";
 import { createMonitorRenderers } from "./lib/monitor-renderers.js";
 import { createSidePanelCommandRouter } from "./lib/side-panel-command-router.js";
@@ -71,8 +72,6 @@ const STORAGE_KEYS = {
   browserJobs: "augmentorBrowserJobs",
   jobMonitorCollapsed: "augmentorJobMonitorCollapsed"
 };
-const MAX_HISTORY_MESSAGES = 16;
-
 let lastSnapshot = null;
 let statusLabel = "Ready";
 let turnBusy = false;
@@ -565,33 +564,6 @@ const explainStructuredPageEditBoundary = async (instruction) => {
   );
 };
 
-const pageContextForBridge = () => {
-  if (!lastSnapshot) return null;
-  const text = String(lastSnapshot.text ?? "").slice(0, 7000);
-  return [
-    `Title: ${lastSnapshot.title || "Untitled"}`,
-    `URL: ${lastSnapshot.url || "unknown"}`,
-    text ? `Visible text:\n${text}` : ""
-  ].filter(Boolean).join("\n\n");
-};
-
-const bridgeChat = async () => {
-  const attachments = chatSessionStore.getAttachments();
-  return bridgeRequest("/augmentor/chat", {
-    method: "POST",
-    body: {
-      model: modelSelect.value,
-      thinkingDepth: thinkingDepthSelect.value,
-      pageContext: pageContextForBridge(),
-      runtimeContext: attachments.length ? `Composer attachments:\n${attachments.map((item) => `- ${item.name}: ${item.content ?? item.summary}`).join("\n")}` : null,
-      messages: chatSessionStore.getMessages()
-        .filter((message) => ["user", "assistant"].includes(message.role))
-        .slice(-MAX_HISTORY_MESSAGES)
-        .map((message) => ({ role: message.role, content: message.content }))
-    }
-  });
-};
-
 const requestControlPlan = async (goal, snapshot) => {
   if (typeof globalThis.__resonantosControlPlannerOverride === "function") {
     return sanitizePlannerPlan(await globalThis.__resonantosControlPlannerOverride({ goal, snapshot }), { dedupeControlSteps });
@@ -945,28 +917,25 @@ const runBrowserCommand = async (body) => {
   await openBrowserUrl(target);
 };
 
-const runChatTurn = async () => {
-  setStatus("Thinking");
-  setActivity("thinking", "Thinking", "Calling the selected model route");
-  try {
-    const result = await bridgeChat();
-    setStatus("Writing");
-    setActivity("writing", "Writing response", result.model || modelSelect.value);
-    await addMessage("assistant", result.reply, { usage: result.usage ?? { providerId: result.providerId, model: result.model } });
-    await clearAttachments();
-    setStatus("Ready");
-  } catch (error) {
-    setStatus("Provider failed");
-    await addMessage("system", error instanceof Error ? error.message : String(error));
-  } finally {
-    clearActivitySoon();
-  }
-};
-
 const handleWalletBoundary = async () => {
   await addMessage("system", "Wallet actions are human-approval gated. I can discuss Phantom and browser context, but wallet connect, signing, seed phrases, private keys, and credential actions stay human-only.");
   setStatus("Approval gated");
 };
+
+const chatTurnController = createChatTurnController({
+  addMessage,
+  bridgeRequest,
+  chatSessionStore,
+  clearActivitySoon,
+  clearAttachments,
+  getLastSnapshot: () => lastSnapshot,
+  getModel: () => modelSelect.value,
+  getThinkingDepth: () => thinkingDepthSelect.value,
+  setActivity,
+  setStatus
+});
+
+const runChatTurn = chatTurnController.runChatTurn;
 
 const {
   cancelBrowserJob,

@@ -67,6 +67,7 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   const bridgeClient = await readText(path.join(extensionRoot, "src", "lib", "bridge-client.js"));
   const commandParser = await readText(path.join(extensionRoot, "src", "lib", "browser-command-parser.js"));
   const browserJobStore = await readText(path.join(extensionRoot, "src", "lib", "browser-job-store.js"));
+  const chatTurnController = await readText(path.join(extensionRoot, "src", "lib", "chat-turn-controller.js"));
   const composerController = await readText(path.join(extensionRoot, "src", "lib", "composer-controller.js"));
   const approvalPolicy = await readText(path.join(extensionRoot, "src", "lib", "approval-policy.js"));
   const agentControlPlanner = await readText(path.join(extensionRoot, "src", "lib", "agent-control-planner.js"));
@@ -103,6 +104,11 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(pageActions, /summarizeSnapshot/);
   assert.match(script, /saveIntake/);
   assert.match(script, /createChatSessionStore/);
+  assert.match(script, /createChatTurnController/);
+  assert.match(chatTurnController, /\/augmentor\/chat/);
+  assert.match(chatTurnController, /pageContextForSnapshot/);
+  assert.match(chatTurnController, /runtimeContextForAttachments/);
+  assert.match(chatTurnController, /providerMessagesFromHistory/);
   assert.match(script, /createComposerController/);
   assert.match(composerController, /handleClipboardShortcut/);
   assert.match(composerController, /resetUndoStack/);
@@ -134,7 +140,7 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(bridgeClient, /__RESONANTOS_BRIDGE_CONFIG__/);
   assert.match(bridgeClient, /X-ResonantOS-Bridge-Token/);
   assert.match(script, /browserJobStore\.getMonitorCollapsed/);
-  assert.match(script, /\/augmentor\/chat/);
+  assert.match(chatTurnController, /\/augmentor\/chat/);
   assert.match(script, /\/archive\/intake/);
   assert.match(appCommandHandlers, /\/memory\/search/);
   assert.match(appCommandHandlers, /\/addons\/delegate/);
