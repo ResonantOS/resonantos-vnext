@@ -25,6 +25,7 @@ import {
   parseStructuredPageEditIntent,
   parseTypeIntent
 } from "./lib/browser-command-parser.js";
+import { createBrowserJobStore, isTerminalBrowserJobStatus } from "./lib/browser-job-store.js";
 import { createBrowserPageActions } from "./lib/browser-page-actions.js";
 import { createBridgeClient } from "./lib/bridge-client.js";
 import { createChatSessionStore } from "./lib/chat-session-store.js";
@@ -82,7 +83,6 @@ const STORAGE_KEYS = {
   jobMonitorCollapsed: "augmentorJobMonitorCollapsed"
 };
 const MAX_HISTORY_MESSAGES = 16;
-const MAX_BROWSER_JOBS = 40;
 
 let lastSnapshot = null;
 let statusLabel = "Ready";
@@ -91,9 +91,6 @@ let activityTimer = null;
 let currentControlRun = null;
 let pendingApproval = null;
 let controlledTabId = null;
-let browserJobs = [];
-let activeJobId = null;
-let jobMonitorCollapsed = true;
 let contextDockExpanded = false;
 let composerUndoStack = [""];
 let composerUndoApplying = false;
@@ -206,6 +203,10 @@ const chatSessionStore = createChatSessionStore({
   isAllowedModel: (model) => [...modelSelect.options].some((option) => option.value === model),
   isAllowedThinkingDepth: (depth) => [...thinkingDepthSelect.options].some((option) => option.value === depth)
 });
+const browserJobStore = createBrowserJobStore({
+  storage: chrome.storage?.local,
+  storageKeys: STORAGE_KEYS
+});
 
 const isReadableBrowserTab = (tab) => typeof tab?.url === "string" && /^https?:\/\//i.test(tab.url);
 const setStatus = (label) => {
@@ -267,7 +268,7 @@ const renderControlMonitor = () => {
 
 const startControlRun = ({ goal, plan }) => {
   currentControlRun = {
-    id: activeJobId ?? `control-${Date.now()}`,
+    id: browserJobStore.getActiveJobId() ?? `control-${Date.now()}`,
     goal,
     planner: plan.source,
     summary: plan.summary,
@@ -358,82 +359,30 @@ const renderSitePermissionPanel = async (tab = null) => {
   await monitorRenderers.renderSitePermissionPanel(tab);
 };
 
-const normalizeJob = (job) => ({
-  id: String(job?.id ?? `job-${Date.now()}`),
-  goal: String(job?.goal ?? "Browser job").slice(0, 300),
-  status: ["queued", "running", "paused", "completed", "blocked", "approval", "denied", "cancelled", "failed"].includes(job?.status)
-    ? job.status
-    : "queued",
-  createdAt: job?.createdAt ?? new Date().toISOString(),
-  updatedAt: job?.updatedAt ?? new Date().toISOString(),
-  completedAt: job?.completedAt ?? null,
-  planner: String(job?.planner ?? "observe-act-verify-loop").slice(0, 120),
-  summary: String(job?.summary ?? "").slice(0, 700),
-  artifacts: Array.isArray(job?.artifacts) ? job.artifacts.slice(0, 20) : [],
-  lastError: job?.lastError ? String(job.lastError).slice(0, 700) : null
-});
-
-const persistBrowserJobs = async () => {
-  const compact = browserJobs
-    .map(normalizeJob)
-    .sort((left, right) => String(right.updatedAt).localeCompare(String(left.updatedAt)))
-    .slice(0, MAX_BROWSER_JOBS);
-  browserJobs = compact;
-  await chrome.storage?.local?.set?.({ [STORAGE_KEYS.browserJobs]: compact });
-};
-
 const renderJobMonitor = () => {
   monitorRenderers.renderJobMonitor();
 };
 
 const loadBrowserJobs = async () => {
-  const stored = await chrome.storage?.local?.get?.([
-    STORAGE_KEYS.browserJobs,
-    STORAGE_KEYS.jobMonitorCollapsed
-  ]).catch(() => ({}));
-  browserJobs = Array.isArray(stored?.[STORAGE_KEYS.browserJobs])
-    ? stored[STORAGE_KEYS.browserJobs].map(normalizeJob)
-    : [];
-  jobMonitorCollapsed = true;
+  await browserJobStore.hydrate();
   renderJobMonitor();
 };
 
 const createBrowserJob = async ({ goal, planner = "observe-act-verify-loop", summary = "" }) => {
-  const job = normalizeJob({
-    id: `job-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+  const job = await browserJobStore.createJob({
     goal,
     planner,
-    summary,
-    status: "running",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+    summary
   });
-  browserJobs = [job, ...browserJobs.filter((item) => item.id !== job.id)];
-  activeJobId = job.id;
-  await persistBrowserJobs();
   renderJobMonitor();
   return job;
 };
 
 const updateBrowserJob = async (jobId, patch) => {
-  if (!jobId) return null;
-  let updated = null;
-  browserJobs = browserJobs.map((job) => {
-    if (job.id !== jobId) return job;
-    updated = normalizeJob({
-      ...job,
-      ...patch,
-      updatedAt: new Date().toISOString(),
-      completedAt: patch.completedAt ?? (["completed", "blocked", "denied", "cancelled", "failed"].includes(patch.status) ? new Date().toISOString() : job.completedAt)
-    });
-    return updated;
-  });
-  await persistBrowserJobs();
+  const updated = await browserJobStore.updateJob(jobId, patch);
   renderJobMonitor();
   return updated;
 };
-
-const currentJob = () => browserJobs.find((job) => job.id === activeJobId) ?? null;
 
 const clearAttachments = async () => {
   await chatSessionStore.clearAttachments();
@@ -609,10 +558,10 @@ monitorRenderers = createMonitorRenderers({
     sitePermissionNote,
     sitePermissionPanel
   },
-  getBrowserJobs: () => browserJobs,
+  getBrowserJobs: () => browserJobStore.getJobs(),
   getContextDockExpanded: () => contextDockExpanded,
   getCurrentControlRun: () => currentControlRun,
-  getJobMonitorCollapsed: () => jobMonitorCollapsed,
+  getJobMonitorCollapsed: () => browserJobStore.getMonitorCollapsed(),
   getPendingApproval: () => pendingApproval,
   isReadableBrowserTab,
   permissionForUrl,
@@ -873,19 +822,11 @@ const runCapabilitiesCommand = async () => {
   );
 };
 
-const findJob = (idOrGoal = "") => {
-  const needle = String(idOrGoal ?? "").trim().toLowerCase();
-  if (!needle) return currentJob() ?? browserJobs[0] ?? null;
-  return browserJobs.find((job) =>
-    job.id.toLowerCase() === needle ||
-    job.id.toLowerCase().includes(needle) ||
-    job.goal.toLowerCase().includes(needle)
-  ) ?? null;
-};
+const findJob = (idOrGoal = "") => browserJobStore.findJob(idOrGoal);
 
 const runJobsCommand = async (body = "") => {
   const filter = String(body ?? "").trim().toLowerCase();
-  const visible = browserJobs
+  const visible = browserJobStore.getJobs()
     .filter((job) => !filter || job.status === filter || job.goal.toLowerCase().includes(filter) || job.id.toLowerCase().includes(filter))
     .slice(0, 12);
   renderJobMonitor();
@@ -903,7 +844,7 @@ const pauseBrowserJob = async (body = "") => {
     await addMessage("system", "No browser job is available to pause.");
     return;
   }
-  if (job.id === activeJobId && currentControlRun && job.status === "running") {
+  if (job.id === browserJobStore.getActiveJobId() && currentControlRun && job.status === "running") {
     finishControlRun("paused");
   }
   await updateBrowserJob(job.id, { status: "paused" });
@@ -930,7 +871,7 @@ const cancelBrowserJob = async (body = "") => {
     await addMessage("system", "No browser job is available to cancel.");
     return;
   }
-  if (job.id === activeJobId && currentControlRun && !["completed", "blocked", "denied", "cancelled"].includes(currentControlRun.status)) {
+  if (job.id === browserJobStore.getActiveJobId() && currentControlRun && !isTerminalBrowserJobStatus(currentControlRun.status)) {
     finishControlRun("cancelled");
   }
   await updateBrowserJob(job.id, { status: "cancelled" });
@@ -1145,7 +1086,7 @@ const delegateControlIssue = async () => {
 };
 
 const observeControlPage = async () => {
-  const job = currentJob();
+  const job = browserJobStore.currentJob();
   if (job?.status === "cancelled") {
     throw new Error("Browser job was cancelled.");
   }
@@ -1179,7 +1120,7 @@ const agentControlRunner = createAgentControlRunner({
   createBrowserJob,
   executeControlStep,
   finishControlRun,
-  getActiveJobId: () => activeJobId,
+  getActiveJobId: () => browserJobStore.getActiveJobId(),
   getCurrentControlRun: () => currentControlRun,
   getLastSnapshot: () => lastSnapshot,
   observeControlPage,
@@ -1466,8 +1407,7 @@ approvalTrustSiteButton.addEventListener("click", () => void trustCurrentSiteFor
 approvalDenyButton.addEventListener("click", () => void denyPendingControlStep());
 approvalDelegateButton.addEventListener("click", () => void delegateControlIssue());
 jobMonitorToggle.addEventListener("click", async () => {
-  jobMonitorCollapsed = !jobMonitorCollapsed;
-  await chrome.storage?.local?.set?.({ [STORAGE_KEYS.jobMonitorCollapsed]: jobMonitorCollapsed });
+  await browserJobStore.toggleMonitorCollapsed();
   renderJobMonitor();
 });
 sitePermissionMode.addEventListener("change", async () => {

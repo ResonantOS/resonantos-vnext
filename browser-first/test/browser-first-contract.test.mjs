@@ -65,6 +65,7 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   const script = await readText(path.join(extensionRoot, "src", "side-panel.js"));
   const bridgeClient = await readText(path.join(extensionRoot, "src", "lib", "bridge-client.js"));
   const commandParser = await readText(path.join(extensionRoot, "src", "lib", "browser-command-parser.js"));
+  const browserJobStore = await readText(path.join(extensionRoot, "src", "lib", "browser-job-store.js"));
   const approvalPolicy = await readText(path.join(extensionRoot, "src", "lib", "approval-policy.js"));
   const agentControlPlanner = await readText(path.join(extensionRoot, "src", "lib", "agent-control-planner.js"));
   const agentControlRunner = await readText(path.join(extensionRoot, "src", "lib", "agent-control-runner.js"));
@@ -116,13 +117,18 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(bridgeClient, /bridgeUrl = config\.bridgeUrl \?\? "http:\/\/127\.0\.0\.1:47773"/);
   assert.match(bridgeClient, /__RESONANTOS_BRIDGE_CONFIG__/);
   assert.match(bridgeClient, /X-ResonantOS-Bridge-Token/);
-  assert.match(script, /jobMonitorCollapsed = true/);
+  assert.match(script, /browserJobStore\.getMonitorCollapsed/);
   assert.match(script, /\/augmentor\/chat/);
   assert.match(script, /\/archive\/intake/);
   assert.match(script, /\/memory\/search/);
   assert.match(script, /\/addons\/delegate/);
   assert.match(script, /\/goals/);
   assert.match(commandParser, /parseNaturalBrowserIntent/);
+  assert.match(script, /createBrowserJobStore/);
+  assert.match(browserJobStore, /normalizeBrowserJob/);
+  assert.match(browserJobStore, /createBrowserJobStore/);
+  assert.match(browserJobStore, /toggleMonitorCollapsed/);
+  assert.match(browserJobStore, /findJob/);
   assert.match(commandParser, /parseNaturalSearchIntent/);
   assert.match(commandParser, /parseTypeIntent/);
   assert.match(commandParser, /parseClickIntent/);
