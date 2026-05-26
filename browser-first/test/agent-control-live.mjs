@@ -298,9 +298,11 @@ try {
     doneSummary: history.length ? "Iframe booking context was observed." : null
   }); return true; })()`);
   await submitControlCommand(panel, `book a call now`);
+  await waitForPageCondition(page, `document.querySelector("#resonantos-control-overlay")?.dataset.session === "active"`, "persistent control overlay session start");
   const iframePanelText = await waitForPanelText(panel, /Booking calendar frame|Iframe booking context was not visible/, "iframe context read");
   assert(!/Iframe booking context was not visible/.test(iframePanelText), "Agent planner could not see iframe booking context.");
   await waitForComposerReady(panel, "iframe context read");
+  await waitForPageCondition(page, `document.querySelector("#resonantos-control-overlay")?.dataset.session !== "active"`, "persistent control overlay session stop");
   const firstJobState = (await evaluate(panel, `(async () => ({
     monitorVisible: !document.querySelector("#job-monitor").hidden,
     stored: (await chrome.storage.local.get("augmentorBrowserJobs")).augmentorBrowserJobs ?? [],
@@ -347,11 +349,17 @@ try {
   assert(bookingState.slot === "Tuesday 10:00", `Variant booking prompt failed: ${JSON.stringify(bookingState)}`);
   const overlayAfterClick = (await evaluate(page, `({
     overlayPresent: Boolean(document.querySelector("#resonantos-control-overlay")),
+    session: document.querySelector("#resonantos-control-overlay")?.dataset.session ?? "",
     toastText: document.querySelector("#resonantos-control-toast")?.textContent ?? "",
     highlighted: Boolean(document.querySelector(".resonantos-control-target"))
   })`)).result.value;
   assert(overlayAfterClick.overlayPresent, `Agent control overlay was not injected: ${JSON.stringify(overlayAfterClick)}`);
-  assert(overlayAfterClick.highlighted || /Clicked|Clicking|Tuesday|Reading page context/i.test(overlayAfterClick.toastText), `Agent control overlay did not expose action feedback: ${JSON.stringify(overlayAfterClick)}`);
+  assert(
+    overlayAfterClick.session === "active" ||
+      overlayAfterClick.highlighted ||
+      /Clicked|Clicking|Tuesday|Reading page context/i.test(overlayAfterClick.toastText),
+    `Agent control overlay did not expose action feedback: ${JSON.stringify(overlayAfterClick)}`
+  );
   await waitForComposerReady(panel, "variant booking prompt");
 
   await evaluate(panel, `(() => { globalThis.__resonantosNextActionOverride = async ({ snapshot, history }) => {

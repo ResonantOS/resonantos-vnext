@@ -75,17 +75,21 @@ const ensureControlOverlay = () => {
       #${controlOverlayId} { position: fixed; inset: 0; display: none; border: 2px solid rgba(36,209,143,.78); box-shadow: inset 0 0 46px rgba(36,209,143,.18), 0 0 40px rgba(36,209,143,.22); background:
         repeating-linear-gradient(90deg, rgba(36,209,143,.10) 0 2px, transparent 2px 11px),
         repeating-linear-gradient(0deg, rgba(36,209,143,.07) 0 1px, transparent 1px 13px); opacity: .92; }
-      #${controlOverlayId}[data-state="active"] { display:block; animation: ros-control-scan 1.3s steps(14) infinite; }
+      #${controlOverlayId}[data-state="active"], #${controlOverlayId}[data-session="active"] { display:block; animation: ros-control-wave 1.7s steps(18) infinite, ros-control-pixel 3.4s linear infinite; }
       #${controlOverlayId}[data-state="done"] { display:block; border-color: rgba(117,255,187,.72); animation: ros-control-fade .8s ease-out forwards; }
       #${controlOverlayId}[data-state="blocked"] { display:block; border-color: rgba(255,121,91,.9); box-shadow: inset 0 0 46px rgba(255,121,91,.16), 0 0 40px rgba(255,121,91,.2); animation: ros-control-fade 1.1s ease-out forwards; }
       #${controlOverlayId}::before, #${controlOverlayId}::after { content:""; position:absolute; left:0; right:0; height:18px; background: linear-gradient(90deg, transparent, rgba(36,209,143,.58), transparent); filter: blur(.4px); }
       #${controlOverlayId}::before { top:0; }
       #${controlOverlayId}::after { bottom:0; }
+      #${controlOverlayId}[data-session="active"]::before { animation: ros-control-edge 1.6s linear infinite; }
+      #${controlOverlayId}[data-session="active"]::after { animation: ros-control-edge 1.6s linear infinite reverse; }
       #${controlToastId} { position: fixed; left: 50%; bottom: 18px; display:none; max-width: min(520px, calc(100vw - 28px)); transform: translateX(-50%); border: 1px solid rgba(36,209,143,.38); border-radius: 999px; background: rgba(4,12,8,.92); color:#dfffea; box-shadow: 0 18px 58px rgba(0,0,0,.38); font: 800 12px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 10px 14px; text-align:center; }
       #${controlToastId}[data-state="active"], #${controlToastId}[data-state="done"], #${controlToastId}[data-state="blocked"] { display:block; }
       #${controlToastId}[data-state="blocked"] { border-color: rgba(255,121,91,.5); color:#ffd9d1; }
       .resonantos-control-target { outline: 2px solid rgba(36,209,143,.9) !important; outline-offset: 4px !important; box-shadow: 0 0 0 6px rgba(36,209,143,.16), 0 0 34px rgba(36,209,143,.38) !important; }
-      @keyframes ros-control-scan { 0% { clip-path: polygon(0 0,100% 0,100% 100%,0 100%); filter: brightness(1); } 50% { filter: brightness(1.45); } 100% { filter: brightness(1); } }
+      @keyframes ros-control-wave { 0% { clip-path: polygon(0 0,100% 0,100% 100%,0 100%); filter: brightness(1); } 50% { filter: brightness(1.48) saturate(1.24); } 100% { filter: brightness(1); } }
+      @keyframes ros-control-pixel { 0% { background-position: 0 0, 0 0; } 100% { background-position: 44px 0, 0 52px; } }
+      @keyframes ros-control-edge { 0% { transform: translateX(-35%); opacity:.2; } 45% { opacity:.86; } 100% { transform: translateX(35%); opacity:.2; } }
       @keyframes ros-control-fade { 0% { opacity:.9; } 100% { opacity:0; } }
     `;
     document.documentElement.append(style);
@@ -122,10 +126,32 @@ const pulseControlOverlay = ({ state = "active", label = "Augmentor is operating
   }
   if (state !== "active") {
     window.setTimeout(() => {
-      if (overlay.dataset.state === state) overlay.dataset.state = "";
-      if (toast.dataset.state === state) toast.dataset.state = "";
+      if (overlay.dataset.state === state) overlay.dataset.state = overlay.dataset.session === "active" ? "active" : "";
+      if (toast.dataset.state === state) {
+        if (toast.dataset.session === "active") {
+          toast.dataset.state = "active";
+          toast.textContent = toast.dataset.sessionLabel || "Augmentor is operating this page";
+        } else {
+          toast.dataset.state = "";
+        }
+      }
     }, 1300);
   }
+};
+
+const setControlSessionOverlay = ({ active = false, label = "Augmentor is operating this page" } = {}) => {
+  const { overlay, toast } = ensureControlOverlay();
+  overlay.dataset.session = active ? "active" : "";
+  overlay.dataset.state = active ? "active" : "";
+  toast.dataset.session = active ? "active" : "";
+  toast.dataset.sessionLabel = active ? label : "";
+  toast.dataset.state = active ? "active" : "";
+  toast.textContent = active ? label : "";
+  if (!active) {
+    toast.dataset.lockedUntil = "0";
+    document.querySelectorAll(".resonantos-control-target").forEach((element) => element.classList.remove("resonantos-control-target"));
+  }
+  return { ok: true, active };
 };
 
 const describeForms = () => ({
@@ -591,9 +617,16 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (message.type === "read_page") {
-    pulseControlOverlay({ state: "active", label: "Reading page context" });
+    if (document.getElementById(controlOverlayId)?.dataset.session !== "active") {
+      pulseControlOverlay({ state: "active", label: "Reading page context" });
+    }
     window.setTimeout(() => pulseControlOverlay({ state: "done", label: "Page context captured" }), 300);
     sendResponse({ ok: true, snapshot: pageSnapshot() });
+    return true;
+  }
+
+  if (message.type === "control_overlay") {
+    sendResponse(setControlSessionOverlay({ active: Boolean(message.active), label: message.label }));
     return true;
   }
 

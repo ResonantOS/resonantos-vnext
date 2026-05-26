@@ -187,6 +187,7 @@ const startControlRun = ({ goal, plan }) => {
   };
   pendingApproval = null;
   renderControlMonitor();
+  void setPageControlOverlay(true, `Augmentor operating: ${goal}`);
 };
 
 const updateControlStep = (index, state, note = "") => {
@@ -212,6 +213,7 @@ const finishControlRun = (status, artifact = null) => {
     artifacts: artifact ? [...currentControlRun.artifacts, artifact] : currentControlRun.artifacts
   };
   renderControlMonitor();
+  void setPageControlOverlay(false, "");
   void updateBrowserJob(currentControlRun.id, {
     status,
     artifacts: currentControlRun.artifacts,
@@ -942,7 +944,7 @@ const sendContentAction = async (payload) => {
   if (siteMode === "blocked") {
     return { ok: false, error: `Assistant is blocked on ${siteKeyForUrl(tab.url)}.` };
   }
-  if (siteMode === "read-only" && payload.type !== "read_page" && payload.type !== "detect_forms") {
+  if (siteMode === "read-only" && payload.type !== "read_page" && payload.type !== "detect_forms" && payload.type !== "control_overlay") {
     return { ok: false, error: `Assistant actions are read-only on ${siteKeyForUrl(tab.url)}.` };
   }
   const message = {
@@ -964,6 +966,12 @@ const sendContentAction = async (payload) => {
   }
   return sendContentActionToFrames(tab.id, message);
 };
+
+const setPageControlOverlay = async (active, label = "") => sendContentAction({
+  type: "control_overlay",
+  active,
+  label: label || (active ? "Augmentor is operating this page" : "")
+});
 
 const typeIntoActivePage = async ({ text, field = "", ref = "", submit, userApproved = false }) => {
   setActivity("tool-running", "Typing into page", text);

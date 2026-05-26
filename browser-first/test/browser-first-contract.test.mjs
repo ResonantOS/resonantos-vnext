@@ -164,6 +164,9 @@ test("browser layer can read active tab context without raw privileged access", 
   assert.match(content, /click_text/);
   assert.match(content, /type_text/);
   assert.match(content, /resonantos-control-overlay/);
+  assert.match(content, /control_overlay/);
+  assert.match(content, /setControlSessionOverlay/);
+  assert.match(content, /data-session="active"/);
   assert.match(content, /pulseControlOverlay/);
   assert.match(content, /resonantos-control-target/);
   assert.match(content, /userApproved/);
