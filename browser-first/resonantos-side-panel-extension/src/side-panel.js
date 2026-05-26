@@ -11,6 +11,7 @@ import { createChatTurnController } from "./lib/chat-turn-controller.js";
 import { createComposerController } from "./lib/composer-controller.js";
 import { createControlPlanningService } from "./lib/control-planning-service.js";
 import { createControlReportingService } from "./lib/control-reporting-service.js";
+import { createControlRunState } from "./lib/control-run-state.js";
 import { createControlStepExecutor } from "./lib/control-step-executor.js";
 import { createMessageActionController } from "./lib/message-action-controller.js";
 import { createMonitorRenderers } from "./lib/monitor-renderers.js";
@@ -166,55 +167,6 @@ const setTurnBusy = (busy) => {
 
 const renderControlMonitor = () => {
   monitorRenderers.renderControlMonitor();
-};
-
-const startControlRun = ({ goal, plan }) => {
-  currentControlRun = {
-    id: browserJobStore.getActiveJobId() ?? `control-${Date.now()}`,
-    goal,
-    planner: plan.source,
-    summary: plan.summary,
-    status: "running",
-    steps: plan.steps.map((step) => ({ ...step, state: "pending" })),
-    artifacts: [],
-    startedAt: new Date().toISOString(),
-    completedAt: null
-  };
-  pendingApproval = null;
-  renderControlMonitor();
-  void setPageControlOverlay(true, `Augmentor operating: ${goal}`);
-};
-
-const updateControlStep = (index, state, note = "") => {
-  if (!currentControlRun?.steps[index]) return;
-  currentControlRun.steps[index] = { ...currentControlRun.steps[index], state, note };
-  renderControlMonitor();
-};
-
-const appendControlStep = (step) => {
-  if (!currentControlRun) return -1;
-  const index = currentControlRun.steps.length;
-  currentControlRun.steps = [...currentControlRun.steps, { ...step, state: "pending" }];
-  renderControlMonitor();
-  return index;
-};
-
-const finishControlRun = (status, artifact = null) => {
-  if (!currentControlRun) return;
-  currentControlRun = {
-    ...currentControlRun,
-    status,
-    completedAt: new Date().toISOString(),
-    artifacts: artifact ? [...currentControlRun.artifacts, artifact] : currentControlRun.artifacts
-  };
-  renderControlMonitor();
-  void setPageControlOverlay(false, "");
-  void updateBrowserJob(currentControlRun.id, {
-    status,
-    artifacts: currentControlRun.artifacts,
-    summary: currentControlRun.summary,
-    planner: currentControlRun.planner
-  });
 };
 
 const updateConnectionLine = () => {
@@ -510,6 +462,25 @@ const controlReportingService = createControlReportingService({
 const delegateControlIssue = controlReportingService.delegateControlIssue;
 const saveControlReportToArchive = controlReportingService.saveControlReportToArchive;
 
+const controlRunState = createControlRunState({
+  browserJobStore,
+  getCurrentControlRun: () => currentControlRun,
+  renderControlMonitor,
+  setCurrentControlRun: (run) => {
+    currentControlRun = run;
+  },
+  setPageControlOverlay,
+  setPendingApproval: (approval) => {
+    pendingApproval = approval;
+  },
+  updateBrowserJob
+});
+const appendControlStep = controlRunState.appendControlStep;
+const finishControlRun = controlRunState.finishControlRun;
+const startControlRun = controlRunState.startControlRun;
+const updateControlRunArtifacts = controlRunState.updateControlRunArtifacts;
+const updateControlStep = controlRunState.updateControlStep;
+
 const observeControlPage = async () => {
   const job = browserJobStore.currentJob();
   if (job?.status === "cancelled") {
@@ -560,11 +531,7 @@ const agentControlRunner = createAgentControlRunner({
   sleep,
   startControlRun,
   updateBrowserJob,
-  updateControlRunArtifacts: (artifacts) => {
-    if (currentControlRun) {
-      currentControlRun = { ...currentControlRun, artifacts };
-    }
-  },
+  updateControlRunArtifacts,
   updateControlStep
 });
 
