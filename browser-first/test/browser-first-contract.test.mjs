@@ -66,6 +66,7 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   const bridgeClient = await readText(path.join(extensionRoot, "src", "lib", "bridge-client.js"));
   const commandParser = await readText(path.join(extensionRoot, "src", "lib", "browser-command-parser.js"));
   const approvalPolicy = await readText(path.join(extensionRoot, "src", "lib", "approval-policy.js"));
+  const agentControlPlanner = await readText(path.join(extensionRoot, "src", "lib", "agent-control-planner.js"));
   const background = await readText(path.join(extensionRoot, "src", "background.js"));
 
   assert.match(panel, /Message Augmentor/);
@@ -117,6 +118,11 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(script, /runSitePermissionCommand/);
   assert.match(script, /runCapabilitiesCommand/);
   assert.match(script, /approvalBoundaryForStep/);
+  assert.match(script, /controlStepLabel/);
+  assert.match(agentControlPlanner, /planControlSteps/);
+  assert.match(agentControlPlanner, /deterministicNextAction/);
+  assert.match(agentControlPlanner, /dedupeControlSteps/);
+  assert.match(agentControlPlanner, /controlStepLabel/);
   assert.match(script, /trustCurrentSiteForSafeActions/);
   assert.match(script, /runJobsCommand/);
   assert.match(script, /pauseBrowserJob/);
@@ -134,8 +140,8 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(script, /detectActivePageForms/);
   assert.match(script, /controlledTabId/);
   assert.match(script, /switch_tab/);
-  assert.match(script, /List open tabs/);
-  assert.match(script, /planControlSteps/);
+  assert.match(agentControlPlanner, /List open tabs/);
+  assert.match(agentControlPlanner, /planControlSteps/);
   assert.match(script, /requestControlPlan/);
   assert.match(script, /requestNextControlAction/);
   assert.match(script, /continueControlLoop/);
