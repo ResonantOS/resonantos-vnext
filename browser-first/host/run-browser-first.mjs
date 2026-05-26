@@ -1,5 +1,5 @@
 import { existsSync, readdirSync } from "node:fs";
-import { appendFile, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -114,6 +114,18 @@ async function seedPinnedExtensions(profileDir, extensionIds) {
     ...(preferences.account_values.extensions.pinned_extensions ?? []),
   ]);
   await writeFile(preferencesPath, `${JSON.stringify(preferences, null, 2)}\n`);
+}
+
+async function removeCachedUnpackedExtension(profileDir, extensionId) {
+  const defaultDir = path.join(profileDir, "Default");
+  const cacheRoots = [
+    path.join(defaultDir, "Extensions", extensionId),
+    path.join(defaultDir, "Extension Scripts", extensionId),
+    path.join(defaultDir, "Extension Rules", extensionId),
+  ];
+  for (const cacheRoot of cacheRoots) {
+    await rm(cacheRoot, { recursive: true, force: true }).catch(() => undefined);
+  }
 }
 
 function providerSecretsPath() {
@@ -1115,6 +1127,7 @@ if (!existsSync(path.join(resonantExtension, "manifest.json"))) {
 }
 
 await mkdir(profileDir, { recursive: true });
+await removeCachedUnpackedExtension(profileDir, resonantExtensionId);
 
 const extensionDirs = [resonantExtension];
 const phantomExtension = findPhantomExtension();

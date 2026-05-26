@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ResonantOS Browser Layer",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApuNZYsaSNn4zSCLL5oqE7cdl8DnhoFUbMmZtcG+Sch5yqT8wob/1yjX/f3HFGRyxgLAW2tmpVA8PVruLCMSDed0YIKm99y6F7Zfmt+XU6bY+r/soP7dVZKVV6PEQdvtxFkd69/dVqS1lY9Y0BDwjxonP4D2AZsi1y2NghV2agjHaO3cu7/837GKv/ZOvtGXofm8ilprmZcwYkq3hU1HCTrJ6IM8NNyvzbeIHC0uMrG4m5ROhqqMXR7GauOiWFZiVaXbZ4EbeX0GzrvLjQ170/DmaW4ob7dxveK26mOx27r4L3G0hOn9gncbHr0kbMErC/+nT9gjm284OKnQiaWIhCQIDAQAB",
   "description": "Browser-contained ResonantOS layer for Augmentor, Living Archive context, add-ons, task monitor, and approval gates.",
   "minimum_chrome_version": "116",

@@ -315,6 +315,15 @@ try {
   assert(inlinePromptPresent, "Inline Assistant custom prompt input is missing.");
   await evaluate(page, `document.querySelector('#resonantos-inline-assistant [data-action="send"]').click()`);
   await waitForPanelText(panel, /Inline Assistant context received\./, "inline send to side panel");
+  const dockCollapsedState = (await evaluate(panel, `({
+    dockHidden: document.querySelector("#context-dock").hidden,
+    siteHidden: document.querySelector("#site-permission-panel").hidden,
+    jobsHidden: document.querySelector("#job-monitor").hidden,
+    activityHidden: document.querySelector("#activity-panel").hidden,
+    toggle: document.querySelector("#context-toggle").textContent
+  })`)).result.value;
+  assert(dockCollapsedState.siteHidden && dockCollapsedState.jobsHidden, `Site/jobs panels should be hidden by default: ${JSON.stringify(dockCollapsedState)}`);
+  await evaluate(panel, `document.querySelector("#context-toggle").click()`);
   const sitePanelState = (await evaluate(panel, `({
     visible: !document.querySelector("#site-permission-panel").hidden,
     host: document.querySelector("#site-permission-host").textContent,

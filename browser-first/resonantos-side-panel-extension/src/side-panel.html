@@ -9,7 +9,7 @@
   <body>
     <main class="chat-shell" aria-label="Augmentor chat">
       <section id="transcript" class="transcript" aria-live="polite"></section>
-      <section id="context-dock" class="context-dock" aria-label="Browser context and task status">
+      <section id="context-dock" class="context-dock" aria-label="Browser context and task status" hidden>
         <section id="activity-panel" class="activity-panel" aria-live="polite" hidden>
           <span class="activity-pulse"></span>
           <div>
@@ -71,6 +71,7 @@
           <input id="file-input" type="file" multiple hidden />
           <button id="read-page" type="button" class="icon-button" title="Read current page" aria-label="Read current page">◎</button>
           <button id="save-intake" type="button" class="toolbar-button" title="Prepare current page for Living Archive intake">Intake</button>
+          <button id="context-toggle" type="button" class="toolbar-button" title="Show browser context, site permissions, and jobs">Status</button>
           <select id="model-select" class="model-select" aria-label="Connected model">
             <option value="MiniMax-M2.7">MiniMax 2.7</option>
             <option value="MiniMax-M2.7-highspeed">MiniMax 2.7 High Speed</option>

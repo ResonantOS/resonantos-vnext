@@ -29,6 +29,7 @@ test("ResonantOS browser layer is packaged as a Chromium side-panel extension", 
 
   assert.equal(manifest.manifest_version, 3);
   assert.equal(manifest.name, "ResonantOS Browser Layer");
+  assert.equal(manifest.version, "0.1.1");
   assert.equal(manifest.key.length > 100, true);
   assert.ok(manifest.permissions.includes("sidePanel"));
   assert.ok(manifest.permissions.includes("activeTab"));
@@ -65,6 +66,8 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
 
   assert.match(panel, /Message Augmentor/);
   assert.match(panel, /control-monitor/);
+  assert.match(panel, /context-dock"[^>]+hidden/);
+  assert.match(panel, /context-toggle/);
   assert.match(panel, /approval-card/);
   assert.match(panel, /approval-trust-site/);
   assert.match(panel, /site-permission-panel/);
@@ -85,6 +88,7 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(script, /summarizeSnapshot/);
   assert.match(script, /saveIntake/);
   assert.match(script, /BRIDGE_URL = "http:\/\/127\.0\.0\.1:47773"/);
+  assert.match(script, /jobMonitorCollapsed = true/);
   assert.match(script, /\/augmentor\/chat/);
   assert.match(script, /\/archive\/intake/);
   assert.match(script, /\/memory\/search/);

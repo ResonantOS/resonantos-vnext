@@ -3,7 +3,9 @@ const attachFileButton = document.querySelector("#attach-file");
 const fileInput = document.querySelector("#file-input");
 const attachmentStrip = document.querySelector("#attachment-strip");
 const saveIntakeButton = document.querySelector("#save-intake");
+const contextToggleButton = document.querySelector("#context-toggle");
 const transcript = document.querySelector("#transcript");
+const contextDock = document.querySelector("#context-dock");
 const activityPanel = document.querySelector("#activity-panel");
 const activityLabel = document.querySelector("#activity-label");
 const activityDetail = document.querySelector("#activity-detail");
@@ -62,6 +64,7 @@ let controlledTabId = null;
 let browserJobs = [];
 let activeJobId = null;
 let jobMonitorCollapsed = true;
+let contextDockExpanded = false;
 
 const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
@@ -144,6 +147,15 @@ const scrollTranscriptToBottom = () => {
   });
 };
 
+const updateContextDockVisibility = () => {
+  const hasVisiblePanel = [activityPanel, sitePermissionPanel, jobMonitor, controlMonitor]
+    .some((panel) => !panel.hidden);
+  contextDock.hidden = !hasVisiblePanel;
+  contextToggleButton.textContent = contextDockExpanded ? "Hide Status" : "Status";
+  contextToggleButton.setAttribute("aria-expanded", contextDockExpanded ? "true" : "false");
+  scrollTranscriptToBottom();
+};
+
 const setActivity = (phase, label, detail = "") => {
   if (activityTimer) {
     window.clearTimeout(activityTimer);
@@ -153,7 +165,7 @@ const setActivity = (phase, label, detail = "") => {
   activityPanel.dataset.phase = phase;
   activityLabel.textContent = label;
   activityDetail.textContent = detail;
-  scrollTranscriptToBottom();
+  updateContextDockVisibility();
 };
 
 const clearActivity = () => {
@@ -161,7 +173,7 @@ const clearActivity = () => {
   activityPanel.dataset.phase = "idle";
   activityLabel.textContent = "Ready";
   activityDetail.textContent = "";
-  scrollTranscriptToBottom();
+  updateContextDockVisibility();
 };
 
 const clearActivitySoon = (delay = 2200) => {
@@ -181,6 +193,7 @@ const renderControlMonitor = () => {
   if (!currentControlRun) {
     controlMonitor.hidden = true;
     approvalCard.hidden = true;
+    updateContextDockVisibility();
     return;
   }
   controlMonitor.hidden = false;
@@ -232,7 +245,7 @@ const renderControlMonitor = () => {
     approvalApproveButton.disabled = false;
     approvalTrustSiteButton.disabled = false;
   }
-  scrollTranscriptToBottom();
+  updateContextDockVisibility();
 };
 
 const startControlRun = ({ goal, plan }) => {
@@ -333,8 +346,9 @@ const sitePermissionDescription = (mode) => {
 
 const renderSitePermissionPanel = async (tab = null) => {
   const current = tab ?? await activeTab();
-  if (!isReadableBrowserTab(current)) {
+  if (!contextDockExpanded || !isReadableBrowserTab(current)) {
     sitePermissionPanel.hidden = true;
+    updateContextDockVisibility();
     return;
   }
   const mode = await permissionForUrl(current.url);
@@ -342,7 +356,7 @@ const renderSitePermissionPanel = async (tab = null) => {
   sitePermissionHost.textContent = siteKeyForUrl(current.url);
   sitePermissionMode.value = mode;
   sitePermissionNote.textContent = sitePermissionDescription(mode);
-  scrollTranscriptToBottom();
+  updateContextDockVisibility();
 };
 
 const normalizeJob = (job) => ({
@@ -370,15 +384,18 @@ const persistBrowserJobs = async () => {
 };
 
 const renderJobMonitor = () => {
-  jobMonitor.hidden = browserJobs.length === 0;
-  if (jobMonitor.hidden) return;
+  jobMonitor.hidden = !contextDockExpanded || browserJobs.length === 0;
+  if (jobMonitor.hidden) {
+    updateContextDockVisibility();
+    return;
+  }
   const activeCount = browserJobs.filter((job) => ["queued", "running", "paused", "approval"].includes(job.status)).length;
   jobMonitorTitle.textContent = `${activeCount} active · ${browserJobs.length} total`;
   jobMonitorToggle.textContent = jobMonitorCollapsed ? "Show" : "Hide";
   jobList.hidden = jobMonitorCollapsed;
   jobList.replaceChildren();
   if (jobMonitorCollapsed) {
-    scrollTranscriptToBottom();
+    updateContextDockVisibility();
     return;
   }
   browserJobs.slice(0, 8).forEach((job) => {
@@ -398,7 +415,7 @@ const renderJobMonitor = () => {
     item.append(details, state);
     jobList.append(item);
   });
-  scrollTranscriptToBottom();
+  updateContextDockVisibility();
 };
 
 const loadBrowserJobs = async () => {
@@ -409,7 +426,7 @@ const loadBrowserJobs = async () => {
   browserJobs = Array.isArray(stored?.[STORAGE_KEYS.browserJobs])
     ? stored[STORAGE_KEYS.browserJobs].map(normalizeJob)
     : [];
-  jobMonitorCollapsed = stored?.[STORAGE_KEYS.jobMonitorCollapsed] !== false;
+  jobMonitorCollapsed = true;
   renderJobMonitor();
 };
 
@@ -2438,6 +2455,11 @@ attachFileButton.addEventListener("click", () => fileInput.click());
 fileInput.addEventListener("change", () => void attachFiles(fileInput.files));
 readButton.addEventListener("click", () => void readActivePage());
 saveIntakeButton.addEventListener("click", () => void saveIntake());
+contextToggleButton.addEventListener("click", () => {
+  contextDockExpanded = !contextDockExpanded;
+  void renderSitePermissionPanel();
+  renderJobMonitor();
+});
 approvalApproveButton.addEventListener("click", () => void approvePendingControlStep());
 approvalTrustSiteButton.addEventListener("click", () => void trustCurrentSiteForSafeActions());
 approvalDenyButton.addEventListener("click", () => void denyPendingControlStep());
@@ -2451,7 +2473,9 @@ sitePermissionMode.addEventListener("change", async () => {
   const tab = await activeTab();
   const result = await setSitePermission(tab?.url, sitePermissionMode.value);
   await renderSitePermissionPanel(tab);
-  await addMessage("system", `Set ${result.key} Assistant permission to ${result.mode}.`);
+  setStatus(`Site permission: ${result.mode}`);
+  setActivity("completed", "Site permission updated", `${result.key} · ${result.mode}`);
+  clearActivitySoon(1600);
 });
 chrome.storage?.onChanged?.addListener((changes, area) => {
   if (area === "local" && changes.augmentorInlineDraft?.newValue) {
