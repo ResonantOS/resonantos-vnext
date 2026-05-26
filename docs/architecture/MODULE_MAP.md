@@ -177,6 +177,7 @@ This map defines which folder owns which feature area so contributors do not kee
   - `resonantos-side-panel-extension/src/lib/chat-session-store.js` owns chat/fork/attachment state, hydration, persistence, and regeneration trimming; side-panel rendering consumes this store instead of mutating raw arrays
   - `resonantos-side-panel-extension/src/lib/chat-turn-controller.js` owns provider chat-turn payload assembly, page context compaction, attachment runtime context, provider success/failure status transitions, and post-turn attachment clearing
   - `resonantos-side-panel-extension/src/lib/composer-controller.js` owns composer keyboard behavior, undo snapshots, select-all, clipboard copy/cut/paste, and Enter versus Shift+Enter semantics
+  - `resonantos-side-panel-extension/src/lib/control-page-observer.js` owns Agent Control page observation, paused/cancelled job guards, active-page snapshot fallback, and readable-tab enrichment
   - `resonantos-side-panel-extension/src/lib/control-planning-service.js` owns Agent Control provider planning calls, planner test overrides, next-action decisions, and deterministic fallback planning
   - `resonantos-side-panel-extension/src/lib/control-reporting-service.js` owns Agent Control report rendering, archive intake report saves, and blocked-task delegation to the Engineer add-on boundary
   - `resonantos-side-panel-extension/src/lib/control-run-state.js` owns Agent Control run lifecycle state, step state transitions, artifact updates, overlay activation/cleanup, and browser-job synchronization

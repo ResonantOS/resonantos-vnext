@@ -69,6 +69,7 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   const browserJobStore = await readText(path.join(extensionRoot, "src", "lib", "browser-job-store.js"));
   const chatTurnController = await readText(path.join(extensionRoot, "src", "lib", "chat-turn-controller.js"));
   const composerController = await readText(path.join(extensionRoot, "src", "lib", "composer-controller.js"));
+  const controlPageObserver = await readText(path.join(extensionRoot, "src", "lib", "control-page-observer.js"));
   const controlPlanningService = await readText(path.join(extensionRoot, "src", "lib", "control-planning-service.js"));
   const controlReportingService = await readText(path.join(extensionRoot, "src", "lib", "control-reporting-service.js"));
   const controlRunState = await readText(path.join(extensionRoot, "src", "lib", "control-run-state.js"));
@@ -212,6 +213,11 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(controlPlanningService, /requestNextControlAction/);
   assert.match(agentControlRunner, /continueControlLoop/);
   assert.match(agentControlRunner, /observe-act-verify-loop/);
+  assert.match(script, /createControlPageObserver/);
+  assert.match(controlPageObserver, /observeControlPage/);
+  assert.match(controlPageObserver, /listReadableTabSnapshots/);
+  assert.match(controlPageObserver, /Browser job is paused/);
+  assert.match(controlPageObserver, /Browser job was cancelled/);
   assert.match(approvalPolicy, /sanitizePlannerStep/);
   assert.match(approvalPolicy, /sanitizeNextActionDecision/);
   assert.match(approvalPolicy, /sanitizePlannerPlan/);

@@ -9,6 +9,7 @@ import { createBridgeClient } from "./lib/bridge-client.js";
 import { createChatSessionStore } from "./lib/chat-session-store.js";
 import { createChatTurnController } from "./lib/chat-turn-controller.js";
 import { createComposerController } from "./lib/composer-controller.js";
+import { createControlPageObserver } from "./lib/control-page-observer.js";
 import { createControlPlanningService } from "./lib/control-planning-service.js";
 import { createControlReportingService } from "./lib/control-reporting-service.js";
 import { createControlRunState } from "./lib/control-run-state.js";
@@ -481,33 +482,17 @@ const startControlRun = controlRunState.startControlRun;
 const updateControlRunArtifacts = controlRunState.updateControlRunArtifacts;
 const updateControlStep = controlRunState.updateControlStep;
 
-const observeControlPage = async () => {
-  const job = browserJobStore.currentJob();
-  if (job?.status === "cancelled") {
-    throw new Error("Browser job was cancelled.");
-  }
-  if (job?.status === "paused") {
-    throw new Error("Browser job is paused.");
-  }
-  setActivity("reading", "Observing active page", currentControlRun?.goal ?? "browser task");
-  const snapshotResponse = await readActivePage({ announce: false }).catch(() => null);
-  const snapshot = snapshotResponse?.snapshot ?? lastSnapshot;
-  if (!snapshot) return null;
-  const tabs = await chrome.tabs.query({}).catch(() => []);
-  return {
-    ...snapshot,
-    tabs: tabs
-      .filter(isReadableBrowserTab)
-      .slice(0, 30)
-      .map((tab) => ({
-        id: tab.id,
-        title: tab.title || "",
-        url: tab.url || "",
-        active: Boolean(tab.active),
-        controlled: tab.id === controlledTabId
-      }))
-  };
-};
+const controlPageObserver = createControlPageObserver({
+  browserJobStore,
+  chrome,
+  getControlledTabId: () => controlledTabId,
+  getCurrentControlRun: () => currentControlRun,
+  getLastSnapshot: () => lastSnapshot,
+  isReadableBrowserTab,
+  readActivePage,
+  setActivity
+});
+const observeControlPage = controlPageObserver.observeControlPage;
 
 const agentControlRunner = createAgentControlRunner({
   addMessage,
