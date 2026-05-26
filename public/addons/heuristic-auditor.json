@@ -1,0 +1,144 @@
+{
+  "id": "addon.heuristic-auditor",
+  "name": "Heuristic Auditor",
+  "version": "0.1.0",
+  "author": "Resonant Alpha",
+  "category": "security",
+  "description": "Post-response philosophical heuristic violation detector. After every agent response, sends the human message and AI reply to a secondary model for evaluation against 7 behavioral heuristics. Writes violations to HEURISTIC-AUDIT.md and sets an augmentor drift flag when relevant heuristics are breached.",
+  "runtimeType": "local-service",
+  "surfaces": [
+    {
+      "id": "heuristic-auditor-monitor",
+      "type": "background-task-monitor",
+      "label": "Heuristic Audit Monitor",
+      "description": "Background monitor showing recent heuristic audit results, violation history, and augmentor drift flag status."
+    }
+  ],
+  "requestedCapabilities": [
+    {
+      "capability": "providers",
+      "granted": false,
+      "scope": "shared",
+      "revocationBehavior": "hard-stop"
+    },
+    {
+      "capability": "chat-interface",
+      "granted": false,
+      "scope": "shared",
+      "revocationBehavior": "hard-stop"
+    },
+    {
+      "capability": "filesystem",
+      "granted": false,
+      "scope": "workspace",
+      "revocationBehavior": "hard-stop"
+    },
+    {
+      "capability": "notifications",
+      "granted": false,
+      "scope": "shared",
+      "revocationBehavior": "degrade"
+    }
+  ],
+  "provenance": {
+    "tier": "curated-signed",
+    "verificationState": "verified",
+    "signed": true,
+    "signer": "ResonantOS bundled catalog"
+  },
+  "runtimeIsolation": {
+    "boundary": "host-mediated-service",
+    "supportsDegradedMode": true,
+    "requiresReviewedGrant": false
+  },
+  "grantPresets": [
+    {
+      "id": "recommended-heuristic-auditing",
+      "label": "Recommended heuristic auditing",
+      "description": "Enable post-response heuristic auditing with provider access for the audit model, chat observation for message content, filesystem for audit output, and notifications for violations.",
+      "grants": [
+        {
+          "capability": "providers",
+          "granted": true,
+          "scope": "shared",
+          "revocationBehavior": "hard-stop"
+        },
+        {
+          "capability": "chat-interface",
+          "granted": true,
+          "scope": "shared",
+          "revocationBehavior": "hard-stop"
+        },
+        {
+          "capability": "filesystem",
+          "granted": true,
+          "scope": "workspace",
+          "revocationBehavior": "hard-stop"
+        },
+        {
+          "capability": "notifications",
+          "granted": true,
+          "scope": "shared",
+          "revocationBehavior": "degrade"
+        }
+      ]
+    }
+  ],
+  "providerRequirements": {
+    "sharedProfiles": ["minimax"],
+    "supportsPrivateCredentials": true,
+    "recommendedPrimaryModel": "minimax/MiniMax-M2.5"
+  },
+  "archiveIntegration": {
+    "readScopes": [],
+    "intakeWriteScopes": [],
+    "canRequestIngest": false,
+    "canWriteKnowledgePages": false
+  },
+  "health": {
+    "strategy": "local-daemon"
+  },
+  "tools": [
+    {
+      "name": "heuristic_auditor.last_audit",
+      "description": "Retrieve the most recent heuristic audit result including any violations detected and the augmentor drift flag state.",
+      "requiredCapabilities": ["filesystem"],
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "auditedAt": { "type": "string" },
+          "violations": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "driftFlagActive": { "type": "boolean" }
+        }
+      },
+      "audit": {
+        "logRequest": true,
+        "logResult": true,
+        "artifactTypes": ["log"]
+      }
+    }
+  ],
+  "installHooks": {
+    "onEnable": "start-heuristic-auditor"
+  },
+  "install": {
+    "mode": "bundled",
+    "requiredCapabilities": [],
+    "requiresHumanApprovalBeforeInstall": false,
+    "preservesExistingUserConfig": true,
+    "credentialSetup": "none",
+    "auditLogRequired": true,
+    "expectedArtifacts": ["log"]
+  },
+  "compatibility": {
+    "shellVersion": "^0.1.0",
+    "platforms": ["macOS", "linux", "windows"]
+  }
+}

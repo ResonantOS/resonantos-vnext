@@ -1,0 +1,17 @@
+{
+  "name": "@resonantos/resonant-browser-host",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Resonant Browser add-on host: controlled Chromium automation service for audited AI browser actions.",
+  "main": "src/browser-host.mjs",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "start": "node src/browser-host.mjs",
+    "start:electron": "electron src/electron-visible-host.mjs"
+  },
+  "dependencies": {
+    "electron": "^41.3.0",
+    "playwright": "^1.59.1"
+  }
+}

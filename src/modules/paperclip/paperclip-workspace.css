@@ -1,0 +1,313 @@
+/* Intent citation: docs/architecture/ADR-006-addon-runtime-sdk.md */
+/* Intent citation: docs/architecture/ADR-028-paperclip-addon-organizational-runtime.md */
+
+.main-shell:has(.paperclip-active) {
+  position: relative;
+}
+
+.content-grid.paperclip-active {
+  position: absolute;
+  inset: 0.65rem;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  height: auto;
+  max-height: none;
+  min-height: 0;
+  overflow: hidden;
+  padding-right: 0;
+  align-content: stretch;
+}
+
+.paperclip-workspace {
+  display: grid;
+  grid-template-rows: auto auto auto auto auto minmax(0, 1fr);
+  gap: 0.32rem;
+  align-self: stretch;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  max-height: none;
+  overflow: hidden;
+}
+
+.paperclip-workspace.is-hidden {
+  display: none;
+}
+
+.paperclip-toolbar,
+.paperclip-setup-card,
+.paperclip-warning,
+.paperclip-error,
+.paperclip-embed-shell {
+  border: 1px solid rgba(138, 128, 112, 0.12);
+  border-radius: 18px;
+  background: rgba(255, 248, 236, 0.028);
+}
+
+.paperclip-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem;
+  padding: 0.24rem 0.42rem;
+  border-radius: 12px;
+}
+
+.paperclip-toolbar-main {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.paperclip-toolbar-main strong {
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.paperclip-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.paperclip-toolbar-actions .button-primary,
+.paperclip-toolbar-actions .button-secondary {
+  min-height: 1.55rem;
+  padding: 0.22rem 0.48rem;
+  font-size: 0.68rem;
+}
+
+.paperclip-icon-button {
+  display: grid;
+  place-items: center;
+  width: 1.62rem;
+  height: 1.62rem;
+  border: 1px solid rgba(138, 128, 112, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 248, 236, 0.035);
+  color: var(--text-secondary);
+}
+
+.paperclip-endpoint {
+  min-width: 0;
+  max-width: min(34vw, 30rem);
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.paperclip-runtime-pill {
+  flex: 0 0 auto;
+  padding: 0.22rem 0.46rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+}
+
+.paperclip-runtime-pill.ready {
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--accent);
+}
+
+.paperclip-runtime-pill.attention {
+  background: rgba(251, 191, 36, 0.1);
+  color: var(--warning);
+}
+
+.paperclip-settings-drawer {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.paperclip-setup-card-wide {
+  grid-column: 1 / -1;
+}
+
+.paperclip-setup-card {
+  display: grid;
+  align-content: start;
+  gap: 0.65rem;
+  min-width: 0;
+  padding: 0.85rem;
+}
+
+.paperclip-setup-card strong {
+  display: block;
+  margin: 0.2rem 0;
+  color: var(--text-primary);
+}
+
+.paperclip-setup-card p,
+.paperclip-embed-placeholder p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.paperclip-field {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+}
+
+.paperclip-field input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid rgba(138, 128, 112, 0.16);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--text-primary);
+  padding: 0.56rem 0.68rem;
+  font: inherit;
+}
+
+.paperclip-field textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 5rem;
+  resize: vertical;
+  border: 1px solid rgba(138, 128, 112, 0.16);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--text-primary);
+  padding: 0.56rem 0.68rem;
+  font: inherit;
+}
+
+.paperclip-issue-form {
+  display: grid;
+  grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr);
+  gap: 0.65rem;
+}
+
+.paperclip-api-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.paperclip-summary-card {
+  min-width: 0;
+  border: 1px solid rgba(138, 128, 112, 0.12);
+  border-radius: 16px;
+  background: rgba(255, 248, 236, 0.026);
+  padding: 0.7rem;
+}
+
+.paperclip-summary-card strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: 1.2rem;
+}
+
+.paperclip-summary-card p {
+  margin: 0.35rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.paperclip-summary-card select {
+  width: 100%;
+  min-width: 0;
+  margin-top: 0.35rem;
+  border: 1px solid rgba(138, 128, 112, 0.16);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.24);
+  color: var(--text-primary);
+  padding: 0.4rem 0.5rem;
+  font: inherit;
+  font-size: 0.75rem;
+}
+
+.paperclip-warning,
+.paperclip-error,
+.paperclip-success {
+  padding: 0.48rem 0.65rem;
+  font-size: 0.76rem;
+  border-radius: 12px;
+  overflow-wrap: anywhere;
+}
+
+.paperclip-warning {
+  border-color: rgba(251, 191, 36, 0.24);
+  color: var(--warning);
+}
+
+.paperclip-error {
+  border-color: rgba(248, 113, 113, 0.26);
+  color: #fda4af;
+}
+
+.paperclip-success {
+  border: 1px solid rgba(16, 185, 129, 0.22);
+  background: rgba(16, 185, 129, 0.06);
+  color: var(--accent);
+}
+
+.paperclip-busy {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.paperclip-embed-shell {
+  display: grid;
+  grid-row: 6;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.paperclip-embed-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border: 0;
+  background: #111;
+}
+
+.paperclip-embed-placeholder {
+  display: grid;
+  place-content: center;
+  gap: 0.45rem;
+  min-height: 0;
+  height: 100%;
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.paperclip-embed-placeholder strong {
+  color: var(--text-primary);
+}
+
+@media (max-width: 980px) {
+  .paperclip-settings-drawer {
+    grid-template-columns: 1fr;
+  }
+
+  .paperclip-api-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .paperclip-issue-form {
+    grid-template-columns: 1fr;
+  }
+
+  .paperclip-toolbar {
+    display: grid;
+  }
+
+  .paperclip-toolbar-main,
+  .paperclip-toolbar-actions {
+    flex-wrap: wrap;
+  }
+}

@@ -1,0 +1,381 @@
+.delegation-workspace {
+  display: grid;
+  gap: 0.95rem;
+  min-width: 0;
+}
+
+.delegation-hero-panel,
+.delegation-list-panel,
+.delegation-detail-panel {
+  min-width: 0;
+  border: 1px solid rgba(138, 128, 112, 0.16);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at top right, rgba(16, 185, 129, 0.1), transparent 14rem),
+    rgba(19, 16, 13, 0.72);
+  box-shadow: var(--shadow-soft);
+}
+
+.delegation-hero-panel {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1.15rem;
+}
+
+.delegation-hero-panel h2 {
+  margin: 0.25rem 0 0;
+  font-size: clamp(1.45rem, 3vw, 2.5rem);
+  line-height: 0.98;
+  letter-spacing: -0.06em;
+}
+
+.delegation-hero-panel p {
+  max-width: 70ch;
+  margin: 0.55rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.delegation-notice {
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  border-radius: 18px;
+  background: rgba(16, 185, 129, 0.07);
+}
+
+.task-monitor-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+.task-metric-card,
+.goal-monitor-panel,
+.goal-monitor-card {
+  min-width: 0;
+  border: 1px solid rgba(138, 128, 112, 0.16);
+  background: rgba(9, 11, 12, 0.22);
+}
+
+.task-metric-card {
+  display: grid;
+  gap: 0.28rem;
+  min-height: 5rem;
+  padding: 0.85rem;
+  border-radius: 18px;
+}
+
+.task-metric-card span {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 850;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.task-metric-card strong {
+  font-size: clamp(1.6rem, 4vw, 2.45rem);
+  line-height: 0.9;
+  letter-spacing: -0.06em;
+}
+
+.task-metric-card.ok {
+  border-color: rgba(16, 185, 129, 0.18);
+}
+
+.task-metric-card.warning {
+  border-color: rgba(255, 113, 51, 0.32);
+  background: rgba(255, 113, 51, 0.08);
+}
+
+.goal-monitor-panel {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at top left, rgba(16, 185, 129, 0.08), transparent 12rem),
+    rgba(19, 16, 13, 0.62);
+}
+
+.goal-monitor-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+.goal-monitor-card {
+  display: grid;
+  gap: 0.75rem;
+  align-content: space-between;
+  min-height: 12rem;
+  padding: 0.9rem;
+  border-radius: 20px;
+}
+
+.goal-monitor-card h4 {
+  margin: 0.3rem 0 0;
+  font-size: 1.05rem;
+  letter-spacing: -0.035em;
+  overflow-wrap: anywhere;
+}
+
+.goal-monitor-card p {
+  margin: 0.35rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.84rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.goal-monitor-meta,
+.goal-monitor-blockers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.goal-monitor-meta span,
+.goal-monitor-blockers span {
+  border: 1px solid rgba(138, 128, 112, 0.16);
+  border-radius: 999px;
+  padding: 0.28rem 0.48rem;
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  font-weight: 750;
+}
+
+.goal-monitor-blockers span {
+  border-color: rgba(255, 113, 51, 0.28);
+  color: #ffb199;
+  background: rgba(255, 113, 51, 0.08);
+}
+
+.delegation-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.75fr) minmax(0, 1.25fr);
+  gap: 0.95rem;
+  min-width: 0;
+}
+
+.delegation-list-panel,
+.delegation-detail-panel {
+  padding: 1rem;
+}
+
+.delegation-task-list {
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 0.8rem;
+}
+
+.delegation-task-card {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 0.7rem;
+  width: 100%;
+  min-height: 92px;
+  padding: 0.75rem;
+  text-align: left;
+  border-radius: 20px;
+  background: rgba(9, 11, 12, 0.24);
+}
+
+.delegation-task-card.active,
+.delegation-task-card:hover {
+  border-color: rgba(16, 185, 129, 0.42);
+  background:
+    radial-gradient(circle at top right, rgba(16, 185, 129, 0.14), transparent 10rem),
+    rgba(16, 185, 129, 0.06);
+}
+
+.delegation-task-orb {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #10b981, #8fb85f);
+  color: #07100d;
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.delegation-task-card span:not(.delegation-task-orb) {
+  display: grid;
+  gap: 0.16rem;
+  min-width: 0;
+}
+
+.delegation-task-card strong,
+.delegation-task-card small,
+.delegation-task-card em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.delegation-task-card small {
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+}
+
+.delegation-task-card em {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-style: normal;
+}
+
+.delegation-detail-panel {
+  display: grid;
+  gap: 0.9rem;
+  align-content: start;
+}
+
+.delegation-detail-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.9rem;
+  min-width: 0;
+}
+
+.delegation-detail-head h3 {
+  margin: 0.25rem 0 0;
+  font-size: 1.24rem;
+  letter-spacing: -0.04em;
+}
+
+.delegation-detail-head p {
+  margin: 0.35rem 0 0;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.delegation-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.delegation-review-panel {
+  display: grid;
+  gap: 0.85rem;
+  min-width: 0;
+  padding: 0.85rem;
+  border: 1px solid rgba(138, 128, 112, 0.16);
+  border-radius: 20px;
+  background: rgba(9, 11, 12, 0.18);
+}
+
+.delegation-review-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(240px, 0.85fr);
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.delegation-review-card {
+  min-width: 0;
+  max-height: 420px;
+  overflow: auto;
+  padding: 0.85rem;
+  border: 1px solid rgba(138, 128, 112, 0.14);
+  border-radius: 18px;
+  background: rgba(7, 9, 10, 0.28);
+}
+
+.delegation-review-card.result {
+  background:
+    radial-gradient(circle at top left, rgba(16, 185, 129, 0.08), transparent 11rem),
+    rgba(7, 9, 10, 0.28);
+}
+
+.delegation-review-card p {
+  color: var(--text-secondary);
+}
+
+.delegation-review-card pre {
+  margin: 0.5rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.delegation-path-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: 0.62rem;
+}
+
+.delegation-path-card {
+  min-width: 0;
+  padding: 0.75rem;
+  border: 1px solid rgba(138, 128, 112, 0.16);
+  border-radius: 18px;
+  background: rgba(9, 11, 12, 0.22);
+}
+
+.delegation-path-card span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.delegation-path-card code {
+  display: block;
+  margin-top: 0.38rem;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.delegation-empty-state {
+  padding: 1rem;
+  border: 1px dashed rgba(138, 128, 112, 0.24);
+  border-radius: 20px;
+  color: var(--text-secondary);
+  background: rgba(9, 11, 12, 0.16);
+}
+
+.delegation-empty-state.large {
+  min-height: 320px;
+  display: grid;
+  align-content: center;
+}
+
+.delegation-empty-state h3,
+.delegation-empty-state p {
+  margin: 0.35rem 0 0;
+}
+
+@media (max-width: 980px) {
+  .task-monitor-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .delegation-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .task-monitor-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .delegation-hero-panel {
+    display: grid;
+  }
+}

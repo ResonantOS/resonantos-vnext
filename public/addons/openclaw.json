@@ -1,0 +1,146 @@
+{
+  "id": "addon.openclaw",
+  "name": "OpenClaw",
+  "version": "0.1.0",
+  "author": "Resonant Alpha",
+  "category": "agent",
+  "description": "Mount an OpenClaw runtime as a delegated agent add-on under ResonantOS supervision.",
+  "runtimeType": "agent-addon",
+  "surfaces": [
+    {
+      "id": "openclaw-panel",
+      "type": "panel",
+      "label": "OpenClaw Runtime",
+      "description": "Monitor runtime health, delegated tasks, and artifact flow."
+    }
+  ],
+  "requestedCapabilities": [
+    {
+      "capability": "providers",
+      "granted": false,
+      "scope": "shared",
+      "revocationBehavior": "degrade"
+    },
+    {
+      "capability": "archive-read",
+      "granted": false,
+      "scope": "workspace",
+      "revocationBehavior": "degrade"
+    },
+    {
+      "capability": "archive-intake-write",
+      "granted": false,
+      "scope": "intake-only",
+      "revocationBehavior": "hard-stop"
+    },
+    {
+      "capability": "agent-delegation",
+      "granted": false,
+      "scope": "shared",
+      "revocationBehavior": "hard-stop"
+    },
+    {
+      "capability": "shell",
+      "granted": false,
+      "scope": "workspace",
+      "revocationBehavior": "degrade"
+    }
+  ],
+  "providerRequirements": {
+    "sharedProfiles": ["shared-openai"],
+    "supportsPrivateCredentials": true
+  },
+  "archiveIntegration": {
+    "readScopes": ["living-archive/context"],
+    "intakeWriteScopes": ["LivingArchive/INTAKE/external-agents"],
+    "canRequestIngest": true,
+    "canWriteKnowledgePages": false
+  },
+  "health": {
+    "strategy": "runtime-gateway"
+  },
+  "delegation": {
+    "acceptsTasks": true,
+    "taskTypes": ["code-change", "bug-fix", "research", "archive-prep", "routine-work", "system-diagnosis"],
+    "artifactReturnTypes": ["summary", "markdown", "diff", "file-list", "log", "citation-bundle", "diagnostic-report", "verification-report"],
+    "defaultTargetRuntime": "external-agent",
+    "requiresHumanApprovalBeforeExecution": true,
+    "notes": [
+      "OpenClaw receives generated TASK.md plus delegation.packet.json.",
+      "OpenClaw is high-power and should start degraded unless runtime health and grants are valid."
+    ]
+  },
+  "workflowBoundaries": [
+    {
+      "id": "external-agent-delegation",
+      "label": "External agent delegation",
+      "jobToBeDone": "Mount OpenClaw as a delegated external agent runtime under ResonantOS task, permission, and artifact-return rules.",
+      "userValue": "The human can use OpenClaw without making it the core shell or trusted memory authority.",
+      "repeatability": "workflow-package",
+      "owner": "addon-agent",
+      "nonGoals": [
+        "Give OpenClaw unrestricted Living Archive write access",
+        "Let OpenClaw replace the Strategist identity",
+        "Run high-power tasks without explicit delegation boundaries"
+      ]
+    }
+  ],
+  "skills": [
+    {
+      "id": "openclaw-task-handoff",
+      "name": "OpenClaw task handoff",
+      "description": "Prepare bounded task handoffs, required artifacts, and verification expectations for OpenClaw.",
+      "documentPath": "docs/architecture/addon-skills/openclaw/TASK_HANDOFF.md",
+      "invocation": "agent-suggested",
+      "requiredCapabilities": ["providers", "archive-read", "archive-intake-write", "agent-delegation"],
+      "requiredTools": []
+    }
+  ],
+  "connectors": [
+    {
+      "id": "openclaw-runtime-gateway",
+      "name": "OpenClaw runtime gateway",
+      "type": "local-runtime",
+      "description": "Connects ResonantOS to an OpenClaw runtime through scoped workspace and provider grants.",
+      "requiredCapabilities": ["shell", "agent-delegation"],
+      "configScope": "user-config"
+    }
+  ],
+  "scripts": [
+    {
+      "id": "openclaw-gateway-preflight",
+      "name": "OpenClaw gateway preflight",
+      "description": "Verify OpenClaw runtime reachability and task workspace configuration before delegation.",
+      "commandRef": "openclaw.gateway_preflight",
+      "runPolicy": "preflight",
+      "deterministic": true,
+      "requiredCapabilities": ["shell", "agent-delegation"],
+      "producesArtifacts": ["diagnostic-report", "verification-report"],
+      "requiresHumanApproval": false
+    }
+  ],
+  "hooks": [
+    {
+      "id": "openclaw-before-task-complete",
+      "event": "before-task-complete",
+      "handlerRef": "openclaw-gateway-preflight",
+      "requiredCapabilities": ["shell", "agent-delegation"],
+      "failurePolicy": "degrade"
+    }
+  ],
+  "installHooks": {
+    "onInstall": "register-external-agent"
+  },
+  "compatibility": {
+    "shellVersion": "^0.1.0",
+    "platforms": ["macOS", "linux"]
+  },
+  "agents": [
+    {
+      "id": "openclaw.runtime",
+      "displayName": "OpenClaw",
+      "trustTier": "addon",
+      "workspaceBehavior": "delegated"
+    }
+  ]
+}

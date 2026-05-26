@@ -1,0 +1,112 @@
+{
+  "id": "addon.reference-memory",
+  "name": "Reference Memory",
+  "version": "0.1.0",
+  "author": "Resonant Alpha",
+  "category": "memory",
+  "sdkVersion": "0.1.0",
+  "description": "Minimal third-party memory-system add-on used to validate that ResonantOS can replace Living Archive through the memory-provider broker.",
+  "runtimeType": "local-service",
+  "surfaces": [
+    {
+      "id": "reference-memory-panel",
+      "type": "panel",
+      "label": "Reference Memory",
+      "description": "Configure the local Reference Memory HTTP JSON service endpoint."
+    }
+  ],
+  "requestedCapabilities": [
+    {
+      "capability": "memory-provider",
+      "granted": false,
+      "scope": "system",
+      "revocationBehavior": "hard-stop"
+    },
+    {
+      "capability": "network",
+      "granted": false,
+      "scope": "self",
+      "revocationBehavior": "hard-stop"
+    }
+  ],
+  "provenance": {
+    "tier": "sideloaded-unverified",
+    "verificationState": "unverified",
+    "signed": false
+  },
+  "runtimeIsolation": {
+    "boundary": "host-mediated-service",
+    "supportsDegradedMode": true,
+    "requiresReviewedGrant": true
+  },
+  "grantPresets": [
+    {
+      "id": "reference-memory-test",
+      "label": "Reference memory test",
+      "description": "Enable this local test memory provider as a replacement memory-system slot owner.",
+      "grants": [
+        {
+          "capability": "memory-provider",
+          "granted": true,
+          "scope": "system",
+          "revocationBehavior": "hard-stop"
+        },
+        {
+          "capability": "network",
+          "granted": true,
+          "scope": "self",
+          "revocationBehavior": "hard-stop"
+        }
+      ]
+    }
+  ],
+  "providerRequirements": {
+    "sharedProfiles": [],
+    "supportsPrivateCredentials": false
+  },
+  "systemSlots": [
+    {
+      "id": "memory-system",
+      "role": "alternative-provider",
+      "replaceable": true,
+      "requiredForFirstRun": false,
+      "recommended": false
+    }
+  ],
+  "archiveIntegration": {
+    "readScopes": [],
+    "intakeWriteScopes": [],
+    "canRequestIngest": true,
+    "canWriteKnowledgePages": false
+  },
+  "health": {
+    "strategy": "http-json-memory-status"
+  },
+  "service": {
+    "protocol": "http-json",
+    "entrypoint": "http://127.0.0.1:4888",
+    "healthCommand": "memory.status"
+  },
+  "tools": [
+    {
+      "name": "memory.search",
+      "description": "Search reference memory pages through the broker contract.",
+      "requiredCapabilities": ["memory-provider", "network"],
+      "inputSchema": {},
+      "outputSchema": {},
+      "audit": {
+        "logRequest": true,
+        "logResult": true,
+        "artifactTypes": ["log"]
+      },
+      "requiresHumanApproval": false
+    }
+  ],
+  "installHooks": {
+    "onInstall": "configure-reference-memory-endpoint"
+  },
+  "compatibility": {
+    "shellVersion": "^0.1.0",
+    "platforms": ["macOS", "linux", "windows"]
+  }
+}

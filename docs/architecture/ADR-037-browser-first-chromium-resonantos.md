@@ -1,0 +1,149 @@
+# ADR-037: Browser-First Chromium ResonantOS
+
+## Status
+
+Accepted.
+
+Supersedes the product direction of ADR-035 and ADR-036. Those ADRs remain as research records only.
+
+## Decision
+
+ResonantOS must become a browser-first application: a Chromium-family browser that contains ResonantOS capabilities, not a ResonantOS dashboard that opens or controls another browser.
+
+The product target is a Comet-style browser:
+
+- the browser viewport is the primary surface
+- ResonantOS capabilities live inside browser chrome as first-class panels, overlays, commands, and services
+- Augmentor is a browser-native assistant panel with access to the active tab through governed APIs
+- Living Archive, add-ons, task monitor, delegation, wallet state, and provider routing are integrated into the browser shell
+- Phantom and other Chrome-compatible extensions must run inside the same browser profile the human uses
+- AI browser control and human browser control operate on the same active tab/session
+
+## Why
+
+The previous paths failed the product requirement:
+
+- Tauri/WebView is not a Chrome-compatible browser.
+- Electron `BrowserView` is Chromium-based but does not provide full Chrome extension API compatibility. Electron documents extension support as a subset of Chrome extension APIs, which is insufficient for Phantom-class wallet behavior.
+- An external Chrome/Brave profile controlled through CDP proves automation feasibility but violates the requirement for one single browser app.
+- A sidecar browser creates user confusion and splits wallet/session state away from ResonantOS.
+
+Comet’s public documentation describes Comet as Chromium-based and Chrome-extension compatible. That validates the direction: ResonantOS must be a Chromium-derived browser with AI and memory layers integrated into browser chrome.
+
+## Binding Rules
+
+- Do not present external Chrome/Brave CDP control as the product Browser.
+- Do not invest further in Phantom-in-Electron as a product path.
+- Do not represent screenshots, iframes, Tauri OS WebView, or Electron sidecars as “the ResonantOS browser.”
+- Product Browser work must target a Chromium-family browser shell or Chromium-source overlay.
+- The default ResonantOS user experience is browser-first: tabs, address bar, navigation, extension UI, and Augmentor panel in one window.
+- Browser extension compatibility is a release gate, not a later nice-to-have.
+- Phantom Wallet must run in the same browser profile and browser chrome as the human’s active tab.
+- Wallet approvals, signatures, seed/export flows, password-manager actions, and public submissions remain human-only approval gates.
+- AI control must use typed, auditable browser tools. No raw CDP, raw filesystem, raw extension, or raw credential access is exposed to add-ons or chat commands.
+
+## Product Shape
+
+```text
+ResonantOS Browser
+├─ Browser chrome
+│  ├─ tabs
+│  ├─ address bar
+│  ├─ navigation controls
+│  ├─ extension toolbar
+│  └─ profile/session controls
+├─ Web contents
+│  └─ active tab, controlled by both human input and mediated AI tools
+├─ ResonantOS side panel
+│  ├─ Augmentor
+│  ├─ task monitor
+│  ├─ Living Archive context
+│  ├─ add-on surfaces
+│  └─ wallet/action approval monitor
+└─ Privileged host services
+   ├─ provider fabric
+   ├─ secure storage
+   ├─ archive service
+   ├─ add-on lifecycle
+   └─ audited browser/action bridge
+```
+
+## Implementation Strategy
+
+Phase 1 creates a browser-contained ResonantOS layer as a Chromium extension-style surface:
+
+- side panel UI
+- content script bridge for active-tab context
+- background service worker for command routing
+- explicit permission declarations
+- no privileged local actions from page JavaScript
+
+Phase 2 embeds that layer into a Chromium-family shell:
+
+- Chromium source fork or equivalent browser-shell build
+- bundled ResonantOS extension/layer
+- real extension toolbar and profile storage
+- Phantom installed and exercised in the same profile
+- Augmentor side panel shipped by default
+
+Phase 3 moves privileged ResonantOS services behind native host boundaries:
+
+- provider vault
+- Living Archive service
+- add-on service manager
+- wallet/signing audit monitor
+- typed browser tools exposed to Augmentor
+
+## Required Interfaces
+
+```ts
+type BrowserFirstTab = {
+  tabId: string;
+  windowId: string;
+  url: string;
+  title: string;
+  status: "loading" | "ready" | "blocked" | "error";
+};
+
+type BrowserFirstPanel = {
+  panelId: "augmentor" | "archive" | "tasks" | "addons" | "wallet-approvals";
+  visibility: "open" | "collapsed" | "detached";
+  activeTabId: string;
+};
+
+type BrowserFirstActionRequest = {
+  requestId: string;
+  tabId: string;
+  actor: "human" | "augmentor" | "addon";
+  action: "navigate" | "read_page" | "click" | "type" | "submit" | "wallet_connect" | "wallet_sign";
+  riskTier: "safe" | "sensitive" | "wallet" | "public" | "destructive";
+  humanApproval: "not_required" | "required" | "granted" | "denied";
+};
+```
+
+## Acceptance Tests
+
+The browser-first product is not complete until deterministic tests prove:
+
+- one ResonantOS browser window owns tabs, address bar, active page, Augmentor panel, and extension toolbar
+- Phantom installs or is bundled through an approved Chrome-compatible extension path
+- Phantom UI opens inside the browser chrome
+- wallet provider injection is visible to a local dApp fixture
+- wallet connection and signing requests are surfaced as human approval gates
+- Augmentor can read and navigate the active tab through typed tools
+- Augmentor cannot approve/sign/export/reveal wallet material
+- Living Archive and add-ons receive scoped browser artifacts only through mediated APIs
+- macOS, Windows, and Linux builds are reproducible
+
+## Consequences
+
+- Existing Tauri and Electron work becomes transitional scaffolding, not the final app architecture.
+- The external wallet-host work remains useful only as a research proof for CDP automation and Phantom requirements.
+- The next implementation target is a Chromium-family browser shell with ResonantOS bundled into browser chrome.
+- The codebase must keep browser-first assets separate so community work on the old dashboard does not contaminate the new product path.
+
+## References
+
+- Comet Browser Help Center: Comet is Chromium-based and supports Chrome extensions.
+- Electron documentation: Electron supports only a subset of Chrome extension APIs.
+- Chrome extension documentation: Manifest V3 and side panel APIs are browser-level surfaces that ResonantOS must treat as part of the product browser architecture.

@@ -1,0 +1,446 @@
+@media (max-width: 1480px) {
+  .hero-panel,
+  .recovery-hero-panel,
+  .home-hero-panel,
+  .app-workbench-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .archive-primary-grid,
+  .archive-secondary-grid,
+  .recovery-dashboard-grid,
+  .recovery-columns,
+  .recovery-status-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 1220px) {
+  .shell {
+    grid-template-columns: 76px minmax(0, 1fr) minmax(320px, min(var(--chat-rail-width, 520px), 42vw));
+  }
+
+  .shell.chat-closed {
+    grid-template-columns: 76px minmax(0, 1fr) 56px;
+  }
+
+  .shell.layout-chat-main {
+    grid-template-columns: 76px minmax(320px, min(var(--chat-rail-width, 520px), 42vw)) minmax(0, 1fr);
+  }
+
+  .shell.layout-chat-main.chat-closed {
+    grid-template-columns: 76px 56px minmax(0, 1fr);
+  }
+
+  .nav-item small {
+    display: none;
+  }
+
+  .topbar-pill {
+    min-width: 0;
+  }
+
+  .workspace-strip,
+  .hero-stack,
+  .workspace-grid,
+  .archive-rail,
+  .archive-command-layout,
+  .archive-memory-hero,
+  .archive-memory-map,
+  .archive-memory-stats,
+  .source-registry-hero,
+  .source-registry-scanbar,
+  .source-registry-summary,
+  .source-registry-grid,
+	  .archive-primary-grid,
+	  .archive-secondary-grid,
+	  .library-importer-intro,
+	  .library-import-form,
+	  .library-field-grid,
+	  .library-preflight-grid,
+	  .home-hero-panel,
+	  .app-workbench-grid,
+  .delegation-grid,
+  .delegation-review-grid,
+	  .classification-review-head,
+	  .classification-review-grid,
+	  .channel-grid,
+  .agent-grid,
+  .provider-grid,
+  .strategy-grid,
+  .settings-grid,
+  .detail-grid,
+  .recovery-dashboard-grid,
+  .recovery-columns,
+  .recovery-status-stack,
+  .recovery-status-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 980px) {
+  .shell,
+  .shell.chat-closed {
+    grid-template-columns: 76px minmax(0, 1fr) 0;
+    grid-template-areas:
+      "topbar topbar topbar"
+      "dock main chat";
+  }
+
+  .shell.home-chat-surface {
+    grid-template-columns: 76px minmax(0, 1fr);
+    grid-template-areas:
+      "topbar topbar"
+      "dock chat";
+  }
+
+  .main-shell {
+    padding: 0.9rem;
+  }
+
+  .chat-sidebar.open {
+    position: fixed;
+    top: 38px;
+    right: 0;
+    width: min(420px, 72vw);
+    height: calc(100vh - 38px);
+    z-index: 30;
+    box-shadow: var(--shadow);
+  }
+
+  .shell.floating-chat-surface .chat-sidebar.open {
+    position: relative;
+    top: auto;
+    right: auto;
+    width: auto;
+    height: 100%;
+    box-shadow: none;
+  }
+
+  .shell.home-chat-surface .chat-sidebar.open {
+    position: relative;
+    top: auto;
+    right: auto;
+    width: auto;
+    height: 100%;
+    box-shadow: none;
+  }
+
+  .topbar {
+    flex-wrap: wrap;
+  }
+
+  .topbar-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .policy-columns,
+	  .archive-command-metrics,
+  .archive-memory-hero,
+  .archive-memory-map,
+  .archive-memory-stats,
+  .source-registry-hero,
+  .source-registry-scanbar,
+  .source-registry-summary,
+  .source-registry-grid,
+	  .archive-search-grid,
+	  .library-importer-intro,
+	  .library-import-form,
+	  .library-field-grid,
+	  .library-preflight-grid,
+	  .home-hero-panel,
+	  .app-workbench-grid,
+	  .classification-review-head,
+	  .classification-review-grid,
+  .archive-review-stats,
+  .archive-review-steps,
+  .archive-review-signal-grid,
+  .archive-proposed-page-grid,
+	  .form-grid,
+	  .obsidian-vault-pane,
+	  .settings-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .delegation-hero-panel {
+    flex-direction: column;
+  }
+
+  .provider-secret-actions,
+  .provider-badges,
+  .provider-toolbar,
+  .archive-command-actions,
+  .source-scan-actions,
+  .searchbar.compact,
+  .provider-diagnostics-head,
+  .provider-diagnostics-actions,
+  .archive-proposed-pages-head,
+  .toolbar,
+  .sideload-strip {
+    flex-wrap: wrap;
+  }
+
+  .provider-head select,
+  .provider-badges select {
+    max-width: 100%;
+  }
+
+  .topbar-pills {
+    width: 100%;
+  }
+
+  .topbar-pill {
+    flex: 1 1 160px;
+  }
+}
+
+@media (max-width: 760px) {
+  .main-shell {
+    padding: 0.8rem;
+  }
+
+  .topbar h1 {
+    font-size: 1.35rem;
+  }
+
+  .workspace-strip,
+  .hero-stack,
+  .policy-columns,
+  .archive-command-layout,
+  .archive-command-metrics,
+  .archive-memory-hero,
+  .archive-memory-map,
+  .archive-memory-stats,
+  .source-registry-hero,
+  .source-registry-scanbar,
+  .source-registry-summary,
+  .source-registry-grid,
+  .archive-help-card,
+  .archive-primary-grid,
+	  .archive-secondary-grid,
+	  .archive-search-form,
+	  .library-importer-intro,
+	  .library-import-form,
+	  .library-field-grid,
+	  .library-preflight-grid,
+	  .home-hero-panel,
+	  .app-workbench-grid,
+	  .classification-review-head,
+	  .classification-review-grid,
+  .archive-review-stats,
+  .archive-review-steps,
+  .archive-review-signal-grid,
+  .archive-proposed-page-grid,
+  .delegation-grid,
+  .delegation-path-grid,
+  .settings-grid,
+  .detail-grid,
+  .channel-grid,
+  .agent-grid,
+  .provider-grid,
+  .strategy-grid,
+  .addon-grid,
+  .recovery-dashboard-grid,
+  .recovery-columns,
+  .recovery-status-stack,
+  .recovery-runtime-grid,
+  .recovery-status-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .panel-header,
+  .service-head,
+  .workspace-header,
+  .channel-header,
+  .addon-headline,
+  .provider-head,
+	  .agent-heading,
+	  .obsidian-addon-hero,
+		  .browser-addon-panel,
+		  .hermes-addon-head,
+		  .hermes-profile-row,
+			  .browser-addon-grant-box,
+			  .hermes-grant-strip,
+			  .obsidian-vault-controls,
+			  .obsidian-note-actions,
+			  .obsidian-intake-history-head,
+			  .archive-command-actions,
+  .archive-memory-actions,
+  .source-registry-actions,
+  .source-root-card,
+  .imported-library-head,
+	  .archive-import-result-head,
+	  .classification-proposal-main,
+	  .recovery-dashboard-card-head,
+  .recovery-dashboard-actions,
+  .provider-secret-actions,
+  .recovery-runtime-head,
+  .recovery-candidate,
+  .message-meta,
+  .chat-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .panel-header,
+  .archive-memory-hero,
+  .archive-memory-latest,
+  .source-registry-hero,
+  .source-root-card,
+  .imported-library-head,
+  .classification-review-head,
+  .archive-import-result-head {
+    grid-template-columns: 1fr;
+  }
+
+  .recovery-hero-actions {
+    flex-direction: column;
+  }
+
+  .chat-toolbar-main,
+  .chat-toolbar-selects {
+    width: 100%;
+    min-width: 0;
+    justify-content: space-between;
+  }
+
+  .chat-control.compact {
+    flex: 1 1 120px;
+  }
+
+  .chat-control.compact select {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .chat-sidebar.open {
+    width: calc(100vw - 84px);
+    max-width: calc(100vw - 84px);
+  }
+
+  .shell.floating-chat-surface .chat-sidebar.open {
+    width: auto;
+    max-width: none;
+  }
+
+  .shell.home-chat-surface .chat-sidebar.open {
+    width: auto;
+    max-width: none;
+  }
+
+  .message-bubble {
+    max-width: 100%;
+  }
+}
+
+.chat-send-button svg {
+  width: 18px;
+  height: 18px;
+}
+
+.chat-stop-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.chat-send-button:hover {
+  border-color: rgba(52, 211, 153, 0.62);
+  background: #34d399;
+}
+
+.chat-send-button:disabled {
+  opacity: 0.48;
+  cursor: default;
+}
+
+.chat-stop-button:hover {
+  border-color: rgba(252, 165, 165, 0.62);
+  background: #f87171;
+}
+
+.chat-stop-button:disabled {
+  opacity: 0.48;
+  cursor: default;
+}
+
+.attachment-strip {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.attachment-chip {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  align-items: center;
+  padding: 0.58rem 0.72rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(255, 248, 236, 0.035);
+}
+
+.attachment-chip strong {
+  display: block;
+  font-size: 0.8rem;
+}
+
+.attachment-chip span {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+}
+
+.attachment-chip button {
+  padding: 0.38rem 0.55rem;
+  font-size: 0.72rem;
+}
+
+.chat-collapsed-toggle {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-size: 0.74rem;
+  padding: 0.8rem 0.5rem;
+}
+
+.chat-sidebar-toggle {
+  min-width: 116px;
+}
+
+.provider-badges {
+  display: flex;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+.provider-secret-block {
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.9rem;
+  border-radius: 16px;
+  border: 1px dashed rgba(96, 165, 250, 0.28);
+  background: rgba(96, 165, 250, 0.06);
+}
+
+.provider-secret-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+}
+
+.provider-secret-actions span {
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+}
+
+.inline-notice {
+  padding: 0.65rem 0.75rem;
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+}
+
+.inline-notice.warning {
+  border-color: rgba(251, 191, 36, 0.32);
+  background: rgba(251, 191, 36, 0.1);
+}

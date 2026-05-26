@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Augmentor</title>
+    <link rel="stylesheet" href="./side-panel.css" />
+  </head>
+  <body>
+    <main class="chat-shell" aria-label="Augmentor chat">
+      <section id="transcript" class="transcript" aria-live="polite"></section>
+      <section id="activity-panel" class="activity-panel" aria-live="polite" hidden>
+        <span class="activity-pulse"></span>
+        <div>
+          <strong id="activity-label">Working</strong>
+          <small id="activity-detail">Preparing task...</small>
+        </div>
+      </section>
+      <section id="control-monitor" class="control-monitor" aria-live="polite" hidden>
+        <div class="control-monitor-header">
+          <div>
+            <span class="eyebrow">Agent Control</span>
+            <strong id="control-monitor-title">No active browser task</strong>
+          </div>
+          <span id="control-monitor-status" class="control-status">idle</span>
+        </div>
+        <ol id="control-step-list" class="control-step-list"></ol>
+        <div id="control-artifacts" class="control-artifacts" hidden></div>
+        <div id="approval-card" class="approval-card" hidden>
+          <strong id="approval-title">Approval required</strong>
+          <p id="approval-reason"></p>
+          <div class="approval-actions">
+            <button id="approval-approve" type="button">Approve once</button>
+            <button id="approval-deny" type="button">Deny</button>
+            <button id="approval-delegate" type="button">Delegate issue</button>
+          </div>
+        </div>
+      </section>
+
+      <form id="command-form" class="composer" aria-label="Message Augmentor">
+        <textarea id="command-input" rows="3" placeholder="Message Augmentor"></textarea>
+        <div id="attachment-strip" class="attachment-strip" hidden></div>
+        <div class="composer-toolbar">
+          <button id="attach-file" type="button" class="icon-button" title="Attach file" aria-label="Attach file">＋</button>
+          <input id="file-input" type="file" multiple hidden />
+          <button id="read-page" type="button" class="icon-button" title="Read current page" aria-label="Read current page">◎</button>
+          <button id="save-intake" type="button" class="toolbar-button" title="Prepare current page for Living Archive intake">Intake</button>
+          <select id="model-select" class="model-select" aria-label="Connected model">
+            <option value="MiniMax-M2.7">MiniMax 2.7</option>
+            <option value="MiniMax-M2.7-highspeed">MiniMax 2.7 High Speed</option>
+            <option value="gpt-5.5">GPT 5.5</option>
+            <option value="gpt-5.4-mini">GPT 5.4 Mini</option>
+            <option value="batiai/gemma4-e2b:q4">Gemma 4 2B</option>
+          </select>
+          <select id="thinking-depth" class="depth-select" aria-label="Thinking depth">
+            <option value="minimal">Minimal</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </select>
+          <button id="dictate-button" type="button" class="icon-button muted" title="Audio dictate is not available in this browser runtime yet." aria-label="Dictate">mic</button>
+          <span id="context-meter" class="context-meter" title="Estimated browser context captured for this session.">0%</span>
+          <button type="submit" class="send-button" aria-label="Send message">➜</button>
+        </div>
+        <p id="connection-line" class="connection-line">Connected to MiniMax 2.7 · Ready</p>
+      </form>
+    </main>
+    <script type="module" src="./side-panel.js"></script>
+  </body>
+</html>

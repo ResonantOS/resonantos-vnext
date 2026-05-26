@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ResonantOS Icon Preview</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #14110e;
+        --panel: #201c18;
+        --line: rgba(255, 255, 255, 0.09);
+        --text: #efe9de;
+        --muted: #9c9489;
+        --accent: #35b875;
+      }
+
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at 18% 14%, rgba(53, 184, 117, 0.12), transparent 24rem),
+          linear-gradient(150deg, #17130f, var(--bg));
+        color: var(--text);
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      main {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 40px 24px 64px;
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: 28px;
+        letter-spacing: -0.03em;
+      }
+
+      p {
+        margin: 0 0 28px;
+        color: var(--muted);
+      }
+
+      h2 {
+        margin: 34px 0 16px;
+        font-size: 15px;
+        color: var(--accent);
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+        gap: 12px;
+      }
+
+      .card {
+        min-height: 116px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: color-mix(in srgb, var(--panel), transparent 10%);
+        display: grid;
+        place-items: center;
+        gap: 10px;
+        padding: 14px;
+      }
+
+      .card img {
+        width: 36px;
+        height: 36px;
+        color: var(--text);
+        opacity: 0.92;
+      }
+
+      .card span {
+        width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        text-align: center;
+        white-space: nowrap;
+        color: var(--muted);
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>ResonantOS Icon Preview</h1>
+      <p>Standalone custom SVGs plus curated third-party open-source SVGs.</p>
+
+      <h2>Custom ResonantOS</h2>
+      <section class="grid">
+        <div class="card"><img src="./custom/addon-grid.svg" alt="" /><span>addon-grid</span></div>
+        <div class="card"><img src="./custom/agent-chat.svg" alt="" /><span>agent-chat</span></div>
+        <div class="card"><img src="./custom/ai-memory.svg" alt="" /><span>ai-memory</span></div>
+        <div class="card"><img src="./custom/archive-intake.svg" alt="" /><span>archive-intake</span></div>
+        <div class="card"><img src="./custom/audio2tol.svg" alt="" /><span>audio2tol</span></div>
+        <div class="card"><img src="./custom/augmentor.svg" alt="" /><span>augmentor</span></div>
+        <div class="card"><img src="./custom/context-meter.svg" alt="" /><span>context-meter</span></div>
+        <div class="card"><img src="./custom/engineer.svg" alt="" /><span>engineer</span></div>
+        <div class="card"><img src="./custom/external-knowledge.svg" alt="" /><span>external-knowledge</span></div>
+        <div class="card"><img src="./custom/fork-chat.svg" alt="" /><span>fork-chat</span></div>
+        <div class="card"><img src="./custom/human-knowledge.svg" alt="" /><span>human-knowledge</span></div>
+        <div class="card"><img src="./custom/living-archive.svg" alt="" /><span>living-archive</span></div>
+        <div class="card"><img src="./custom/logician.svg" alt="" /><span>logician</span></div>
+        <div class="card"><img src="./custom/obsidian-vault.svg" alt="" /><span>obsidian-vault</span></div>
+        <div class="card"><img src="./custom/provider-fabric.svg" alt="" /><span>provider-fabric</span></div>
+        <div class="card"><img src="./custom/resurrect.svg" alt="" /><span>resurrect</span></div>
+        <div class="card"><img src="./custom/settings.svg" alt="" /><span>settings</span></div>
+        <div class="card"><img src="./custom/shield.svg" alt="" /><span>shield</span></div>
+        <div class="card"><img src="./custom/telegram-channel.svg" alt="" /><span>telegram-channel</span></div>
+        <div class="card"><img src="./custom/wallet.svg" alt="" /><span>wallet</span></div>
+        <div class="card"><img src="./custom/workspace.svg" alt="" /><span>workspace</span></div>
+      </section>
+
+      <h2>Third-Party</h2>
+      <section class="grid">
+        <div class="card"><img src="./third-party/tabler/arrow-right.svg" alt="" /><span>tabler/arrow-right</span></div>
+        <div class="card"><img src="./third-party/tabler/git-branch.svg" alt="" /><span>tabler/git-branch</span></div>
+        <div class="card"><img src="./third-party/tabler/pin.svg" alt="" /><span>tabler/pin</span></div>
+        <div class="card"><img src="./third-party/tabler/refresh.svg" alt="" /><span>tabler/refresh</span></div>
+        <div class="card"><img src="./third-party/tabler/dots.svg" alt="" /><span>tabler/dots</span></div>
+        <div class="card"><img src="./third-party/tabler/history.svg" alt="" /><span>tabler/history</span></div>
+        <div class="card"><img src="./third-party/lucide/copy.svg" alt="" /><span>lucide/copy</span></div>
+        <div class="card"><img src="./third-party/lucide/git-branch.svg" alt="" /><span>lucide/git-branch</span></div>
+        <div class="card"><img src="./third-party/lucide/panel-left.svg" alt="" /><span>lucide/panel-left</span></div>
+        <div class="card"><img src="./third-party/lucide/rotate-ccw.svg" alt="" /><span>lucide/rotate-ccw</span></div>
+        <div class="card"><img src="./third-party/heroicons/command-line.svg" alt="" /><span>heroicons/command-line</span></div>
+        <div class="card"><img src="./third-party/heroicons/cpu-chip.svg" alt="" /><span>heroicons/cpu-chip</span></div>
+        <div class="card"><img src="./third-party/simple-icons/anthropic.svg" alt="" /><span>simple-icons/anthropic</span></div>
+        <div class="card"><img src="./third-party/simple-icons/googlegemini.svg" alt="" /><span>simple-icons/googlegemini</span></div>
+        <div class="card"><img src="./third-party/simple-icons/obsidian.svg" alt="" /><span>simple-icons/obsidian</span></div>
+        <div class="card"><img src="./third-party/simple-icons/telegram.svg" alt="" /><span>simple-icons/telegram</span></div>
+      </section>
+    </main>
+  </body>
+</html>

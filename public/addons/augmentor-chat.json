@@ -1,0 +1,222 @@
+{
+  "id": "addon.augmentor-chat",
+  "name": "Augmentor Chat",
+  "version": "0.1.0",
+  "author": "Resonant Alpha",
+  "category": "agent",
+  "sdkVersion": "0.1.0",
+  "description": "Recommended default chat and primary-agent interface for ResonantOS. It can run as the right rail or detach into a floating chat window, and can be disabled or replaced by another chat add-on.",
+  "runtimeType": "ui-module",
+  "surfaces": [
+    {
+      "id": "augmentor-chat-rail",
+      "type": "rail",
+      "label": "Chat Rail",
+      "description": "Persistent right-side conversation surface for the selected primary agent."
+    },
+    {
+      "id": "augmentor-floating-chat",
+      "type": "floating-window",
+      "label": "Floating Chat",
+      "description": "Detached always-available chat window for use beside external software."
+    },
+    {
+      "id": "augmentor-chat-settings",
+      "type": "panel",
+      "label": "Chat Settings",
+      "description": "Configure model route, memory provider, channels, and chat behavior."
+    }
+  ],
+  "requestedCapabilities": [
+    {
+      "capability": "chat-interface",
+      "granted": false,
+      "scope": "system",
+      "revocationBehavior": "hide-surface"
+    },
+    {
+      "capability": "providers",
+      "granted": false,
+      "scope": "shared",
+      "revocationBehavior": "hard-stop"
+    },
+    {
+      "capability": "archive-read",
+      "granted": false,
+      "scope": "shared",
+      "revocationBehavior": "degrade"
+    },
+    {
+      "capability": "archive-intake-write",
+      "granted": false,
+      "scope": "intake-only",
+      "revocationBehavior": "degrade"
+    },
+    {
+      "capability": "notifications",
+      "granted": false,
+      "scope": "shared",
+      "revocationBehavior": "degrade"
+    }
+  ],
+  "provenance": {
+    "tier": "curated-signed",
+    "verificationState": "verified",
+    "signed": true,
+    "signer": "ResonantOS bundled catalog"
+  },
+  "runtimeIsolation": {
+    "boundary": "shell-ui",
+    "supportsDegradedMode": true,
+    "requiresReviewedGrant": true
+  },
+  "grantPresets": [
+    {
+      "id": "recommended-primary-chat",
+      "label": "Recommended primary chat",
+      "description": "Enable Augmentor Chat as the default primary-agent interface with provider access and scoped memory read/write-to-intake permissions.",
+      "grants": [
+        {
+          "capability": "chat-interface",
+          "granted": true,
+          "scope": "system",
+          "revocationBehavior": "hide-surface"
+        },
+        {
+          "capability": "providers",
+          "granted": true,
+          "scope": "shared",
+          "revocationBehavior": "hard-stop"
+        },
+        {
+          "capability": "archive-read",
+          "granted": true,
+          "scope": "shared",
+          "revocationBehavior": "degrade"
+        },
+        {
+          "capability": "archive-intake-write",
+          "granted": true,
+          "scope": "intake-only",
+          "revocationBehavior": "degrade"
+        }
+      ]
+    }
+  ],
+  "systemSlots": [
+    {
+      "id": "primary-agent",
+      "role": "default-provider",
+      "replaceable": true,
+      "requiredForFirstRun": false,
+      "recommended": true
+    },
+    {
+      "id": "chat-interface",
+      "role": "default-provider",
+      "replaceable": true,
+      "requiredForFirstRun": false,
+      "recommended": true
+    }
+  ],
+  "providerRequirements": {
+    "sharedProfiles": ["shared-minimax", "gx10-local-llama", "shared-openai", "shared-local"],
+    "supportsPrivateCredentials": true,
+    "recommendedPrimaryModel": "MiniMax-M2.7",
+    "recommendedFallbackModel": "gpt-5.5",
+    "preferredRuntimeKinds": ["cloud", "remote-user-owned", "local"],
+    "allowExperimentalAuth": true,
+    "fallbackPolicyId": "core-default"
+  },
+  "archiveIntegration": {
+    "readScopes": ["active-memory/context", "system-memory/context"],
+    "intakeWriteScopes": ["Memory/INTAKE/chat"],
+    "canRequestIngest": true,
+    "canWriteKnowledgePages": false
+  },
+  "workflowBoundaries": [
+    {
+      "id": "primary-strategist-chat",
+      "label": "Primary Strategist conversation",
+      "jobToBeDone": "Give the human a persistent, replaceable chat interface for the trusted Strategist identity.",
+      "userValue": "The human can talk to Augmentor from the dashboard or a floating window while provider routing, memory context, and permissions remain host-mediated.",
+      "repeatability": "workflow-package",
+      "owner": "augmentor",
+      "nonGoals": [
+        "Make the chat interface a non-replaceable core dependency",
+        "Bypass provider routing policy",
+        "Write trusted memory pages directly"
+      ]
+    }
+  ],
+  "skills": [
+    {
+      "id": "strategist-conversation",
+      "name": "Strategist conversation",
+      "description": "Keep Augmentor grounded in user intent, active workspace context, provider cost, and Living Archive boundaries.",
+      "documentPath": "docs/architecture/addon-skills/augmentor-chat/STRATEGIST_CONVERSATION.md",
+      "invocation": "automatic",
+      "requiredCapabilities": ["chat-interface", "providers", "archive-read"],
+      "requiredTools": []
+    }
+  ],
+  "connectors": [
+    {
+      "id": "provider-fabric",
+      "name": "Provider fabric",
+      "type": "api",
+      "description": "Routes Strategist turns through ResonantOS provider policy instead of add-on-owned model selection.",
+      "requiredCapabilities": ["providers"],
+      "configScope": "host-vault"
+    },
+    {
+      "id": "active-memory-context",
+      "name": "Active memory context",
+      "type": "app-connector",
+      "description": "Reads scoped context from the active memory provider for Strategist turns.",
+      "requiredCapabilities": ["archive-read"],
+      "configScope": "none"
+    }
+  ],
+  "scripts": [
+    {
+      "id": "strategist-route-preflight",
+      "name": "Strategist route preflight",
+      "description": "Verify that at least one allowed provider route is available before a Strategist request runs.",
+      "commandRef": "provider.route.preflight",
+      "runPolicy": "preflight",
+      "deterministic": true,
+      "requiredCapabilities": ["providers"],
+      "producesArtifacts": ["diagnostic-report"],
+      "requiresHumanApproval": false
+    }
+  ],
+  "hooks": [
+    {
+      "id": "strategist-health-check",
+      "event": "health-check",
+      "handlerRef": "strategist-route-preflight",
+      "requiredCapabilities": ["providers"],
+      "failurePolicy": "degrade"
+    }
+  ],
+  "health": {
+    "strategy": "host-command-ready"
+  },
+  "installHooks": {
+    "onInstall": "register-primary-chat-interface",
+    "onEnable": "activate-primary-chat-slot"
+  },
+  "compatibility": {
+    "shellVersion": "^0.1.0",
+    "platforms": ["macOS", "linux", "windows"]
+  },
+  "agents": [
+    {
+      "id": "augmentor.agent",
+      "displayName": "Augmentor",
+      "trustTier": "addon",
+      "workspaceBehavior": "primary"
+    }
+  ]
+}

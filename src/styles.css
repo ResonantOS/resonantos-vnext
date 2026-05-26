@@ -1,0 +1,15 @@
+/* Intent citation: docs/architecture/ADR-002-modular-codebase.md */
+/* This file preserves cascade order while delegating ownership to focused style modules. */
+
+@import "./styles/base.css";
+@import "./styles/shell.css";
+@import "./modules/delegation/delegation.css";
+@import "./modules/recovery/recovery.css";
+@import "./modules/browser/browser.css";
+@import "./modules/terminal/terminal.css";
+@import "./modules/chat/messages.css";
+@import "./styles/workspace-cards.css";
+@import "./modules/archive/archive.css";
+@import "./modules/settings/settings.css";
+@import "./modules/chat/chat-rail.css";
+@import "./styles/responsive.css";

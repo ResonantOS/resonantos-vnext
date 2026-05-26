@@ -1,0 +1,224 @@
+/* Intent citation: docs/architecture/ADR-006-addon-runtime-sdk.md */
+/* Intent citation: docs/architecture/ADR-015-delegation-fabric-addon-catalog-native-tools.md */
+
+.main-shell:has(.hermes-active) {
+  position: relative;
+}
+
+.content-grid.hermes-active {
+  position: absolute;
+  inset: 0.65rem;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  height: auto;
+  max-height: none;
+  min-height: 0;
+  overflow: hidden;
+  padding-right: 0;
+  align-content: stretch;
+}
+
+.hermes-workspace {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.hermes-workspace.is-hidden {
+  display: none;
+}
+
+.hermes-settings-drawer,
+.hermes-dashboard-frame {
+  border: 1px solid rgba(138, 128, 112, 0.12);
+  background: rgba(255, 248, 236, 0.028);
+}
+
+.hermes-action-row,
+.hermes-profile-edit {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.hermes-pill {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 0.2rem 0.45rem;
+  font-size: 0.68rem;
+  background: rgba(251, 191, 36, 0.1);
+  color: var(--warning);
+  white-space: nowrap;
+}
+
+.hermes-pill.ready {
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--accent);
+}
+
+.hermes-settings-drawer .button-secondary,
+.hermes-dashboard-placeholder .button-primary,
+.hermes-dashboard-placeholder .button-secondary {
+  min-height: 1.55rem;
+  padding: 0.22rem 0.48rem;
+  font-size: 0.68rem;
+}
+
+.hermes-settings-trigger {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.55rem;
+  z-index: 6;
+  min-height: 1.65rem;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid rgba(255, 248, 236, 0.18);
+  border-radius: 999px;
+  background: rgba(10, 10, 9, 0.42);
+  color: var(--text-secondary);
+  font-size: 0.68rem;
+  opacity: 0;
+  transform: translateY(-0.15rem);
+  transition: opacity 120ms ease, transform 120ms ease, background 120ms ease;
+}
+
+.hermes-workspace:hover .hermes-settings-trigger,
+.hermes-settings-trigger:focus-visible,
+.hermes-settings-trigger.active {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.hermes-settings-trigger:hover,
+.hermes-settings-trigger.active {
+  background: rgba(10, 10, 9, 0.72);
+  color: var(--text-primary);
+}
+
+.hermes-floating-status {
+  position: absolute;
+  left: 50%;
+  top: 0.55rem;
+  z-index: 5;
+  max-width: min(46rem, calc(100% - 8rem));
+  transform: translateX(-50%);
+  border: 1px solid rgba(251, 191, 36, 0.24);
+  border-radius: 999px;
+  background: rgba(10, 10, 9, 0.72);
+  color: var(--warning);
+  padding: 0.25rem 0.65rem;
+  font-size: 0.72rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hermes-settings-drawer {
+  position: absolute;
+  inset: 0.6rem 0.6rem auto 0.6rem;
+  z-index: 7;
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr 1.4fr;
+  gap: 0.5rem;
+  padding: 0.55rem;
+  border-radius: 12px;
+  background: rgba(18, 17, 15, 0.94);
+  box-shadow: 0 1.4rem 4rem rgba(0, 0, 0, 0.38);
+  backdrop-filter: blur(18px);
+}
+
+.hermes-settings-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  grid-column: 1 / -1;
+}
+
+.hermes-settings-head strong {
+  color: var(--text-primary);
+  margin-right: auto;
+}
+
+.hermes-settings-drawer article {
+  min-width: 0;
+}
+
+.hermes-settings-drawer strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+
+.hermes-settings-drawer p,
+.hermes-dashboard-placeholder p {
+  margin: 0.2rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.hermes-profile-edit {
+  margin-top: 0.4rem;
+}
+
+.hermes-profile-edit input {
+  width: 100%;
+  min-width: 0;
+}
+
+.hermes-dashboard-frame {
+  border-radius: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.hermes-dashboard-frame iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border: 0;
+  background: #0f1115;
+}
+
+.hermes-dashboard-placeholder {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 0.6rem;
+  height: 100%;
+  min-height: 22rem;
+  padding: 1rem;
+  text-align: center;
+}
+
+.hermes-dashboard-placeholder strong {
+  color: var(--text-primary);
+}
+
+@media (max-width: 1180px) {
+  .hermes-settings-drawer {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .hermes-action-row,
+  .hermes-profile-edit,
+  .hermes-settings-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .hermes-settings-drawer {
+    grid-template-columns: 1fr;
+    overflow: auto;
+    max-height: calc(100% - 1.2rem);
+  }
+}

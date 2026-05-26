@@ -1,0 +1,827 @@
+/* Intent citation: docs/architecture/ADR-017-resonant-browser-addon.md */
+/* UX citation: docs/product/UX-001-resonantos-app-shell.md */
+
+.content-grid.browser-active {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  padding-right: 0;
+  align-content: stretch;
+  grid-auto-rows: minmax(0, 1fr);
+}
+
+.browser-workspace {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  min-height: 0;
+  height: 100%;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid rgba(138, 128, 112, 0.18);
+  border-radius: 24px;
+  background: #101112;
+}
+
+.browser-gate,
+.browser-live-session {
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  background: #101112;
+}
+
+.browser-gate {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 1rem;
+  align-items: center;
+  padding: 1rem;
+}
+
+.browser-gate h4 {
+  margin: 0.2rem 0 0;
+  letter-spacing: -0.04em;
+}
+
+.browser-gate p {
+  margin: 0.35rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.browser-live-session {
+  display: grid;
+  grid-template-rows: auto auto auto auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.browser-menu-bar {
+  display: flex;
+  align-items: center;
+  gap: clamp(0.45rem, 1.5vw, 1.2rem);
+  min-width: 0;
+  min-height: 34px;
+  padding: 0 0.72rem;
+  border-bottom: 1px solid rgba(255, 248, 236, 0.08);
+  background: #050606;
+  color: rgba(255, 248, 236, 0.88);
+  overflow-x: auto;
+  scrollbar-width: none;
+  position: relative;
+  z-index: 4;
+}
+
+.browser-menu-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.browser-menu-bar strong {
+  flex: 0 0 auto;
+  color: #f9fafb;
+  font-size: 0.82rem;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+}
+
+.browser-menu-item {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.browser-menu-bar button {
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 0 0.1rem;
+  border: 0;
+  border-radius: 8px;
+  color: rgba(255, 248, 236, 0.82);
+  background: transparent;
+  font-size: 0.76rem;
+}
+
+.browser-menu-bar button:hover {
+  color: #ffffff;
+  background: rgba(255, 248, 236, 0.08);
+}
+
+.browser-menu-popover {
+  position: fixed;
+  top: 34px;
+  z-index: 20;
+  display: grid;
+  min-width: 13rem;
+  padding: 0.38rem;
+  border: 1px solid rgba(255, 248, 236, 0.14);
+  border-radius: 12px;
+  background: rgba(22, 23, 24, 0.98);
+  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.42);
+}
+
+.browser-menu-popover button {
+  justify-content: start;
+  min-height: 30px;
+  padding: 0 0.55rem;
+  color: rgba(255, 248, 236, 0.86);
+  text-align: left;
+  font-size: 0.74rem;
+}
+
+.browser-menu-popover button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.browser-menu-status {
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+  color: rgba(94, 234, 212, 0.82);
+  font-size: 0.7rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.browser-menu-status-error {
+  color: #fca5a5;
+}
+
+.browser-tab-strip {
+  display: flex;
+  align-items: end;
+  gap: 0.42rem;
+  min-width: 0;
+  padding: 0.45rem 0.58rem 0;
+  border-bottom: 1px solid rgba(255, 248, 236, 0.08);
+  background: linear-gradient(180deg, #1f2022, #151617);
+}
+
+.browser-tab {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.35rem;
+  width: min(18rem, 32%);
+  min-width: 7rem;
+  min-height: 38px;
+  padding: 0 0.2rem 0 0.62rem;
+  border: 1px solid rgba(255, 248, 236, 0.08);
+  border-bottom: 0;
+  border-radius: 14px 14px 0 0;
+  background: rgba(255, 248, 236, 0.075);
+}
+
+.browser-tab.active {
+  background: #303133;
+}
+
+.browser-tab button {
+  min-width: 0;
+  min-height: 28px;
+  padding: 0;
+  border: 0;
+  color: rgba(255, 248, 236, 0.8);
+  background: transparent;
+  font-size: 0.78rem;
+}
+
+.browser-tab button:first-child {
+  justify-content: start;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.browser-tab button:last-child {
+  width: 28px;
+  border-radius: 999px;
+  color: rgba(255, 248, 236, 0.52);
+}
+
+.browser-tab button:last-child:hover {
+  color: var(--text-primary);
+  background: rgba(255, 248, 236, 0.08);
+}
+
+.browser-toolbar {
+  display: grid;
+  grid-template-columns: auto minmax(14rem, 1fr) auto;
+  gap: 0.62rem;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  padding: 0.5rem 0.7rem;
+  border-bottom: 1px solid rgba(255, 248, 236, 0.08);
+  background: #303133;
+}
+
+.browser-nav-cluster {
+  display: flex;
+  align-items: center;
+  gap: 0.34rem;
+  min-width: 0;
+}
+
+.browser-nav-cluster-right {
+  justify-content: end;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.browser-nav-cluster-right::-webkit-scrollbar {
+  display: none;
+}
+
+.browser-icon-button {
+  display: inline-grid;
+  place-items: center;
+  min-width: 38px;
+  min-height: 38px;
+  padding: 0 0.45rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 248, 236, 0.1);
+  color: rgba(255, 248, 236, 0.76);
+  background: rgba(255, 248, 236, 0.06);
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.browser-icon-button:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: rgba(255, 248, 236, 0.12);
+}
+
+.browser-icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.34;
+}
+
+.browser-go-button {
+  color: #062016;
+  border-color: rgba(92, 211, 151, 0.64);
+  background: var(--accent);
+}
+
+.browser-ai-mode-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 0.86rem;
+  border-radius: 999px;
+  border: 1px solid rgba(96, 165, 250, 0.72);
+  color: #bfdbfe;
+  background: rgba(14, 116, 144, 0.44);
+  font-size: 0.76rem;
+  font-weight: 900;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.browser-ai-mode-pill:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.browser-extension-button {
+  color: #d9f99d;
+  border-color: rgba(255, 248, 236, 0.14);
+  background: rgba(255, 248, 236, 0.08);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.browser-toolbar input {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 248, 236, 0.14);
+  background: rgba(5, 7, 8, 0.36);
+  color: var(--text-primary);
+  padding: 0 1rem;
+  text-align: left;
+  font-size: 0.9rem;
+  font-family: "SF Mono", "Cascadia Code", "Liberation Mono", monospace;
+  direction: ltr;
+  text-overflow: ellipsis;
+}
+
+.browser-toolbar input:focus {
+  border-color: rgba(96, 165, 250, 0.8);
+  outline: 3px solid rgba(96, 165, 250, 0.2);
+}
+
+.browser-bookmarks-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.48rem;
+  min-width: 0;
+  min-height: 34px;
+  padding: 0 0.72rem;
+  border-bottom: 1px solid rgba(255, 248, 236, 0.08);
+  background: #202123;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.browser-bookmarks-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.browser-bookmarks-bar button,
+.browser-extension-note {
+  flex: 0 0 auto;
+  min-height: 26px;
+  padding: 0 0.36rem;
+  border: 0;
+  border-radius: 8px;
+  color: rgba(255, 248, 236, 0.72);
+  background: transparent;
+  font-size: 0.74rem;
+  white-space: nowrap;
+}
+
+.browser-bookmarks-bar button:hover {
+  color: #ffffff;
+  background: rgba(255, 248, 236, 0.08);
+}
+
+.browser-apps-button {
+  font-size: 1rem !important;
+}
+
+.browser-extension-note {
+  margin-left: auto;
+  color: rgba(255, 248, 236, 0.42);
+}
+
+.browser-extension-note-loaded {
+  color: rgba(37, 211, 137, 0.86);
+}
+
+.browser-extension-note-blocked {
+  color: rgba(255, 179, 102, 0.9);
+}
+
+.browser-bookmark-action {
+  border: 1px solid rgba(37, 211, 137, 0.28) !important;
+  color: rgba(37, 211, 137, 0.9) !important;
+}
+
+.browser-extension-warning-list {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0.45rem 0 0;
+  padding-left: 1rem;
+  color: rgba(255, 209, 161, 0.82);
+  font-size: 0.74rem;
+  line-height: 1.35;
+}
+
+.browser-native-host {
+  position: relative;
+  display: grid;
+  min-height: 0;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.browser-v2-host {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+  background: transparent;
+}
+
+.browser-internal-preview {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: transparent;
+  cursor: grab;
+  touch-action: pan-y;
+}
+
+.browser-wallet-host-panel {
+  display: grid;
+  align-content: center;
+  gap: 1.2rem;
+  min-width: 0;
+  min-height: 0;
+  padding: clamp(1.2rem, 3vw, 2rem);
+  background:
+    radial-gradient(circle at 80% 12%, rgba(37, 211, 137, 0.18), transparent 32%),
+    linear-gradient(145deg, rgba(13, 29, 23, 0.94), rgba(8, 9, 8, 0.98));
+  border: 1px solid rgba(37, 211, 137, 0.18);
+  color: rgba(255, 248, 236, 0.9);
+}
+
+.browser-wallet-host-panel h3 {
+  max-width: 760px;
+  margin: 0.25rem 0 0;
+  font-size: clamp(1.35rem, 3vw, 2.3rem);
+  line-height: 0.98;
+  letter-spacing: -0.06em;
+}
+
+.browser-wallet-host-panel p {
+  max-width: 720px;
+  margin: 0.7rem 0 0;
+  color: rgba(255, 248, 236, 0.68);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.browser-wallet-host-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.browser-wallet-host-rules {
+  display: grid;
+  gap: 0.25rem;
+  max-width: 720px;
+  padding: 0.8rem 0.95rem;
+  border: 1px solid rgba(255, 179, 102, 0.2);
+  border-radius: 18px;
+  background: rgba(255, 179, 102, 0.08);
+  color: rgba(255, 218, 184, 0.86);
+  font-size: 0.82rem;
+}
+
+.browser-wallet-host-rules span {
+  color: rgba(255, 248, 236, 0.64);
+}
+
+.browser-internal-preview img {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  object-fit: cover;
+  object-position: top center;
+  background: #ffffff;
+  user-select: none;
+}
+
+.browser-native-diagnostics {
+  display: none;
+}
+
+.browser-native-diagnostics h3 {
+  font-size: 1rem;
+  letter-spacing: -0.03em;
+}
+
+.browser-native-diagnostics p {
+  font-size: 0.74rem;
+}
+
+.browser-native-diagnostics .browser-v2-actions {
+  margin-top: 0.65rem;
+}
+
+.browser-native-diagnostics .button-secondary {
+  min-height: 32px;
+  padding: 0 0.62rem;
+  font-size: 0.72rem;
+}
+
+.browser-v2-hero,
+.browser-native-probe,
+.browser-extension-manager,
+.browser-extension-priority-grid article,
+.browser-extension-list {
+  min-width: 0;
+  border: 1px solid rgba(255, 248, 236, 0.1);
+  border-radius: 22px;
+  background: rgba(255, 248, 236, 0.045);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.22);
+}
+
+.browser-v2-host > .browser-native-probe,
+.browser-v2-host > .browser-extension-manager,
+.browser-v2-host > .browser-extension-list {
+  display: none;
+}
+
+.browser-v2-hero {
+  padding: clamp(1rem, 2vw, 1.35rem);
+}
+
+.browser-native-placeholder {
+  place-self: center;
+  width: min(42rem, calc(100% - 2rem));
+}
+
+.browser-v2-hero h3 {
+  margin: 0.2rem 0 0;
+  color: var(--text-primary);
+  font-size: clamp(1.35rem, 2vw, 2rem);
+  letter-spacing: -0.06em;
+}
+
+.browser-v2-hero p,
+.browser-extension-priority-grid p,
+.browser-extension-list p {
+  margin: 0.42rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.browser-v2-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-top: 1rem;
+}
+
+.browser-native-probe {
+  display: grid;
+  gap: 0.8rem;
+  padding: 1rem;
+}
+
+.browser-native-probe h4 {
+  margin: 0.2rem 0 0;
+  color: var(--text-primary);
+  font-size: 1.05rem;
+  letter-spacing: -0.04em;
+}
+
+.browser-native-probe p {
+  margin: 0.42rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.browser-native-probe-blocked {
+  border-color: rgba(255, 136, 96, 0.28);
+  background: rgba(255, 136, 96, 0.06);
+}
+
+.browser-native-probe-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.browser-native-probe-grid span,
+.browser-native-probe li {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.browser-native-probe-grid span {
+  padding: 0.45rem 0.6rem;
+  border: 1px solid rgba(255, 248, 236, 0.1);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.browser-native-probe ul {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.browser-extension-priority-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.browser-extension-manager {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+}
+
+.browser-extension-manager-head {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 1rem;
+  align-items: end;
+}
+
+.browser-extension-manager-head h4 {
+  margin: 0.2rem 0 0;
+  color: var(--text-primary);
+  font-size: 1.05rem;
+  letter-spacing: -0.04em;
+}
+
+.browser-extension-target-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+}
+
+.browser-extension-priority-grid article.installed {
+  border-color: rgba(92, 211, 151, 0.35);
+  background: rgba(92, 211, 151, 0.08);
+}
+
+.browser-extension-priority-grid small {
+  display: block;
+  margin-top: 0.55rem;
+  color: rgba(255, 248, 236, 0.52);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.browser-extension-priority-grid article,
+.browser-extension-list {
+  padding: 1rem;
+}
+
+.browser-extension-priority-grid strong,
+.browser-extension-list strong {
+  color: var(--text-primary);
+}
+
+.browser-extension-priority-grid button {
+  margin-top: 0.85rem;
+}
+
+.browser-extension-list {
+  overflow: auto;
+}
+
+.browser-extension-list ul {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0.7rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.browser-extension-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.7rem;
+  align-items: center;
+  min-width: 0;
+  padding: 0.72rem;
+  border-radius: 14px;
+  background: rgba(255, 248, 236, 0.06);
+}
+
+.browser-extension-list span {
+  display: block;
+  margin-top: 0.22rem;
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  white-space: nowrap;
+}
+
+.browser-extension-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.browser-extension-row-actions button {
+  min-height: 34px;
+  padding: 0 0.7rem;
+  font-size: 0.74rem;
+}
+
+.browser-native-webview-mount {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  background: transparent;
+}
+
+.browser-native-webview-placeholder {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  gap: 0.25rem;
+  color: rgba(15, 23, 42, 0.58);
+  background: transparent;
+  opacity: 0;
+  font-size: 0.82rem;
+  pointer-events: none;
+}
+
+.browser-native-webview-placeholder span {
+  color: rgba(15, 23, 42, 0.42);
+  font-size: 0.72rem;
+}
+
+.browser-empty-state {
+  display: grid;
+  place-content: center;
+  gap: 0.45rem;
+  padding: 2rem;
+  text-align: center;
+  background:
+    radial-gradient(circle at center, rgba(255, 248, 236, 0.08), transparent 18rem),
+    #101112;
+}
+
+.browser-empty-state h4,
+.browser-empty-state p {
+  margin: 0;
+}
+
+.browser-empty-state h4 {
+  color: rgba(255, 248, 236, 0.76);
+  font-size: clamp(1rem, 2vw, 1.45rem);
+  letter-spacing: -0.04em;
+}
+
+.browser-empty-state p {
+  color: var(--text-secondary);
+  font-size: 0.84rem;
+}
+
+.browser-error,
+.browser-engine-status {
+  position: absolute;
+  left: 0.75rem;
+  bottom: 0.75rem;
+  z-index: 2;
+  max-width: min(34rem, calc(100% - 1.5rem));
+  padding: 0.55rem 0.7rem;
+  border-radius: 14px;
+  border: 1px solid rgba(248, 113, 113, 0.34);
+  color: #fecaca;
+  background: rgba(127, 29, 29, 0.82);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  pointer-events: none;
+}
+
+.browser-engine-status {
+  right: 0.75rem;
+  left: auto;
+  border-color: rgba(96, 165, 250, 0.34);
+  color: #bfdbfe;
+  background: rgba(30, 64, 175, 0.72);
+}
+
+.browser-engine-status-ready {
+  border-color: rgba(94, 234, 212, 0.36);
+  color: #ccfbf1;
+  background: rgba(20, 83, 45, 0.72);
+}
+
+.browser-engine-status-error {
+  border-color: rgba(248, 113, 113, 0.4);
+  color: #fecaca;
+  background: rgba(127, 29, 29, 0.82);
+}
+
+@media (max-width: 980px) {
+  .browser-gate,
+  .browser-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .browser-tab {
+    width: min(16rem, 54%);
+  }
+
+  .browser-nav-cluster,
+  .browser-nav-cluster-right {
+    justify-content: center;
+  }
+
+  .browser-extension-note {
+    display: none;
+  }
+
+  .browser-extension-priority-grid,
+  .browser-extension-manager-head,
+  .browser-extension-list li {
+    grid-template-columns: 1fr;
+  }
+
+  .browser-extension-row-actions {
+    justify-content: start;
+  }
+
+  .browser-extension-list span {
+    white-space: normal;
+  }
+}

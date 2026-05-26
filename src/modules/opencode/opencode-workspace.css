@@ -1,0 +1,298 @@
+/* Intent citation: docs/architecture/ADR-006-addon-runtime-sdk.md */
+/* Intent citation: docs/architecture/ADR-015-delegation-fabric-addon-catalog-native-tools.md */
+
+.main-shell:has(.opencode-active) {
+  position: relative;
+}
+
+.content-grid.opencode-active {
+  position: absolute;
+  inset: 0.65rem;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  height: auto;
+  max-height: none;
+  min-height: 0;
+  overflow: hidden;
+  padding-right: 0;
+  align-content: stretch;
+}
+
+.opencode-workspace {
+  display: grid;
+  grid-template-rows: auto auto auto auto minmax(0, 1fr);
+  gap: 0.32rem;
+  align-self: stretch;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  max-height: none;
+  overflow: hidden;
+}
+
+.opencode-workspace.is-hidden {
+  display: none;
+}
+
+.opencode-toolbar,
+.opencode-setup-card,
+.opencode-warning,
+.opencode-error,
+.opencode-embed-shell {
+  border: 1px solid rgba(138, 128, 112, 0.12);
+  border-radius: 18px;
+  background: rgba(255, 248, 236, 0.028);
+}
+
+.opencode-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem;
+  padding: 0.24rem 0.42rem;
+  border-radius: 12px;
+}
+
+.opencode-setup-card strong {
+  display: block;
+  margin: 0.2rem 0;
+  color: var(--text-primary);
+}
+
+.opencode-toolbar-main {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.opencode-toolbar-main strong {
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.opencode-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.opencode-toolbar-actions .button-primary,
+.opencode-toolbar-actions .button-secondary {
+  min-height: 1.55rem;
+  padding: 0.22rem 0.48rem;
+  font-size: 0.68rem;
+}
+
+.opencode-icon-button {
+  display: grid;
+  place-items: center;
+  width: 1.62rem;
+  height: 1.62rem;
+  border: 1px solid rgba(138, 128, 112, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 248, 236, 0.035);
+  color: var(--text-secondary);
+}
+
+.opencode-workspace-path {
+  min-width: 0;
+  max-width: min(34vw, 30rem);
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.opencode-setup-card p,
+.opencode-embed-placeholder p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.opencode-runtime-pill {
+  flex: 0 0 auto;
+  padding: 0.22rem 0.46rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+}
+
+.opencode-runtime-pill.ready {
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--accent);
+}
+
+.opencode-runtime-pill.attention {
+  background: rgba(251, 191, 36, 0.1);
+  color: var(--warning);
+}
+
+.opencode-settings-drawer {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.opencode-setup-card {
+  display: grid;
+  align-content: start;
+  gap: 0.65rem;
+  padding: 0.85rem;
+  min-width: 0;
+}
+
+.opencode-warning,
+.opencode-error {
+  padding: 0.48rem 0.65rem;
+  font-size: 0.76rem;
+  border-radius: 12px;
+  overflow-wrap: anywhere;
+}
+
+.opencode-warning {
+  border-color: rgba(251, 191, 36, 0.24);
+  color: var(--warning);
+}
+
+.opencode-error {
+  border-color: rgba(248, 113, 113, 0.26);
+  color: #fda4af;
+}
+
+.opencode-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.opencode-busy {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.opencode-embed-shell {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-row: 5;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.opencode-delegation-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 0.38rem 0.55rem;
+  border-bottom: 1px solid rgba(86, 211, 151, 0.16);
+  background: rgba(16, 185, 129, 0.055);
+  font-size: 0.7rem;
+}
+
+.opencode-delegation-strip div:first-child {
+  display: grid;
+  gap: 0.08rem;
+  min-width: 0;
+}
+
+.opencode-delegation-strip strong {
+  color: var(--text-primary);
+}
+
+.opencode-delegation-strip span,
+.opencode-delegation-strip small {
+  min-width: 0;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.opencode-delegation-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.28rem;
+}
+
+.opencode-delegation-actions .button-secondary {
+  min-height: 1.45rem;
+  padding: 0.18rem 0.42rem;
+  font-size: 0.66rem;
+}
+
+.opencode-trust-kernel {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  padding: 0.32rem 0.55rem;
+  border-bottom: 1px solid rgba(138, 128, 112, 0.12);
+  font-size: 0.68rem;
+}
+
+.opencode-trust-kernel strong {
+  flex: 0 0 auto;
+  color: var(--text-primary);
+}
+
+.opencode-trust-kernel span {
+  min-width: 0;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.opencode-trust-kernel.ready {
+  background: rgba(16, 185, 129, 0.06);
+}
+
+.opencode-trust-kernel.attention {
+  background: rgba(251, 191, 36, 0.08);
+}
+
+.opencode-embed-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border: 0;
+  background: #111;
+}
+
+.opencode-embed-placeholder {
+  display: grid;
+  place-content: center;
+  gap: 0.45rem;
+  min-height: 0;
+  height: 100%;
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.opencode-embed-placeholder strong {
+  color: var(--text-primary);
+}
+
+@media (max-width: 980px) {
+  .opencode-settings-drawer {
+    grid-template-columns: 1fr;
+  }
+
+  .opencode-toolbar {
+    display: grid;
+  }
+
+  .opencode-toolbar-main,
+  .opencode-toolbar-actions {
+    flex-wrap: wrap;
+  }
+}

@@ -1,0 +1,49 @@
+# Dependencies
+node_modules/
+
+# Frontend build output
+dist/
+
+# Tauri/Rust build output and generated bundles
+src-tauri/target/
+src-tauri/gen/
+addons/resonant-browser-native/build/
+addons/resonant-browser-native/vendor/
+build/native-browser/*
+!build/native-browser/.gitkeep
+*.dmg
+*.app
+
+# Local runtime state and generated memory
+Memory/
+Living_Archive/
+.resonantos/
+
+# Development-only add-on manifests excluded from the current public catalog
+public/addons/paperclip.json
+public/addons/*.local-test-backup-*
+
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.mobileprovision
+*.keystore
+
+# Logs and caches
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+.vite/
+coverage/
+tmp/
+
+# IDE/editor local state
+.idea/
+.vscode/
+*.swp

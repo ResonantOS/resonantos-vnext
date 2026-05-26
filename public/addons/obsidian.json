@@ -1,0 +1,166 @@
+{
+  "id": "addon.obsidian",
+  "name": "Resonant Notes",
+  "version": "0.1.0",
+  "author": "Resonant Alpha",
+  "category": "knowledge",
+  "description": "Opens an Obsidian-compatible markdown vault inside ResonantOS as a native Resonant Notes workspace.",
+  "runtimeType": "ui-module",
+  "surfaces": [
+    {
+      "id": "obsidian-vault-bridge",
+      "type": "panel",
+      "label": "Vault Bridge",
+      "description": "Select, scan, and preview markdown notes from a user-approved vault."
+    },
+    {
+      "id": "obsidian-workspace",
+      "type": "embedded-pane",
+      "label": "Resonant Notes Workspace",
+      "description": "ResonantOS-hosted markdown workspace for operating an Obsidian-compatible vault."
+    }
+  ],
+  "requestedCapabilities": [
+    {
+      "capability": "filesystem",
+      "granted": false,
+      "scope": "shared",
+      "revocationBehavior": "hard-stop"
+    },
+    {
+      "capability": "archive-read",
+      "granted": false,
+      "scope": "shared",
+      "revocationBehavior": "degrade"
+    },
+    {
+      "capability": "archive-intake-write",
+      "granted": false,
+      "scope": "intake-only",
+      "revocationBehavior": "hard-stop"
+    },
+    {
+      "capability": "ui-embedding",
+      "granted": false,
+      "scope": "system",
+      "revocationBehavior": "hide-surface"
+    }
+  ],
+  "providerRequirements": {
+    "sharedProfiles": [],
+    "supportsPrivateCredentials": false
+  },
+  "archiveIntegration": {
+    "readScopes": ["living-archive/context", "vault"],
+    "intakeWriteScopes": ["obsidian-vault-notes"],
+    "canRequestIngest": true,
+    "canWriteKnowledgePages": false
+  },
+  "health": {
+    "strategy": "vault-bridge-ready"
+  },
+  "tools": [
+    {
+      "name": "obsidian.write_note",
+      "description": "Write an existing markdown note through the host with stale-save protection, pre-write version snapshot, and audit record.",
+      "requiredCapabilities": ["filesystem"],
+      "inputSchema": {},
+      "outputSchema": {},
+      "audit": {
+        "logRequest": true,
+        "logResult": true,
+        "artifactTypes": ["log"]
+      },
+      "requiresHumanApproval": true
+    },
+    {
+      "name": "obsidian.vault_index",
+      "description": "Build a clean-room Obsidian-compatible index of markdown notes, tags, wikilinks, backlinks, and search matches.",
+      "requiredCapabilities": ["filesystem"],
+      "inputSchema": {},
+      "outputSchema": {},
+      "audit": {
+        "logRequest": true,
+        "logResult": false,
+        "artifactTypes": ["log"]
+      },
+      "requiresHumanApproval": false
+    }
+  ],
+  "delegation": {
+    "acceptsTasks": true,
+    "taskTypes": ["knowledge-organization", "archive-prep"],
+    "artifactReturnTypes": ["summary", "markdown", "file-list", "archive-intake-bundle"],
+    "defaultTargetRuntime": "embedded-workspace",
+    "requiresHumanApprovalBeforeExecution": true,
+    "notes": [
+      "Resonant Notes is primarily a user workspace in v1.",
+      "Delegated organization proposals must not move or rewrite vault content without user approval."
+    ]
+  },
+  "workflowBoundaries": [
+    {
+      "id": "vault-as-human-workspace",
+      "label": "Vault as human workspace",
+      "jobToBeDone": "Expose an Obsidian-compatible markdown vault as a user-managed knowledge workspace connected to Living Archive intake.",
+      "userValue": "The human can keep editing notes in a familiar markdown/vault structure while ResonantOS tracks changes for memory intake.",
+      "repeatability": "workflow-package",
+      "owner": "human",
+      "nonGoals": [
+        "Force Obsidian as a core dependency",
+        "Rewrite vault notes without approval",
+        "Promote vault notes directly into trusted AI Memory pages"
+      ]
+    }
+  ],
+  "skills": [
+    {
+      "id": "vault-organization-assist",
+      "name": "Vault organization assist",
+      "description": "Help the human organize markdown notes with tags, wikilinks, and source boundaries while preserving review gates.",
+      "documentPath": "docs/architecture/addon-skills/obsidian/VAULT_ORGANIZATION_ASSIST.md",
+      "invocation": "agent-suggested",
+      "requiredCapabilities": ["filesystem", "archive-read", "archive-intake-write"],
+      "requiredTools": ["obsidian.vault_index", "obsidian.write_note"]
+    }
+  ],
+  "connectors": [
+    {
+      "id": "markdown-vault",
+      "name": "Markdown vault",
+      "type": "filesystem",
+      "description": "Connects a user-selected markdown or Obsidian vault to ResonantOS through audited filesystem operations.",
+      "requiredCapabilities": ["filesystem"],
+      "configScope": "user-config"
+    }
+  ],
+  "scripts": [
+    {
+      "id": "vault-index-preflight",
+      "name": "Vault index preflight",
+      "description": "Index markdown notes, tags, wikilinks, and backlinks before organization or intake work.",
+      "commandRef": "obsidian.vault_index",
+      "runPolicy": "preflight",
+      "deterministic": true,
+      "requiredCapabilities": ["filesystem"],
+      "producesArtifacts": ["file-list", "diagnostic-report"],
+      "requiresHumanApproval": false
+    }
+  ],
+  "hooks": [
+    {
+      "id": "after-vault-intake-index",
+      "event": "after-archive-intake",
+      "handlerRef": "vault-index-preflight",
+      "requiredCapabilities": ["filesystem"],
+      "failurePolicy": "warn"
+    }
+  ],
+  "installHooks": {
+    "onInstall": "bind-vault"
+  },
+  "compatibility": {
+    "shellVersion": "^0.1.0",
+    "platforms": ["macOS", "windows", "linux"]
+  }
+}

@@ -1,0 +1,200 @@
+{
+  "id": "addon.opencode",
+  "name": "OpenCode",
+  "version": "0.1.0",
+  "author": "Resonant Alpha",
+  "category": "tool",
+  "description": "Open-source coding workspace add-on. ResonantOS launches OpenCode as an optional scoped local service, embeds OpenCode's own web UI, and uses the server/API layer for governance and audit.",
+  "runtimeType": "embedded-module",
+  "surfaces": [
+    {
+      "id": "opencode-workspace",
+      "type": "embedded-pane",
+      "label": "OpenCode Workspace",
+      "description": "Open a coding workspace inside the ResonantOS center surface."
+    }
+  ],
+  "requestedCapabilities": [
+    {
+      "capability": "filesystem",
+      "granted": false,
+      "scope": "workspace",
+      "revocationBehavior": "hard-stop"
+    },
+    {
+      "capability": "shell",
+      "granted": false,
+      "scope": "workspace",
+      "revocationBehavior": "degrade"
+    },
+    {
+      "capability": "providers",
+      "granted": false,
+      "scope": "shared",
+      "revocationBehavior": "degrade"
+    },
+    {
+      "capability": "archive-read",
+      "granted": false,
+      "scope": "shared",
+      "revocationBehavior": "degrade"
+    },
+    {
+      "capability": "archive-intake-write",
+      "granted": false,
+      "scope": "intake-only",
+      "revocationBehavior": "degrade"
+    },
+    {
+      "capability": "ui-embedding",
+      "granted": false,
+      "scope": "system",
+      "revocationBehavior": "hide-surface"
+    }
+  ],
+  "providerRequirements": {
+    "sharedProfiles": ["gx10-local-llama", "shared-local", "shared-minimax"],
+    "supportsPrivateCredentials": true,
+    "preferredRuntimeKinds": ["local", "remote-user-owned", "cloud"],
+    "fallbackPolicyId": "coding-default"
+  },
+  "archiveIntegration": {
+    "readScopes": ["living-archive/context"],
+    "intakeWriteScopes": ["LivingArchive/INTAKE/coding"],
+    "canRequestIngest": true,
+    "canWriteKnowledgePages": false
+  },
+  "health": {
+    "strategy": "workspace-process",
+    "command": "opencode_status"
+  },
+  "service": {
+    "protocol": "host-command",
+    "entrypoint": "opencode_start_service",
+    "healthCommand": "opencode_status",
+    "shutdownCommand": "opencode_stop_service"
+  },
+  "delegation": {
+    "acceptsTasks": true,
+    "taskTypes": ["code-change", "bug-fix", "system-diagnosis"],
+    "artifactReturnTypes": ["summary", "diff", "file-list", "log", "diagnostic-report", "verification-report"],
+    "defaultTargetRuntime": "embedded-workspace",
+    "requiresHumanApprovalBeforeExecution": true,
+    "notes": [
+      "OpenCode must return changed files, commands run, verification evidence, and residual risks.",
+      "Direct filesystem and process access must stay scoped to the task workspace."
+    ]
+  },
+  "workflowBoundaries": [
+    {
+      "id": "scoped-coding-workspace",
+      "label": "Scoped coding workspace",
+      "jobToBeDone": "Launch OpenCode as a scoped coding workspace with provider routing, filesystem boundaries, and artifact return.",
+      "userValue": "The human can use an open-source coding IDE under ResonantOS governance without broad shell or filesystem leakage.",
+      "repeatability": "workflow-package",
+      "owner": "addon-agent",
+      "nonGoals": [
+        "Grant unrestricted filesystem access",
+        "Hide commands or changed files from the human",
+        "Bypass deterministic verification before task completion"
+      ]
+    }
+  ],
+  "skills": [
+    {
+      "id": "opencode-coding-handoff",
+      "name": "OpenCode coding handoff",
+      "description": "Prepare task scope, workspace path, verification expectations, and artifact return rules for OpenCode.",
+      "documentPath": "docs/architecture/addon-skills/opencode/CODING_HANDOFF.md",
+      "invocation": "agent-suggested",
+      "requiredCapabilities": ["filesystem", "shell", "providers", "archive-read"],
+      "requiredTools": ["opencode.launch_workspace"]
+    }
+  ],
+  "augmentorSkills": [
+    {
+      "documentPath": "docs/architecture/addon-skills/opencode/CODING_HANDOFF.md",
+      "objective": "Delegate bounded coding, debugging, refactor, and coding-workspace diagnosis tasks to OpenCode under ResonantOS governance.",
+      "requiredCapabilities": ["filesystem", "shell", "providers", "ui-embedding"],
+      "requiredTools": ["opencode.launch_workspace"],
+      "workflowPhases": [
+        "capture task scope",
+        "create OpenCode delegation packet",
+        "open scoped OpenCode workspace",
+        "collect changed files and verification artifacts",
+        "return result for human review"
+      ],
+      "approvalGates": [
+        "Human approval is required before OpenCode executes shell commands or broad filesystem work.",
+        "OpenCode must return changed files, commands run, verification evidence, and residual risks before completion.",
+        "Augmentor must not claim opencode.launch_workspace executed unless ResonantOS returns a concrete host result."
+      ],
+      "expectedInputs": ["human coding task", "workspace path or bounded files in scope"],
+      "expectedOutputs": ["delegation packet", "TASK.md", "diff", "file list", "command log", "verification report"],
+      "producesDelegationPackets": true,
+      "auditLogRequired": true
+    }
+  ],
+  "connectors": [
+    {
+      "id": "opencode-local-service",
+      "name": "OpenCode local service",
+      "type": "local-runtime",
+      "description": "Starts and embeds an OpenCode service for a selected local workspace.",
+      "requiredCapabilities": ["filesystem", "shell", "ui-embedding"],
+      "configScope": "user-config"
+    }
+  ],
+  "scripts": [
+    {
+      "id": "opencode-workspace-preflight",
+      "name": "OpenCode workspace preflight",
+      "description": "Verify selected workspace path and service readiness before launching OpenCode.",
+      "commandRef": "opencode.launch_workspace",
+      "runPolicy": "preflight",
+      "deterministic": true,
+      "requiredCapabilities": ["filesystem", "shell", "ui-embedding"],
+      "producesArtifacts": ["diagnostic-report", "verification-report"],
+      "requiresHumanApproval": false
+    }
+  ],
+  "hooks": [
+    {
+      "id": "opencode-before-task-complete",
+      "event": "before-task-complete",
+      "handlerRef": "opencode-workspace-preflight",
+      "requiredCapabilities": ["filesystem", "shell", "ui-embedding"],
+      "failurePolicy": "block"
+    }
+  ],
+  "installHooks": {
+    "onInstall": "register-coding-workspace"
+  },
+  "compatibility": {
+    "shellVersion": "^0.1.0",
+    "platforms": ["macOS", "linux", "windows"]
+  },
+  "agents": [
+    {
+      "id": "opencode.runtime",
+      "displayName": "OpenCode",
+      "trustTier": "addon",
+      "workspaceBehavior": "delegated"
+    }
+  ],
+  "tools": [
+    {
+      "name": "opencode.launch_workspace",
+      "description": "Start an OpenCode web/server session for a scoped workspace path.",
+      "requiredCapabilities": ["filesystem", "shell", "ui-embedding"],
+      "inputSchema": {},
+      "outputSchema": {},
+      "audit": {
+        "logRequest": true,
+        "logResult": true,
+        "artifactTypes": ["log", "diagnostic-report"]
+      },
+      "requiresHumanApproval": true
+    }
+  ]
+}
