@@ -74,6 +74,7 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   const agentControlRunner = await readText(path.join(extensionRoot, "src", "lib", "agent-control-runner.js"));
   const pageActions = await readText(path.join(extensionRoot, "src", "lib", "browser-page-actions.js"));
   const chatSessionStore = await readText(path.join(extensionRoot, "src", "lib", "chat-session-store.js"));
+  const messageActionController = await readText(path.join(extensionRoot, "src", "lib", "message-action-controller.js"));
   const sidePanelRenderers = await readText(path.join(extensionRoot, "src", "lib", "side-panel-renderers.js"));
   const monitorRenderers = await readText(path.join(extensionRoot, "src", "lib", "monitor-renderers.js"));
   const commandRouter = await readText(path.join(extensionRoot, "src", "lib", "side-panel-command-router.js"));
@@ -113,6 +114,12 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(composerController, /handleClipboardShortcut/);
   assert.match(composerController, /resetUndoStack/);
   assert.match(composerController, /requestSubmit/);
+  assert.match(script, /createMessageActionController/);
+  assert.match(messageActionController, /copyMessage/);
+  assert.match(messageActionController, /forkFromMessage/);
+  assert.match(messageActionController, /saveMessageToArchive/);
+  assert.match(messageActionController, /regenerateFromMessage/);
+  assert.match(messageActionController, /attachFiles/);
   assert.match(chatSessionStore, /forkFromMessage/);
   assert.match(chatSessionStore, /trimToPreviousUserMessage/);
   assert.match(chatSessionStore, /addAttachments/);
@@ -216,18 +223,18 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(pageActions, /openBrowserUrl/);
   assert.match(pageActions, /chrome\.tabs\.update/);
   assert.match(pageActions, /chrome\.tabs\.create/);
-  assert.match(script, /copyMessage/);
+  assert.match(messageActionController, /copyMessage/);
   assert.match(sidePanelRenderers, /message-action/);
   assert.match(composerController, /commandInput\.addEventListener\("keydown"/);
   assert.match(composerController, /commandForm\.requestSubmit\(\)/);
   assert.match(composerController, /event\.metaKey/);
   assert.match(composerController, /undoInput/);
   assert.match(composerController, /shortcutKey === "z"/);
-  assert.match(script, /forkFromMessage/);
-  assert.match(script, /editMessage/);
-  assert.match(script, /saveMessageToArchive/);
-  assert.match(script, /regenerateFromMessage/);
-  assert.match(script, /deleteMessage/);
+  assert.match(messageActionController, /forkFromMessage/);
+  assert.match(messageActionController, /editMessage/);
+  assert.match(messageActionController, /saveMessageToArchive/);
+  assert.match(messageActionController, /regenerateFromMessage/);
+  assert.match(messageActionController, /deleteMessage/);
   assert.doesNotMatch(script, /Full LLM replies will come from/);
 });
 

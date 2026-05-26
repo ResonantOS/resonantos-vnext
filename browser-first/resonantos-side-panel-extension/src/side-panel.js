@@ -18,6 +18,7 @@ import { createBridgeClient } from "./lib/bridge-client.js";
 import { createChatSessionStore } from "./lib/chat-session-store.js";
 import { createChatTurnController } from "./lib/chat-turn-controller.js";
 import { createComposerController } from "./lib/composer-controller.js";
+import { createMessageActionController } from "./lib/message-action-controller.js";
 import { createMonitorRenderers } from "./lib/monitor-renderers.js";
 import { createSidePanelCommandRouter } from "./lib/side-panel-command-router.js";
 import { createSidePanelRenderers } from "./lib/side-panel-renderers.js";
@@ -80,6 +81,7 @@ let currentControlRun = null;
 let pendingApproval = null;
 let controlledTabId = null;
 let contextDockExpanded = false;
+let messageActions = null;
 let monitorRenderers = null;
 
 const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -289,11 +291,6 @@ const updateBrowserJob = async (jobId, patch) => {
   return updated;
 };
 
-const clearAttachments = async () => {
-  await chatSessionStore.clearAttachments();
-  renderAttachments();
-};
-
 const persistChatState = () => chatSessionStore.persist();
 
 const {
@@ -309,13 +306,13 @@ const {
     await chatSessionStore.removeAttachment(id);
     renderAttachments();
   },
-  onCopyMessage: (id) => copyMessage(id),
-  onDeleteMessage: (id) => deleteMessage(id),
-  onEditMessage: (id) => editMessage(id),
-  onForkMessage: (id) => forkFromMessage(id),
-  onRegenerateMessage: (id) => regenerateFromMessage(id),
-  onSaveMessageToArchive: (id) => saveMessageToArchive(id),
-  onShowMessageStats: (id) => showMessageStats(id),
+  onCopyMessage: (id) => messageActions.copyMessage(id),
+  onDeleteMessage: (id) => messageActions.deleteMessage(id),
+  onEditMessage: (id) => messageActions.editMessage(id),
+  onForkMessage: (id) => messageActions.forkFromMessage(id),
+  onRegenerateMessage: (id) => messageActions.regenerateFromMessage(id),
+  onSaveMessageToArchive: (id) => messageActions.saveMessageToArchive(id),
+  onShowMessageStats: (id) => messageActions.showMessageStats(id),
   scrollTranscriptToBottom,
   window
 });
@@ -327,76 +324,21 @@ const addMessage = async (role, content, { persist = true, usage = null } = {}) 
   return message;
 };
 
-const copyMessage = async (id) => {
-  const message = chatSessionStore.findMessage(id);
-  if (!message) return;
-  await navigator.clipboard?.writeText?.(message.content).catch(() => undefined);
-  flashCopied(id);
-  setStatus("Copied");
-};
-
-const forkFromMessage = async (id) => {
-  const fork = await chatSessionStore.forkFromMessage(id);
-  if (!fork) return;
-  renderMessages();
-  setStatus("Forked");
-};
-
-const deleteMessage = async (id) => {
-  await chatSessionStore.deleteMessage(id);
-  renderMessages();
-  setStatus("Deleted");
-};
-
-const editMessage = (id) => {
-  const message = chatSessionStore.findMessage(id);
-  if (!message || message.role !== "user") return;
-  commandInput.value = message.content;
-  resetComposerUndoStack(message.content);
-  commandInput.focus();
-  setStatus("Editing");
-};
-
-const saveMessageToArchive = async (id) => {
-  const message = chatSessionStore.findMessage(id);
-  if (!message) return;
-  setStatus("Saving");
-  try {
-    const result = await bridgeRequest("/archive/intake", {
-      method: "POST",
-      body: {
-        title: `Augmentor message ${new Date(message.createdAt).toLocaleString()}`,
-        content: message.content,
-        sourceMessageId: message.id,
-        url: lastSnapshot?.url ?? null
-      }
-    });
-    await addMessage("system", `Saved to Living Archive intake: ${result.path}`);
-    setStatus("Ready");
-  } catch (error) {
-    setStatus("Archive failed");
-    await addMessage("system", error instanceof Error ? error.message : String(error));
-  }
-};
-
-const showMessageStats = async (id) => {
-  const message = chatSessionStore.findMessage(id);
-  if (!message?.usage) {
-    await addMessage("system", "No generation telemetry is available for this message.");
-    return;
-  }
-  await addMessage("system", `Generation stats:\n${JSON.stringify(message.usage, null, 2)}`);
-};
-
-const regenerateFromMessage = async (id) => {
-  const userMessage = await chatSessionStore.trimToPreviousUserMessage(id);
-  if (!userMessage) {
-    await addMessage("system", "No previous user message is available for regeneration.");
-    return;
-  }
-  renderMessages();
-  await respondToCommand(userMessage.content);
-};
+messageActions = createMessageActionController({
+  addMessage,
+  bridgeRequest,
+  chatSessionStore,
+  commandInput,
+  composerController,
+  fileInput,
+  flashCopied,
+  getLastSnapshot: () => lastSnapshot,
+  getRespondToCommand: () => respondToCommand,
+  navigator,
+  renderAttachments,
+  renderMessages,
+  setStatus
+});
 
 const browserPageActions = createBrowserPageActions({
   addMessage,
@@ -500,31 +442,6 @@ const bindMentionedTab = async (message) => {
   await renderSitePermissionPanel(tab);
   await addMessage("system", `Using @tab context: ${tab.title || tab.url}`);
   return tab;
-};
-
-const attachFiles = async (fileList) => {
-  const files = Array.from(fileList ?? []);
-  if (!files.length) return;
-  const nextAttachments = [];
-  for (const [index, file] of files.entries()) {
-    const textLike = /^(text\/|application\/(json|xml|javascript|typescript))/i.test(file.type) || /\.(md|txt|json|csv|ts|tsx|js|jsx|css|html|xml|yaml|yml)$/i.test(file.name);
-    let content = "";
-    if (textLike && file.size <= 64 * 1024) {
-      content = (await file.text()).slice(0, 12000);
-    }
-    nextAttachments.push({
-      id: `${file.name}-${file.size}-${Date.now()}-${index}`,
-      name: file.name,
-      size: file.size,
-      type: file.type,
-      summary: `${Math.round(file.size / 1024)} KB${content ? " · embedded text" : " · metadata only"}`,
-      content
-    });
-  }
-  await chatSessionStore.addAttachments(nextAttachments);
-  fileInput.value = "";
-  renderAttachments();
-  setStatus("Attached");
 };
 
 const saveIntake = async () => {
@@ -927,7 +844,7 @@ const chatTurnController = createChatTurnController({
   bridgeRequest,
   chatSessionStore,
   clearActivitySoon,
-  clearAttachments,
+  clearAttachments: () => messageActions.clearAttachments(),
   getLastSnapshot: () => lastSnapshot,
   getModel: () => modelSelect.value,
   getThinkingDepth: () => thinkingDepthSelect.value,
@@ -1020,7 +937,7 @@ const consumeInlineDraft = async (draft) => {
 };
 
 attachFileButton.addEventListener("click", () => fileInput.click());
-fileInput.addEventListener("change", () => void attachFiles(fileInput.files));
+fileInput.addEventListener("change", () => void messageActions.attachFiles(fileInput.files));
 readButton.addEventListener("click", () => void readActivePage());
 saveIntakeButton.addEventListener("click", () => void saveIntake());
 contextToggleButton.addEventListener("click", () => {

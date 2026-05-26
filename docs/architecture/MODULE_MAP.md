@@ -177,6 +177,7 @@ This map defines which folder owns which feature area so contributors do not kee
   - `resonantos-side-panel-extension/src/lib/chat-session-store.js` owns chat/fork/attachment state, hydration, persistence, and regeneration trimming; side-panel rendering consumes this store instead of mutating raw arrays
   - `resonantos-side-panel-extension/src/lib/chat-turn-controller.js` owns provider chat-turn payload assembly, page context compaction, attachment runtime context, provider success/failure status transitions, and post-turn attachment clearing
   - `resonantos-side-panel-extension/src/lib/composer-controller.js` owns composer keyboard behavior, undo snapshots, select-all, clipboard copy/cut/paste, and Enter versus Shift+Enter semantics
+  - `resonantos-side-panel-extension/src/lib/message-action-controller.js` owns message mutation actions, archive-save from messages, stats reporting, regeneration dispatch, clipboard copy feedback, and file attachment import/clear behavior
   - `resonantos-side-panel-extension/src/lib/side-panel-renderers.js` owns dependency-injected message and attachment rendering, action icons, copy flash feedback, and role labels
   - `resonantos-side-panel-extension/src/lib/monitor-renderers.js` owns dependency-injected status dock rendering for site permissions, browser jobs, control runs, artifacts, and approval prompts
   - `resonantos-side-panel-extension/src/lib/side-panel-command-router.js` owns side-panel command dispatch for slash commands, natural browser intents, wallet boundaries, and chat fallback
