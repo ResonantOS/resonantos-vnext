@@ -6,6 +6,8 @@ This folder is the documentation entrypoint for the current codebase.
 
 - [PROJECT_STATUS.md](./PROJECT_STATUS.md)
   - current implementation checkpoint, known gaps, guardrails, and recommended next work
+- [FEATURE_INVENTORY_2026-05-26.md](./FEATURE_INVENTORY_2026-05-26.md)
+  - browser-first working features, browser-first next features, and desktop vNext feature inventory
 - [architecture/MODULE_MAP.md](./architecture/MODULE_MAP.md)
   - current ownership map for modules and shell composition
 - [architecture/VNEXT_SYSTEM_DIAGRAM.md](./architecture/VNEXT_SYSTEM_DIAGRAM.md)
@@ -103,6 +105,8 @@ This folder is the documentation entrypoint for the current codebase.
   - `working/SESSION_CONTEXT_2026-04-25.md`
 - `What exists now, what is missing, and what should we do next?`
   - `PROJECT_STATUS`
+- `Which browser-first features work now, what are we adding next, and what still exists in desktop vNext?`
+  - `FEATURE_INVENTORY_2026-05-26`
 - `What is still planned?`
   - `FEATURE_BACKLOG`
 - `What UI/UX experience are we building?`
