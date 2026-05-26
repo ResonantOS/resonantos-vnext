@@ -173,6 +173,7 @@ This map defines which folder owns which feature area so contributors do not kee
   - `resonantos-side-panel-extension/src/lib/agent-control-planner.js` owns pure Agent Control step labels, deterministic plan generation, dedupe, and fallback next-action selection
   - `resonantos-side-panel-extension/src/lib/agent-control-runner.js` owns the dependency-injected observe/decide/act/verify Agent Control loop and approval continuation/denial flow
   - `resonantos-side-panel-extension/src/lib/browser-page-actions.js` owns dependency-injected browser page actions: tab selection, navigation, search, frame reads, content-script injection fallback, click/type/scroll/form operations, and page summarization
+  - `resonantos-side-panel-extension/src/lib/app-command-handlers.js` owns dependency-injected non-page command handlers for goals, delegation, status, site permissions, memory/history search, capabilities, and browser job controls
   - `resonantos-side-panel-extension/src/lib/chat-session-store.js` owns chat/fork/attachment state, hydration, persistence, and regeneration trimming; side-panel rendering consumes this store instead of mutating raw arrays
   - `resonantos-side-panel-extension/src/lib/side-panel-renderers.js` owns dependency-injected message and attachment rendering, action icons, copy flash feedback, and role labels
   - `resonantos-side-panel-extension/src/lib/monitor-renderers.js` owns dependency-injected status dock rendering for site permissions, browser jobs, control runs, artifacts, and approval prompts

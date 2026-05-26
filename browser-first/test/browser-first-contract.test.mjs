@@ -63,6 +63,7 @@ test("browser layer has a human approval boundary for wallet and credential acti
 test("browser layer exposes Augmentor chat as the side-panel surface without stealing the browser tab", async () => {
   const panel = await readText(path.join(extensionRoot, "src", "side-panel.html"));
   const script = await readText(path.join(extensionRoot, "src", "side-panel.js"));
+  const appCommandHandlers = await readText(path.join(extensionRoot, "src", "lib", "app-command-handlers.js"));
   const bridgeClient = await readText(path.join(extensionRoot, "src", "lib", "bridge-client.js"));
   const commandParser = await readText(path.join(extensionRoot, "src", "lib", "browser-command-parser.js"));
   const browserJobStore = await readText(path.join(extensionRoot, "src", "lib", "browser-job-store.js"));
@@ -106,6 +107,11 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(chatSessionStore, /addAttachments/);
   assert.match(chatSessionStore, /hydrate/);
   assert.match(script, /createSidePanelRenderers/);
+  assert.match(script, /createAppCommandHandlers/);
+  assert.match(appCommandHandlers, /runGoalCommand/);
+  assert.match(appCommandHandlers, /runSitePermissionCommand/);
+  assert.match(appCommandHandlers, /runJobsCommand/);
+  assert.match(appCommandHandlers, /pauseBrowserJob/);
   assert.match(script, /createSidePanelCommandRouter/);
   assert.match(commandRouter, /respondToCommand/);
   assert.match(commandRouter, /parseControlIntent/);
@@ -125,9 +131,9 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(script, /browserJobStore\.getMonitorCollapsed/);
   assert.match(script, /\/augmentor\/chat/);
   assert.match(script, /\/archive\/intake/);
-  assert.match(script, /\/memory\/search/);
-  assert.match(script, /\/addons\/delegate/);
-  assert.match(script, /\/goals/);
+  assert.match(appCommandHandlers, /\/memory\/search/);
+  assert.match(appCommandHandlers, /\/addons\/delegate/);
+  assert.match(appCommandHandlers, /\/goals/);
   assert.match(commandParser, /parseNaturalBrowserIntent/);
   assert.match(script, /createBrowserJobStore/);
   assert.match(browserJobStore, /normalizeBrowserJob/);
@@ -144,9 +150,9 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(commandParser, /parseControlIntent/);
   assert.match(commandParser, /parseAutonomousBrowserActionIntent/);
   assert.match(commandParser, /parseAmazonShoppingTask/);
-  assert.match(script, /runHistorySearchCommand/);
-  assert.match(script, /runSitePermissionCommand/);
-  assert.match(script, /runCapabilitiesCommand/);
+  assert.match(appCommandHandlers, /runHistorySearchCommand/);
+  assert.match(appCommandHandlers, /runSitePermissionCommand/);
+  assert.match(appCommandHandlers, /runCapabilitiesCommand/);
   assert.match(script, /approvalBoundaryForStep/);
   assert.match(script, /controlStepLabel/);
   assert.match(agentControlPlanner, /planControlSteps/);
@@ -154,10 +160,10 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(agentControlPlanner, /dedupeControlSteps/);
   assert.match(agentControlPlanner, /controlStepLabel/);
   assert.match(script, /trustCurrentSiteForSafeActions/);
-  assert.match(script, /runJobsCommand/);
-  assert.match(script, /pauseBrowserJob/);
-  assert.match(script, /resumeBrowserJob/);
-  assert.match(script, /cancelBrowserJob/);
+  assert.match(appCommandHandlers, /runJobsCommand/);
+  assert.match(appCommandHandlers, /pauseBrowserJob/);
+  assert.match(appCommandHandlers, /resumeBrowserJob/);
+  assert.match(appCommandHandlers, /cancelBrowserJob/);
   assert.match(script, /augmentorBrowserJobs/);
   assert.match(script, /renderSitePermissionPanel/);
   assert.match(script, /sitePermissionMode\.addEventListener/);
