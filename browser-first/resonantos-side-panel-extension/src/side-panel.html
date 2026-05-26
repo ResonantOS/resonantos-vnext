@@ -9,56 +9,58 @@
   <body>
     <main class="chat-shell" aria-label="Augmentor chat">
       <section id="transcript" class="transcript" aria-live="polite"></section>
-      <section id="activity-panel" class="activity-panel" aria-live="polite" hidden>
-        <span class="activity-pulse"></span>
-        <div>
-          <strong id="activity-label">Working</strong>
-          <small id="activity-detail">Preparing task...</small>
-        </div>
-      </section>
-      <section id="site-permission-panel" class="site-permission-panel" aria-label="Current site assistant permission" hidden>
-        <div>
-          <span class="eyebrow">Current Site</span>
-          <strong id="site-permission-host">No readable page</strong>
-          <small id="site-permission-note">Choose how much browser help Augmentor may use here.</small>
-        </div>
-        <select id="site-permission-mode" aria-label="Current site permission">
-          <option value="blocked">Blocked</option>
-          <option value="read-only">Read only</option>
-          <option value="ask-before-action">Ask before action</option>
-          <option value="trusted-for-safe-actions">Trusted safe actions</option>
-        </select>
-      </section>
-      <section id="job-monitor" class="job-monitor" aria-live="polite" hidden>
-        <div class="job-monitor-header">
+      <section id="context-dock" class="context-dock" aria-label="Browser context and task status">
+        <section id="activity-panel" class="activity-panel" aria-live="polite" hidden>
+          <span class="activity-pulse"></span>
           <div>
-            <span class="eyebrow">Browser Jobs</span>
-            <strong id="job-monitor-title">No durable browser jobs</strong>
+            <strong id="activity-label">Working</strong>
+            <small id="activity-detail">Preparing task...</small>
           </div>
-          <button id="job-monitor-toggle" type="button">Hide</button>
-        </div>
-        <ol id="job-list" class="job-list"></ol>
-      </section>
-      <section id="control-monitor" class="control-monitor" aria-live="polite" hidden>
-        <div class="control-monitor-header">
+        </section>
+        <section id="site-permission-panel" class="site-permission-panel" aria-label="Current site assistant permission" hidden>
           <div>
-            <span class="eyebrow">Agent Control</span>
-            <strong id="control-monitor-title">No active browser task</strong>
+            <span class="eyebrow">Site</span>
+            <strong id="site-permission-host">No readable page</strong>
+            <small id="site-permission-note">Choose how much browser help Augmentor may use here.</small>
           </div>
-          <span id="control-monitor-status" class="control-status">idle</span>
-        </div>
-        <ol id="control-step-list" class="control-step-list"></ol>
-        <div id="control-artifacts" class="control-artifacts" hidden></div>
-        <div id="approval-card" class="approval-card" hidden>
-          <strong id="approval-title">Approval required</strong>
-          <p id="approval-reason"></p>
-          <div class="approval-actions">
-            <button id="approval-approve" type="button">Approve once</button>
-            <button id="approval-trust-site" type="button">Trust safe actions here</button>
-            <button id="approval-deny" type="button">Deny</button>
-            <button id="approval-delegate" type="button">Delegate issue</button>
+          <select id="site-permission-mode" aria-label="Current site permission">
+            <option value="blocked">Blocked</option>
+            <option value="read-only">Read only</option>
+            <option value="ask-before-action">Ask before action</option>
+            <option value="trusted-for-safe-actions">Trusted safe actions</option>
+          </select>
+        </section>
+        <section id="job-monitor" class="job-monitor" aria-live="polite" hidden>
+          <div class="job-monitor-header">
+            <div>
+              <span class="eyebrow">Jobs</span>
+              <strong id="job-monitor-title">No durable browser jobs</strong>
+            </div>
+            <button id="job-monitor-toggle" type="button">Show</button>
           </div>
-        </div>
+          <ol id="job-list" class="job-list" hidden></ol>
+        </section>
+        <section id="control-monitor" class="control-monitor" aria-live="polite" hidden>
+          <div class="control-monitor-header">
+            <div>
+              <span class="eyebrow">Agent Control</span>
+              <strong id="control-monitor-title">No active browser task</strong>
+            </div>
+            <span id="control-monitor-status" class="control-status">idle</span>
+          </div>
+          <ol id="control-step-list" class="control-step-list"></ol>
+          <div id="control-artifacts" class="control-artifacts" hidden></div>
+          <div id="approval-card" class="approval-card" hidden>
+            <strong id="approval-title">Approval required</strong>
+            <p id="approval-reason"></p>
+            <div class="approval-actions">
+              <button id="approval-approve" type="button">Approve once</button>
+              <button id="approval-trust-site" type="button">Trust safe actions here</button>
+              <button id="approval-deny" type="button">Deny</button>
+              <button id="approval-delegate" type="button">Delegate issue</button>
+            </div>
+          </div>
+        </section>
       </section>
 
       <form id="command-form" class="composer" aria-label="Message Augmentor">

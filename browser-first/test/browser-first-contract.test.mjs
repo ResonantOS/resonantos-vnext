@@ -32,6 +32,8 @@ test("ResonantOS browser layer is packaged as a Chromium side-panel extension", 
   assert.equal(manifest.key.length > 100, true);
   assert.ok(manifest.permissions.includes("sidePanel"));
   assert.ok(manifest.permissions.includes("activeTab"));
+  assert.ok(manifest.permissions.includes("clipboardRead"));
+  assert.ok(manifest.permissions.includes("clipboardWrite"));
   assert.ok(manifest.permissions.includes("history"));
   assert.ok(manifest.permissions.includes("scripting"));
   assert.ok(manifest.permissions.includes("tabs"));

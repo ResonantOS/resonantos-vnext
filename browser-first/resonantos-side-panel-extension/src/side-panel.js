@@ -61,9 +61,62 @@ let pendingApproval = null;
 let controlledTabId = null;
 let browserJobs = [];
 let activeJobId = null;
-let jobMonitorCollapsed = false;
+let jobMonitorCollapsed = true;
 
 const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+const composerSelection = () => ({
+  start: commandInput.selectionStart ?? commandInput.value.length,
+  end: commandInput.selectionEnd ?? commandInput.value.length
+});
+
+const replaceComposerSelection = (text) => {
+  const { start, end } = composerSelection();
+  commandInput.setRangeText(String(text ?? ""), start, end, "end");
+  commandInput.dispatchEvent(new Event("input", { bubbles: true }));
+};
+
+const writeClipboardText = async (text) => {
+  const value = String(text ?? "");
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return true;
+  }
+  return false;
+};
+
+const readClipboardText = async () => {
+  if (!navigator.clipboard?.readText) return "";
+  return navigator.clipboard.readText();
+};
+
+const handleComposerClipboardShortcut = async (event) => {
+  const shortcutKey = event.key.toLowerCase();
+  if (!(event.metaKey || event.ctrlKey) || event.altKey || !["x", "c", "v"].includes(shortcutKey)) {
+    return false;
+  }
+  event.preventDefault();
+  const { start, end } = composerSelection();
+  const selectedText = commandInput.value.slice(start, end);
+  if (shortcutKey === "c") {
+    await writeClipboardText(selectedText || commandInput.value).catch(() => undefined);
+    return true;
+  }
+  if (shortcutKey === "x") {
+    await writeClipboardText(selectedText || commandInput.value).catch(() => undefined);
+    if (selectedText) {
+      replaceComposerSelection("");
+    } else {
+      commandInput.value = "";
+    }
+    return true;
+  }
+  const pastedText = await readClipboardText().catch(() => "");
+  if (pastedText) {
+    replaceComposerSelection(pastedText);
+  }
+  return true;
+};
 
 const MODEL_LABELS = {
   "MiniMax-M2.7": "MiniMax 2.7",
@@ -85,6 +138,12 @@ const setStatus = (label) => {
   updateConnectionLine();
 };
 
+const scrollTranscriptToBottom = () => {
+  window.requestAnimationFrame(() => {
+    transcript.scrollTop = transcript.scrollHeight;
+  });
+};
+
 const setActivity = (phase, label, detail = "") => {
   if (activityTimer) {
     window.clearTimeout(activityTimer);
@@ -94,6 +153,7 @@ const setActivity = (phase, label, detail = "") => {
   activityPanel.dataset.phase = phase;
   activityLabel.textContent = label;
   activityDetail.textContent = detail;
+  scrollTranscriptToBottom();
 };
 
 const clearActivity = () => {
@@ -101,6 +161,7 @@ const clearActivity = () => {
   activityPanel.dataset.phase = "idle";
   activityLabel.textContent = "Ready";
   activityDetail.textContent = "";
+  scrollTranscriptToBottom();
 };
 
 const clearActivitySoon = (delay = 2200) => {
@@ -171,6 +232,7 @@ const renderControlMonitor = () => {
     approvalApproveButton.disabled = false;
     approvalTrustSiteButton.disabled = false;
   }
+  scrollTranscriptToBottom();
 };
 
 const startControlRun = ({ goal, plan }) => {
@@ -280,6 +342,7 @@ const renderSitePermissionPanel = async (tab = null) => {
   sitePermissionHost.textContent = siteKeyForUrl(current.url);
   sitePermissionMode.value = mode;
   sitePermissionNote.textContent = sitePermissionDescription(mode);
+  scrollTranscriptToBottom();
 };
 
 const normalizeJob = (job) => ({
@@ -314,7 +377,10 @@ const renderJobMonitor = () => {
   jobMonitorToggle.textContent = jobMonitorCollapsed ? "Show" : "Hide";
   jobList.hidden = jobMonitorCollapsed;
   jobList.replaceChildren();
-  if (jobMonitorCollapsed) return;
+  if (jobMonitorCollapsed) {
+    scrollTranscriptToBottom();
+    return;
+  }
   browserJobs.slice(0, 8).forEach((job) => {
     const item = document.createElement("li");
     item.dataset.status = job.status;
@@ -332,6 +398,7 @@ const renderJobMonitor = () => {
     item.append(details, state);
     jobList.append(item);
   });
+  scrollTranscriptToBottom();
 };
 
 const loadBrowserJobs = async () => {
@@ -342,7 +409,7 @@ const loadBrowserJobs = async () => {
   browserJobs = Array.isArray(stored?.[STORAGE_KEYS.browserJobs])
     ? stored[STORAGE_KEYS.browserJobs].map(normalizeJob)
     : [];
-  jobMonitorCollapsed = Boolean(stored?.[STORAGE_KEYS.jobMonitorCollapsed]);
+  jobMonitorCollapsed = stored?.[STORAGE_KEYS.jobMonitorCollapsed] !== false;
   renderJobMonitor();
 };
 
@@ -500,7 +567,7 @@ const renderMessages = () => {
     article.append(header, paragraph, actions);
     transcript.append(article);
   });
-  transcript.scrollTop = transcript.scrollHeight;
+  scrollTranscriptToBottom();
 };
 
 const addMessage = async (role, content, { persist = true, usage = null } = {}) => {
@@ -2411,6 +2478,10 @@ commandInput.addEventListener("keydown", (event) => {
     return;
   }
   const shortcutKey = event.key.toLowerCase();
+  if ((event.metaKey || event.ctrlKey) && !event.altKey && ["x", "c", "v"].includes(shortcutKey)) {
+    void handleComposerClipboardShortcut(event);
+    return;
+  }
   if ((event.metaKey || event.ctrlKey) && !event.altKey && shortcutKey === "a") {
     event.preventDefault();
     commandInput.select();
