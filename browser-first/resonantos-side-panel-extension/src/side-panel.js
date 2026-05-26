@@ -10,6 +10,7 @@ import { createChatSessionStore } from "./lib/chat-session-store.js";
 import { createChatTurnController } from "./lib/chat-turn-controller.js";
 import { createComposerController } from "./lib/composer-controller.js";
 import { createControlPlanningService } from "./lib/control-planning-service.js";
+import { createControlStepExecutor } from "./lib/control-step-executor.js";
 import { createMessageActionController } from "./lib/message-action-controller.js";
 import { createMonitorRenderers } from "./lib/monitor-renderers.js";
 import { createSidePanelCommandRouter } from "./lib/side-panel-command-router.js";
@@ -473,72 +474,29 @@ const controlPlanningService = createControlPlanningService({
 });
 const requestNextControlAction = controlPlanningService.requestNextControlAction;
 
-const executeControlStep = async (step) => {
-  if (step.type === "inspect" || step.type === "read") {
-    return summarizeSnapshot();
-  }
-  if (step.type === "tabs") {
-    const tabs = await chrome.tabs.query({}).catch(() => []);
-    const readableTabs = tabs.filter(isReadableBrowserTab).map((tab) => ({
-      id: tab.id,
-      title: tab.title || "",
-      url: tab.url || "",
-      active: Boolean(tab.active),
-      controlled: tab.id === controlledTabId
-    }));
-    await addMessage(
-      "system",
-      readableTabs.length
-        ? `Open browser tabs:\n${readableTabs.map((tab) => `- ${tab.id}${tab.controlled ? " [controlled]" : tab.active ? " [active]" : ""}: ${tab.title || tab.url}`).join("\n")}`
-        : "No readable browser tabs are open."
-    );
-    return { ok: true, tabs: readableTabs };
-  }
-  if (step.type === "switch_tab") {
-    const tab = await chrome.tabs.get(step.tabId).catch(() => null);
-    if (!isReadableBrowserTab(tab)) {
-      return { ok: false, error: `Tab ${step.tabId} is not a readable web page.` };
-    }
-    controlledTabId = tab.id;
-    await chrome.tabs.update(tab.id, { active: true });
-    lastSnapshot = null;
-    setContextMeter(null);
-    await addMessage("system", `Switched controlled tab to ${tab.title || tab.url}.`);
-    return { ok: true, tabId: tab.id, title: tab.title || "", url: tab.url || "" };
-  }
-  if (step.type === "open") {
-    const result = await openBrowserUrl(step.target);
-    await sleep(1200);
-    return result;
-  }
-  if (step.type === "search") {
-    const result = await searchBrowser({ query: step.query, action: step.action });
-    await sleep(1200);
-    return result;
-  }
-  if (step.type === "forms") {
-    return detectActivePageForms();
-  }
-  if (step.type === "click") {
-    const result = await clickActivePageText({ text: step.text, ref: step.ref, userApproved: step.userApproved });
-    await sleep(500);
-    return result;
-  }
-  if (step.type === "type") {
-    const result = await typeIntoActivePage({ text: step.text, field: step.field, ref: step.ref, submit: step.submit, userApproved: step.userApproved });
-    await sleep(500);
-    return result;
-  }
-  if (step.type === "scroll") {
-    return scrollActivePage({ direction: step.direction });
-  }
-  if (step.type === "wait") {
-    setActivity("tool-running", "Waiting for page state", `${step.ms ?? 1000}ms`);
-    await sleep(step.ms ?? 1000);
-    return { ok: true, waitedMs: step.ms ?? 1000 };
-  }
-  return { ok: false, error: `Unknown control step: ${step.type}` };
-};
+const controlStepExecutor = createControlStepExecutor({
+  addMessage,
+  chrome,
+  clickActivePageText,
+  detectActivePageForms,
+  getControlledTabId: () => controlledTabId,
+  isReadableBrowserTab,
+  openBrowserUrl,
+  scrollActivePage,
+  searchBrowser,
+  setActivity,
+  setContextMeter,
+  setControlledTabId: (tabId) => {
+    controlledTabId = tabId;
+  },
+  setLastSnapshot: (snapshot) => {
+    lastSnapshot = snapshot;
+  },
+  sleep,
+  summarizeSnapshot,
+  typeIntoActivePage
+});
+const executeControlStep = controlStepExecutor.executeControlStep;
 
 const buildControlReport = (results, status) => {
   if (!currentControlRun) return "";

@@ -70,6 +70,7 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   const chatTurnController = await readText(path.join(extensionRoot, "src", "lib", "chat-turn-controller.js"));
   const composerController = await readText(path.join(extensionRoot, "src", "lib", "composer-controller.js"));
   const controlPlanningService = await readText(path.join(extensionRoot, "src", "lib", "control-planning-service.js"));
+  const controlStepExecutor = await readText(path.join(extensionRoot, "src", "lib", "control-step-executor.js"));
   const approvalPolicy = await readText(path.join(extensionRoot, "src", "lib", "approval-policy.js"));
   const agentControlPlanner = await readText(path.join(extensionRoot, "src", "lib", "agent-control-planner.js"));
   const agentControlRunner = await readText(path.join(extensionRoot, "src", "lib", "agent-control-runner.js"));
@@ -201,7 +202,7 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(pageActions, /scrollActivePage/);
   assert.match(pageActions, /detectActivePageForms/);
   assert.match(script, /controlledTabId/);
-  assert.match(script, /switch_tab/);
+  assert.match(controlStepExecutor, /switch_tab/);
   assert.match(agentControlPlanner, /List open tabs/);
   assert.match(agentControlPlanner, /planControlSteps/);
   assert.match(script, /createControlPlanningService/);
@@ -216,7 +217,10 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(controlPlanningService, /planAgentControlSteps/);
   assert.match(controlPlanningService, /__resonantosControlPlannerOverride/);
   assert.match(controlPlanningService, /__resonantosNextActionOverride/);
-  assert.match(script, /executeControlStep/);
+  assert.match(script, /createControlStepExecutor/);
+  assert.match(controlStepExecutor, /executeControlStep/);
+  assert.match(controlStepExecutor, /listReadableTabs/);
+  assert.match(controlStepExecutor, /Unknown control step/);
   assert.match(agentControlRunner, /runControlCommand/);
   assert.match(script, /renderControlMonitor/);
   assert.match(agentControlRunner, /approvePendingControlStep/);
