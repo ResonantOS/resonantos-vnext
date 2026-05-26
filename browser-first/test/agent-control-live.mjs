@@ -301,6 +301,30 @@ try {
   const iframePanelText = await waitForPanelText(panel, /Booking calendar frame|Iframe booking context was not visible/, "iframe context read");
   assert(!/Iframe booking context was not visible/.test(iframePanelText), "Agent planner could not see iframe booking context.");
   await waitForComposerReady(panel, "iframe context read");
+  const firstJobState = (await evaluate(panel, `(async () => ({
+    monitorVisible: !document.querySelector("#job-monitor").hidden,
+    stored: (await chrome.storage.local.get("augmentorBrowserJobs")).augmentorBrowserJobs ?? [],
+    panelText: document.querySelector("#job-monitor").innerText
+  }))()`)).result.value;
+  assert(firstJobState.monitorVisible, "Browser job monitor is not visible after a control task.");
+  assert(firstJobState.stored.some((job) => job.goal === "book a call now"), `Browser job did not persist: ${JSON.stringify(firstJobState)}`);
+  await submitControlCommand(panel, `/jobs`);
+  await waitForPanelText(panel, /Browser jobs:/, "jobs command");
+  await submitControlCommand(panel, `/pause book a call`);
+  await waitForPanelText(panel, /Paused browser job/, "pause job command");
+  await submitControlCommand(panel, `/resume book a call`);
+  await waitForPanelText(panel, /Queued browser job/, "resume job command");
+  await submitControlCommand(panel, `/cancel book a call`);
+  await waitForPanelText(panel, /Cancelled browser job/, "cancel job command");
+  const persistedAfterCancel = (await evaluate(panel, `(async () => (await chrome.storage.local.get("augmentorBrowserJobs")).augmentorBrowserJobs ?? [])()`)).result.value;
+  assert(persistedAfterCancel.some((job) => job.goal === "book a call now" && job.status === "cancelled"), "Cancelled job state did not persist.");
+  await panel.send("Page.reload");
+  await evaluate(panel, `new Promise((resolve) => {
+    const done = () => resolve(Boolean(document.querySelector("#command-input")));
+    if (document.readyState === "complete") done();
+    else addEventListener("load", done, { once: true });
+  })`);
+  await waitForPanelText(panel, /book a call now/, "job monitor persisted after panel reload");
 
   await evaluate(panel, `(() => { globalThis.__resonantosNextActionOverride = async ({ history }) => ({
     source: "test-next-action",

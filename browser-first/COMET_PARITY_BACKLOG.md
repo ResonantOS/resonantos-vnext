@@ -18,6 +18,7 @@ Intent: keep the browser-first ResonantOS work aligned with the AI-browser capab
 - Visible current-site permission control in the side panel.
 - `/capabilities` permission summary for the current page.
 - Local browser history metadata search through `/history`.
+- Durable Browser Jobs v1: persistent job registry, visible job monitor, `/jobs`, `/pause`, `/resume`, and `/cancel`.
 - Shopping/search/cart-style flows with safety stops.
 - Wallet, payment, login, credential, and public submit boundaries.
 
@@ -36,8 +37,8 @@ Intent: keep the browser-first ResonantOS work aligned with the AI-browser capab
 
 4. Parallel / Durable Browser Jobs
    - Multiple concurrent browser tasks with separate monitors.
-   - Pause/resume/cancel per task.
    - Long-running task reports into Living Archive intake.
+   - Automatic resume from exact step/history after reload.
 
 5. Email / Calendar Add-ons
    - Gmail/Calendar-style integrations as add-ons with explicit approval.

@@ -29,6 +29,16 @@
           <option value="trusted-for-safe-actions">Trusted safe actions</option>
         </select>
       </section>
+      <section id="job-monitor" class="job-monitor" aria-live="polite" hidden>
+        <div class="job-monitor-header">
+          <div>
+            <span class="eyebrow">Browser Jobs</span>
+            <strong id="job-monitor-title">No durable browser jobs</strong>
+          </div>
+          <button id="job-monitor-toggle" type="button">Hide</button>
+        </div>
+        <ol id="job-list" class="job-list"></ol>
+      </section>
       <section id="control-monitor" class="control-monitor" aria-live="polite" hidden>
         <div class="control-monitor-header">
           <div>

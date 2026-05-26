@@ -18,6 +18,10 @@ const sitePermissionPanel = document.querySelector("#site-permission-panel");
 const sitePermissionHost = document.querySelector("#site-permission-host");
 const sitePermissionNote = document.querySelector("#site-permission-note");
 const sitePermissionMode = document.querySelector("#site-permission-mode");
+const jobMonitor = document.querySelector("#job-monitor");
+const jobMonitorTitle = document.querySelector("#job-monitor-title");
+const jobMonitorToggle = document.querySelector("#job-monitor-toggle");
+const jobList = document.querySelector("#job-list");
 const controlMonitor = document.querySelector("#control-monitor");
 const controlMonitorTitle = document.querySelector("#control-monitor-title");
 const controlMonitorStatus = document.querySelector("#control-monitor-status");
@@ -37,9 +41,12 @@ const STORAGE_KEYS = {
   model: "augmentorModel",
   thinkingDepth: "augmentorThinkingDepth",
   attachments: "augmentorBrowserAttachments",
-  sitePermissions: "augmentorSitePermissions"
+  sitePermissions: "augmentorSitePermissions",
+  browserJobs: "augmentorBrowserJobs",
+  jobMonitorCollapsed: "augmentorJobMonitorCollapsed"
 };
 const MAX_HISTORY_MESSAGES = 16;
+const MAX_BROWSER_JOBS = 40;
 
 let lastSnapshot = null;
 let statusLabel = "Ready";
@@ -51,6 +58,9 @@ let activityTimer = null;
 let currentControlRun = null;
 let pendingApproval = null;
 let controlledTabId = null;
+let browserJobs = [];
+let activeJobId = null;
+let jobMonitorCollapsed = false;
 
 const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
@@ -149,7 +159,7 @@ const renderControlMonitor = () => {
 
 const startControlRun = ({ goal, plan }) => {
   currentControlRun = {
-    id: `control-${Date.now()}`,
+    id: activeJobId ?? `control-${Date.now()}`,
     goal,
     planner: plan.source,
     summary: plan.summary,
@@ -186,6 +196,12 @@ const finishControlRun = (status, artifact = null) => {
     artifacts: artifact ? [...currentControlRun.artifacts, artifact] : currentControlRun.artifacts
   };
   renderControlMonitor();
+  void updateBrowserJob(currentControlRun.id, {
+    status,
+    artifacts: currentControlRun.artifacts,
+    summary: currentControlRun.summary,
+    planner: currentControlRun.planner
+  });
 };
 
 const updateConnectionLine = () => {
@@ -247,6 +263,107 @@ const renderSitePermissionPanel = async (tab = null) => {
   sitePermissionMode.value = mode;
   sitePermissionNote.textContent = sitePermissionDescription(mode);
 };
+
+const normalizeJob = (job) => ({
+  id: String(job?.id ?? `job-${Date.now()}`),
+  goal: String(job?.goal ?? "Browser job").slice(0, 300),
+  status: ["queued", "running", "paused", "completed", "blocked", "approval", "denied", "cancelled", "failed"].includes(job?.status)
+    ? job.status
+    : "queued",
+  createdAt: job?.createdAt ?? new Date().toISOString(),
+  updatedAt: job?.updatedAt ?? new Date().toISOString(),
+  completedAt: job?.completedAt ?? null,
+  planner: String(job?.planner ?? "observe-act-verify-loop").slice(0, 120),
+  summary: String(job?.summary ?? "").slice(0, 700),
+  artifacts: Array.isArray(job?.artifacts) ? job.artifacts.slice(0, 20) : [],
+  lastError: job?.lastError ? String(job.lastError).slice(0, 700) : null
+});
+
+const persistBrowserJobs = async () => {
+  const compact = browserJobs
+    .map(normalizeJob)
+    .sort((left, right) => String(right.updatedAt).localeCompare(String(left.updatedAt)))
+    .slice(0, MAX_BROWSER_JOBS);
+  browserJobs = compact;
+  await chrome.storage?.local?.set?.({ [STORAGE_KEYS.browserJobs]: compact });
+};
+
+const renderJobMonitor = () => {
+  jobMonitor.hidden = browserJobs.length === 0;
+  if (jobMonitor.hidden) return;
+  const activeCount = browserJobs.filter((job) => ["queued", "running", "paused", "approval"].includes(job.status)).length;
+  jobMonitorTitle.textContent = `${activeCount} active · ${browserJobs.length} total`;
+  jobMonitorToggle.textContent = jobMonitorCollapsed ? "Show" : "Hide";
+  jobList.hidden = jobMonitorCollapsed;
+  jobList.replaceChildren();
+  if (jobMonitorCollapsed) return;
+  browserJobs.slice(0, 8).forEach((job) => {
+    const item = document.createElement("li");
+    item.dataset.status = job.status;
+    const details = document.createElement("div");
+    const title = document.createElement("strong");
+    title.textContent = job.goal;
+    const meta = document.createElement("small");
+    meta.textContent = `${job.updatedAt.replace("T", " ").slice(0, 16)} · ${job.planner}`;
+    const id = document.createElement("code");
+    id.textContent = job.id;
+    details.append(title, meta, id);
+    const state = document.createElement("span");
+    state.className = "job-state";
+    state.textContent = job.status;
+    item.append(details, state);
+    jobList.append(item);
+  });
+};
+
+const loadBrowserJobs = async () => {
+  const stored = await chrome.storage?.local?.get?.([
+    STORAGE_KEYS.browserJobs,
+    STORAGE_KEYS.jobMonitorCollapsed
+  ]).catch(() => ({}));
+  browserJobs = Array.isArray(stored?.[STORAGE_KEYS.browserJobs])
+    ? stored[STORAGE_KEYS.browserJobs].map(normalizeJob)
+    : [];
+  jobMonitorCollapsed = Boolean(stored?.[STORAGE_KEYS.jobMonitorCollapsed]);
+  renderJobMonitor();
+};
+
+const createBrowserJob = async ({ goal, planner = "observe-act-verify-loop", summary = "" }) => {
+  const job = normalizeJob({
+    id: `job-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+    goal,
+    planner,
+    summary,
+    status: "running",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  });
+  browserJobs = [job, ...browserJobs.filter((item) => item.id !== job.id)];
+  activeJobId = job.id;
+  await persistBrowserJobs();
+  renderJobMonitor();
+  return job;
+};
+
+const updateBrowserJob = async (jobId, patch) => {
+  if (!jobId) return null;
+  let updated = null;
+  browserJobs = browserJobs.map((job) => {
+    if (job.id !== jobId) return job;
+    updated = normalizeJob({
+      ...job,
+      ...patch,
+      updatedAt: new Date().toISOString(),
+      completedAt: patch.completedAt ?? (["completed", "blocked", "denied", "cancelled", "failed"].includes(patch.status) ? new Date().toISOString() : job.completedAt)
+    });
+    return updated;
+  });
+  await persistBrowserJobs();
+  renderJobMonitor();
+  return updated;
+};
+
+const currentJob = () => browserJobs.find((job) => job.id === activeJobId) ?? null;
 
 const renderAttachments = () => {
   attachmentStrip.replaceChildren();
@@ -1224,6 +1341,70 @@ const runCapabilitiesCommand = async () => {
   );
 };
 
+const findJob = (idOrGoal = "") => {
+  const needle = String(idOrGoal ?? "").trim().toLowerCase();
+  if (!needle) return currentJob() ?? browserJobs[0] ?? null;
+  return browserJobs.find((job) =>
+    job.id.toLowerCase() === needle ||
+    job.id.toLowerCase().includes(needle) ||
+    job.goal.toLowerCase().includes(needle)
+  ) ?? null;
+};
+
+const runJobsCommand = async (body = "") => {
+  const filter = String(body ?? "").trim().toLowerCase();
+  const visible = browserJobs
+    .filter((job) => !filter || job.status === filter || job.goal.toLowerCase().includes(filter) || job.id.toLowerCase().includes(filter))
+    .slice(0, 12);
+  renderJobMonitor();
+  await addMessage(
+    "system",
+    visible.length
+      ? `Browser jobs:\n${visible.map((job) => `- ${job.id} · ${job.status} · ${job.goal}`).join("\n")}`
+      : "No browser jobs match that filter."
+  );
+};
+
+const pauseBrowserJob = async (body = "") => {
+  const job = findJob(body);
+  if (!job) {
+    await addMessage("system", "No browser job is available to pause.");
+    return;
+  }
+  if (job.id === activeJobId && currentControlRun && job.status === "running") {
+    finishControlRun("paused");
+  }
+  await updateBrowserJob(job.id, { status: "paused" });
+  await addMessage("system", `Paused browser job ${job.id}: ${job.goal}`);
+};
+
+const resumeBrowserJob = async (body = "") => {
+  const job = findJob(body);
+  if (!job) {
+    await addMessage("system", "No browser job is available to resume.");
+    return;
+  }
+  if (job.status !== "paused") {
+    await addMessage("system", `Browser job ${job.id} is ${job.status}; only paused jobs can resume in v1.`);
+    return;
+  }
+  await updateBrowserJob(job.id, { status: "queued" });
+  await addMessage("system", `Queued browser job ${job.id} for manual resume: ${job.goal}\nRun /control ${job.goal} to restart it from the current page state.`);
+};
+
+const cancelBrowserJob = async (body = "") => {
+  const job = findJob(body);
+  if (!job) {
+    await addMessage("system", "No browser job is available to cancel.");
+    return;
+  }
+  if (job.id === activeJobId && currentControlRun && !["completed", "blocked", "denied", "cancelled"].includes(currentControlRun.status)) {
+    finishControlRun("cancelled");
+  }
+  await updateBrowserJob(job.id, { status: "cancelled" });
+  await addMessage("system", `Cancelled browser job ${job.id}: ${job.goal}`);
+};
+
 const controlStepLabel = (step) => {
   if (step.type === "inspect") return "Inspect active page";
   if (step.type === "open") return `Open ${step.target}`;
@@ -1651,6 +1832,13 @@ const delegateControlIssue = async () => {
 };
 
 const observeControlPage = async () => {
+  const job = currentJob();
+  if (job?.status === "cancelled") {
+    throw new Error("Browser job was cancelled.");
+  }
+  if (job?.status === "paused") {
+    throw new Error("Browser job is paused.");
+  }
   setActivity("reading", "Observing active page", currentControlRun?.goal ?? "browser task");
   const snapshotResponse = await readActivePage({ announce: false }).catch(() => null);
   const snapshot = snapshotResponse?.snapshot ?? lastSnapshot;
@@ -1672,110 +1860,123 @@ const observeControlPage = async () => {
 };
 
 const continueControlLoop = async ({ goal, history = [], results = [], startIndex = 0, maxSteps = 12 } = {}) => {
-  for (let loopIndex = startIndex; loopIndex < maxSteps; loopIndex += 1) {
-    const snapshot = await observeControlPage();
-    setActivity("thinking", "Deciding next browser action", `Loop ${loopIndex + 1}/${maxSteps}`);
-    setStatus("Deciding");
-    const decision = await requestNextControlAction({ goal, snapshot, history });
-    if (decision.thought) {
-      setActivity("thinking", decision.thought, decision.action ? controlStepLabel(decision.action) : decision.status);
-    }
-    if (decision.status === "done") {
-      const archiveResult = await saveControlReportToArchive(results, "completed");
-      const artifact = archiveResult?.path ? { type: "archive-intake", path: archiveResult.path } : null;
-      finishControlRun("completed", artifact);
-      await addMessage(
-        "system",
-        [
-          "Agent Control Mode completed.",
-          `Goal: ${goal}`,
-          "",
-          decision.doneSummary ?? "The observed page state satisfies the goal.",
-          "",
-          "Completed actions:",
-          ...(results.length ? results.map(({ step }, index) => `${index + 1}. ${controlStepLabel(step)}`) : ["- No browser mutation was needed."])
-        ].join("\n")
-      );
-      setStatus("Ready");
-      setActivity("completed", "Control mode completed", goal);
-      return { ok: true, results };
-    }
-    if (decision.status === "needs_approval" || decision.status === "blocked" || !decision.action) {
-      const isApproval = decision.status === "needs_approval" && Boolean(decision.action);
-      finishControlRun(isApproval ? "approval" : "blocked");
-      setStatus(isApproval ? "Needs approval" : "Control blocked");
-      setActivity("failed", isApproval ? "Control mode needs approval" : "Control mode blocked", decision.approvalReason);
-      await addMessage(
-        "system",
-        [
-          `Agent Control Mode ${isApproval ? "needs approval" : "blocked"}.`,
-          `Goal: ${goal}`,
-          `Reason: ${decision.approvalReason ?? decision.thought ?? "No safe next action is available."}`
-        ].join("\n")
-      );
-      await saveControlReportToArchive(results, isApproval ? "approval-required" : "blocked");
-      return { ok: false, results, approvalRequired: isApproval };
+  try {
+    for (let loopIndex = startIndex; loopIndex < maxSteps; loopIndex += 1) {
+      await updateBrowserJob(activeJobId, { status: "running" });
+      const snapshot = await observeControlPage();
+      setActivity("thinking", "Deciding next browser action", `Loop ${loopIndex + 1}/${maxSteps}`);
+      setStatus("Deciding");
+      const decision = await requestNextControlAction({ goal, snapshot, history });
+      if (decision.thought) {
+        setActivity("thinking", decision.thought, decision.action ? controlStepLabel(decision.action) : decision.status);
+      }
+      if (decision.status === "done") {
+        const archiveResult = await saveControlReportToArchive(results, "completed");
+        const artifact = archiveResult?.path ? { type: "archive-intake", path: archiveResult.path } : null;
+        finishControlRun("completed", artifact);
+        await addMessage(
+          "system",
+          [
+            "Agent Control Mode completed.",
+            `Goal: ${goal}`,
+            "",
+            decision.doneSummary ?? "The observed page state satisfies the goal.",
+            "",
+            "Completed actions:",
+            ...(results.length ? results.map(({ step }, index) => `${index + 1}. ${controlStepLabel(step)}`) : ["- No browser mutation was needed."])
+          ].join("\n")
+        );
+        setStatus("Ready");
+        setActivity("completed", "Control mode completed", goal);
+        return { ok: true, results };
+      }
+      if (decision.status === "needs_approval" || decision.status === "blocked" || !decision.action) {
+        const isApproval = decision.status === "needs_approval" && Boolean(decision.action);
+        finishControlRun(isApproval ? "approval" : "blocked");
+        setStatus(isApproval ? "Needs approval" : "Control blocked");
+        setActivity("failed", isApproval ? "Control mode needs approval" : "Control mode blocked", decision.approvalReason);
+        await addMessage(
+          "system",
+          [
+            `Agent Control Mode ${isApproval ? "needs approval" : "blocked"}.`,
+            `Goal: ${goal}`,
+            `Reason: ${decision.approvalReason ?? decision.thought ?? "No safe next action is available."}`
+          ].join("\n")
+        );
+        await saveControlReportToArchive(results, isApproval ? "approval-required" : "blocked");
+        return { ok: false, results, approvalRequired: isApproval };
+      }
+
+      const step = decision.action;
+      const stepIndex = appendControlStep(step);
+      updateControlStep(stepIndex, "active", decision.thought);
+      setActivity("tool-running", `Executing browser action ${stepIndex + 1}`, controlStepLabel(step));
+      const result = await executeControlStep(step);
+      results.push({ step, result });
+      history.push({
+        action: step,
+        result: {
+          ok: Boolean(result?.ok),
+          approvalRequired: Boolean(result?.approvalRequired),
+          error: result?.error ?? null,
+          clickedText: result?.clickedText ?? null,
+          typedText: result?.typedText ?? null,
+          url: result?.url ?? null,
+          query: result?.query ?? null
+        },
+        observation: {
+          title: lastSnapshot?.title ?? snapshot?.title ?? null,
+          url: lastSnapshot?.url ?? snapshot?.url ?? null
+        }
+      });
+      if (!result?.ok) {
+        const status = result?.approvalRequired ? "approval" : "blocked";
+        const reason = result?.approvalRequired
+          ? "Stopped because this step requires human approval."
+          : `Stopped because this step failed: ${result?.error ?? "unknown error"}`;
+        updateControlStep(stepIndex, result?.approvalRequired ? "blocked" : "failed", result?.error ?? "unknown error");
+        finishControlRun(status);
+        setStatus(result?.approvalRequired ? "Needs approval" : "Control blocked");
+        setActivity("failed", "Control mode blocked", controlStepLabel(step));
+        await addMessage("system", `Agent Control Mode blocked at action ${stepIndex + 1}: ${controlStepLabel(step)}\n${reason}`);
+        if (result?.approvalRequired) {
+          pendingApproval = {
+            step: { ...step },
+            stepIndex,
+            reason: result?.error ?? "This browser action requires human approval.",
+            results,
+            history
+          };
+          renderControlMonitor();
+        }
+        const archiveResult = await saveControlReportToArchive(results, result?.approvalRequired ? "approval-required" : "blocked");
+        if (archiveResult?.path) {
+          currentControlRun.artifacts = [...(currentControlRun.artifacts ?? []), { type: "archive-intake", path: archiveResult.path }];
+          renderControlMonitor();
+          await updateBrowserJob(currentControlRun.id, { artifacts: currentControlRun.artifacts });
+        }
+        return { ok: false, results, approvalRequired: Boolean(result?.approvalRequired) };
+      }
+      updateControlStep(stepIndex, "completed");
+      await sleep(350);
     }
 
-    const step = decision.action;
-    const stepIndex = appendControlStep(step);
-    updateControlStep(stepIndex, "active", decision.thought);
-    setActivity("tool-running", `Executing browser action ${stepIndex + 1}`, controlStepLabel(step));
-    const result = await executeControlStep(step);
-    results.push({ step, result });
-    history.push({
-      action: step,
-      result: {
-        ok: Boolean(result?.ok),
-        approvalRequired: Boolean(result?.approvalRequired),
-        error: result?.error ?? null,
-        clickedText: result?.clickedText ?? null,
-        typedText: result?.typedText ?? null,
-        url: result?.url ?? null,
-        query: result?.query ?? null
-      },
-      observation: {
-        title: lastSnapshot?.title ?? snapshot?.title ?? null,
-        url: lastSnapshot?.url ?? snapshot?.url ?? null
-      }
-    });
-    if (!result?.ok) {
-      const status = result?.approvalRequired ? "approval" : "blocked";
-      const reason = result?.approvalRequired
-        ? "Stopped because this step requires human approval."
-        : `Stopped because this step failed: ${result?.error ?? "unknown error"}`;
-      updateControlStep(stepIndex, result?.approvalRequired ? "blocked" : "failed", result?.error ?? "unknown error");
-      finishControlRun(status);
-      setStatus(result?.approvalRequired ? "Needs approval" : "Control blocked");
-      setActivity("failed", "Control mode blocked", controlStepLabel(step));
-      await addMessage("system", `Agent Control Mode blocked at action ${stepIndex + 1}: ${controlStepLabel(step)}\n${reason}`);
-      if (result?.approvalRequired) {
-        pendingApproval = {
-          step: { ...step },
-          stepIndex,
-          reason: result?.error ?? "This browser action requires human approval.",
-          results,
-          history
-        };
-        renderControlMonitor();
-      }
-      const archiveResult = await saveControlReportToArchive(results, result?.approvalRequired ? "approval-required" : "blocked");
-      if (archiveResult?.path) {
-        currentControlRun.artifacts = [...(currentControlRun.artifacts ?? []), { type: "archive-intake", path: archiveResult.path }];
-        renderControlMonitor();
-      }
-      return { ok: false, results, approvalRequired: Boolean(result?.approvalRequired) };
-    }
-    updateControlStep(stepIndex, "completed");
-    await sleep(350);
+    finishControlRun("blocked");
+    setStatus("Control blocked");
+    setActivity("failed", "Control loop reached safety limit", `${maxSteps} actions`);
+    await addMessage("system", `Agent Control Mode stopped after ${maxSteps} actions. The task did not reach a verified completion state.`);
+    await saveControlReportToArchive(results, "blocked-step-limit");
+    return { ok: false, results };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const status = /cancelled/i.test(message) ? "cancelled" : /paused/i.test(message) ? "paused" : "failed";
+    finishControlRun(status);
+    await updateBrowserJob(activeJobId, { status, lastError: message });
+    setStatus(status === "paused" ? "Paused" : status === "cancelled" ? "Cancelled" : "Control failed");
+    setActivity(status === "paused" ? "paused" : "failed", `Control mode ${status}`, message);
+    await addMessage("system", `Agent Control Mode ${status}.\nGoal: ${goal}\nReason: ${message}`);
+    return { ok: false, results, error: message };
   }
-
-  finishControlRun("blocked");
-  setStatus("Control blocked");
-  setActivity("failed", "Control loop reached safety limit", `${maxSteps} actions`);
-  await addMessage("system", `Agent Control Mode stopped after ${maxSteps} actions. The task did not reach a verified completion state.`);
-  await saveControlReportToArchive(results, "blocked-step-limit");
-  return { ok: false, results };
 };
 
 const runControlCommand = async (body) => {
@@ -1786,6 +1987,11 @@ const runControlCommand = async (body) => {
   }
   setStatus("Taking control");
   setActivity("tool-running", "Agent Control Mode", goal);
+  const job = await createBrowserJob({
+    goal,
+    planner: "observe-act-verify-loop",
+    summary: "Adaptive browser-agent loop. The host observes the page, asks for one safe next action, executes it, then verifies before continuing."
+  });
   startControlRun({
     goal,
     plan: {
@@ -1798,6 +2004,7 @@ const runControlCommand = async (body) => {
     "system",
     [
       "Agent Control Mode started.",
+      `Job: ${job.id}`,
       `Goal: ${goal}`,
       "Mode: observe → decide → act → verify.",
       "",
@@ -1953,6 +2160,22 @@ const respondToCommand = async (value) => {
       await runCapabilitiesCommand();
       return;
     }
+    if (name === "jobs") {
+      await runJobsCommand(body);
+      return;
+    }
+    if (name === "pause") {
+      await pauseBrowserJob(body);
+      return;
+    }
+    if (name === "resume") {
+      await resumeBrowserJob(body);
+      return;
+    }
+    if (name === "cancel") {
+      await cancelBrowserJob(body);
+      return;
+    }
     if (name === "browser") {
       await runBrowserCommand(body);
       return;
@@ -2087,6 +2310,11 @@ saveIntakeButton.addEventListener("click", () => void saveIntake());
 approvalApproveButton.addEventListener("click", () => void approvePendingControlStep());
 approvalDenyButton.addEventListener("click", () => void denyPendingControlStep());
 approvalDelegateButton.addEventListener("click", () => void delegateControlIssue());
+jobMonitorToggle.addEventListener("click", async () => {
+  jobMonitorCollapsed = !jobMonitorCollapsed;
+  await chrome.storage?.local?.set?.({ [STORAGE_KEYS.jobMonitorCollapsed]: jobMonitorCollapsed });
+  renderJobMonitor();
+});
 sitePermissionMode.addEventListener("change", async () => {
   const tab = await activeTab();
   const result = await setSitePermission(tab?.url, sitePermissionMode.value);
@@ -2136,6 +2364,7 @@ commandForm.addEventListener("submit", async (event) => {
 });
 
 hydrateChatSettings().then(async () => {
+  await loadBrowserJobs();
   await refreshTabContext();
   const draft = await chrome.storage?.local?.get?.("augmentorInlineDraft").catch(() => ({}));
   await consumeInlineDraft(draft?.augmentorInlineDraft);
