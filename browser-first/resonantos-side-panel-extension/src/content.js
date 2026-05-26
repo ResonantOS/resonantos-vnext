@@ -2,6 +2,7 @@ const controlRefAttribute = "data-resonantos-control-ref";
 const inlineAssistantId = "resonantos-inline-assistant";
 const inlineButtonId = "resonantos-inline-button";
 const controlOverlayId = "resonantos-control-overlay";
+const controlBubbleClass = "resonantos-control-bubble";
 const controlToastId = "resonantos-control-toast";
 let nextControlRef = 1;
 
@@ -96,11 +97,14 @@ const ensureControlOverlay = () => {
       #${controlToastId}[data-state="active"], #${controlToastId}[data-state="done"], #${controlToastId}[data-state="blocked"] { display:block; }
       #${controlToastId}[data-state="blocked"] { border-color: rgba(255,121,91,.5); color:#ffd9d1; }
       .resonantos-control-target { outline: 2px solid rgba(36,209,143,.9) !important; outline-offset: 4px !important; box-shadow: 0 0 0 6px rgba(36,209,143,.16), 0 0 34px rgba(36,209,143,.38) !important; }
+      .${controlBubbleClass} { all: initial; position: fixed; max-width: min(360px, calc(100vw - 32px)); z-index: 2147483647; pointer-events: none; transform: translate(-50%, calc(-100% - 14px)); border: 1px solid rgba(36,209,143,.5); border-radius: 999px; background: rgba(3,14,9,.94); color:#e8fff3; box-shadow: 0 16px 42px rgba(0,0,0,.34), 0 0 34px rgba(36,209,143,.28); font: 900 12px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 9px 12px; text-align:center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; animation: ros-control-bubble 2.1s ease-out forwards; }
+      .${controlBubbleClass}[data-state="blocked"] { border-color: rgba(255,121,91,.68); color:#ffd9d1; box-shadow: 0 16px 42px rgba(0,0,0,.34), 0 0 34px rgba(255,121,91,.24); }
       @keyframes ros-control-wave { 0% { clip-path: polygon(0 0,100% 0,100% 100%,0 100%); filter: brightness(1); } 50% { filter: brightness(1.48) saturate(1.24); } 100% { filter: brightness(1); } }
       @keyframes ros-control-pixel { 0% { background-position: 0 0, 0 0; } 100% { background-position: 44px 0, 0 52px; } }
       @keyframes ros-control-edge { 0% { transform: translateX(-18%); opacity:.28; } 45% { opacity:1; } 100% { transform: translateX(18%); opacity:.28; } }
       @keyframes ros-control-side { 0% { transform: translateY(-18%); opacity:.32; } 45% { opacity:1; } 100% { transform: translateY(18%); opacity:.32; } }
       @keyframes ros-control-fade { 0% { opacity:.9; } 100% { opacity:0; } }
+      @keyframes ros-control-bubble { 0% { opacity:0; transform: translate(-50%, calc(-100% - 4px)) scale(.96); } 16% { opacity:1; transform: translate(-50%, calc(-100% - 14px)) scale(1); } 78% { opacity:1; } 100% { opacity:0; transform: translate(-50%, calc(-100% - 24px)) scale(.98); } }
     `;
     document.documentElement.append(style);
   }
@@ -120,6 +124,23 @@ const ensureControlOverlay = () => {
   return { overlay, toast };
 };
 
+const showControlActionBubble = (target, label, state = "active") => {
+  if (!target?.getBoundingClientRect) return;
+  const rect = target.getBoundingClientRect();
+  if (!rect.width && !rect.height) return;
+  document.querySelectorAll(`.${controlBubbleClass}`).forEach((bubble) => bubble.remove());
+  const bubble = document.createElement("div");
+  bubble.className = controlBubbleClass;
+  bubble.dataset.state = state;
+  bubble.textContent = label;
+  const centerX = Math.max(18, Math.min(window.innerWidth - 18, rect.left + rect.width / 2));
+  const topY = Math.max(46, rect.top);
+  bubble.style.left = `${Math.round(centerX)}px`;
+  bubble.style.top = `${Math.round(topY)}px`;
+  document.documentElement.append(bubble);
+  window.setTimeout(() => bubble.remove(), 2200);
+};
+
 const pulseControlOverlay = ({ state = "active", label = "Augmentor is operating this page", target = null } = {}) => {
   const { overlay, toast } = ensureControlOverlay();
   const now = Date.now();
@@ -133,6 +154,7 @@ const pulseControlOverlay = ({ state = "active", label = "Augmentor is operating
   document.querySelectorAll(".resonantos-control-target").forEach((element) => element.classList.remove("resonantos-control-target"));
   if (target?.classList) {
     target.classList.add("resonantos-control-target");
+    showControlActionBubble(target, label, state);
     toast.dataset.lockedUntil = String(now + 1800);
     window.setTimeout(() => target.classList.remove("resonantos-control-target"), 1500);
   }
