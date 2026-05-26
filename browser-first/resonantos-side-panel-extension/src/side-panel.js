@@ -10,26 +10,13 @@ import {
   planControlSteps
 } from "./lib/agent-control-planner.js";
 import { createAgentControlRunner } from "./lib/agent-control-runner.js";
-import {
-  normalizeBrowserUrl,
-  normalizeSearchQuery,
-  parseAutonomousBrowserActionIntent,
-  parseClickIntent,
-  parseControlIntent,
-  parseFormsIntent,
-  parseNaturalBrowserIntent,
-  parseNaturalSearchIntent,
-  parseQuotedText,
-  parseReadPageIntent,
-  parseScrollIntent,
-  parseStructuredPageEditIntent,
-  parseTypeIntent
-} from "./lib/browser-command-parser.js";
+import { normalizeBrowserUrl, normalizeSearchQuery, parseQuotedText } from "./lib/browser-command-parser.js";
 import { createBrowserJobStore, isTerminalBrowserJobStatus } from "./lib/browser-job-store.js";
 import { createBrowserPageActions } from "./lib/browser-page-actions.js";
 import { createBridgeClient } from "./lib/bridge-client.js";
 import { createChatSessionStore } from "./lib/chat-session-store.js";
 import { createMonitorRenderers } from "./lib/monitor-renderers.js";
+import { createSidePanelCommandRouter } from "./lib/side-panel-command-router.js";
 import { createSidePanelRenderers } from "./lib/side-panel-renderers.js";
 
 const readButton = document.querySelector("#read-page");
@@ -1231,129 +1218,7 @@ const runBrowserCommand = async (body) => {
   await openBrowserUrl(target);
 };
 
-const respondToCommand = async (value) => {
-  await bindMentionedTab(value);
-  const slash = /^\/([a-z]+)(?:\s+([\s\S]*))?$/i.exec(value.trim());
-  if (slash) {
-    const name = slash[1].toLowerCase();
-    const body = (slash[2] ?? "").trim();
-    if (name === "goal") {
-      await runGoalCommand(body);
-      return;
-    }
-    if (name === "delegate") {
-      await runDelegateCommand(body);
-      return;
-    }
-    if (name === "status") {
-      await runStatusCommand();
-      return;
-    }
-    if (name === "site") {
-      await runSitePermissionCommand(body);
-      return;
-    }
-    if (name === "memory") {
-      await runMemorySearchCommand(body);
-      return;
-    }
-    if (name === "history") {
-      await runHistorySearchCommand(body);
-      return;
-    }
-    if (name === "capabilities" || name === "permissions") {
-      await runCapabilitiesCommand();
-      return;
-    }
-    if (name === "jobs") {
-      await runJobsCommand(body);
-      return;
-    }
-    if (name === "pause") {
-      await pauseBrowserJob(body);
-      return;
-    }
-    if (name === "resume") {
-      await resumeBrowserJob(body);
-      return;
-    }
-    if (name === "cancel") {
-      await cancelBrowserJob(body);
-      return;
-    }
-    if (name === "browser") {
-      await runBrowserCommand(body);
-      return;
-    }
-    if (name === "control") {
-      await runControlCommand(body);
-      return;
-    }
-  }
-  const controlIntent = parseControlIntent(value);
-  if (controlIntent) {
-    await runControlCommand(controlIntent.goal);
-    return;
-  }
-  const autonomousBrowserActionIntent = parseAutonomousBrowserActionIntent(value);
-  if (autonomousBrowserActionIntent) {
-    await runControlCommand(autonomousBrowserActionIntent.goal);
-    return;
-  }
-  const typeIntent = parseTypeIntent(value);
-  if (typeIntent) {
-    await typeIntoActivePage(typeIntent);
-    return;
-  }
-  const clickIntent = parseClickIntent(value);
-  if (clickIntent) {
-    await clickActivePageText(clickIntent);
-    return;
-  }
-  const readPageIntent = parseReadPageIntent(value);
-  if (readPageIntent) {
-    await summarizeSnapshot();
-    return;
-  }
-  const scrollIntent = parseScrollIntent(value);
-  if (scrollIntent) {
-    await scrollActivePage(scrollIntent);
-    return;
-  }
-  const formsIntent = parseFormsIntent(value);
-  if (formsIntent) {
-    await detectActivePageForms();
-    return;
-  }
-  const structuredEditIntent = parseStructuredPageEditIntent(value);
-  if (structuredEditIntent) {
-    await explainStructuredPageEditBoundary(structuredEditIntent.instruction);
-    return;
-  }
-  const browserIntent = parseNaturalBrowserIntent(value);
-  if (browserIntent) {
-    await openBrowserUrl(browserIntent.target);
-    return;
-  }
-  const searchIntent = parseNaturalSearchIntent(value);
-  if (searchIntent) {
-    await searchBrowser(searchIntent);
-    return;
-  }
-  if (/^\/(read|context)\b/i.test(value) || /^\/(summari[sz]e)\b/i.test(value)) {
-    await summarizeSnapshot();
-    return;
-  }
-  if (/^\/(save|archive|intake)\b/i.test(value)) {
-    await saveIntake();
-    return;
-  }
-  if (/wallet|phantom|seed phrase|private key/i.test(value)) {
-    await addMessage("system", "Wallet actions are human-approval gated. I can discuss Phantom and browser context, but wallet connect, signing, seed phrases, private keys, and credential actions stay human-only.");
-    setStatus("Approval gated");
-    return;
-  }
-
+const runChatTurn = async () => {
   setStatus("Thinking");
   setActivity("thinking", "Thinking", "Calling the selected model route");
   try {
@@ -1370,6 +1235,41 @@ const respondToCommand = async (value) => {
     clearActivitySoon();
   }
 };
+
+const handleWalletBoundary = async () => {
+  await addMessage("system", "Wallet actions are human-approval gated. I can discuss Phantom and browser context, but wallet connect, signing, seed phrases, private keys, and credential actions stay human-only.");
+  setStatus("Approval gated");
+};
+
+const commandRouter = createSidePanelCommandRouter({
+  bindMentionedTab,
+  clickActivePageText,
+  detectActivePageForms,
+  explainStructuredPageEditBoundary,
+  handleWalletBoundary,
+  openBrowserUrl,
+  pauseBrowserJob,
+  resumeBrowserJob,
+  cancelBrowserJob,
+  runBrowserCommand,
+  runCapabilitiesCommand,
+  runChatTurn,
+  runControlCommand,
+  runDelegateCommand,
+  runGoalCommand,
+  runHistorySearchCommand,
+  runJobsCommand,
+  runMemorySearchCommand,
+  runSitePermissionCommand,
+  runStatusCommand,
+  saveIntake,
+  scrollActivePage,
+  searchBrowser,
+  summarizeSnapshot,
+  typeIntoActivePage
+});
+
+const respondToCommand = commandRouter.respondToCommand;
 
 const hydrateChatSettings = async () => {
   await chatSessionStore.hydrate();
