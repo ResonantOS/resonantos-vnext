@@ -153,16 +153,28 @@ const pulseControlOverlay = ({ state = "active", label = "Augmentor is operating
 
 const setControlSessionOverlay = ({ active = false, label = "Augmentor is operating this page" } = {}) => {
   const { overlay, toast } = ensureControlOverlay();
-  overlay.dataset.session = active ? "active" : "";
-  overlay.dataset.state = active ? "active" : "";
-  toast.dataset.session = active ? "active" : "";
-  toast.dataset.sessionLabel = active ? label : "";
-  toast.dataset.state = active ? "active" : "";
-  toast.textContent = active ? label : "";
-  if (!active) {
+  window.clearTimeout(globalThis.__resonantosControlStopTimer);
+  if (active) {
+    overlay.dataset.session = "active";
+    overlay.dataset.state = "active";
+    toast.dataset.session = "active";
+    toast.dataset.sessionLabel = label;
+    toast.dataset.state = "active";
+    toast.textContent = label;
+    return { ok: true, active };
+  }
+  toast.textContent = "Returning control to human...";
+  toast.dataset.state = "active";
+  globalThis.__resonantosControlStopTimer = window.setTimeout(() => {
+    overlay.dataset.session = "";
+    overlay.dataset.state = "";
+    toast.dataset.session = "";
+    toast.dataset.sessionLabel = "";
+    toast.dataset.state = "";
+    toast.textContent = "";
     toast.dataset.lockedUntil = "0";
     document.querySelectorAll(".resonantos-control-target").forEach((element) => element.classList.remove("resonantos-control-target"));
-  }
+  }, 6500);
   return { ok: true, active };
 };
 
