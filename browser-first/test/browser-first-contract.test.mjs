@@ -70,6 +70,7 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   const chatTurnController = await readText(path.join(extensionRoot, "src", "lib", "chat-turn-controller.js"));
   const composerController = await readText(path.join(extensionRoot, "src", "lib", "composer-controller.js"));
   const controlPlanningService = await readText(path.join(extensionRoot, "src", "lib", "control-planning-service.js"));
+  const controlReportingService = await readText(path.join(extensionRoot, "src", "lib", "control-reporting-service.js"));
   const controlStepExecutor = await readText(path.join(extensionRoot, "src", "lib", "control-step-executor.js"));
   const approvalPolicy = await readText(path.join(extensionRoot, "src", "lib", "approval-policy.js"));
   const agentControlPlanner = await readText(path.join(extensionRoot, "src", "lib", "agent-control-planner.js"));
@@ -157,7 +158,7 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(bridgeClient, /X-ResonantOS-Bridge-Token/);
   assert.match(script, /browserJobStore\.getMonitorCollapsed/);
   assert.match(chatTurnController, /\/augmentor\/chat/);
-  assert.match(script, /\/archive\/intake/);
+  assert.match(controlReportingService, /\/archive\/intake/);
   assert.match(appCommandHandlers, /\/memory\/search/);
   assert.match(appCommandHandlers, /\/addons\/delegate/);
   assert.match(appCommandHandlers, /\/goals/);
@@ -225,8 +226,11 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(script, /renderControlMonitor/);
   assert.match(agentControlRunner, /approvePendingControlStep/);
   assert.match(agentControlRunner, /denyPendingControlStep/);
-  assert.match(script, /saveControlReportToArchive/);
-  assert.match(script, /delegateControlIssue/);
+  assert.match(script, /createControlReportingService/);
+  assert.match(controlReportingService, /buildControlReport/);
+  assert.match(controlReportingService, /saveControlReportToArchive/);
+  assert.match(controlReportingService, /delegateControlIssue/);
+  assert.match(controlReportingService, /Browser Agent Control Report/);
   assert.match(agentControlRunner, /Agent Control Mode started/);
   assert.match(script, /explainStructuredPageEditBoundary/);
   assert.match(pageActions, /bing\.com\/news\/search/);

@@ -10,6 +10,7 @@ import { createChatSessionStore } from "./lib/chat-session-store.js";
 import { createChatTurnController } from "./lib/chat-turn-controller.js";
 import { createComposerController } from "./lib/composer-controller.js";
 import { createControlPlanningService } from "./lib/control-planning-service.js";
+import { createControlReportingService } from "./lib/control-reporting-service.js";
 import { createControlStepExecutor } from "./lib/control-step-executor.js";
 import { createMessageActionController } from "./lib/message-action-controller.js";
 import { createMonitorRenderers } from "./lib/monitor-renderers.js";
@@ -498,67 +499,16 @@ const controlStepExecutor = createControlStepExecutor({
 });
 const executeControlStep = controlStepExecutor.executeControlStep;
 
-const buildControlReport = (results, status) => {
-  if (!currentControlRun) return "";
-  return [
-    `# Browser Agent Control Report`,
-    "",
-    `- id: ${currentControlRun.id}`,
-    `- status: ${status}`,
-    `- planner: ${currentControlRun.planner}`,
-    `- startedAt: ${currentControlRun.startedAt}`,
-    `- completedAt: ${new Date().toISOString()}`,
-    `- page: ${lastSnapshot?.title ?? "unknown"} (${lastSnapshot?.url ?? "unknown"})`,
-    "",
-    "## Goal",
-    currentControlRun.goal,
-    "",
-    "## Plan",
-    currentControlRun.summary,
-    "",
-    "## Steps",
-    ...results.map(({ step, result }, index) => `${index + 1}. ${controlStepLabel(step)} — ${result?.ok ? "ok" : result?.approvalRequired ? "approval-required" : "failed"}${result?.error ? ` — ${result.error}` : ""}`),
-    "",
-    "## Boundary",
-    "This is an intake artifact only. Wallet, credential, public-submit, payment, and destructive actions require explicit human approval.",
-    ""
-  ].join("\n");
-};
-
-const saveControlReportToArchive = async (results, status) => {
-  const content = buildControlReport(results, status);
-  if (!content) return null;
-  return bridgeRequest("/archive/intake", {
-    method: "POST",
-    body: {
-      title: `Browser control ${status}: ${currentControlRun?.goal ?? "task"}`.slice(0, 160),
-      content,
-      url: lastSnapshot?.url ?? null,
-      sourceMessageId: currentControlRun?.id ?? null
-    }
-  }).catch((error) => ({ error: error instanceof Error ? error.message : String(error) }));
-};
-
-const delegateControlIssue = async () => {
-  if (!pendingApproval && !currentControlRun) return;
-  const step = pendingApproval?.step;
-  const result = await bridgeRequest("/addons/delegate", {
-    method: "POST",
-    body: {
-      target: "engineer",
-      mission: [
-        "Investigate blocked browser-control task.",
-        `Goal: ${currentControlRun?.goal ?? "unknown"}`,
-        step ? `Blocked step: ${controlStepLabel(step)}` : "",
-        pendingApproval?.reason ? `Reason: ${pendingApproval.reason}` : ""
-      ].filter(Boolean).join("\n")
-    }
-  }).catch((error) => ({ error: error instanceof Error ? error.message : String(error) }));
-  await addMessage(
-    "system",
-    result.error ? `Delegation failed: ${result.error}` : `Delegated blocked control task to ${result.target}: ${result.id}`
-  );
-};
+const controlReportingService = createControlReportingService({
+  addMessage,
+  bridgeRequest,
+  controlStepLabel,
+  getCurrentControlRun: () => currentControlRun,
+  getLastSnapshot: () => lastSnapshot,
+  getPendingApproval: () => pendingApproval
+});
+const delegateControlIssue = controlReportingService.delegateControlIssue;
+const saveControlReportToArchive = controlReportingService.saveControlReportToArchive;
 
 const observeControlPage = async () => {
   const job = browserJobStore.currentJob();
