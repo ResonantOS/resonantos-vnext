@@ -148,6 +148,9 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(script, /chrome\.tabs\.update/);
   assert.match(script, /chrome\.tabs\.create/);
   assert.match(script, /copyMessage/);
+  assert.match(script, /commandInput\.addEventListener\("keydown"/);
+  assert.match(script, /commandForm\.requestSubmit\(\)/);
+  assert.match(script, /event\.metaKey/);
   assert.match(script, /forkFromMessage/);
   assert.match(script, /editMessage/);
   assert.match(script, /saveMessageToArchive/);

@@ -2406,6 +2406,16 @@ dictateButton.addEventListener("click", () => {
   void addMessage("system", "Audio dictate is not available in this browser runtime yet.");
 });
 
+commandInput.addEventListener("keydown", (event) => {
+  if (event.isComposing || event.metaKey || event.ctrlKey || event.altKey) {
+    return;
+  }
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    commandForm.requestSubmit();
+  }
+});
+
 commandForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (turnBusy) {

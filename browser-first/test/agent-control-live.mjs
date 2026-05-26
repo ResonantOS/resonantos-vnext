@@ -241,6 +241,25 @@ try {
   })`);
 
   await evaluate(panel, `chrome.storage.local.clear(); document.querySelector("#transcript").replaceChildren();`);
+  const shortcutState = (await evaluate(panel, `(() => {
+    const input = document.querySelector("#command-input");
+    const form = document.querySelector("#command-form");
+    const originalRequestSubmit = form.requestSubmit.bind(form);
+    input.value = "first";
+    let submitted = false;
+    form.requestSubmit = () => { submitted = true; };
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", shiftKey: true, bubbles: true, cancelable: true }));
+    const afterShiftEnter = { submitted, value: input.value };
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true, cancelable: true }));
+    const afterMetaEnter = { submitted, value: input.value };
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    form.requestSubmit = originalRequestSubmit;
+    return { afterShiftEnter, afterMetaEnter, submitted };
+  })()`)).result.value;
+  assert(!shortcutState.afterShiftEnter.submitted, `Shift+Enter should not submit: ${JSON.stringify(shortcutState)}`);
+  assert(!shortcutState.afterMetaEnter.submitted, `Command-modified Enter should not submit: ${JSON.stringify(shortcutState)}`);
+  assert(shortcutState.submitted, `Enter should submit the composer: ${JSON.stringify(shortcutState)}`);
+  await evaluate(panel, `document.querySelector("#command-input").value = ""; document.querySelector("#transcript").replaceChildren();`);
   await evaluate(panel, `document.querySelector("#read-page").click()`);
   await waitForPanelText(panel, /Page context attached:/, "initial content script attachment");
   await evaluate(page, `(() => {
