@@ -67,6 +67,7 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   const bridgeClient = await readText(path.join(extensionRoot, "src", "lib", "bridge-client.js"));
   const commandParser = await readText(path.join(extensionRoot, "src", "lib", "browser-command-parser.js"));
   const browserJobStore = await readText(path.join(extensionRoot, "src", "lib", "browser-job-store.js"));
+  const composerController = await readText(path.join(extensionRoot, "src", "lib", "composer-controller.js"));
   const approvalPolicy = await readText(path.join(extensionRoot, "src", "lib", "approval-policy.js"));
   const agentControlPlanner = await readText(path.join(extensionRoot, "src", "lib", "agent-control-planner.js"));
   const agentControlRunner = await readText(path.join(extensionRoot, "src", "lib", "agent-control-runner.js"));
@@ -102,6 +103,10 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(pageActions, /summarizeSnapshot/);
   assert.match(script, /saveIntake/);
   assert.match(script, /createChatSessionStore/);
+  assert.match(script, /createComposerController/);
+  assert.match(composerController, /handleClipboardShortcut/);
+  assert.match(composerController, /resetUndoStack/);
+  assert.match(composerController, /requestSubmit/);
   assert.match(chatSessionStore, /forkFromMessage/);
   assert.match(chatSessionStore, /trimToPreviousUserMessage/);
   assert.match(chatSessionStore, /addAttachments/);
@@ -207,11 +212,11 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(pageActions, /chrome\.tabs\.create/);
   assert.match(script, /copyMessage/);
   assert.match(sidePanelRenderers, /message-action/);
-  assert.match(script, /commandInput\.addEventListener\("keydown"/);
-  assert.match(script, /commandForm\.requestSubmit\(\)/);
-  assert.match(script, /event\.metaKey/);
-  assert.match(script, /undoComposerInput/);
-  assert.match(script, /shortcutKey === "z"/);
+  assert.match(composerController, /commandInput\.addEventListener\("keydown"/);
+  assert.match(composerController, /commandForm\.requestSubmit\(\)/);
+  assert.match(composerController, /event\.metaKey/);
+  assert.match(composerController, /undoInput/);
+  assert.match(composerController, /shortcutKey === "z"/);
   assert.match(script, /forkFromMessage/);
   assert.match(script, /editMessage/);
   assert.match(script, /saveMessageToArchive/);
