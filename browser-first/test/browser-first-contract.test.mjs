@@ -64,6 +64,7 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(panel, /Message Augmentor/);
   assert.match(panel, /control-monitor/);
   assert.match(panel, /approval-card/);
+  assert.match(panel, /approval-trust-site/);
   assert.match(panel, /site-permission-panel/);
   assert.match(panel, /job-monitor/);
   assert.match(panel, /trusted-for-safe-actions/);
@@ -100,6 +101,8 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(script, /runHistorySearchCommand/);
   assert.match(script, /runSitePermissionCommand/);
   assert.match(script, /runCapabilitiesCommand/);
+  assert.match(script, /approvalBoundaryForStep/);
+  assert.match(script, /trustCurrentSiteForSafeActions/);
   assert.match(script, /runJobsCommand/);
   assert.match(script, /pauseBrowserJob/);
   assert.match(script, /resumeBrowserJob/);
@@ -161,6 +164,7 @@ test("browser layer can read active tab context without raw privileged access", 
   assert.match(content, /click_text/);
   assert.match(content, /type_text/);
   assert.match(content, /userApproved/);
+  assert.match(content, /isHardRestrictedElement/);
   assert.match(content, /scroll_page/);
   assert.match(content, /detect_forms/);
   assert.match(content, /clickVisibleText/);

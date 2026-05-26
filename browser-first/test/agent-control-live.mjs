@@ -448,21 +448,39 @@ try {
     doneSummary: null
   }); return true; })()`);
   await submitControlCommand(panel, `/control click "Submit public form"`);
-  await waitForPanelText(panel, /Agent Control Mode needs approval|restricted click|requires human approval/i, "approval boundary");
+  await waitForPanelText(panel, /Agent Control Mode blocked at action|submit\/public action|requires human approval/i, "approval boundary");
+  await waitForPageCondition(panel, `!document.querySelector("#approval-card").hidden`, "public-submit approval card");
   const blockedState = (await evaluate(page, `({ submitted: window.__submitted, status: document.querySelector("#status").textContent })`)).result.value;
   assert(!blockedState.submitted, `Approval gate failed before approval: ${JSON.stringify(blockedState)}`);
+  const publicSubmitApprovalState = (await evaluate(panel, `({
+    cardVisible: !document.querySelector("#approval-card").hidden,
+    approveDisabled: document.querySelector("#approval-approve").disabled,
+    trustDisabled: document.querySelector("#approval-trust-site").disabled,
+    reason: document.querySelector("#approval-reason").textContent
+  })`)).result.value;
+  assert(publicSubmitApprovalState.cardVisible, "Public-submit approval card is not visible.");
+  assert(!publicSubmitApprovalState.approveDisabled, "Approve-once should remain available for reviewed public-submit actions.");
+  assert(publicSubmitApprovalState.trustDisabled, `Site trust must not bypass public submit: ${JSON.stringify(publicSubmitApprovalState)}`);
+  await evaluate(panel, `document.querySelector("#approval-deny").click()`);
+  await waitForPanelText(panel, /Denied browser action/, "deny public submit approval");
 
   await evaluate(panel, `(() => { globalThis.__resonantosNextActionOverride = async () => ({
     source: "test-next-action",
-    thought: "Wallet action must stop before execution.",
-    status: "needs_approval",
-    action: null,
-    approvalReason: "Wallet connection requires human confirmation.",
+    thought: "Attempt wallet click; content boundary must block automation.",
+    status: "continue",
+    action: { type: "click", text: "Connect Wallet" },
+    approvalReason: null,
     doneSummary: null
   }); return true; })()`);
   await submitControlCommand(panel, `/control connect wallet`);
-  await waitForPanelText(panel, /Wallet connection requires human confirmation/, "wallet approval boundary");
+  await waitForPanelText(panel, /Planner requested a restricted click|wallet, login, payment, credential/i, "wallet approval boundary");
+  const walletApprovalState = (await evaluate(panel, `({
+    cardVisible: !document.querySelector("#approval-card").hidden,
+    status: document.querySelector("#status")?.textContent ?? ""
+  })`)).result.value;
+  assert(!walletApprovalState.cardVisible, `Wallet/payment/login planner blocks must not expose an approval bypass: ${JSON.stringify(walletApprovalState)}`);
   const approvalState = (await evaluate(page, `({ submitted: window.__submitted, status: document.querySelector("#status").textContent })`)).result.value;
+  assert(approvalState.status !== "wallet-clicked", `Wallet action executed unexpectedly: ${JSON.stringify(approvalState)}`);
 
   const panelShot = await panel.send("Page.captureScreenshot", { format: "png" });
   const pageShot = await page.send("Page.captureScreenshot", { format: "png" });

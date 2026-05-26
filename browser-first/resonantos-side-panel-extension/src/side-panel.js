@@ -31,6 +31,7 @@ const approvalCard = document.querySelector("#approval-card");
 const approvalTitle = document.querySelector("#approval-title");
 const approvalReason = document.querySelector("#approval-reason");
 const approvalApproveButton = document.querySelector("#approval-approve");
+const approvalTrustSiteButton = document.querySelector("#approval-trust-site");
 const approvalDenyButton = document.querySelector("#approval-deny");
 const approvalDelegateButton = document.querySelector("#approval-delegate");
 
@@ -150,10 +151,25 @@ const renderControlMonitor = () => {
   }
   if (pendingApproval) {
     approvalCard.hidden = false;
+    const boundary = approvalBoundaryForStep(pendingApproval.step, pendingApproval.reason);
     approvalTitle.textContent = `Approval required: ${controlStepLabel(pendingApproval.step)}`;
-    approvalReason.textContent = pendingApproval.reason;
+    approvalReason.textContent = [
+      pendingApproval.reason,
+      boundary === "hard"
+        ? "Hard boundary: wallet, payment, login, credential, signing, or irreversible value actions cannot be trusted by site."
+        : boundary === "public-submit"
+          ? "Public-submit boundary: use approve once only when you have reviewed the page state."
+          : "Safe-action boundary: you may approve once or trust safe actions for this site."
+    ].filter(Boolean).join("\n");
+    approvalApproveButton.disabled = boundary === "hard";
+    approvalTrustSiteButton.disabled = boundary !== "safe";
+    approvalTrustSiteButton.title = boundary === "safe"
+      ? "Trust safe non-sensitive actions on this site."
+      : "Site trust never bypasses wallet, payment, login, credential, or public-submit boundaries.";
   } else {
     approvalCard.hidden = true;
+    approvalApproveButton.disabled = false;
+    approvalTrustSiteButton.disabled = false;
   }
 };
 
@@ -1470,7 +1486,23 @@ const planControlSteps = (goal) => {
   return dedupeControlSteps(steps).slice(0, 8);
 };
 
-const restrictedPlannerText = /\b(seed|private key|password|passphrase|wallet|phantom|sign|signature|approve|confirm|buy|sell|swap|stake|unstake|bridge|mint|claim|pay|payment|checkout|login|submit|publish|post|delete|remove|transfer)\b/i;
+const restrictedPlannerText = /\b(seed|private key|password|passphrase|wallet|phantom|sign|signature|approve|buy|sell|swap|stake|unstake|bridge|mint|claim|pay|payment|checkout|login|delete|remove|destroy|credential|2fa|otp|transfer)\b/i;
+const hardApprovalBoundaryText = /\b(seed|private key|password|passphrase|wallet|phantom|sign|signature|approve|buy|sell|swap|stake|unstake|bridge|mint|claim|pay|payment|checkout|login|delete|remove|destroy|credential|2fa|otp|transfer)\b/i;
+const publicSubmitBoundaryText = /\b(submit|publish|post|share|send|save|confirm)\b/i;
+
+const approvalBoundaryForStep = (step, reason = "") => {
+  const haystack = [
+    step?.type,
+    step?.text,
+    step?.field,
+    step?.target,
+    step?.query,
+    reason
+  ].filter(Boolean).join(" ").toLowerCase();
+  if (hardApprovalBoundaryText.test(haystack)) return "hard";
+  if (publicSubmitBoundaryText.test(haystack)) return "public-submit";
+  return "safe";
+};
 
 const sanitizePlannerUrl = (target) => {
   const trimmed = String(target ?? "").trim().replace(/[.,;:!?]+$/, "");
@@ -2017,6 +2049,11 @@ const runControlCommand = async (body) => {
 const approvePendingControlStep = async () => {
   if (!pendingApproval || !currentControlRun) return;
   const approval = pendingApproval;
+  const boundary = approvalBoundaryForStep(approval.step, approval.reason);
+  if (boundary === "hard") {
+    await addMessage("system", `Cannot automate this action: ${controlStepLabel(approval.step)}.\nWallet, payment, login, credential, signing, and transfer actions are human-only.`);
+    return;
+  }
   pendingApproval = null;
   renderControlMonitor();
   setStatus("Approved once");
@@ -2061,6 +2098,25 @@ const approvePendingControlStep = async () => {
     startIndex: history.length,
     maxSteps: 12
   });
+};
+
+const trustCurrentSiteForSafeActions = async () => {
+  if (!pendingApproval || !currentControlRun) return;
+  const approval = pendingApproval;
+  const boundary = approvalBoundaryForStep(approval.step, approval.reason);
+  const tab = await activeTab();
+  const result = await setSitePermission(tab?.url, "trusted-for-safe-actions");
+  await renderSitePermissionPanel(tab);
+  if (boundary !== "safe") {
+    await addMessage(
+      "system",
+      `Set ${result.key} to trusted safe actions. The current blocked step still needs explicit once-only review because it is ${boundary}.`
+    );
+    renderControlMonitor();
+    return;
+  }
+  await addMessage("system", `Set ${result.key} to trusted safe actions and approved this safe step once: ${controlStepLabel(approval.step)}`);
+  await approvePendingControlStep();
 };
 
 const denyPendingControlStep = async () => {
@@ -2308,6 +2364,7 @@ fileInput.addEventListener("change", () => void attachFiles(fileInput.files));
 readButton.addEventListener("click", () => void readActivePage());
 saveIntakeButton.addEventListener("click", () => void saveIntake());
 approvalApproveButton.addEventListener("click", () => void approvePendingControlStep());
+approvalTrustSiteButton.addEventListener("click", () => void trustCurrentSiteForSafeActions());
 approvalDenyButton.addEventListener("click", () => void denyPendingControlStep());
 approvalDelegateButton.addEventListener("click", () => void delegateControlIssue());
 jobMonitorToggle.addEventListener("click", async () => {

@@ -98,7 +98,26 @@ const isSubmitLikeElement = (element) => {
     (role === "button" && Boolean(element.closest("form")) && /\b(submit|send|post|publish|save|share|buy|pay|confirm|connect|sign)\b/i.test(text));
 };
 
+const isHardRestrictedElement = (element, fallbackText = "") => {
+  const text = [
+    visibleText(element),
+    element?.getAttribute?.("aria-label"),
+    element?.id,
+    element?.className,
+    fallbackText
+  ].filter(Boolean).join(" ").toLowerCase();
+  return /\b(wallet|phantom|sign|signature|approve|connect wallet|buy|sell|swap|stake|unstake|bridge|mint|claim|pay|payment|checkout|login|credential|password|transfer)\b/i.test(text);
+};
+
 const clickElement = (element, { userApproved = false, fallbackText = "" } = {}) => {
+  if (isHardRestrictedElement(element, fallbackText)) {
+    return {
+      ok: false,
+      approvalRequired: true,
+      deniedToAutomation: true,
+      error: `Clicking "${visibleText(element) || fallbackText}" crosses a wallet/payment/login/credential boundary and must be completed by the human.`
+    };
+  }
   if (isSubmitLikeElement(element) && !userApproved) {
     return {
       ok: false,
