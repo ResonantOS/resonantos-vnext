@@ -14,11 +14,12 @@ import {
 export function createSidePanelCommandRouter(handlers) {
   async function respondToCommand(value) {
     await handlers.bindMentionedTab(value);
-    const slash = /^\/([a-z]+)(?:\s+([\s\S]*))?$/i.exec(value.trim());
+    const slash = /^\/\s*([a-z]+)(?:\s+([\s\S]*))?$/i.exec(value.trim());
     if (slash) {
       const name = slash[1].toLowerCase();
       const body = (slash[2] ?? "").trim();
       if (name === "goal") return handlers.runGoalCommand(body);
+      if (name === "hermes") return handlers.runDelegateCommand(`hermes ${body}`);
       if (name === "delegate") return handlers.runDelegateCommand(body);
       if (name === "status") return handlers.runStatusCommand();
       if (name === "site") return handlers.runSitePermissionCommand(body);

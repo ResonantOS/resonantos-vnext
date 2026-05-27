@@ -1,5 +1,6 @@
 import { existsSync, readdirSync } from "node:fs";
 import { appendFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -149,6 +150,53 @@ function memoryRoot() {
 
 function browserFirstRoot() {
   return path.join(userRoot(), "BrowserFirst");
+}
+
+function hermesHome(profileHome) {
+  const value = String(profileHome ?? process.env.HERMES_HOME ?? "~/.hermes").trim();
+  if (value === "~") return os.homedir();
+  if (value.startsWith("~/")) return path.join(os.homedir(), value.slice(2));
+  return path.resolve(value);
+}
+
+function hermesCommand(profileHome) {
+  if (process.env.HERMES_COMMAND && existsSync(process.env.HERMES_COMMAND)) {
+    return process.env.HERMES_COMMAND;
+  }
+  const home = hermesHome(profileHome);
+  const candidates = [
+    path.join(home, "hermes-agent", "venv", "bin", "hermes"),
+    path.join(home, "venv", "bin", "hermes"),
+    path.join(home, "bin", "hermes"),
+  ];
+  return candidates.find((candidate) => existsSync(candidate)) ?? null;
+}
+
+function dashboardTarget(host = "127.0.0.1", port = 9119) {
+  const normalizedHost = String(host || "127.0.0.1").trim().toLowerCase();
+  if (!["127.0.0.1", "localhost"].includes(normalizedHost)) {
+    throw new Error("Hermes dashboard can only bind to localhost or 127.0.0.1 from ResonantOS.");
+  }
+  const normalizedPort = Number(port || 9119);
+  if (!Number.isInteger(normalizedPort) || normalizedPort < 1 || normalizedPort > 65535) {
+    throw new Error("Hermes dashboard port must be between 1 and 65535.");
+  }
+  return { host: "127.0.0.1", port: normalizedPort, url: `http://127.0.0.1:${normalizedPort}` };
+}
+
+async function socketOpen(host, port) {
+  return new Promise((resolve) => {
+    const socket = net.createConnection({ host, port });
+    const done = (value) => {
+      socket.removeAllListeners();
+      socket.destroy();
+      resolve(value);
+    };
+    socket.setTimeout(350);
+    socket.once("connect", () => done(true));
+    socket.once("timeout", () => done(false));
+    socket.once("error", () => done(false));
+  });
 }
 
 function safeFileSlug(value) {
@@ -962,6 +1010,68 @@ async function executeAddonsStatus() {
   };
 }
 
+async function executeHermesDashboardStatus(payload = {}) {
+  const target = dashboardTarget(payload.host, payload.port);
+  const command = hermesCommand(payload.profileHome);
+  const running = await socketOpen(target.host, target.port);
+  return {
+    running,
+    url: target.url,
+    host: target.host,
+    port: target.port,
+    command,
+    profileHome: hermesHome(payload.profileHome),
+    detail: running
+      ? `Hermes dashboard is reachable at ${target.url}.`
+      : `Hermes dashboard is not reachable at ${target.url}.`,
+    rawStatus: command ? "Hermes CLI found." : "Hermes CLI was not found.",
+  };
+}
+
+async function executeHermesDashboardStart(payload = {}) {
+  const target = dashboardTarget(payload.host, payload.port);
+  const profileHome = hermesHome(payload.profileHome);
+  const command = hermesCommand(profileHome);
+  if (!command) {
+    throw new Error("Hermes CLI was not found. Install or configure Hermes before launching the dashboard.");
+  }
+  const alreadyRunning = await socketOpen(target.host, target.port);
+  if (!alreadyRunning) {
+    const args = ["dashboard", "--host", target.host, "--port", String(target.port), "--no-open"];
+    if (payload.includeTui !== false) {
+      args.push("--tui");
+    }
+    const child = spawn(command, args, {
+      detached: true,
+      env: { ...process.env, HERMES_HOME: profileHome },
+      stdio: "ignore",
+    });
+    child.unref();
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      if (await socketOpen(target.host, target.port)) break;
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    }
+  }
+  return executeHermesDashboardStatus({ ...payload, host: target.host, port: target.port, profileHome });
+}
+
+async function executeHermesDashboardStop(payload = {}) {
+  const profileHome = hermesHome(payload.profileHome);
+  const command = hermesCommand(profileHome);
+  if (!command) {
+    throw new Error("Hermes CLI was not found. Install or configure Hermes before stopping the dashboard.");
+  }
+  await new Promise((resolve) => {
+    const child = spawn(command, ["dashboard", "--stop"], {
+      env: { ...process.env, HERMES_HOME: profileHome },
+      stdio: "ignore",
+    });
+    child.once("exit", resolve);
+    child.once("error", resolve);
+  });
+  return executeHermesDashboardStatus({ ...payload, profileHome });
+}
+
 async function executeNewsSearch(payload) {
   const query = String(payload.query ?? "top stories").trim() || "top stories";
   const url = query === "top stories"
@@ -1018,6 +1128,9 @@ const bridgeRoutes = [
   { method: "POST", path: "/memory/search", handler: executeMemorySearch },
   { method: "POST", path: "/archive/intake", handler: executeArchiveIntake },
   { method: "GET", path: "/addons/status", handler: executeAddonsStatus },
+  { method: "POST", path: "/hermes/dashboard/status", handler: executeHermesDashboardStatus },
+  { method: "POST", path: "/hermes/dashboard/start", handler: executeHermesDashboardStart },
+  { method: "POST", path: "/hermes/dashboard/stop", handler: executeHermesDashboardStop },
   { method: "POST", path: "/web/news", handler: executeNewsSearch },
   { method: "POST", path: "/addons/delegate", handler: executeDelegationRecord },
   { method: "POST", path: "/goals", handler: executeGoalRecord },

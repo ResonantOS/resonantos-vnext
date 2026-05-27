@@ -403,7 +403,8 @@ textarea {
 }
 
 .module-card,
-.module-form {
+.module-form,
+.dashboard-frame-card {
   border: 1px solid rgba(36, 209, 143, 0.16);
   border-radius: 22px;
   background: rgba(17, 22, 19, 0.72);
@@ -442,4 +443,61 @@ textarea {
 .module-result {
   min-height: 1.2em;
   color: rgba(214, 229, 219, 0.78);
+}
+
+.dashboard-frame-card {
+  display: grid;
+  min-height: 58vh;
+  overflow: hidden;
+  padding: 0;
+}
+
+.dashboard-frame-card iframe {
+  width: 100%;
+  height: 100%;
+  min-height: 58vh;
+  border: 0;
+  background: #0b0f0d;
+}
+
+.dashboard-placeholder {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  min-height: 58vh;
+  padding: 28px;
+  text-align: center;
+}
+
+.dashboard-placeholder[hidden],
+.dashboard-frame-card iframe[hidden] {
+  display: none;
+}
+
+.dashboard-placeholder strong {
+  color: rgba(247, 255, 249, 0.96);
+  font-size: 1.1rem;
+}
+
+.dashboard-placeholder p {
+  max-width: 520px;
+  margin: 0;
+  color: rgba(214, 229, 219, 0.72);
+}
+
+.module-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.module-action-row button {
+  border: 1px solid rgba(36, 209, 143, 0.18);
+  border-radius: 999px;
+  background: rgba(36, 209, 143, 0.08);
+  color: rgba(247, 255, 249, 0.92);
+  font-weight: 900;
+  padding: 9px 12px;
 }

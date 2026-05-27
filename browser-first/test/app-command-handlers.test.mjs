@@ -71,9 +71,11 @@ test("app command handlers create goals and delegations", async () => {
 
   await harness.handlers.runGoalCommand("Build | success: tests, build | constraints: safe");
   await harness.handlers.runDelegateCommand("opencode fix browser tests");
+  await harness.handlers.runDelegateCommand("hermes coordinate the research handoff");
 
   assert.ok(harness.calls.some((call) => call[0] === "bridge" && call[1] === "/goals" && call[2].mission === "Build"));
   assert.ok(harness.calls.some((call) => call[0] === "bridge" && call[1] === "/addons/delegate" && call[2].target === "opencode"));
+  assert.ok(harness.calls.some((call) => call[0] === "bridge" && call[1] === "/addons/delegate" && call[2].target === "hermes"));
   assert.ok(harness.calls.some((call) => call[0] === "message" && /Goal workspace recorded/.test(call[2])));
 });
 

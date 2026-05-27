@@ -46,6 +46,10 @@ let activeWorkspace = "answer";
 
 const supportsThinkingDepth = (model) => model.startsWith("gpt-5.");
 const assistantTextFromResponse = (response) => String(response?.content ?? response?.reply ?? "").trim();
+const parseHermesSlashCommand = (value) => {
+  const match = /^\/\s*hermes(?:\s+([\s\S]*))?$/i.exec(String(value ?? "").trim());
+  return match ? (match[1] ?? "").trim() : null;
+};
 const providerMessagesFromHistory = (messages, limit = 18) => messages
   .filter((message) => ["user", "assistant"].includes(message.role))
   .slice(-limit)
@@ -239,53 +243,91 @@ function renderStatusWorkspace({ eyebrow, title, body, addonId }) {
 
 function renderHermesWorkspace() {
   const section = workspaceShell({
-    eyebrow: "Delegation add-on",
+    eyebrow: "Embedded add-on workspace",
     title: "Hermes",
-    body: "Delegate operational tasks to Hermes through ResonantOS. Hermes receives a task packet only; provider secrets, wallet actions, and trusted memory writes stay host-mediated."
+    body: "Hermes runs as an add-on workspace in the main browser area. Keep Augmentor in the side panel when you want to discuss or delegate work with `/hermes <mission>`."
   });
   const status = document.createElement("div");
   status.className = "module-card";
   status.textContent = "Checking Hermes status...";
-  const form = document.createElement("form");
-  form.className = "module-form";
-  const textarea = document.createElement("textarea");
-  textarea.rows = 5;
-  textarea.placeholder = "Describe the task Hermes should handle";
-  const submit = document.createElement("button");
-  submit.type = "submit";
-  submit.textContent = "Delegate to Hermes";
-  const result = document.createElement("div");
-  result.className = "module-result";
-  form.append(textarea, submit, result);
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const mission = textarea.value.trim();
-    if (mission.length < 8) {
-      result.textContent = "Write a concrete Hermes task first.";
-      return;
+  const frameCard = document.createElement("section");
+  frameCard.className = "dashboard-frame-card";
+  const iframe = document.createElement("iframe");
+  iframe.title = "Hermes dashboard";
+  iframe.hidden = true;
+  const placeholder = document.createElement("div");
+  placeholder.className = "dashboard-placeholder";
+  const placeholderTitle = document.createElement("strong");
+  placeholderTitle.textContent = "Hermes dashboard is not running";
+  const placeholderBody = document.createElement("p");
+  placeholderBody.textContent = "Start the local Hermes dashboard to load it here. Delegation remains available from Augmentor chat with /hermes.";
+  const actions = document.createElement("div");
+  actions.className = "module-action-row";
+  const start = document.createElement("button");
+  start.type = "button";
+  start.textContent = "Start Dashboard";
+  const stop = document.createElement("button");
+  stop.type = "button";
+  stop.textContent = "Stop";
+  const refresh = document.createElement("button");
+  refresh.type = "button";
+  refresh.textContent = "Refresh";
+  actions.append(start, stop, refresh);
+  placeholder.append(placeholderTitle, placeholderBody, actions);
+  frameCard.append(iframe, placeholder);
+  section.append(status, frameCard);
+  transcript.append(section);
+
+  const setDashboardState = (dashboard) => {
+    const running = Boolean(dashboard?.running);
+    iframe.hidden = !running;
+    placeholder.hidden = running;
+    if (running) {
+      iframe.src = dashboard.url;
     }
-    submit.disabled = true;
-    result.textContent = "Creating governed Hermes delegation...";
+    status.textContent = running
+      ? `Hermes dashboard running · ${dashboard.url}`
+      : `${dashboard?.rawStatus || "Hermes dashboard stopped"} · ${dashboard?.detail || "Start it to embed the workspace."}`;
+  };
+  const loadStatus = async () => {
+    const [addon, dashboard] = await Promise.all([
+      statusForAddon("addon.hermes"),
+      bridgeRequest("/hermes/dashboard/status", { method: "POST", body: { port: 9119 } })
+    ]);
+    setDashboardState(dashboard);
+    if (!addon?.available) {
+      status.textContent = `${status.textContent}\nHermes add-on files are not available in this build.`;
+    }
+  };
+  start.addEventListener("click", async () => {
+    start.disabled = true;
+    status.textContent = "Starting Hermes dashboard...";
     try {
-      const delegation = await bridgeRequest("/addons/delegate", {
+      setDashboardState(await bridgeRequest("/hermes/dashboard/start", {
         method: "POST",
-        body: { target: "hermes", mission }
-      });
-      result.textContent = `Queued ${delegation.id} · ${delegation.path}`;
-      textarea.value = "";
+        body: { host: "127.0.0.1", port: 9119, includeTui: true }
+      }));
     } catch (error) {
-      result.textContent = `Delegation failed: ${error instanceof Error ? error.message : String(error)}`;
+      status.textContent = `Hermes dashboard failed to start: ${error instanceof Error ? error.message : String(error)}`;
     } finally {
-      submit.disabled = false;
+      start.disabled = false;
     }
   });
-  section.append(status, form);
-  transcript.append(section);
-  void statusForAddon("addon.hermes").then((addon) => {
-    status.textContent = addon
-      ? `Hermes is ${addon.available ? "available" : "not available"} · ${addon.mode} · ${addon.trust}`
-      : "Hermes is not registered yet.";
-  }).catch((error) => {
+  stop.addEventListener("click", async () => {
+    stop.disabled = true;
+    status.textContent = "Stopping Hermes dashboard...";
+    try {
+      setDashboardState(await bridgeRequest("/hermes/dashboard/stop", { method: "POST", body: { port: 9119 } }));
+    } catch (error) {
+      status.textContent = `Hermes dashboard failed to stop: ${error instanceof Error ? error.message : String(error)}`;
+    } finally {
+      stop.disabled = false;
+    }
+  });
+  refresh.addEventListener("click", () => void loadStatus().catch((error) => {
+    status.textContent = `Hermes status unavailable: ${error instanceof Error ? error.message : String(error)}`;
+  }));
+  void loadStatus().catch((error) => {
     status.textContent = `Hermes status unavailable: ${error instanceof Error ? error.message : String(error)}`;
   });
 }
@@ -342,6 +384,21 @@ async function runChatTurn(prompt) {
   updateConnectionLine("Ready");
 }
 
+async function runHermesDelegation(prompt) {
+  const mission = parseHermesSlashCommand(prompt);
+  if (!mission || mission.length < 8) {
+    await addMessage("system", "Use `/hermes <mission>` to ask Augmentor to create a governed Hermes delegation packet.");
+    return;
+  }
+  updateConnectionLine("Delegating");
+  const result = await bridgeRequest("/addons/delegate", {
+    method: "POST",
+    body: { target: "hermes", mission }
+  });
+  await addMessage("system", `Delegation queued for Hermes: ${result.id}\n${result.path}`);
+  updateConnectionLine("Ready");
+}
+
 commandForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (busy) return;
@@ -355,7 +412,9 @@ commandForm.addEventListener("submit", async (event) => {
     const shouldControl = modeSelect.value === "browser" ||
       parseAutonomousBrowserActionIntent(prompt) ||
       parseNaturalBrowserIntent(prompt);
-    if (shouldControl) {
+    if (parseHermesSlashCommand(prompt) !== null) {
+      await runHermesDelegation(prompt);
+    } else if (shouldControl) {
       await handoffToBrowserControl(prompt);
     } else {
       await runChatTurn(prompt);
