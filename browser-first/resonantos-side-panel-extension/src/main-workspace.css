@@ -22,7 +22,7 @@ body {
     radial-gradient(circle at 18% 0%, rgba(36, 209, 143, 0.15), transparent 24rem),
     linear-gradient(160deg, #0b100d, var(--bg) 46%);
   color: var(--text);
-  font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font: 13px/1.45 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 button,
@@ -76,14 +76,16 @@ button {
   background: rgba(36, 209, 143, 0.1);
   color: var(--text);
   font-weight: 900;
-  padding: 9px 12px;
+  font-size: 0.82rem;
+  padding: 8px 11px;
   text-align: left;
 }
 
 .rail-item {
   border-radius: 12px;
+  font-size: 0.82rem;
   font-weight: 800;
-  padding: 9px 10px;
+  padding: 8px 10px;
   text-align: left;
 }
 
@@ -120,7 +122,8 @@ button {
   background: transparent;
   color: rgba(207, 219, 210, 0.62);
   overflow: hidden;
-  padding: 8px;
+  font-size: 0.78rem;
+  padding: 7px 8px;
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -153,6 +156,10 @@ button {
   gap: 20px;
 }
 
+body:not([data-workspace="answer"]) .workspace-topbar nav {
+  visibility: hidden;
+}
+
 .topbar-tab {
   border-bottom: 2px solid transparent;
   font-size: 0.86rem;
@@ -182,7 +189,7 @@ button {
   gap: 18px;
   min-height: 0;
   overflow: auto;
-  padding: 42px min(18vw, 260px) 130px;
+  padding: 42px min(20vw, 310px) 128px;
 }
 
 .empty-hero {
@@ -230,12 +237,12 @@ button {
 }
 
 .message {
-  max-width: 780px;
+  max-width: 690px;
 }
 
 .message.user {
   justify-self: end;
-  max-width: 640px;
+  max-width: 560px;
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.07);
   padding: 14px 16px;
@@ -257,7 +264,7 @@ button {
 
 .message p {
   margin: 8px 0 0;
-  color: rgba(238, 247, 240, 0.88);
+  color: rgba(247, 255, 249, 0.95);
   white-space: pre-wrap;
 }
 
@@ -267,13 +274,17 @@ button {
 
 .main-composer {
   justify-self: center;
-  width: min(720px, calc(100% - 48px));
+  width: min(650px, calc(100% - 56px));
   margin-bottom: 20px;
   border: 1px solid var(--line);
   border-radius: 22px;
   background: rgba(17, 22, 19, 0.94);
   box-shadow: 0 20px 70px rgba(0, 0, 0, 0.34);
   padding: 12px;
+}
+
+.main-composer[hidden] {
+  display: none;
 }
 
 textarea {
@@ -354,4 +365,81 @@ textarea {
   color: rgba(238, 247, 240, 0.82);
   font-size: 0.72rem;
   padding: 5px 8px;
+}
+
+.module-workspace {
+  display: grid;
+  gap: 18px;
+  justify-self: center;
+  width: min(760px, 100%);
+  margin-top: 7vh;
+}
+
+.module-copy {
+  display: grid;
+  gap: 10px;
+}
+
+.module-eyebrow {
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 950;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.module-copy h1 {
+  margin: 0;
+  color: rgba(247, 255, 249, 0.98);
+  font-size: clamp(2rem, 4vw, 4rem);
+  letter-spacing: -0.06em;
+  line-height: 0.96;
+}
+
+.module-copy p {
+  max-width: 640px;
+  margin: 0;
+  color: rgba(214, 229, 219, 0.78);
+}
+
+.module-card,
+.module-form {
+  border: 1px solid rgba(36, 209, 143, 0.16);
+  border-radius: 22px;
+  background: rgba(17, 22, 19, 0.72);
+  color: rgba(238, 247, 240, 0.86);
+  padding: 18px;
+}
+
+.module-form {
+  display: grid;
+  gap: 12px;
+}
+
+.module-form textarea {
+  min-height: 120px;
+  border: 1px solid rgba(36, 209, 143, 0.13);
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.18);
+  padding: 14px;
+}
+
+.module-form button {
+  justify-self: start;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #06110d;
+  font-weight: 950;
+  padding: 10px 14px;
+}
+
+.module-form button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.module-result {
+  min-height: 1.2em;
+  color: rgba(214, 229, 219, 0.78);
 }

@@ -28,6 +28,7 @@ const MODEL_LABELS = {
 
 const transcript = document.querySelector("#transcript");
 const chatHistory = document.querySelector("#chat-history");
+const workspaceButtons = [...document.querySelectorAll("[data-workspace]")];
 const newChatButton = document.querySelector("#new-chat");
 const openSidebarButton = document.querySelector("#open-sidebar");
 const commandForm = document.querySelector("#command-form");
@@ -41,8 +42,10 @@ const thinkingDepthSelect = document.querySelector("#thinking-depth");
 const connectionLine = document.querySelector("#connection-line");
 const bridgeRequest = createBridgeClient();
 let busy = false;
+let activeWorkspace = "answer";
 
 const supportsThinkingDepth = (model) => model.startsWith("gpt-5.");
+const assistantTextFromResponse = (response) => String(response?.content ?? response?.reply ?? "").trim();
 const providerMessagesFromHistory = (messages, limit = 18) => messages
   .filter((message) => ["user", "assistant"].includes(message.role))
   .slice(-limit)
@@ -89,6 +92,21 @@ function renderChatHistory() {
   });
 }
 
+function setActiveWorkspace(workspaceId) {
+  activeWorkspace = workspaceId;
+  document.body.dataset.workspace = activeWorkspace;
+  workspaceButtons.forEach((button) => {
+    const active = button.dataset.workspace === activeWorkspace;
+    button.classList.toggle("active", active);
+    if (active) {
+      button.setAttribute("aria-current", "page");
+    } else {
+      button.removeAttribute("aria-current");
+    }
+  });
+  commandForm.hidden = activeWorkspace !== "answer";
+}
+
 function renderAttachments() {
   const attachments = chatSessionStore.getAttachments();
   attachmentStrip.replaceChildren();
@@ -124,6 +142,30 @@ function emptyHero() {
 
 function renderMessages() {
   transcript.replaceChildren();
+  if (activeWorkspace === "hermes") {
+    renderHermesWorkspace();
+    return;
+  }
+  if (activeWorkspace === "memory") {
+    renderStatusWorkspace({
+      title: "Living Archive",
+      eyebrow: "Memory system",
+      body: "The Living Archive workspace will expose the LLM Wiki, intake queue, and memory search here. For now it remains available to Augmentor through the governed memory bridge.",
+      endpoint: "/addons/status",
+      addonId: "addon.living-archive"
+    });
+    return;
+  }
+  if (activeWorkspace === "opencode") {
+    renderStatusWorkspace({
+      title: "OpenCode",
+      eyebrow: "Coding add-on",
+      body: "OpenCode will become the coding workspace for delegated engineering tasks. It stays an add-on, not a trusted core agent.",
+      endpoint: "/addons/status",
+      addonId: "addon.opencode"
+    });
+    return;
+  }
   const messages = chatSessionStore.getMessages();
   if (!messages.length) {
     transcript.append(emptyHero());
@@ -150,10 +192,102 @@ function renderMessages() {
 }
 
 function renderAll() {
+  setActiveWorkspace(activeWorkspace);
   renderMessages();
   renderAttachments();
   renderChatHistory();
   updateConnectionLine();
+}
+
+function workspaceShell({ eyebrow, title, body }) {
+  const section = document.createElement("section");
+  section.className = "module-workspace";
+  const copy = document.createElement("div");
+  copy.className = "module-copy";
+  const eyebrowNode = document.createElement("span");
+  eyebrowNode.className = "module-eyebrow";
+  eyebrowNode.textContent = eyebrow;
+  const titleNode = document.createElement("h1");
+  titleNode.textContent = title;
+  const bodyNode = document.createElement("p");
+  bodyNode.textContent = body;
+  copy.append(eyebrowNode, titleNode, bodyNode);
+  section.append(copy);
+  return section;
+}
+
+async function statusForAddon(addonId) {
+  const result = await bridgeRequest("/addons/status", { method: "GET" });
+  return result?.addons?.find((addon) => addon.id === addonId) ?? null;
+}
+
+function renderStatusWorkspace({ eyebrow, title, body, addonId }) {
+  const section = workspaceShell({ eyebrow, title, body });
+  const status = document.createElement("div");
+  status.className = "module-card";
+  status.textContent = "Checking add-on status...";
+  section.append(status);
+  transcript.append(section);
+  void statusForAddon(addonId).then((addon) => {
+    status.textContent = addon
+      ? `${addon.name}: ${addon.available ? "available" : "not available"} · ${addon.mode} · ${addon.trust}`
+      : "This add-on is not registered yet.";
+  }).catch((error) => {
+    status.textContent = `Status unavailable: ${error instanceof Error ? error.message : String(error)}`;
+  });
+}
+
+function renderHermesWorkspace() {
+  const section = workspaceShell({
+    eyebrow: "Delegation add-on",
+    title: "Hermes",
+    body: "Delegate operational tasks to Hermes through ResonantOS. Hermes receives a task packet only; provider secrets, wallet actions, and trusted memory writes stay host-mediated."
+  });
+  const status = document.createElement("div");
+  status.className = "module-card";
+  status.textContent = "Checking Hermes status...";
+  const form = document.createElement("form");
+  form.className = "module-form";
+  const textarea = document.createElement("textarea");
+  textarea.rows = 5;
+  textarea.placeholder = "Describe the task Hermes should handle";
+  const submit = document.createElement("button");
+  submit.type = "submit";
+  submit.textContent = "Delegate to Hermes";
+  const result = document.createElement("div");
+  result.className = "module-result";
+  form.append(textarea, submit, result);
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const mission = textarea.value.trim();
+    if (mission.length < 8) {
+      result.textContent = "Write a concrete Hermes task first.";
+      return;
+    }
+    submit.disabled = true;
+    result.textContent = "Creating governed Hermes delegation...";
+    try {
+      const delegation = await bridgeRequest("/addons/delegate", {
+        method: "POST",
+        body: { target: "hermes", mission }
+      });
+      result.textContent = `Queued ${delegation.id} · ${delegation.path}`;
+      textarea.value = "";
+    } catch (error) {
+      result.textContent = `Delegation failed: ${error instanceof Error ? error.message : String(error)}`;
+    } finally {
+      submit.disabled = false;
+    }
+  });
+  section.append(status, form);
+  transcript.append(section);
+  void statusForAddon("addon.hermes").then((addon) => {
+    status.textContent = addon
+      ? `Hermes is ${addon.available ? "available" : "not available"} · ${addon.mode} · ${addon.trust}`
+      : "Hermes is not registered yet.";
+  }).catch((error) => {
+    status.textContent = `Hermes status unavailable: ${error instanceof Error ? error.message : String(error)}`;
+  });
 }
 
 async function addMessage(role, content, options = {}) {
@@ -202,7 +336,7 @@ async function runChatTurn(prompt) {
       ]
     }
   });
-  await addMessage("assistant", response?.content || "No response was returned.", {
+  await addMessage("assistant", assistantTextFromResponse(response) || "No response was returned.", {
     usage: response?.usage ?? null
   });
   updateConnectionLine("Ready");
@@ -244,6 +378,7 @@ commandInput.addEventListener("keydown", (event) => {
 });
 
 newChatButton.addEventListener("click", async () => {
+  activeWorkspace = "answer";
   await chatSessionStore.createSession();
   commandInput.value = "";
   renderAll();
@@ -251,6 +386,12 @@ newChatButton.addEventListener("click", async () => {
 });
 
 openSidebarButton.addEventListener("click", () => void openSidebar());
+workspaceButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    setActiveWorkspace(button.dataset.workspace);
+    renderAll();
+  });
+});
 attachFileButton.addEventListener("click", () => fileInput.click());
 fileInput.addEventListener("change", async () => {
   const attachments = Array.from(fileInput.files ?? []).map((file) => ({
