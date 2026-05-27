@@ -88,6 +88,8 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   const background = await readText(path.join(extensionRoot, "src", "background.js"));
 
   assert.match(panel, /Message Augmentor/);
+  assert.match(panel, /new-chat/);
+  assert.match(panel, /chat-history/);
   assert.match(panel, /bridge-config\.generated\.js/);
   assert.match(panel, /control-monitor/);
   assert.match(panel, /context-dock"[^>]+hidden/);
@@ -128,6 +130,9 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(messageActionController, /regenerateFromMessage/);
   assert.match(messageActionController, /attachFiles/);
   assert.match(chatSessionStore, /forkFromMessage/);
+  assert.match(chatSessionStore, /createSession/);
+  assert.match(chatSessionStore, /switchSession/);
+  assert.match(chatSessionStore, /getSessions/);
   assert.match(chatSessionStore, /trimToPreviousUserMessage/);
   assert.match(chatSessionStore, /addAttachments/);
   assert.match(chatSessionStore, /hydrate/);
@@ -142,6 +147,7 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(commandRouter, /parseControlIntent/);
   assert.match(commandRouter, /handleWalletBoundary/);
   assert.match(sidePanelRenderers, /renderMessages/);
+  assert.match(sidePanelRenderers, /What should Augmentor work on/);
   assert.match(sidePanelRenderers, /renderAttachments/);
   assert.match(sidePanelRenderers, /flashCopied/);
   assert.match(script, /createSitePermissionStore/);

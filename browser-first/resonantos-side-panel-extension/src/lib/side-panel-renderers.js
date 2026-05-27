@@ -64,7 +64,32 @@ export function createSidePanelRenderers({
 
   function renderMessages() {
     transcript.replaceChildren();
-    getMessages().forEach((message) => {
+    const messages = getMessages();
+    if (!messages.length) {
+      const empty = document.createElement("section");
+      empty.className = "empty-state";
+      empty.innerHTML = `
+        <h1>What should Augmentor work on?</h1>
+        <p>Ask a question, search, or give a browser task. If the task needs page control, Augmentor will move into Agent Control Mode.</p>
+        <div class="empty-prompts">
+          <button type="button" data-prompt="Find the latest useful context about ResonantOS.">Find web context</button>
+          <button type="button" data-prompt="/control read this page and summarize what matters">Control the current page</button>
+          <button type="button" data-prompt="Help me plan the next implementation step.">Plan next step</button>
+        </div>
+      `;
+      empty.querySelectorAll("[data-prompt]").forEach((button) => {
+        button.addEventListener("click", () => {
+          transcript.dispatchEvent(new CustomEvent("resonantos:use-prompt", {
+            bubbles: true,
+            detail: { prompt: button.dataset.prompt }
+          }));
+        });
+      });
+      transcript.append(empty);
+      scrollTranscriptToBottom();
+      return;
+    }
+    messages.forEach((message) => {
       const article = document.createElement("article");
       article.className = `message ${message.role}`;
       article.dataset.messageId = message.id;

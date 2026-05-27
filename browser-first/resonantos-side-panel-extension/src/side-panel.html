@@ -8,6 +8,13 @@
   </head>
   <body>
     <main class="chat-shell" aria-label="Augmentor chat">
+      <aside class="chat-rail" aria-label="Augmentor conversations">
+        <div class="rail-brand" aria-label="ResonantOS">R</div>
+        <button id="new-chat" type="button" class="new-chat-button" title="Start a new Augmentor chat">＋ New</button>
+        <div class="rail-section-label">History</div>
+        <ol id="chat-history" class="chat-history" aria-label="Chat history"></ol>
+      </aside>
+      <section class="chat-workspace" aria-label="Active Augmentor workspace">
       <section id="transcript" class="transcript" aria-live="polite"></section>
       <section id="context-dock" class="context-dock" aria-label="Browser context and task status" hidden>
         <section id="activity-panel" class="activity-panel" aria-live="polite" hidden>
@@ -90,6 +97,7 @@
         </div>
         <p id="connection-line" class="connection-line">Connected to MiniMax 2.7 · Ready</p>
       </form>
+      </section>
     </main>
     <script src="./bridge-config.generated.js"></script>
     <script type="module" src="./side-panel.js"></script>

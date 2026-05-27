@@ -19,6 +19,8 @@ function createHarness(initial = {}) {
     storageKeys: {
       messages: "messages",
       forks: "forks",
+      sessions: "sessions",
+      activeSessionId: "activeSessionId",
       model: "model",
       thinkingDepth: "thinkingDepth",
       attachments: "attachments"
@@ -64,8 +66,28 @@ test("chat session store hydrates valid state and ignores invalid messages/setti
   assert.equal(harness.getModel(), "gpt-5.5");
   assert.equal(harness.getThinkingDepth(), "low");
   assert.equal(harness.store.getMessages().length, 1);
+  assert.equal(harness.store.getSessions().length, 1);
   assert.equal(harness.store.getForks().length, 1);
   assert.equal(harness.store.getAttachments().length, 1);
+});
+
+test("chat session store creates and switches durable chat workspaces", async () => {
+  const harness = createHarness();
+
+  await harness.store.hydrate();
+  await harness.store.addMessage("user", "first workspace question");
+  const firstSessionId = harness.store.getActiveSessionId();
+  const second = await harness.store.createSession();
+  await harness.store.addMessage("user", "second workspace question");
+
+  assert.notEqual(second.id, firstSessionId);
+  assert.equal(harness.store.getMessages()[0].content, "second workspace question");
+  assert.equal(harness.store.getSessions()[0].title, "second workspace question");
+
+  await harness.store.switchSession(firstSessionId);
+
+  assert.equal(harness.store.getMessages()[0].content, "first workspace question");
+  assert.equal(harness.store.getActiveSessionId(), firstSessionId);
 });
 
 test("chat session store adds, deletes, forks, and trims messages", async () => {
