@@ -22,7 +22,7 @@ export function createControlRunState({
     setCurrentControlRun(run);
     setPendingApproval(null);
     renderControlMonitor();
-    void setPageControlOverlay(true, `Augmentor operating: ${goal}`);
+    void setPageControlOverlay(true, `Augmentor operating: ${goal}`, "working");
     return run;
   };
 
@@ -64,7 +64,7 @@ export function createControlRunState({
     };
     setCurrentControlRun(completedRun);
     renderControlMonitor();
-    void setPageControlOverlay(false, "");
+    void setPageControlOverlay(false, "", "returning");
     void updateBrowserJob(completedRun.id, {
       status,
       artifacts: completedRun.artifacts,

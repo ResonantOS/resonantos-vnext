@@ -490,6 +490,7 @@ const agentControlRunner = createAgentControlRunner({
   requestNextControlAction,
   saveControlReportToArchive,
   setActivity,
+  setPageControlOverlay,
   setPendingApproval: (approval) => {
     pendingApproval = approval;
   },
@@ -668,6 +669,21 @@ const commandRouter = createSidePanelCommandRouter({
 });
 
 const respondToCommand = commandRouter.respondToCommand;
+
+chrome.runtime?.onMessage?.addListener?.((message, _sender, sendResponse) => {
+  if (!message || message.channel !== "resonantos.browser_first.side_panel") {
+    return false;
+  }
+  if (message.type === "cancel_control_run") {
+    void cancelBrowserJob(currentControlRun?.id ?? browserJobStore.getActiveJobId() ?? "").then(() => {
+      sendResponse({ ok: true });
+    }).catch((error) => {
+      sendResponse({ ok: false, error: error instanceof Error ? error.message : String(error) });
+    });
+    return true;
+  }
+  return false;
+});
 
 const hydrateChatSettings = async () => {
   await chatSessionStore.hydrate();

@@ -56,7 +56,24 @@ class CdpClient {
   send(method, params = {}) {
     const id = this.nextId++;
     this.ws.send(JSON.stringify({ id, method, params }));
-    return new Promise((resolve, reject) => this.pending.set(id, { resolve, reject }));
+    let timeoutId = null;
+    const response = new Promise((resolve, reject) => this.pending.set(id, {
+      resolve: (value) => {
+        clearTimeout(timeoutId);
+        resolve(value);
+      },
+      reject: (error) => {
+        clearTimeout(timeoutId);
+        reject(error);
+      }
+    }));
+    const timeout = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(`CDP ${method} timed out after 10000ms.`));
+      }, 10000);
+    });
+    return Promise.race([response, timeout]);
   }
 
   close() {
@@ -227,6 +244,18 @@ const host = spawn("node", [
 let hostLogs = "";
 host.stdout.on("data", (chunk) => { hostLogs += chunk.toString(); });
 host.stderr.on("data", (chunk) => { hostLogs += chunk.toString(); });
+
+async function shutdownHost() {
+  host.stdout.destroy();
+  host.stderr.destroy();
+  if (!host.killed) host.kill("SIGTERM");
+  await Promise.race([
+    new Promise((resolve) => host.once("exit", resolve)),
+    new Promise((resolve) => setTimeout(resolve, 1500)),
+  ]);
+  spawnSync("pkill", ["-9", "-f", "ResonantBrowserNativeHost"], { stdio: "ignore" });
+  spawnSync("pkill", ["-9", "-f", "run-browser-first.mjs"], { stdio: "ignore" });
+}
 
 try {
   await waitForDebugPort(() => hostLogs);
@@ -608,7 +637,6 @@ try {
   panel.close();
   page.close();
 } finally {
-  host.kill("SIGTERM");
-  spawnSync("pkill", ["-9", "-f", "ResonantBrowserNativeHost"], { stdio: "ignore" });
-  server.close();
+  await shutdownHost();
+  await new Promise((resolve) => server.close(resolve));
 }

@@ -18,7 +18,7 @@ function createHarness(overrides = {}) {
       currentControlRun = run;
       events.push(["run", run?.status ?? null]);
     },
-    setPageControlOverlay: async (active, label) => events.push(["overlay", active, label]),
+    setPageControlOverlay: async (active, label, phase) => events.push(["overlay", active, label, phase]),
     setPendingApproval: (approval) => {
       pendingApproval = approval;
       events.push(["pending", approval]);
@@ -52,7 +52,7 @@ test("control run state starts a run with active job id and overlay", () => {
   assert.equal(harness.getPendingApproval(), null);
   assert.deepEqual(harness.getCurrentControlRun().steps.map((step) => step.state), ["pending", "pending"]);
   assert.ok(harness.events.some((event) => event[0] === "render"));
-  assert.ok(harness.events.some((event) => event[0] === "overlay" && event[1] === true && /find booking/.test(event[2])));
+  assert.ok(harness.events.some((event) => event[0] === "overlay" && event[1] === true && /find booking/.test(event[2]) && event[3] === "working"));
 });
 
 test("control run state appends and updates steps immutably", () => {
@@ -113,7 +113,7 @@ test("control run state finishes run, clears overlay, and syncs browser job", as
   assert.equal(harness.getCurrentControlRun().status, "completed");
   assert.ok(harness.getCurrentControlRun().completedAt);
   assert.deepEqual(harness.getCurrentControlRun().artifacts.map((artifact) => artifact.path), ["/old.md", "/new.md"]);
-  assert.ok(harness.events.some((event) => event[0] === "overlay" && event[1] === false));
+  assert.ok(harness.events.some((event) => event[0] === "overlay" && event[1] === false && event[3] === "returning"));
   assert.ok(harness.events.some((event) =>
     event[0] === "job" &&
     event[1] === "job-a" &&

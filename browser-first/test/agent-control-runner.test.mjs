@@ -64,6 +64,7 @@ function createHarness(overrides = {}) {
     requestNextControlAction: async () => decisions[decisionIndex++] ?? { status: "done", doneSummary: "Finished." },
     saveControlReportToArchive: async (_results, status) => ({ path: `/archive/${status}.md` }),
     setActivity: (phase, label, detail) => events.push(["activity", phase, label, detail]),
+    setPageControlOverlay: async (active, label, phase) => events.push(["overlay", active, label, phase]),
     setPendingApproval: (approval) => {
       pendingApproval = approval;
       events.push(["pending", approval?.step?.type ?? null]);
@@ -105,6 +106,10 @@ test("agent control runner completes an observe-act-verify loop", async () => {
   assert.equal(harness.getControlRun().status, "completed");
   assert.deepEqual(harness.getControlRun().steps.map((step) => step.state), ["completed"]);
   assert.deepEqual(harness.getControlRun().steps.map((step) => step.note), ['clicked "Next"']);
+  assert.deepEqual(
+    harness.events.filter((event) => event[0] === "overlay").map((event) => event[3]),
+    ["reading", "working", "clicking", "verifying", "reading", "working"]
+  );
   assert.ok(harness.events.some((event) => event[0] === "message" && /Agent Control Mode completed/.test(event[2])));
 });
 

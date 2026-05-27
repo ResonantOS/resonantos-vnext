@@ -181,10 +181,11 @@ export function createBrowserPageActions(deps) {
     return sendContentActionToFrames(tab.id, message);
   }
 
-  const setPageControlOverlay = async (active, label = "") => sendContentAction({
+  const setPageControlOverlay = async (active, label = "", phase = "") => sendContentAction({
     type: "control_overlay",
     active,
-    label: label || (active ? "Augmentor is operating this page" : "")
+    label: label || (active ? "Augmentor is operating this page" : ""),
+    phase
   });
 
   async function typeIntoActivePage({ text, field = "", ref = "", submit, userApproved = false }) {

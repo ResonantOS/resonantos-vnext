@@ -4,7 +4,11 @@ const inlineButtonId = "resonantos-inline-button";
 const controlOverlayId = "resonantos-control-overlay";
 const controlBubbleClass = "resonantos-control-bubble";
 const controlToastId = "resonantos-control-toast";
+const controlStatusTextClass = "ros-control-status-text";
+const controlStopButtonClass = "ros-control-stop-button";
 let nextControlRef = 1;
+
+const isTopWindow = () => window.top === window;
 
 const ensureControlRef = (element) => {
   if (!element?.getAttribute) return "";
@@ -67,20 +71,57 @@ const pageSnapshot = () => ({
   }
 });
 
+const controlPhaseDetails = {
+  active: { icon: "(( ))", label: "Working..." },
+  blocked: { icon: "!!", label: "Blocked" },
+  clicking: { icon: "*", label: "Clicking..." },
+  done: { icon: "ok", label: "Done" },
+  reading: { icon: "doc", label: "Reading page..." },
+  returning: { icon: "<-", label: "Returning control..." },
+  screenshot: { icon: "cam", label: "Taking screenshot..." },
+  typing: { icon: "kbd", label: "Typing..." },
+  verifying: { icon: "chk", label: "Verifying..." },
+  waiting: { icon: "...", label: "Waiting..." },
+  working: { icon: "(( ))", label: "Working..." }
+};
+
+const controlPhaseForLabel = (state, label = "") => {
+  const normalized = String(label ?? "").toLowerCase();
+  if (state === "blocked") return "blocked";
+  if (state === "done") return "done";
+  if (/read|observ|context|scan|summar/i.test(normalized)) return "reading";
+  if (/click|press|tap|select/i.test(normalized)) return "clicking";
+  if (/typ|writ|enter|input/i.test(normalized)) return "typing";
+  if (/screenshot|capture/i.test(normalized)) return "screenshot";
+  if (/verif|check/i.test(normalized)) return "verifying";
+  if (/wait/i.test(normalized)) return "waiting";
+  return "working";
+};
+
+const controlLabelForPhase = (phase, label = "") => {
+  const detail = controlPhaseDetails[phase] ?? controlPhaseDetails.working;
+  const trimmed = String(label ?? "").trim();
+  if (!trimmed || /^augmentor (is )?operating/i.test(trimmed)) {
+    return detail.label;
+  }
+  return trimmed;
+};
+
 const ensureControlOverlay = () => {
   if (!document.getElementById("resonantos-control-overlay-styles")) {
     const style = document.createElement("style");
     style.id = "resonantos-control-overlay-styles";
     style.textContent = `
       #${controlOverlayId}, #${controlToastId} { all: initial; color-scheme: dark; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; z-index: 2147483646; pointer-events: none; }
-      #${controlOverlayId} { position: fixed; inset: 0; display: none; border: 4px solid rgba(36,209,143,.98); box-shadow: inset 0 0 118px rgba(36,209,143,.38), inset 0 0 220px rgba(36,209,143,.22), 0 0 86px rgba(36,209,143,.42); background:
-        radial-gradient(circle at 12% 18%, rgba(36,209,143,.25), transparent 30%),
-        radial-gradient(circle at 88% 82%, rgba(36,209,143,.22), transparent 32%),
-        linear-gradient(90deg, rgba(36,209,143,.38), transparent 18%, transparent 82%, rgba(36,209,143,.38)),
-        linear-gradient(0deg, rgba(36,209,143,.34), transparent 20%, transparent 80%, rgba(36,209,143,.34)),
+      #${controlOverlayId} { position: fixed; inset: 0; display: none; border: 4px solid rgba(36,209,143,.98); box-shadow: inset 0 0 118px rgba(36,209,143,.38), inset 0 0 260px rgba(36,209,143,.26), 0 0 86px rgba(36,209,143,.42); background:
+        radial-gradient(circle at 10% 18%, rgba(36,209,143,.30), transparent 32%),
+        radial-gradient(circle at 92% 72%, rgba(36,209,143,.24), transparent 34%),
+        radial-gradient(ellipse at 50% 112%, rgba(36,209,143,.42), transparent 36%),
+        linear-gradient(90deg, rgba(36,209,143,.42), transparent 22%, transparent 78%, rgba(36,209,143,.42)),
+        linear-gradient(0deg, rgba(36,209,143,.38), transparent 24%, transparent 76%, rgba(36,209,143,.38)),
         repeating-linear-gradient(90deg, rgba(36,209,143,.16) 0 3px, transparent 3px 13px),
         repeating-linear-gradient(0deg, rgba(36,209,143,.12) 0 2px, transparent 2px 15px); opacity: .98; }
-      #${controlOverlayId}[data-state="active"], #${controlOverlayId}[data-session="active"] { display:block; animation: ros-control-wave 1.7s steps(18) infinite, ros-control-pixel 3.4s linear infinite; }
+      #${controlOverlayId}[data-state="active"], #${controlOverlayId}[data-session="active"] { display:block; animation: ros-control-wave 1.7s steps(18) infinite, ros-control-pixel 3.4s linear infinite, ros-control-fluid 5.8s ease-in-out infinite alternate; }
       #${controlOverlayId}[data-state="done"] { display:block; border-color: rgba(117,255,187,.72); animation: ros-control-fade .8s ease-out forwards; }
       #${controlOverlayId}[data-state="blocked"] { display:block; border-color: rgba(255,121,91,.9); box-shadow: inset 0 0 46px rgba(255,121,91,.16), 0 0 40px rgba(255,121,91,.2); animation: ros-control-fade 1.1s ease-out forwards; }
       #${controlOverlayId}::before, #${controlOverlayId}::after { content:""; position:absolute; left:-35%; right:-35%; height:76px; background: linear-gradient(90deg, transparent, rgba(36,209,143,.22), rgba(36,209,143,.88), rgba(36,209,143,.22), transparent); filter: blur(1.2px); }
@@ -93,14 +134,20 @@ const ensureControlOverlay = () => {
       #${controlOverlayId}[data-session="active"] .ros-control-right { animation: ros-control-side 1.9s linear infinite reverse; }
       #${controlOverlayId}[data-session="active"]::before { animation: ros-control-edge 1.6s linear infinite; }
       #${controlOverlayId}[data-session="active"]::after { animation: ros-control-edge 1.6s linear infinite reverse; }
-      #${controlToastId} { position: fixed; left: 50%; bottom: 18px; display:none; max-width: min(520px, calc(100vw - 28px)); transform: translateX(-50%); border: 1px solid rgba(36,209,143,.38); border-radius: 999px; background: rgba(4,12,8,.92); color:#dfffea; box-shadow: 0 18px 58px rgba(0,0,0,.38); font: 800 12px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 10px 14px; text-align:center; }
-      #${controlToastId}[data-state="active"], #${controlToastId}[data-state="done"], #${controlToastId}[data-state="blocked"] { display:block; }
+      #${controlToastId} { position: fixed; left: 50%; bottom: 20px; display:none; grid-template-columns:auto minmax(0, 1fr) auto; align-items:center; gap:9px; width: min(390px, calc(100vw - 32px)); transform: translateX(-50%); border: 1px solid rgba(36,209,143,.34); border-radius: 14px; background: linear-gradient(135deg, rgba(7,55,44,.86), rgba(4,24,20,.92)); color:#8ef4d3; box-shadow: 0 18px 58px rgba(0,0,0,.38), 0 0 34px rgba(36,209,143,.24); font: 800 12px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 8px 8px 8px 12px; text-align:left; backdrop-filter: blur(14px); pointer-events:auto; }
+      #${controlToastId}[data-session="active"], #${controlToastId}[data-state="active"], #${controlToastId}[data-state="done"], #${controlToastId}[data-state="blocked"] { display:grid; }
       #${controlToastId}[data-state="blocked"] { border-color: rgba(255,121,91,.5); color:#ffd9d1; }
+      #${controlToastId} .${controlStatusTextClass} { all: initial; min-width:0; overflow:hidden; color:inherit; font: 800 12px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; text-overflow: ellipsis; white-space: nowrap; }
+      #${controlToastId} .ros-control-phase-icon { all: initial; color:inherit; font: 900 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace; opacity:.9; }
+      #${controlToastId} .${controlStopButtonClass} { all: initial; box-sizing:border-box; display:grid; place-items:center; width:34px; height:28px; border-left:1px solid rgba(142,244,211,.18); border-radius: 10px; color:#baffea; cursor:pointer; font: 900 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace; pointer-events:auto; }
+      #${controlToastId} .${controlStopButtonClass}::before { content:""; width:12px; height:12px; border-radius:4px; background:#7df3dc; box-shadow:0 0 14px rgba(125,243,220,.62); }
+      #${controlToastId} .${controlStopButtonClass}:hover { background:rgba(255,255,255,.08); }
       .resonantos-control-target { outline: 2px solid rgba(36,209,143,.9) !important; outline-offset: 4px !important; box-shadow: 0 0 0 6px rgba(36,209,143,.16), 0 0 34px rgba(36,209,143,.38) !important; }
       .${controlBubbleClass} { all: initial; position: fixed; max-width: min(360px, calc(100vw - 32px)); z-index: 2147483647; pointer-events: none; transform: translate(-50%, calc(-100% - 14px)); border: 1px solid rgba(36,209,143,.5); border-radius: 999px; background: rgba(3,14,9,.94); color:#e8fff3; box-shadow: 0 16px 42px rgba(0,0,0,.34), 0 0 34px rgba(36,209,143,.28); font: 900 12px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 9px 12px; text-align:center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; animation: ros-control-bubble 2.1s ease-out forwards; }
       .${controlBubbleClass}[data-state="blocked"] { border-color: rgba(255,121,91,.68); color:#ffd9d1; box-shadow: 0 16px 42px rgba(0,0,0,.34), 0 0 34px rgba(255,121,91,.24); }
       @keyframes ros-control-wave { 0% { clip-path: polygon(0 0,100% 0,100% 100%,0 100%); filter: brightness(1); } 50% { filter: brightness(1.48) saturate(1.24); } 100% { filter: brightness(1); } }
-      @keyframes ros-control-pixel { 0% { background-position: 0 0, 0 0; } 100% { background-position: 44px 0, 0 52px; } }
+      @keyframes ros-control-pixel { 0% { background-position: 0 0, 0 0, 0 0, 0 0; } 100% { background-position: 44px 0, -32px 20px, 0 52px, 44px 0; } }
+      @keyframes ros-control-fluid { 0% { box-shadow: inset 0 0 90px rgba(36,209,143,.28), inset 0 0 210px rgba(36,209,143,.18), 0 0 72px rgba(36,209,143,.32); } 100% { box-shadow: inset 0 0 150px rgba(36,209,143,.46), inset 0 0 310px rgba(36,209,143,.30), 0 0 108px rgba(36,209,143,.48); } }
       @keyframes ros-control-edge { 0% { transform: translateX(-18%); opacity:.28; } 45% { opacity:1; } 100% { transform: translateX(18%); opacity:.28; } }
       @keyframes ros-control-side { 0% { transform: translateY(-18%); opacity:.32; } 45% { opacity:1; } 100% { transform: translateY(18%); opacity:.32; } }
       @keyframes ros-control-fade { 0% { opacity:.9; } 100% { opacity:0; } }
@@ -119,9 +166,27 @@ const ensureControlOverlay = () => {
   if (!toast) {
     toast = document.createElement("div");
     toast.id = controlToastId;
+    toast.innerHTML = `<span class="ros-control-phase-icon"></span><span class="${controlStatusTextClass}"></span><button class="${controlStopButtonClass}" type="button" title="Stop Augmentor control" aria-label="Stop Augmentor control"></button>`;
+    toast.querySelector(`.${controlStopButtonClass}`).addEventListener("click", () => {
+      toast.querySelector(`.${controlStatusTextClass}`).textContent = "Stopping...";
+      chrome.runtime?.sendMessage?.({
+        channel: "resonantos.browser_first.side_panel",
+        type: "cancel_control_run",
+        reason: "Stopped from page overlay"
+      }).catch(() => undefined);
+    });
     document.documentElement.append(toast);
   }
   return { overlay, toast };
+};
+
+const setControlToast = (toast, { state = "active", label = "", phase = "" } = {}) => {
+  const resolvedPhase = phase || controlPhaseForLabel(state, label);
+  const detail = controlPhaseDetails[resolvedPhase] ?? controlPhaseDetails.working;
+  toast.dataset.phase = resolvedPhase;
+  toast.dataset.state = state;
+  toast.querySelector(".ros-control-phase-icon").textContent = detail.icon;
+  toast.querySelector(`.${controlStatusTextClass}`).textContent = controlLabelForPhase(resolvedPhase, label);
 };
 
 const showControlActionBubble = (target, label, state = "active") => {
@@ -141,7 +206,16 @@ const showControlActionBubble = (target, label, state = "active") => {
   window.setTimeout(() => bubble.remove(), 2200);
 };
 
-const pulseControlOverlay = ({ state = "active", label = "Augmentor is operating this page", target = null } = {}) => {
+const pulseControlOverlay = ({ state = "active", label = "Augmentor is operating this page", phase = "", target = null } = {}) => {
+  if (!isTopWindow()) {
+    if (target?.classList) {
+      ensureControlOverlay();
+      target.classList.add("resonantos-control-target");
+      showControlActionBubble(target, label, state);
+      window.setTimeout(() => target.classList.remove("resonantos-control-target"), 1500);
+    }
+    return;
+  }
   const { overlay, toast } = ensureControlOverlay();
   const now = Date.now();
   if (!target && state === "active" && Number(toast.dataset.lockedUntil || 0) > now) {
@@ -149,8 +223,7 @@ const pulseControlOverlay = ({ state = "active", label = "Augmentor is operating
   }
   const sessionActive = overlay.dataset.session === "active";
   overlay.dataset.state = sessionActive && state !== "blocked" ? "active" : state;
-  toast.dataset.state = state;
-  toast.textContent = label;
+  setControlToast(toast, { state, label, phase });
   document.querySelectorAll(".resonantos-control-target").forEach((element) => element.classList.remove("resonantos-control-target"));
   if (target?.classList) {
     target.classList.add("resonantos-control-target");
@@ -164,7 +237,11 @@ const pulseControlOverlay = ({ state = "active", label = "Augmentor is operating
       if (toast.dataset.state === state) {
         if (toast.dataset.session === "active") {
           toast.dataset.state = "active";
-          toast.textContent = toast.dataset.sessionLabel || "Augmentor is operating this page";
+          setControlToast(toast, {
+            state: "active",
+            label: toast.dataset.sessionLabel || "Augmentor is operating this page",
+            phase: toast.dataset.sessionPhase || "working"
+          });
         } else {
           toast.dataset.state = "";
         }
@@ -173,7 +250,10 @@ const pulseControlOverlay = ({ state = "active", label = "Augmentor is operating
   }
 };
 
-const setControlSessionOverlay = ({ active = false, label = "Augmentor is operating this page" } = {}) => {
+const setControlSessionOverlay = ({ active = false, label = "Augmentor is operating this page", phase = "working" } = {}) => {
+  if (!isTopWindow()) {
+    return { ok: true, active };
+  }
   const { overlay, toast } = ensureControlOverlay();
   window.clearTimeout(globalThis.__resonantosControlStopTimer);
   if (active) {
@@ -181,20 +261,21 @@ const setControlSessionOverlay = ({ active = false, label = "Augmentor is operat
     overlay.dataset.state = "active";
     toast.dataset.session = "active";
     toast.dataset.sessionLabel = label;
-    toast.dataset.state = "active";
-    toast.textContent = label;
+    toast.dataset.sessionPhase = phase || controlPhaseForLabel("active", label);
+    setControlToast(toast, { state: "active", label, phase: toast.dataset.sessionPhase });
     return { ok: true, active };
   }
-  toast.textContent = "Returning control to human...";
-  toast.dataset.state = "active";
+  setControlToast(toast, { state: "active", label: "Returning control to human...", phase: "returning" });
   globalThis.__resonantosControlStopTimer = window.setTimeout(() => {
     overlay.dataset.session = "";
     overlay.dataset.state = "";
     toast.dataset.session = "";
     toast.dataset.sessionLabel = "";
+    toast.dataset.sessionPhase = "";
     toast.dataset.state = "";
-    toast.textContent = "";
     toast.dataset.lockedUntil = "0";
+    toast.querySelector(".ros-control-phase-icon").textContent = "";
+    toast.querySelector(`.${controlStatusTextClass}`).textContent = "";
     document.querySelectorAll(".resonantos-control-target").forEach((element) => element.classList.remove("resonantos-control-target"));
   }, 6500);
   return { ok: true, active };
@@ -246,9 +327,9 @@ const isHardRestrictedElement = (element, fallbackText = "") => {
 };
 
 const clickElement = (element, { userApproved = false, fallbackText = "" } = {}) => {
-  pulseControlOverlay({ state: "active", label: `Clicking ${visibleText(element) || fallbackText}`, target: element });
+  pulseControlOverlay({ state: "active", label: `Clicking ${visibleText(element) || fallbackText}`, phase: "clicking", target: element });
   if (isHardRestrictedElement(element, fallbackText)) {
-    pulseControlOverlay({ state: "blocked", label: "Blocked: human-only action", target: element });
+    pulseControlOverlay({ state: "blocked", label: "Blocked: human-only action", phase: "blocked", target: element });
     return {
       ok: false,
       approvalRequired: true,
@@ -257,7 +338,7 @@ const clickElement = (element, { userApproved = false, fallbackText = "" } = {})
     };
   }
   if (isSubmitLikeElement(element) && !userApproved) {
-    pulseControlOverlay({ state: "blocked", label: "Approval required for public action", target: element });
+    pulseControlOverlay({ state: "blocked", label: "Approval required for public action", phase: "blocked", target: element });
     return {
       ok: false,
       approvalRequired: true,
@@ -280,7 +361,7 @@ const clickElement = (element, { userApproved = false, fallbackText = "" } = {})
     element.dispatchEvent(new EventConstructor(eventName, eventOptions));
   }
   element.click();
-  pulseControlOverlay({ state: "done", label: `Clicked ${visibleText(element).slice(0, 80) || fallbackText}`, target: element });
+  pulseControlOverlay({ state: "done", label: `Clicked ${visibleText(element).slice(0, 80) || fallbackText}`, phase: "done", target: element });
   return {
     ok: true,
     ref: ensureControlRef(element),
@@ -393,13 +474,13 @@ const typeIntoPage = ({ text, field = "", ref = "", submit = false, userApproved
   if (!element) {
     return { ok: false, error: "No editable field was found on this page." };
   }
-  pulseControlOverlay({ state: "active", label: `Typing into ${field || visibleText(element) || element.getAttribute("aria-label") || "field"}`, target: element });
+  pulseControlOverlay({ state: "active", label: `Typing into ${field || visibleText(element) || element.getAttribute("aria-label") || "field"}`, phase: "typing", target: element });
   element.scrollIntoView({ block: "center", inline: "center", behavior: "auto" });
   element.focus();
   setNativeValue(element, value);
   if (submit) {
     if (!isSearchLikeEditable(element) && !userApproved) {
-      pulseControlOverlay({ state: "blocked", label: "Approval required to submit this field", target: element });
+      pulseControlOverlay({ state: "blocked", label: "Approval required to submit this field", phase: "blocked", target: element });
       return {
         ok: false,
         approvalRequired: true,
@@ -411,7 +492,7 @@ const typeIntoPage = ({ text, field = "", ref = "", submit = false, userApproved
     element.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", code: "Enter", bubbles: true, cancelable: true }));
     element.form?.requestSubmit?.();
   }
-  pulseControlOverlay({ state: "done", label: `Typed ${value.slice(0, 80)}`, target: element });
+  pulseControlOverlay({ state: "done", label: `Typed ${value.slice(0, 80)}`, phase: "done", target: element });
   return {
     ok: true,
     ref: ensureControlRef(element),
@@ -423,7 +504,7 @@ const typeIntoPage = ({ text, field = "", ref = "", submit = false, userApproved
 };
 
 const scrollPage = ({ direction = "down", amount = 720 } = {}) => {
-  pulseControlOverlay({ state: "active", label: `Scrolling ${direction}` });
+  pulseControlOverlay({ state: "active", label: `Scrolling ${direction}`, phase: "working" });
   const normalized = String(direction || "down").toLowerCase();
   const viewport = Math.max(320, window.innerHeight || 720);
   const magnitude = Math.max(120, Math.min(4000, Number(amount) || viewport));
@@ -432,7 +513,7 @@ const scrollPage = ({ direction = "down", amount = 720 } = {}) => {
   if (normalized === "top") deltaY = -document.documentElement.scrollHeight;
   if (normalized === "bottom") deltaY = document.documentElement.scrollHeight;
   window.scrollBy({ top: deltaY, left: 0, behavior: "auto" });
-  pulseControlOverlay({ state: "done", label: `Scrolled ${normalized}` });
+  pulseControlOverlay({ state: "done", label: `Scrolled ${normalized}`, phase: "done" });
   return {
     ok: true,
     direction: normalized,
@@ -663,16 +744,18 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (message.type === "read_page") {
-    if (document.getElementById(controlOverlayId)?.dataset.session !== "active") {
-      pulseControlOverlay({ state: "active", label: "Reading page context" });
+    if (isTopWindow() && document.getElementById(controlOverlayId)?.dataset.session !== "active") {
+      pulseControlOverlay({ state: "active", label: "Reading page context", phase: "reading" });
     }
-    window.setTimeout(() => pulseControlOverlay({ state: "done", label: "Page context captured" }), 300);
+    if (isTopWindow()) {
+      window.setTimeout(() => pulseControlOverlay({ state: "done", label: "Page context captured", phase: "done" }), 300);
+    }
     sendResponse({ ok: true, snapshot: pageSnapshot() });
     return true;
   }
 
   if (message.type === "control_overlay") {
-    sendResponse(setControlSessionOverlay({ active: Boolean(message.active), label: message.label }));
+    sendResponse(setControlSessionOverlay({ active: Boolean(message.active), label: message.label, phase: message.phase }));
     return true;
   }
 

@@ -30,6 +30,7 @@ export function createAgentControlRunner(deps) {
     requestNextControlAction,
     saveControlReportToArchive,
     setActivity,
+    setPageControlOverlay = async () => undefined,
     setPendingApproval,
     setStatus,
     sleep,
@@ -43,7 +44,9 @@ export function createAgentControlRunner(deps) {
     try {
       for (let loopIndex = startIndex; loopIndex < maxSteps; loopIndex += 1) {
         await updateBrowserJob(getActiveJobId(), { status: "running" });
+        await setPageControlOverlay(true, "Reading page...", "reading");
         const snapshot = await deps.observeControlPage();
+        await setPageControlOverlay(true, "Deciding next browser action...", "working");
         setActivity("thinking", "Deciding next browser action", `Loop ${loopIndex + 1}/${maxSteps}`);
         setStatus("Deciding");
         const decision = await requestNextControlAction({ goal, snapshot, history });
@@ -90,8 +93,10 @@ export function createAgentControlRunner(deps) {
         const step = decision.action;
         const stepIndex = appendControlStep(step);
         updateControlStep(stepIndex, "active", decision.thought);
+        await setPageControlOverlay(true, controlStepLabel(step), step.type === "click" ? "clicking" : step.type === "type" ? "typing" : step.type === "read" ? "reading" : step.type === "wait" ? "waiting" : "working");
         setActivity("tool-running", `Executing browser action ${stepIndex + 1}`, controlStepLabel(step));
         const result = await executeControlStep(step);
+        await setPageControlOverlay(true, "Verifying page state...", "verifying");
         results.push({ step, result });
         history.push({
           action: step,

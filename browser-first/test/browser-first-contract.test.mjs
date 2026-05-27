@@ -284,7 +284,16 @@ test("browser layer can read active tab context without raw privileged access", 
   assert.match(content, /type_text/);
   assert.match(content, /resonantos-control-overlay/);
   assert.match(content, /control_overlay/);
+  assert.match(content, /controlPhaseDetails/);
+  assert.match(content, /ros-control-status-text/);
+  assert.match(content, /ros-control-stop-button/);
+  assert.match(content, /cancel_control_run/);
+  assert.match(content, /Reading page\.\.\./);
+  assert.match(content, /Typing\.\.\./);
+  assert.match(content, /Taking screenshot\.\.\.|Clicking\.\.\.|Working\.\.\./);
   assert.match(content, /setControlSessionOverlay/);
+  assert.match(content, /isTopWindow/);
+  assert.match(content, /phase: message\.phase/);
   assert.match(content, /data-session="active"/);
   assert.match(content, /pulseControlOverlay/);
   assert.match(content, /resonantos-control-target/);
@@ -313,6 +322,7 @@ test("browser layer can read active tab context without raw privileged access", 
   assert.match(content, /document\.body\?\.innerText/);
   assert.match(content, /phantomSolana/);
   assert.match(pageActions, /chrome\.tabs\.sendMessage/);
+  assert.match(pageActions, /phase/);
   assert.match(pageActions, /chrome\.scripting/);
   assert.match(pageActions, /executeScript/);
   assert.match(pageActions, /chrome\.webNavigation/);
