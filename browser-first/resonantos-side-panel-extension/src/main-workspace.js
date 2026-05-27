@@ -242,13 +242,11 @@ function renderStatusWorkspace({ eyebrow, title, body, addonId }) {
 }
 
 function renderHermesWorkspace() {
-  const section = workspaceShell({
-    eyebrow: "Embedded add-on workspace",
-    title: "Hermes",
-    body: "Hermes runs as an add-on workspace in the main browser area. Keep Augmentor in the side panel when you want to discuss or delegate work with `/hermes <mission>`."
-  });
+  const section = document.createElement("section");
+  section.className = "hermes-dashboard-workspace";
+  section.setAttribute("aria-label", "Hermes dashboard workspace");
   const status = document.createElement("div");
-  status.className = "module-card";
+  status.className = "dashboard-status";
   status.textContent = "Checking Hermes status...";
   const frameCard = document.createElement("section");
   frameCard.className = "dashboard-frame-card";
@@ -286,7 +284,7 @@ function renderHermesWorkspace() {
       iframe.src = dashboard.url;
     }
     status.textContent = running
-      ? `Hermes dashboard running · ${dashboard.url}`
+      ? ""
       : `${dashboard?.rawStatus || "Hermes dashboard stopped"} · ${dashboard?.detail || "Start it to embed the workspace."}`;
   };
   const loadStatus = async () => {
@@ -299,7 +297,7 @@ function renderHermesWorkspace() {
       status.textContent = `${status.textContent}\nHermes add-on files are not available in this build.`;
     }
   };
-  start.addEventListener("click", async () => {
+  const startDashboard = async () => {
     start.disabled = true;
     status.textContent = "Starting Hermes dashboard...";
     try {
@@ -312,6 +310,9 @@ function renderHermesWorkspace() {
     } finally {
       start.disabled = false;
     }
+  };
+  start.addEventListener("click", async () => {
+    await startDashboard();
   });
   stop.addEventListener("click", async () => {
     stop.disabled = true;
@@ -329,6 +330,10 @@ function renderHermesWorkspace() {
   }));
   void loadStatus().catch((error) => {
     status.textContent = `Hermes status unavailable: ${error instanceof Error ? error.message : String(error)}`;
+  }).then(() => {
+    if (iframe.hidden) {
+      void startDashboard();
+    }
   });
 }
 

@@ -138,6 +138,7 @@ button {
 .answer-workspace {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
+  position: relative;
   min-width: 0;
   min-height: 0;
 }
@@ -158,6 +159,10 @@ button {
 
 body:not([data-workspace="answer"]) .workspace-topbar nav {
   visibility: hidden;
+}
+
+body[data-workspace="hermes"] .workspace-topbar {
+  display: none;
 }
 
 .topbar-tab {
@@ -190,6 +195,15 @@ body:not([data-workspace="answer"]) .workspace-topbar nav {
   min-height: 0;
   overflow: auto;
   padding: 42px min(20vw, 310px) 128px;
+}
+
+body[data-workspace="hermes"] .answer-thread {
+  display: block;
+  padding: 0;
+}
+
+body[data-workspace="hermes"] .answer-workspace {
+  display: block;
 }
 
 .empty-hero {
@@ -452,12 +466,60 @@ textarea {
   padding: 0;
 }
 
+.hermes-dashboard-workspace {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.hermes-dashboard-workspace .dashboard-frame-card {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  background: #0b0f0d;
+}
+
 .dashboard-frame-card iframe {
   width: 100%;
   height: 100%;
   min-height: 58vh;
   border: 0;
   background: #0b0f0d;
+}
+
+.hermes-dashboard-workspace .dashboard-frame-card iframe,
+.hermes-dashboard-workspace .dashboard-placeholder {
+  position: absolute;
+  inset: 0;
+  min-height: 100%;
+}
+
+.dashboard-status {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  z-index: 2;
+  max-width: min(720px, calc(100% - 48px));
+  transform: translateX(-50%);
+  border: 1px solid rgba(36, 209, 143, 0.18);
+  border-radius: 999px;
+  background: rgba(4, 9, 7, 0.74);
+  color: rgba(214, 229, 219, 0.76);
+  font-size: 0.72rem;
+  overflow: hidden;
+  padding: 6px 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-status:empty {
+  display: none;
 }
 
 .dashboard-placeholder {
