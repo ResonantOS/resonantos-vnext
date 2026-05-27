@@ -28,6 +28,7 @@ const phantomExtensionId = "bfnaelmomeimhlpmgjnjophhpkkoljpa";
 const resonantExtensionId = "cdpdmmalhmokbfcfgogoepnjplaakgnl";
 const defaultBridgePort = 47773;
 const resonantExtensionOrigin = `chrome-extension://${resonantExtensionId}`;
+const defaultMainWorkspaceUrl = `${resonantExtensionOrigin}/src/main-workspace.html`;
 
 function parseArgs(argv) {
   const parsed = new Map();
@@ -1035,7 +1036,7 @@ if (args.get("bridge-auth-self-test") === "true") {
   process.exit(result.ok ? 0 : 1);
 }
 
-const url = args.get("url") ?? "https://resonantos.com";
+const url = args.get("url") ?? defaultMainWorkspaceUrl;
 const profileDir = path.resolve(args.get("profile") ?? process.env.RESONANTOS_BROWSER_FIRST_PROFILE ?? defaultProfile);
 const autoOpenSidePanel = args.get("auto-open-side-panel") !== "false";
 const bridgePort = Number(args.get("bridge-port") ?? process.env.RESONANTOS_BROWSER_FIRST_BRIDGE_PORT ?? defaultBridgePort);

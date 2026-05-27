@@ -68,6 +68,7 @@ const STORAGE_KEYS = {
   forks: "augmentorBrowserForks",
   sessions: "augmentorBrowserSessions",
   activeSessionId: "augmentorActiveBrowserSessionId",
+  pendingSidebarPrompt: "augmentorPendingSidebarPrompt",
   model: "augmentorModel",
   thinkingDepth: "augmentorThinkingDepth",
   attachments: "augmentorBrowserAttachments",
@@ -736,6 +737,29 @@ const hydrateChatSettings = async () => {
   updateConnectionLine();
 };
 
+const consumePendingSidebarPrompt = async () => {
+  const payload = await chrome.storage?.local?.get?.(STORAGE_KEYS.pendingSidebarPrompt).catch(() => ({}));
+  const pending = payload?.[STORAGE_KEYS.pendingSidebarPrompt];
+  const prompt = String(pending?.prompt ?? "").trim();
+  if (!prompt) return;
+  if (turnBusy) return;
+  await chrome.storage.local.remove(STORAGE_KEYS.pendingSidebarPrompt).catch(() => undefined);
+  setTurnBusy(true);
+  try {
+    await addMessage("user", prompt);
+    await respondToCommand(prompt);
+  } finally {
+    setTurnBusy(false);
+  }
+};
+
+chrome.storage?.onChanged?.addListener?.((changes, areaName) => {
+  if (areaName !== "local" || !changes[STORAGE_KEYS.pendingSidebarPrompt]?.newValue) {
+    return;
+  }
+  void consumePendingSidebarPrompt();
+});
+
 newChatButton.addEventListener("click", async () => {
   await chatSessionStore.createSession();
   lastSnapshot = null;
@@ -817,6 +841,7 @@ commandForm.addEventListener("submit", async (event) => {
 hydrateChatSettings().then(async () => {
   await loadBrowserJobs();
   await tabContextController.hydrateInitialContext();
+  await consumePendingSidebarPrompt();
 }).catch((error) => {
   setStatus("Context failed");
   void addMessage("system", `I could not read the active tab context: ${String(error)}`);

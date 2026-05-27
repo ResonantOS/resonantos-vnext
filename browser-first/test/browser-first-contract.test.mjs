@@ -42,9 +42,47 @@ test("ResonantOS browser layer is packaged as a Chromium side-panel extension", 
   assert.ok(manifest.permissions.includes("webNavigation"));
   assert.equal(manifest.content_scripts[0].all_frames, true);
   assert.equal(manifest.side_panel.default_path, "src/side-panel.html");
+  assert.equal(manifest.chrome_url_overrides.newtab, "src/main-workspace.html");
   assert.equal(manifest.background.type, "module");
   assert.equal(manifest.background.service_worker, "src/background.js");
   assert.equal(manifest.commands["open-augmentor-side-panel"].suggested_key.mac, "Alt+Shift+A");
+});
+
+test("browser-first main workspace owns new-tab AI chat and hands browser tasks to the sidebar", async () => {
+  const manifest = await readJson(path.join(extensionRoot, "manifest.json"));
+  const workspace = await readText(path.join(extensionRoot, "src", "main-workspace.html"));
+  const workspaceScript = await readText(path.join(extensionRoot, "src", "main-workspace.js"));
+  const workspaceStyles = await readText(path.join(extensionRoot, "src", "main-workspace.css"));
+  const launcher = await readText(path.join(browserFirstRoot, "host", "run-browser-first.mjs"));
+  const background = await readText(path.join(extensionRoot, "src", "background.js"));
+  const sidePanel = await readText(path.join(extensionRoot, "src", "side-panel.js"));
+
+  assert.equal(manifest.chrome_url_overrides.newtab, "src/main-workspace.html");
+  assert.match(workspace, /ResonantOS main workspace/);
+  assert.match(workspace, /chat-history/);
+  assert.match(workspace, /Living Archive/);
+  assert.match(workspace, /Hermes/);
+  assert.match(workspace, /OpenCode/);
+  assert.match(workspace, /mode-select/);
+  assert.match(workspace, /model-select/);
+  assert.match(workspace, /thinking-depth/);
+  assert.match(workspace, /Open Sidebar/);
+  assert.match(workspace, /main-workspace\.js/);
+  assert.match(workspaceScript, /createChatSessionStore/);
+  assert.match(workspaceScript, /\/augmentor\/chat/);
+  assert.match(workspaceScript, /parseAutonomousBrowserActionIntent/);
+  assert.match(workspaceScript, /parseNaturalBrowserIntent/);
+  assert.match(workspaceScript, /augmentorPendingSidebarPrompt/);
+  assert.match(workspaceScript, /open_side_panel/);
+  assert.match(workspaceScript, /chrome\.tabs\.update/);
+  assert.match(workspaceScript, /commandForm\.requestSubmit\(\)/);
+  assert.match(workspaceStyles, /workspace-shell/);
+  assert.match(workspaceStyles, /answer-workspace/);
+  assert.match(launcher, /defaultMainWorkspaceUrl/);
+  assert.match(launcher, /main-workspace\.html/);
+  assert.match(background, /open_side_panel/);
+  assert.match(sidePanel, /consumePendingSidebarPrompt/);
+  assert.match(sidePanel, /chrome\.storage\?\.onChanged/);
 });
 
 test("browser layer has a human approval boundary for wallet and credential actions", async () => {

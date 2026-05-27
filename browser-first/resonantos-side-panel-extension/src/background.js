@@ -52,6 +52,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === "open_side_panel") {
+    const windowId = sender.tab?.windowId;
+    if (windowId !== undefined) {
+      void openResonantSidePanel(windowId).then(() => sendResponse({ ok: true }));
+      return true;
+    }
+    chrome.windows.getCurrent((window) => {
+      void openResonantSidePanel(window?.id).then(() => sendResponse({ ok: true }));
+    });
+    return true;
+  }
+
   if (message.type === "action_request") {
     const action = String(message.action ?? "");
     const approvalRequired = APPROVAL_REQUIRED_ACTIONS.has(action);
