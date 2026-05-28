@@ -1,14 +1,32 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src http://127.0.0.1:47773; img-src 'self' data:;" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Augmentor</title>
     <link rel="stylesheet" href="./side-panel.css" />
   </head>
   <body>
+    <!-- Bridge offline/online status banner -->
+    <div id="bridge-banner" class="bridge-banner" hidden aria-live="assertive"></div>
+
     <main class="chat-shell" aria-label="Augmentor chat">
+      <aside class="chat-rail" aria-label="Augmentor conversations">
+        <div class="rail-brand" aria-label="ResonantOS">R</div>
+        <button id="new-chat" type="button" class="new-chat-button" title="Start a new Augmentor chat">＋ New</button>
+        <div class="rail-section-label">History</div>
+        <ol id="chat-history" class="chat-history" aria-label="Chat history"></ol>
+      </aside>
       <section class="chat-workspace" aria-label="Active Augmentor workspace">
+      <!-- Panel header with title + theme + settings -->
+      <header class="panel-header">
+        <span class="panel-title">◈ ResonantOS</span>
+        <div class="header-actions">
+          <button id="theme-toggle" type="button" class="icon-button" title="Toggle light/dark mode" aria-label="Toggle theme">🌙</button>
+          <button id="settings-toggle" type="button" class="icon-button" title="Settings" aria-label="Open settings">⚙</button>
+        </div>
+      </header>
       <section id="transcript" class="transcript" aria-live="polite"></section>
       <section id="context-dock" class="context-dock" aria-label="Browser context and task status" hidden>
         <section id="activity-panel" class="activity-panel" aria-live="polite" hidden>
@@ -91,9 +109,7 @@
           <button id="attach-file" type="button" class="icon-button" title="Attach file" aria-label="Attach file">＋</button>
           <input id="file-input" type="file" multiple hidden />
           <button id="read-page" type="button" class="icon-button" title="Read current page" aria-label="Read current page">◎</button>
-          <button id="save-intake" type="button" class="icon-button" title="Save current page to Living Archive intake" aria-label="Save current page to Living Archive intake">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h11l3 3v13H5z"/><path d="M8 4v6h8V4"/><path d="M8 16h8"/></svg>
-          </button>
+          <button id="save-intake" type="button" class="icon-button" title="Save current page to Living Archive intake" aria-label="Save current page to Living Archive intake">Intake</button>
           <button id="save-selection" type="button" class="icon-button" title="Save selected page text to Living Archive intake" aria-label="Save selected page text to Living Archive intake">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v14H5z"/><path d="M8 9h8"/><path d="M8 13h5"/><path d="m15 15 2 2 3-4"/></svg>
           </button>
@@ -101,11 +117,34 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 1 16 0"/><path d="M4 12h4"/><path d="M16 12h4"/><path d="M12 4v4"/><path d="M8.5 17.5 12 12l3.5 5.5"/></svg>
           </button>
           <select id="model-select" class="model-select" aria-label="Connected model">
-            <option value="MiniMax-M2.7">MiniMax 2.7</option>
-            <option value="MiniMax-M2.7-highspeed">MiniMax 2.7 High Speed</option>
-            <option value="gpt-5.5">GPT 5.5</option>
-            <option value="gpt-5.4-mini">GPT 5.4 Mini</option>
-            <option value="batiai/gemma4-e2b:q4">Gemma 4 2B</option>
+            <optgroup label="ResonantOS">
+              <option value="resonantos-alpha" selected>ResonantOS Alpha (Llama 70B)</option>
+            </optgroup>
+            <optgroup label="OpenAI">
+              <option value="gpt-5.5">GPT 5.5</option>
+              <option value="gpt-5.4-mini">GPT 5.4 Mini</option>
+              <option value="gpt-4o">GPT-4o</option>
+            </optgroup>
+            <optgroup label="Anthropic">
+              <option value="claude-sonnet-4">Claude Sonnet 4</option>
+              <option value="claude-opus-4">Claude Opus 4</option>
+            </optgroup>
+            <optgroup label="MiniMax">
+              <option value="MiniMax-M2.7">MiniMax 2.7</option>
+              <option value="MiniMax-M2.7-highspeed">MiniMax 2.7 High Speed</option>
+            </optgroup>
+            <optgroup label="Groq">
+              <option value="llama-3.3-70b-versatile">Llama 3.3 70B</option>
+              <option value="llama-4-scout">Llama 4 Scout</option>
+            </optgroup>
+            <optgroup label="DeepSeek">
+              <option value="deepseek-chat">DeepSeek Chat</option>
+              <option value="deepseek-reasoner">DeepSeek Reasoner</option>
+            </optgroup>
+            <optgroup label="xAI">
+              <option value="grok-4">Grok 4</option>
+              <option value="grok-3">Grok 3</option>
+            </optgroup>
           </select>
           <select id="thinking-depth" class="depth-select" aria-label="Thinking depth">
             <option value="minimal">Minimal</option>
@@ -127,7 +166,52 @@
       </form>
       </section>
     </main>
-    <script src="./bridge-config.generated.js"></script>
+
+    <!-- Side panels container — nav buttons (open as sidecar tabs) -->
+    <div class="side-panels-container">
+      <div class="panel-section panel-section-link" id="store-section">
+        <button type="button" class="panel-section-summary panel-nav-btn" id="open-store-tab">◈ Protocol Store</button>
+      </div>
+      <div class="panel-section panel-section-link" id="shield-section">
+        <button type="button" class="panel-section-summary panel-nav-btn" id="open-shield-tab">◈ Shield</button>
+      </div>
+      <div class="panel-section panel-section-link" id="archive-section">
+        <button type="button" class="panel-section-summary panel-nav-btn" id="open-archive-tab">◈ Archive</button>
+      </div>
+      <div class="panel-section panel-section-link" id="awareness-section">
+        <button type="button" class="panel-section-summary panel-nav-btn" id="open-awareness-tab">◈ R-Awareness</button>
+      </div>
+    </div>
+
+    <!-- Settings overlay -->
+    <div id="settings-overlay" class="settings-overlay" hidden role="dialog" aria-modal="true" aria-label="Settings">
+      <div class="settings-panel">
+        <div class="settings-header">
+          <strong>ResonantOS Settings</strong>
+          <button id="settings-close" type="button" class="icon-button" aria-label="Close settings">✕</button>
+        </div>
+        <p class="settings-hint">Enter provider API keys to enable AI models. Keys are stored locally on your machine.</p>
+        <div class="settings-fields">
+          <label class="settings-label">OpenAI API Key
+            <input id="key-openai" type="password" class="settings-input" placeholder="sk-..." autocomplete="off" />
+          </label>
+          <label class="settings-label">Anthropic API Key
+            <input id="key-anthropic" type="password" class="settings-input" placeholder="sk-ant-..." autocomplete="off" />
+          </label>
+          <label class="settings-label">xAI (Grok) API Key
+            <input id="key-xai" type="password" class="settings-input" placeholder="xai-..." autocomplete="off" />
+          </label>
+          <label class="settings-label">ResonantOS Gateway URL
+            <input id="gateway-url" type="text" class="settings-input" value="http://127.0.0.1:47773" autocomplete="off" />
+          </label>
+        </div>
+        <div class="settings-footer">
+          <button id="settings-save" type="button" class="settings-save-btn">Save</button>
+          <span id="settings-status" class="settings-status"></span>
+        </div>
+      </div>
+    </div>
+
     <script type="module" src="./side-panel.js"></script>
   </body>
 </html>

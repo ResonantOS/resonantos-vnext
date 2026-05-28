@@ -3,7 +3,6 @@ import os from "node:os";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { writeFile } from "node:fs/promises";
-import { deflateSync } from "node:zlib";
 
 const repoRoot = path.resolve(import.meta.dirname, "..", "..");
 const hostBinary = path.join(
@@ -29,7 +28,6 @@ async function freeLoopbackPort() {
 const fixturePort = await freeLoopbackPort();
 const debugPort = await freeLoopbackPort();
 const bridgePort = await freeLoopbackPort();
-const cdpTimeoutMs = Number.parseInt(process.env.RESONANTOS_LIVE_CDP_TIMEOUT_MS ?? "10000", 10);
 
 class CdpClient {
   constructor(url) {
@@ -72,8 +70,8 @@ class CdpClient {
     const timeout = new Promise((_, reject) => {
       timeoutId = setTimeout(() => {
         this.pending.delete(id);
-        reject(new Error(`CDP ${method} timed out after ${cdpTimeoutMs}ms.`));
-      }, cdpTimeoutMs);
+        reject(new Error(`CDP ${method} timed out after 10000ms.`));
+      }, 10000);
     });
     return Promise.race([response, timeout]);
   }
@@ -81,186 +79,6 @@ class CdpClient {
   close() {
     this.ws?.close();
   }
-}
-
-async function captureScreenshotArtifact(client, filePath) {
-  const captureVisibleViewport = async () => {
-    await client.send("Page.bringToFront").catch(() => undefined);
-    await client.send("Runtime.evaluate", {
-      expression: "new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))",
-      awaitPromise: true,
-      returnByValue: true,
-    }).catch(() => undefined);
-    const metrics = await client.send("Page.getLayoutMetrics").catch(() => ({}));
-    const viewport = metrics.cssLayoutViewport ?? metrics.layoutViewport ?? {};
-    const width = Math.max(320, Math.min(1600, Math.floor(viewport.clientWidth ?? 1280)));
-    const height = Math.max(240, Math.min(1200, Math.floor(viewport.clientHeight ?? 900)));
-    return client.send("Page.captureScreenshot", {
-      captureBeyondViewport: false,
-      format: "png",
-      fromSurface: true,
-      clip: {
-        x: Math.max(0, Math.floor(viewport.pageX ?? 0)),
-        y: Math.max(0, Math.floor(viewport.pageY ?? 0)),
-        width,
-        height,
-        scale: 1,
-      },
-    });
-  };
-
-  try {
-    let shot = null;
-    let lastError = null;
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      try {
-        shot = await captureVisibleViewport();
-        break;
-      } catch (error) {
-        lastError = error;
-        await client.send("Page.stopLoading").catch(() => undefined);
-        await new Promise((resolve) => setTimeout(resolve, 350));
-      }
-    }
-    if (!shot?.data) {
-      throw lastError ?? new Error("CDP Page.captureScreenshot did not return image data.");
-    }
-    await writeFile(filePath, Buffer.from(shot.data, "base64"));
-    return { ok: true, path: filePath };
-  } catch (error) {
-    const domPng = await client.send("Runtime.evaluate", {
-      expression: `new Promise((resolve) => {
-        try {
-          const width = Math.max(320, Math.min(1600, window.innerWidth || 1280));
-          const height = Math.max(240, Math.min(1200, window.innerHeight || 900));
-          const clone = document.documentElement.cloneNode(true);
-          clone.querySelectorAll("script").forEach((node) => node.remove());
-          const html = new XMLSerializer().serializeToString(clone);
-          const svg = "<svg xmlns='http://www.w3.org/2000/svg' width='" + width + "' height='" + height + "'>" +
-            "<foreignObject width='100%' height='100%'>" + html + "</foreignObject></svg>";
-          const image = new Image();
-          image.onload = () => {
-            const canvas = document.createElement("canvas");
-            canvas.width = width;
-            canvas.height = height;
-            const context = canvas.getContext("2d");
-            context.fillStyle = getComputedStyle(document.body).backgroundColor || "#fff";
-            context.fillRect(0, 0, width, height);
-            context.drawImage(image, 0, 0);
-            resolve({ ok: true, data: canvas.toDataURL("image/png").split(",")[1] });
-          };
-          image.onerror = () => resolve({ ok: false, error: "DOM image render failed." });
-          image.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
-        } catch (renderError) {
-          resolve({ ok: false, error: String(renderError && renderError.message ? renderError.message : renderError) });
-        }
-      })`,
-      awaitPromise: true,
-      returnByValue: true,
-    }).catch((fallbackError) => ({
-      result: { value: { ok: false, error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError) } },
-    }));
-    if (domPng?.result?.value?.ok && domPng.result.value.data) {
-      await writeFile(filePath, Buffer.from(domPng.result.value.data, "base64"));
-      return { ok: true, path: filePath, fallback: "dom-rendered-png" };
-    }
-    const snapshot = await client.send("Runtime.evaluate", {
-      expression: "document.body.innerText",
-      returnByValue: true,
-    }).catch((fallbackError) => ({
-      result: {
-        value: `Screenshot failed: ${error instanceof Error ? error.message : String(error)}\nText snapshot failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`,
-      },
-    }));
-    await writeTextPreviewPng(filePath, String(snapshot?.result?.value ?? ""));
-    return {
-      ok: true,
-      path: filePath,
-      fallback: "node-rendered-text-png",
-      error: error instanceof Error ? error.message : String(error),
-    };
-  }
-}
-
-function crc32(buffer) {
-  let crc = 0xffffffff;
-  for (const byte of buffer) {
-    crc ^= byte;
-    for (let bit = 0; bit < 8; bit += 1) {
-      crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
-    }
-  }
-  return (crc ^ 0xffffffff) >>> 0;
-}
-
-function pngChunk(type, data = Buffer.alloc(0)) {
-  const name = Buffer.from(type);
-  const length = Buffer.alloc(4);
-  length.writeUInt32BE(data.length, 0);
-  const crc = Buffer.alloc(4);
-  crc.writeUInt32BE(crc32(Buffer.concat([name, data])), 0);
-  return Buffer.concat([length, name, data, crc]);
-}
-
-function textHash(text) {
-  let hash = 2166136261;
-  for (const char of text) {
-    hash ^= char.charCodeAt(0);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
-}
-
-async function writeTextPreviewPng(filePath, text) {
-  const width = 1280;
-  const height = 900;
-  const hash = textHash(text);
-  const rows = [];
-  for (let y = 0; y < height; y += 1) {
-    const row = Buffer.alloc(1 + width * 4);
-    row[0] = 0;
-    for (let x = 0; x < width; x += 1) {
-      const i = 1 + x * 4;
-      const wave = Math.sin((x + y + (hash % 360)) / 55);
-      const grid = (x % 32 === 0 || y % 32 === 0) ? 30 : 0;
-      row[i] = 190 - grid;
-      row[i + 1] = Math.max(120, 245 - grid);
-      row[i + 2] = Math.max(130, 218 + Math.round(wave * 22) - grid);
-      row[i + 3] = 255;
-    }
-    rows.push(row);
-  }
-  const lines = text.split(/\n+/).map((line) => line.trim()).filter(Boolean).slice(0, 8);
-  lines.forEach((line, lineIndex) => {
-    const y = 70 + lineIndex * 46;
-    const blocks = Math.min(44, Math.max(8, Math.ceil(line.length / 3)));
-    for (let block = 0; block < blocks; block += 1) {
-      const x = 70 + block * 24;
-      for (let dy = 0; dy < 22; dy += 1) {
-        const row = rows[y + dy];
-        if (!row) continue;
-        for (let dx = 0; dx < 16; dx += 1) {
-          const i = 1 + (x + dx) * 4;
-          row[i] = 16;
-          row[i + 1] = 36;
-          row[i + 2] = 30;
-          row[i + 3] = 255;
-        }
-      }
-    }
-  });
-  const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(width, 0);
-  ihdr.writeUInt32BE(height, 4);
-  ihdr[8] = 8;
-  ihdr[9] = 6;
-  const png = Buffer.concat([
-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    pngChunk("IHDR", ihdr),
-    pngChunk("IDAT", deflateSync(Buffer.concat(rows))),
-    pngChunk("IEND"),
-  ]);
-  await writeFile(filePath, png);
 }
 
 const fixtureHtml = `<!doctype html>
@@ -796,10 +614,10 @@ try {
   const approvalState = (await evaluate(page, `({ submitted: window.__submitted, status: document.querySelector("#status").textContent })`)).result.value;
   assert(approvalState.status !== "wallet-clicked", `Wallet action executed unexpectedly: ${JSON.stringify(approvalState)}`);
 
-  const screenshots = [
-    await captureScreenshotArtifact(panel, "/tmp/resonantos-agent-control-live-panel.png"),
-    await captureScreenshotArtifact(page, "/tmp/resonantos-agent-control-live-page.png"),
-  ];
+  const panelShot = await panel.send("Page.captureScreenshot", { format: "png" });
+  const pageShot = await page.send("Page.captureScreenshot", { format: "png" });
+  await writeFile("/tmp/resonantos-agent-control-live-panel.png", Buffer.from(panelShot.data, "base64"));
+  await writeFile("/tmp/resonantos-agent-control-live-page.png", Buffer.from(pageShot.data, "base64"));
 
   console.log(JSON.stringify({
     ok: true,
@@ -810,7 +628,10 @@ try {
     documentState,
     blockedState,
     approvalState,
-    screenshots,
+    screenshots: [
+      "/tmp/resonantos-agent-control-live-panel.png",
+      "/tmp/resonantos-agent-control-live-page.png",
+    ],
   }, null, 2));
 
   panel.close();

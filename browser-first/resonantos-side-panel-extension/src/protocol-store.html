@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src http://127.0.0.1:47773; img-src 'self' data:;" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>◈ Protocol Store — ResonantOS</title>
+    <link rel="stylesheet" href="./side-panel.css" />
+    <style>
+      /* Full-tab layout overrides */
+      body {
+        margin: 0;
+        padding: 0;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        background: var(--bg);
+        color: var(--text);
+      }
+
+      .store-page-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 24px;
+        border-bottom: 1px solid var(--line);
+        background: var(--bg-secondary);
+        flex-shrink: 0;
+      }
+
+      .store-page-title {
+        color: var(--accent);
+        font-size: 0.85rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        flex: 1;
+      }
+
+      .store-page-close {
+        background: transparent;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-md);
+        color: var(--muted);
+        font-size: 0.7rem;
+        font-weight: 600;
+        padding: 4px 10px;
+        cursor: pointer;
+        transition: background 0.15s, border-color 0.15s, color 0.15s;
+      }
+
+      .store-page-close:hover {
+        background: rgba(255,255,255,0.05);
+        border-color: var(--line-active);
+        color: var(--text);
+      }
+
+      .store-page-content {
+        flex: 1;
+        max-width: 1200px;
+        width: 100%;
+        margin: 0 auto;
+        padding: 24px;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      /* Full-width grid: 4 cols → 3 → 2 → 1 */
+      #protocol-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 16px;
+        max-height: none !important;
+        overflow-y: visible !important;
+      }
+
+      @media (max-width: 1100px) {
+        #protocol-grid { grid-template-columns: repeat(3, 1fr); }
+      }
+
+      @media (max-width: 780px) {
+        #protocol-grid { grid-template-columns: repeat(2, 1fr); }
+      }
+
+      @media (max-width: 520px) {
+        #protocol-grid { grid-template-columns: 1fr; }
+      }
+
+      /* Expand cards vertically in full-tab mode */
+      .protocol-card {
+        height: auto !important;
+      }
+
+      /* Wider search input in full-tab */
+      .store-controls {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .store-search-input {
+        flex: 1;
+        min-width: 200px;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="store-page-header">
+      <span class="store-page-title">◈ Protocol Store</span>
+      <button type="button" class="store-page-close" id="store-close-btn">✕ Close Tab</button>
+    </header>
+
+    <div class="store-page-content">
+      <div class="store-controls">
+        <input id="store-search" type="search" class="store-search-input" placeholder="Search protocols…" autocomplete="off" />
+        <div class="store-category-filters" id="store-category-filters">
+          <button type="button" class="store-cat-btn active" data-cat="">All</button>
+          <button type="button" class="store-cat-btn" data-cat="AI Agent">AI Agent</button>
+          <button type="button" class="store-cat-btn" data-cat="Workflow">Workflow</button>
+          <button type="button" class="store-cat-btn" data-cat="Integration">Integration</button>
+          <button type="button" class="store-cat-btn" data-cat="Tool">Tool</button>
+        </div>
+        <div class="store-tabs">
+          <button type="button" class="store-tab active" id="tab-all">All</button>
+          <button type="button" class="store-tab" id="tab-owned">My Protocols</button>
+        </div>
+      </div>
+
+      <div class="protocol-grid" id="protocol-grid">
+        <span class="store-placeholder">Loading protocols…</span>
+      </div>
+
+      <button type="button" class="store-submit-btn" id="store-submit-btn">+ Submit Protocol</button>
+      <div id="store-submit-form" class="store-submit-form" hidden>
+        <input id="submit-name" type="text" class="store-field" placeholder="Protocol name" />
+        <textarea id="submit-desc" class="store-field" rows="2" placeholder="Description"></textarea>
+        <select id="submit-category" class="store-field">
+          <option value="AI Agent">AI Agent</option>
+          <option value="Workflow">Workflow</option>
+          <option value="Integration">Integration</option>
+          <option value="Tool">Tool</option>
+        </select>
+        <input id="submit-price" type="number" class="store-field" placeholder="Price (0 = free)" min="0" value="0" />
+        <button type="button" class="store-action-btn" id="store-submit-confirm">Submit Protocol</button>
+        <button type="button" class="store-cancel-btn" id="store-submit-cancel">Cancel</button>
+      </div>
+    </div>
+
+    <script src="./bridge-config.generated.js"></script>
+    <script type="module" src="./protocol-store.js"></script>
+  </body>
+</html>

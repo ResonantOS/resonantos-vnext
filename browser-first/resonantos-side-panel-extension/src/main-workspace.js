@@ -666,6 +666,15 @@ async function runOpenCodeCommand(prompt) {
   );
 }
 
+// Our addition: Enter key submits (Shift/Meta/Ctrl/Alt+Enter stays as newline)
+commandInput.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" || event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) {
+    return;
+  }
+  event.preventDefault();
+  commandForm.requestSubmit();
+});
+
 commandForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (busy) return;

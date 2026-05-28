@@ -22,4 +22,4 @@ Profile state is stored under:
 ~/ResonantOS_User/BrowserFirst/Profiles/main
 ```
 
-This is now the product-direction prototype. Electron/Tauri browser surfaces and external Chrome sidecars are research paths only.
+This is now the product-direction prototype. External browser surfaces and Chrome sidecars are research paths only.

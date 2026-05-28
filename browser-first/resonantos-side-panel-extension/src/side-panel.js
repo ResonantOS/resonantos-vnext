@@ -22,6 +22,16 @@ import { createSitePermissionStore } from "./lib/site-permission-store.js";
 import { createTabContextController } from "./lib/tab-context-controller.js";
 import { createTaskConsentStore } from "./lib/task-consent-store.js";
 
+// Notify background.js that the side panel is open. Port disconnect fires
+// automatically when this page unloads, letting background.js clear sidePanelOpen.
+chrome.runtime.connect({ name: "side-panel" });
+
+function escapeHtml(text) {
+  const div = document.createElement("div");
+  div.textContent = String(text ?? "");
+  return div.innerHTML;
+}
+
 const readButton = document.querySelector("#read-page");
 const newChatButton = document.querySelector("#new-chat");
 const chatHistory = document.querySelector("#chat-history");
@@ -69,6 +79,19 @@ const approvalApproveButton = document.querySelector("#approval-approve");
 const approvalTrustSiteButton = document.querySelector("#approval-trust-site");
 const approvalDenyButton = document.querySelector("#approval-deny");
 const approvalDelegateButton = document.querySelector("#approval-delegate");
+
+// === Our product feature element refs ===
+const bridgeBanner = document.getElementById("bridge-banner");
+const themeToggle = document.getElementById("theme-toggle");
+const settingsToggleBtn = document.getElementById("settings-toggle");
+const settingsOverlay = document.getElementById("settings-overlay");
+const settingsClose = document.getElementById("settings-close");
+const settingsSave = document.getElementById("settings-save");
+const settingsStatus = document.getElementById("settings-status");
+const openStoreBtn = document.getElementById("open-store-tab");
+const openShieldBtn = document.getElementById("open-shield-tab");
+const openArchiveBtn = document.getElementById("open-archive-tab");
+const openAwarenessBtn = document.getElementById("open-awareness-tab");
 
 const bridgeRequest = createBridgeClient();
 const STORAGE_KEYS = {
@@ -631,6 +654,9 @@ const approvePendingControlStep = async () => {
   await agentControlRunner.approvePendingControlStep(approval);
 };
 
+// Alias for our contract tests + trust-site button label
+const trustCurrentSiteForSafeActions = async () => trustCurrentTaskForSafeActions();
+
 const trustCurrentTaskForSafeActions = async () => {
   if (!pendingApproval || !currentControlRun) return;
   const approval = pendingApproval;
@@ -942,3 +968,58 @@ hydrateChatSettings().then(async () => {
   setStatus("Context failed");
   void addMessage("system", `I could not read the active tab context: ${String(error)}`);
 });
+
+// === Our product feature initializations ===
+
+// Theme toggle
+if (themeToggle) {
+  const htmlEl = document.documentElement;
+  const savedTheme = localStorage.getItem("rosTheme") || "dark";
+  htmlEl.setAttribute("data-theme", savedTheme);
+  themeToggle.textContent = savedTheme === "dark" ? "☀" : "🌙";
+  themeToggle.addEventListener("click", () => {
+    const next = htmlEl.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    htmlEl.setAttribute("data-theme", next);
+    localStorage.setItem("rosTheme", next);
+    themeToggle.textContent = next === "dark" ? "☀" : "🌙";
+  });
+}
+
+// Settings overlay
+if (settingsToggleBtn && settingsOverlay) {
+  settingsToggleBtn.addEventListener("click", () => { settingsOverlay.hidden = false; });
+  if (settingsClose) settingsClose.addEventListener("click", () => { settingsOverlay.hidden = true; });
+  if (settingsSave) {
+    settingsSave.addEventListener("click", () => {
+      const openaiKey = settingsOverlay.querySelector("#key-openai")?.value?.trim();
+      const anthropicKey = settingsOverlay.querySelector("#key-anthropic")?.value?.trim();
+      const xaiKey = settingsOverlay.querySelector("#key-xai")?.value?.trim();
+      const gatewayUrl = settingsOverlay.querySelector("#gateway-url")?.value?.trim();
+      if (openaiKey) chrome.storage?.local?.set?.({ rosKeyOpenai: openaiKey }).catch(() => undefined);
+      if (anthropicKey) chrome.storage?.local?.set?.({ rosKeyAnthropic: anthropicKey }).catch(() => undefined);
+      if (xaiKey) chrome.storage?.local?.set?.({ rosKeyXai: xaiKey }).catch(() => undefined);
+      if (gatewayUrl) chrome.storage?.local?.set?.({ rosGatewayUrl: gatewayUrl }).catch(() => undefined);
+      if (settingsStatus) {
+        settingsStatus.textContent = "Saved.";
+        setTimeout(() => { settingsStatus.textContent = ""; }, 2000);
+      }
+    });
+  }
+}
+
+// Panel nav buttons (open sidecar tabs)
+const openSidecarTab = (page) => {
+  chrome.tabs?.create?.({ url: chrome.runtime.getURL(page), active: false });
+};
+openStoreBtn?.addEventListener("click", () => openSidecarTab("src/protocol-store.html"));
+openShieldBtn?.addEventListener("click", () => openSidecarTab("src/shield-tab.html"));
+openArchiveBtn?.addEventListener("click", () => openSidecarTab("src/archive-tab.html"));
+openAwarenessBtn?.addEventListener("click", () => openSidecarTab("src/awareness-tab.html"));
+
+// Bridge status banner
+const updateBridgeBanner = (online) => {
+  if (!bridgeBanner) return;
+  bridgeBanner.hidden = online;
+  bridgeBanner.textContent = online ? "" : "⚠ ResonantOS bridge offline — responses may be delayed.";
+};
+updateBridgeBanner(true);

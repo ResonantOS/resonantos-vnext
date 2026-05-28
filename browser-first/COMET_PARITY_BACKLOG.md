@@ -16,14 +16,11 @@ Intent: keep the browser-first ResonantOS work aligned with the AI-browser capab
 - Inline Assistant custom prompt input.
 - Site permission modes: blocked, read-only, ask-before-action, trusted-for-safe-actions.
 - Visible current-site permission control in the side panel.
-- Task-level consent v1: approve once, trust safe actions by site + task class, expire stale grants, or deny, while keeping wallet/payment/login/signing/credential/public-submit boundaries human-only.
+- Task-level consent v1: approve once, trust safe actions for site, or deny, while keeping wallet/payment/login boundaries human-only.
 - `/capabilities` permission summary for the current page.
 - Local browser history metadata search through `/history`.
 - Durable Browser Jobs v1: persistent job registry, visible job monitor, `/jobs`, `/pause`, `/resume`, and `/cancel`.
-- Browser page summaries can be generated into Living Archive intake with source provenance, review queueing, and a deterministic fallback when the provider is unavailable.
-- Multi-tab browser research trails can be captured into one Living Archive intake bundle with per-page provenance and review queueing.
 - Agent Control visual overlay v1: persistent Matrix-style green perimeter, in-page action toast, and highlighted clicked/typed targets for the full control session.
-- Agent Control UX vNext baseline: structured per-action observation/decision/action/result/safety details, completion/blocker summary cards, and persisted replay details in durable browser jobs.
 - Shopping/search/cart-style flows with safety stops.
 - Wallet, payment, login, credential, and public submit boundaries.
 
@@ -38,7 +35,7 @@ Intent: keep the browser-first ResonantOS work aligned with the AI-browser capab
    - Add date filters and recent-tabs/history synthesis.
 
 3. Site Permission Controls v2
-   - Add a visible consent-history manager for reviewing and revoking site + task-class grants.
+   - Add task-level consent history and “allow once for this task class”.
 
 4. Parallel / Durable Browser Jobs
    - Multiple concurrent browser tasks with separate monitors.

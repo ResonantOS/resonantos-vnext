@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src http://127.0.0.1:47773; img-src 'self' data:;" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Shield — ResonantOS</title>
+  <link rel="stylesheet" href="./side-panel.css" />
+</head>
+<body>
+  <div class="sidecar-page">
+    <header class="sidecar-header">
+      <h1 class="sidecar-title">◈ Shield</h1>
+      <button type="button" class="sidecar-close" id="close-tab-btn">✕ Close Tab</button>
+    </header>
+    <div class="sidecar-body">
+      <div class="shield-status-row">
+        <span class="status-dot active"></span>
+        <strong>Shield Active</strong>
+      </div>
+      <div class="shield-stats">
+        <div class="shield-stat"><span class="shield-stat-value" id="shield-blocks">—</span><span class="shield-stat-label">Blocks</span></div>
+        <div class="shield-stat"><span class="shield-stat-value" id="shield-approvals">—</span><span class="shield-stat-label">Approvals</span></div>
+        <div class="shield-stat"><span class="shield-stat-value" id="shield-rules">—</span><span class="shield-stat-label">Rules</span></div>
+      </div>
+      <h2 class="sidecar-section-title">Recent Security Events</h2>
+      <div id="shield-events" class="shield-events">
+        <p class="sidecar-placeholder">Loading events…</p>
+      </div>
+      <h2 class="sidecar-section-title">Page Security Audit Trail</h2>
+      <div id="shield-security-log" class="shield-events">
+        <p class="sidecar-placeholder">No security events recorded.</p>
+      </div>
+      <h2 class="sidecar-section-title">Active Rules</h2>
+      <div id="shield-rules-list" class="shield-rules-list">
+        <p class="sidecar-placeholder">Loading rules…</p>
+      </div>
+    </div>
+  </div>
+  <script src="./bridge-config.generated.js"></script>
+  <script type="module" src="./shield-tab.js"></script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src http://127.0.0.1:47773; img-src 'self' data:;" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>R-Awareness — ResonantOS</title>
+  <link rel="stylesheet" href="./side-panel.css" />
+</head>
+<body>
+  <div class="sidecar-page">
+    <header class="sidecar-header">
+      <h1 class="sidecar-title">◈ R-Awareness</h1>
+      <button type="button" class="sidecar-close" id="close-tab-btn">✕ Close Tab</button>
+    </header>
+    <div class="sidecar-body">
+      <div class="awareness-grid">
+        <div class="awareness-card"><span class="awareness-card-label">Context Richness</span><span class="awareness-card-value" id="aw-richness">—</span></div>
+        <div class="awareness-card"><span class="awareness-card-label">Visible Sections</span><span class="awareness-card-value" id="aw-sections">—</span></div>
+        <div class="awareness-card"><span class="awareness-card-label">Active Dwell</span><span class="awareness-card-value" id="aw-dwell">—</span></div>
+        <div class="awareness-card"><span class="awareness-card-label">Domain Plugin</span><span class="awareness-card-value" id="aw-plugin">—</span></div>
+      </div>
+      <button type="button" class="sidecar-action-btn full-width" id="aw-refresh-btn">Refresh Context</button>
+      <h2 class="sidecar-section-title">Visible Sections</h2>
+      <div id="aw-sections-list" class="aw-sections-list">
+        <p class="sidecar-placeholder">Click refresh to capture current page context.</p>
+      </div>
+    </div>
+  </div>
+  <script src="./bridge-config.generated.js"></script>
+  <script type="module" src="./awareness-tab.js"></script>
+</body>
+</html>

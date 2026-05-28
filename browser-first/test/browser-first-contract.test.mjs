@@ -222,9 +222,9 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   const background = await readText(path.join(extensionRoot, "src", "background.js"));
 
   assert.match(panel, /Message Augmentor/);
-  assert.doesNotMatch(panel, /new-chat/);
-  assert.doesNotMatch(panel, /chat-history/);
-  assert.match(panel, /bridge-config\.generated\.js/);
+  assert.match(panel, /new-chat/);
+  assert.match(panel, /chat-history/);
+  assert.doesNotMatch(panel, /bridge-config\.generated\.js/);
   assert.match(panel, /control-monitor/);
   assert.match(panel, /control-current-action/);
   assert.match(panel, /control-stop/);
@@ -243,6 +243,7 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(panel, /Thinking depth/);
   assert.match(panel, /Save current page to Living Archive intake/);
   assert.match(panel, /Save selected page text to Living Archive intake/);
+  assert.match(panel, /Intake/);
   assert.match(background, /openPanelOnActionClick/);
   assert.match(background, /openResonantSidePanel/);
   assert.match(background, /open-augmentor-side-panel/);
@@ -353,7 +354,7 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(agentControlPlanner, /deterministicNextAction/);
   assert.match(agentControlPlanner, /dedupeControlSteps/);
   assert.match(agentControlPlanner, /controlStepLabel/);
-  assert.match(script, /trustCurrentTaskForSafeActions/);
+  assert.match(script, /trustCurrentSiteForSafeActions/);
   assert.match(appCommandHandlers, /runJobsCommand/);
   assert.match(appCommandHandlers, /pauseBrowserJob/);
   assert.match(appCommandHandlers, /resumeBrowserJob/);

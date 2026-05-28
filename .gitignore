@@ -50,3 +50,12 @@ browser-first/resonantos-side-panel-extension/src/bridge-config.generated.js
 .idea/
 .vscode/
 *.swp
+
+# Browser-first build output
+browser-first/dist/
+
+# Generated zip archives
+*.zip
+
+# Additional generated bridge config
+bridge-config.generated.js
