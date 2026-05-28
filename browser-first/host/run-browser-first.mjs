@@ -1454,6 +1454,42 @@ async function executeArchiveReviewArtifactPromote(payload = {}) {
   };
 }
 
+async function executeArchivePromotionList(payload = {}) {
+  const limit = Math.max(1, Math.min(100, Number(payload.limit ?? 20)));
+  const artifactsRoot = path.join(memoryRoot(), "REVIEW", "artifacts");
+  const files = await listFilesRecursive(artifactsRoot, (filePath) => /\.(md|markdown)$/i.test(filePath), 2_000);
+  const promotions = [];
+  for (const filePath of files) {
+    const [details, content] = await Promise.all([
+      stat(filePath),
+      readFile(filePath, "utf8").catch(() => ""),
+    ]);
+    if (frontmatterValue(content, "promotionStatus") !== "promoted") {
+      continue;
+    }
+    const title = markdownTitle(content, path.basename(filePath, path.extname(filePath)))
+      .replace(/^Draft Wiki Update:\s*/i, "");
+    promotions.push({
+      path: path.relative(memoryRoot(), filePath),
+      title,
+      status: "promoted",
+      promotedPage: frontmatterValue(content, "promotedPage") || frontmatterValue(content, "proposedPage") || "",
+      promotedAt: frontmatterValue(content, "promotedAt") || details.mtime.toISOString(),
+      backupPath: frontmatterValue(content, "backupPath") || "",
+      artifactPath: frontmatterValue(content, "artifactPath") || "",
+      requestPath: frontmatterValue(content, "requestPath") || "",
+      modifiedAt: details.mtime.toISOString(),
+    });
+  }
+  promotions.sort((left, right) =>
+    String(right.promotedAt || right.modifiedAt).localeCompare(String(left.promotedAt || left.modifiedAt))
+  );
+  return {
+    root: path.relative(userRoot(), artifactsRoot),
+    promotions: promotions.slice(0, limit),
+  };
+}
+
 async function executeGoalRecord(payload) {
   const mission = String(payload.mission ?? "").trim();
   if (mission.length < 8) {
@@ -1678,6 +1714,7 @@ const bridgeRoutes = [
   { method: "POST", path: "/archive/review/draft", handler: executeArchiveReviewDraft },
   { method: "POST", path: "/archive/review/artifact/read", handler: executeArchiveReviewArtifactRead },
   { method: "POST", path: "/archive/review/artifact/promote", handler: executeArchiveReviewArtifactPromote },
+  { method: "POST", path: "/archive/review/promotions/list", handler: executeArchivePromotionList },
   { method: "GET", path: "/addons/status", handler: executeAddonsStatus },
   { method: "GET", path: "/opencode/status", handler: executeOpenCodeStatus },
   { method: "POST", path: "/hermes/dashboard/status", handler: executeHermesDashboardStatus },

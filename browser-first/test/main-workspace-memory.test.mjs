@@ -24,6 +24,7 @@ test("living archive workspace renders status, search, and intake through bridge
   const calls = [];
   let reviewStatus = "pending";
   let draftArtifactPath = "";
+  let promoted = false;
   const bridgeRequest = async (route, options = {}) => {
     calls.push([route, options]);
     if (route === "/memory/status") {
@@ -82,12 +83,26 @@ test("living archive workspace renders status, search, and intake through bridge
       };
     }
     if (route === "/archive/review/artifact/promote") {
+      promoted = true;
       return {
         path: options.body.path,
         status: "promoted",
         promotedPage: "AI_MEMORY/wiki/browser-job-completed.md",
         promotedAt: "2026-05-28T11:00:00.000Z",
         backupPath: ""
+      };
+    }
+    if (route === "/archive/review/promotions/list") {
+      return {
+        root: "Memory/REVIEW/artifacts",
+        promotions: promoted ? [{
+          title: "Browser job completed",
+          status: "promoted",
+          path: "REVIEW/artifacts/browser/browser-job-completed-draft.md",
+          promotedPage: "AI_MEMORY/wiki/browser-job-completed.md",
+          promotedAt: "2026-05-28T11:00:00.000Z",
+          backupPath: "AI_MEMORY/backups/promotions/2026-05-28/browser-job-completed.md"
+        }] : []
       };
     }
     if (route === "/archive/intake") {
@@ -105,6 +120,7 @@ test("living archive workspace renders status, search, and intake through bridge
     assert.match(container.textContent, /4/);
     assert.match(container.textContent, /5/);
     assert.ok(calls.some(([route]) => route === "/archive/review/list"));
+    assert.ok(calls.some(([route]) => route === "/archive/review/promotions/list"));
     assert.match(container.textContent, /Browser job completed: compare a product/);
     assert.match(container.textContent, /INTAKE\/browser\/job-report\.md/);
     container.querySelector("[data-review-status='approved']").click();
@@ -146,6 +162,8 @@ test("living archive workspace renders status, search, and intake through bridge
       options.body.path === "REVIEW/artifacts/browser/browser-job-completed-draft.md"
     ));
     assert.match(container.textContent, /Promoted AI_MEMORY\/wiki\/browser-job-completed\.md/);
+    assert.match(container.textContent, /Promotion History/);
+    assert.match(container.textContent, /AI_MEMORY\/backups\/promotions\/2026-05-28\/browser-job-completed\.md/);
 
     const searchInput = container.querySelector("input[type='search']");
     searchInput.value = "resonant";
@@ -179,6 +197,9 @@ test("living archive workspace can run an initial routed search", async () => {
     }
     if (route === "/archive/review/list") {
       return { root: "Memory/REVIEW/requests", requests: [] };
+    }
+    if (route === "/archive/review/promotions/list") {
+      return { root: "Memory/REVIEW/artifacts", promotions: [] };
     }
     throw new Error(`Unexpected route ${route}`);
   };

@@ -78,6 +78,31 @@ function reviewRequestCard(request, onTransition, onDraft, onPreviewDraft) {
   return card;
 }
 
+function promotionCard(entry) {
+  const card = document.createElement("article");
+  card.className = "memory-promotion-card";
+  const heading = document.createElement("div");
+  heading.className = "memory-promotion-heading";
+  const title = document.createElement("strong");
+  title.textContent = entry.title || "Promoted wiki update";
+  const status = document.createElement("span");
+  status.textContent = entry.status || "promoted";
+  heading.append(title, status);
+  const page = document.createElement("code");
+  page.textContent = entry.promotedPage || "AI_MEMORY/wiki";
+  const meta = document.createElement("p");
+  meta.textContent = entry.promotedAt
+    ? `Promoted ${entry.promotedAt}`
+    : "Promotion time not recorded.";
+  card.append(heading, page, meta);
+  if (entry.backupPath) {
+    const backup = document.createElement("code");
+    backup.textContent = `backup: ${entry.backupPath}`;
+    card.append(backup);
+  }
+  return card;
+}
+
 function setStatus(node, text, tone = "neutral") {
   node.textContent = text;
   node.dataset.tone = tone;
@@ -163,7 +188,23 @@ export function renderLivingArchiveWorkspace({ container, bridgeRequest, initial
   draftPreview.hidden = true;
   reviewPanel.append(reviewHeader, reviewStatus, reviewList, draftPreview);
 
-  section.append(header, metrics, reviewPanel, searchForm, intakeForm);
+  const promotionPanel = document.createElement("section");
+  promotionPanel.className = "memory-card memory-promotion-history";
+  const promotionHeader = document.createElement("div");
+  promotionHeader.className = "memory-review-top";
+  const promotionLabel = document.createElement("label");
+  promotionLabel.textContent = "Promotion History";
+  const refreshPromotions = document.createElement("button");
+  refreshPromotions.type = "button";
+  refreshPromotions.textContent = "Refresh";
+  promotionHeader.append(promotionLabel, refreshPromotions);
+  const promotionStatus = document.createElement("p");
+  promotionStatus.className = "memory-status";
+  const promotionList = document.createElement("div");
+  promotionList.className = "memory-promotion-list";
+  promotionPanel.append(promotionHeader, promotionStatus, promotionList);
+
+  section.append(header, metrics, reviewPanel, promotionPanel, searchForm, intakeForm);
   container.append(section);
 
   const loadStatus = async () => {
@@ -202,6 +243,29 @@ export function renderLivingArchiveWorkspace({ container, bridgeRequest, initial
       setStatus(reviewStatus, error instanceof Error ? error.message : String(error), "error");
     } finally {
       refreshReview.disabled = false;
+    }
+  };
+
+  const loadPromotionHistory = async () => {
+    refreshPromotions.disabled = true;
+    promotionList.replaceChildren();
+    setStatus(promotionStatus, "Loading promotion history…");
+    try {
+      const result = await bridgeRequest("/archive/review/promotions/list", {
+        method: "POST",
+        body: { limit: 10 }
+      });
+      const promotions = Array.isArray(result.promotions) ? result.promotions : [];
+      if (!promotions.length) {
+        setStatus(promotionStatus, "No promoted wiki updates yet.", "warning");
+        return;
+      }
+      promotionList.append(...promotions.map(promotionCard));
+      setStatus(promotionStatus, `${promotions.length} promoted wiki update(s) in ${result.root}.`, "success");
+    } catch (error) {
+      setStatus(promotionStatus, error instanceof Error ? error.message : String(error), "error");
+    } finally {
+      refreshPromotions.disabled = false;
     }
   };
 
@@ -304,6 +368,7 @@ export function renderLivingArchiveWorkspace({ container, bridgeRequest, initial
       });
       await loadStatus();
       await loadReviewQueue();
+      await loadPromotionHistory();
       setStatus(reviewStatus, `Promoted ${result.promotedPage}.`, "success");
     } catch (error) {
       setStatus(reviewStatus, error instanceof Error ? error.message : String(error), "error");
@@ -312,6 +377,9 @@ export function renderLivingArchiveWorkspace({ container, bridgeRequest, initial
 
   refreshReview.addEventListener("click", () => {
     void loadReviewQueue();
+  });
+  refreshPromotions.addEventListener("click", () => {
+    void loadPromotionHistory();
   });
 
   searchForm.addEventListener("submit", async (event) => {
@@ -370,6 +438,7 @@ export function renderLivingArchiveWorkspace({ container, bridgeRequest, initial
 
   void loadStatus();
   void loadReviewQueue();
+  void loadPromotionHistory();
   if (initialQuery.trim()) {
     searchInput.value = initialQuery.trim();
     queueMicrotask(() => {

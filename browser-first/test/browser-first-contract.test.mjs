@@ -138,6 +138,8 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(workspaceStyles, /memory-review-actions/);
   assert.match(workspaceStyles, /memory-review-draft/);
   assert.match(workspaceStyles, /memory-review-preview/);
+  assert.match(workspaceStyles, /memory-promotion-history/);
+  assert.match(workspaceStyles, /memory-promotion-card/);
   assert.match(launcher, /defaultMainWorkspaceUrl/);
   assert.match(launcher, /\/hermes\/dashboard\/status/);
   assert.match(launcher, /\/hermes\/dashboard\/start/);
@@ -153,6 +155,7 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(launcher, /\/archive\/review\/draft/);
   assert.match(launcher, /\/archive\/review\/artifact\/read/);
   assert.match(launcher, /\/archive\/review\/artifact\/promote/);
+  assert.match(launcher, /\/archive\/review\/promotions\/list/);
   assert.match(archiveMerge, /mergePromotedMarkdownBody/);
   assert.match(archiveMerge, /Superseded Sections/);
   assert.match(launcher, /executeProviderCredentialSave/);
