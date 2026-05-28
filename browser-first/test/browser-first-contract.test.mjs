@@ -54,6 +54,7 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   const workspaceScript = await readText(path.join(extensionRoot, "src", "main-workspace.js"));
   const workspaceStyles = await readText(path.join(extensionRoot, "src", "main-workspace.css"));
   const launcher = await readText(path.join(browserFirstRoot, "host", "run-browser-first.mjs"));
+  const archiveMerge = await readText(path.join(browserFirstRoot, "host", "archive-merge.mjs"));
   const background = await readText(path.join(extensionRoot, "src", "background.js"));
   const sidePanel = await readText(path.join(extensionRoot, "src", "side-panel.js"));
 
@@ -152,6 +153,8 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(launcher, /\/archive\/review\/draft/);
   assert.match(launcher, /\/archive\/review\/artifact\/read/);
   assert.match(launcher, /\/archive\/review\/artifact\/promote/);
+  assert.match(archiveMerge, /mergePromotedMarkdownBody/);
+  assert.match(archiveMerge, /Superseded Sections/);
   assert.match(launcher, /executeProviderCredentialSave/);
   assert.match(launcher, /executeOpenCodeStatus/);
   assert.match(launcher, /workspaceLaunch: "not-enabled-in-browser-first-v1"/);

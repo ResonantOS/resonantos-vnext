@@ -11,6 +11,7 @@ import {
   startBridgeServer,
   writeBridgeConfig,
 } from "./bridge-server.mjs";
+import { mergePromotedMarkdownBody } from "./archive-merge.mjs";
 
 const repoRoot = path.resolve(import.meta.dirname, "..", "..");
 const hostBinary = path.join(
@@ -1086,6 +1087,7 @@ function markdownSection(content, heading) {
   return pattern.exec(content)?.[1]?.trim() ?? "";
 }
 
+
 async function executeArchiveIntakeList(payload = {}) {
   const limit = Math.max(1, Math.min(100, Number(payload.limit ?? 40)));
   const intakeRoot = path.join(memoryRoot(), "INTAKE");
@@ -1398,7 +1400,9 @@ async function executeArchiveReviewArtifactPromote(payload = {}) {
   const now = new Date().toISOString();
   await mkdir(path.dirname(pageFile), { recursive: true });
   let backupPath = "";
+  let existingPageContent = "";
   if (existsSync(pageFile)) {
+    existingPageContent = await readFile(pageFile, "utf8");
     const backupDir = path.join(memoryRoot(), "AI_MEMORY", "backups", "promotions", now.replace(/[:.]/g, "-"));
     await mkdir(backupDir, { recursive: true });
     const backupFile = path.join(backupDir, path.basename(pageFile));
@@ -1406,6 +1410,13 @@ async function executeArchiveReviewArtifactPromote(payload = {}) {
     backupPath = path.relative(memoryRoot(), backupFile);
   }
   const pageTitle = markdownTitle(artifactContent, path.basename(pageFile, path.extname(pageFile))).replace(/^Draft Wiki Update:\s*/i, "");
+  const mergedContent = mergePromotedMarkdownBody({
+    existingContent: existingPageContent,
+    promotedBody: proposedContent,
+    sourcePath: frontmatterValue(artifactContent, "artifactPath") || "",
+    artifactPath,
+    promotedAt: now,
+  });
   const pageBody = [
     "---",
     `source: ${JSON.stringify("resonantos-browser-first")}`,
@@ -1416,10 +1427,7 @@ async function executeArchiveReviewArtifactPromote(payload = {}) {
     `sourceArtifact: ${JSON.stringify(frontmatterValue(artifactContent, "artifactPath") || "")}`,
     "---",
     "",
-    proposedContent,
-    "",
-    "<!-- resonantos-browser-first-promotion -->",
-    `Promoted at: ${now} from ${artifactPath}`,
+    mergedContent,
     "",
   ].join("\n");
   await writeFile(pageFile, pageBody);
