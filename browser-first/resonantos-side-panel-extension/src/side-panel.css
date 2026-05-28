@@ -244,7 +244,8 @@ textarea:disabled {
 }
 
 .task-consent-panel,
-.permission-manager-panel {
+.permission-manager-panel,
+.control-preflight-card {
   border: 1px solid rgba(36, 209, 143, 0.14);
   border-radius: 14px;
   background:
@@ -254,8 +255,33 @@ textarea:disabled {
 }
 
 .task-consent-panel[hidden],
-.permission-manager-panel[hidden] {
+.permission-manager-panel[hidden],
+.control-preflight-card[hidden] {
   display: none;
+}
+
+.control-preflight-card {
+  border-color: rgba(36, 209, 143, 0.28);
+  box-shadow: inset 0 0 22px rgba(36, 209, 143, 0.06);
+}
+
+.control-preflight-card strong,
+.control-preflight-card p {
+  display: block;
+  min-width: 0;
+}
+
+.control-preflight-card strong {
+  color: var(--text);
+  font-size: 0.74rem;
+}
+
+.control-preflight-card p {
+  margin: 5px 0 8px;
+  color: rgba(207, 219, 210, 0.68);
+  font-size: 0.62rem;
+  line-height: 1.32;
+  overflow-wrap: anywhere;
 }
 
 .task-consent-header {

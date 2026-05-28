@@ -22,6 +22,7 @@ Intent: keep the browser-first ResonantOS work aligned with the AI-browser capab
 - Site Permission Controls v2 audit trail: site permission changes/resets and task-class consents/revocations record timestamp, source, and reason, and the permission manager surfaces latest audit evidence.
 - Permission/Consent UX v2: the current-site panel states what Augmentor can see/do now for blocked, read-only, ask-before-action, and trusted-safe-action modes.
 - Permission/Consent UX v3: long autonomous Agent Control tasks require a task-class preflight before Augmentor starts operating the page; `/approve-control <id>` starts the governed run, `/deny-control <id>` cancels it, stored safe task-class consent can skip the preflight, and hard wallet/payment/login/credential/signing/public-submit boundaries remain separately enforced.
+- Permission/Consent UX v3.1: the preflight also appears as a context-dock approval card with clickable Approve and Deny buttons, so users do not have to type the slash commands.
 - `/capabilities` permission summary for the current page.
 - Browser History / Activity Search v2: `/history <query> | site:example.com | days:7 | tabs` supports date filtering, per-site filtering, readable open-tab synthesis, explicit incognito exclusion, and `/history <query> | intake` export into Living Archive intake with a review request.
 - Browser-first Add-ons workspace lists visible add-ons, availability, trust tier, and governed workspace actions without granting new capabilities.
@@ -49,7 +50,6 @@ Intent: keep the browser-first ResonantOS work aligned with the AI-browser capab
    - Search/query field submission can remain allowed when content-script checks classify it as search-like.
 
 4. Permission / Consent UX
-   - Add button-based approval/deny controls for the preflight prompt, so users do not have to type `/approve-control`.
    - Add a one-click "trust safe actions for this task class" option from the preflight, scoped to the current site and never applying to hard boundaries.
 
 ## Validation Rule

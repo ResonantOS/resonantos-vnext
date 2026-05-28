@@ -57,6 +57,11 @@ const taskConsentList = document.querySelector("#task-consent-list");
 const permissionManagerPanel = document.querySelector("#permission-manager-panel");
 const permissionManagerTitle = document.querySelector("#permission-manager-title");
 const permissionManagerList = document.querySelector("#permission-manager-list");
+const controlPreflightCard = document.querySelector("#control-preflight-card");
+const controlPreflightTitle = document.querySelector("#control-preflight-title");
+const controlPreflightBody = document.querySelector("#control-preflight-body");
+const controlPreflightApproveButton = document.querySelector("#control-preflight-approve");
+const controlPreflightDenyButton = document.querySelector("#control-preflight-deny");
 const jobMonitor = document.querySelector("#job-monitor");
 const jobMonitorTitle = document.querySelector("#job-monitor-title");
 const jobMonitorToggle = document.querySelector("#job-monitor-toggle");
@@ -153,7 +158,7 @@ const scrollTranscriptToBottom = () => {
 };
 
 const updateContextDockVisibility = () => {
-  const hasVisiblePanel = [activityPanel, sitePermissionPanel, taskConsentPanel, jobMonitor, controlMonitor]
+  const hasVisiblePanel = [activityPanel, sitePermissionPanel, taskConsentPanel, permissionManagerPanel, controlPreflightCard, jobMonitor, controlMonitor]
     .some((panel) => !panel.hidden);
   contextDock.hidden = !hasVisiblePanel;
   contextToggleButton.title = contextDockExpanded ? "Hide context usage and browser status" : "Show context usage and browser status";
@@ -193,6 +198,18 @@ const clearActivitySoon = (delay = 2200) => {
     window.clearTimeout(activityTimer);
   }
   activityTimer = window.setTimeout(clearActivity, delay);
+};
+
+const renderControlPreflightCard = () => {
+  if (!pendingControlPreflight) {
+    controlPreflightCard.hidden = true;
+    updateContextDockVisibility();
+    return;
+  }
+  controlPreflightCard.hidden = false;
+  controlPreflightTitle.textContent = `${pendingControlPreflight.taskClass} control on ${pendingControlPreflight.siteKey}`;
+  controlPreflightBody.textContent = `${pendingControlPreflight.goal} · ${pendingControlPreflight.mode}. Augmentor may read, scroll, click safe controls, and type into editable fields. Wallet, login, credential, payment, signing, transfer, destructive, and public-submit boundaries remain human-gated.`;
+  updateContextDockVisibility();
 };
 
 const setTurnBusy = (busy) => {
@@ -642,16 +659,19 @@ const persistControlPreflight = async () => {
   await chrome.storage?.local?.set?.({
     [STORAGE_KEYS.controlPreflight]: pendingControlPreflight
   }).catch(() => undefined);
+  renderControlPreflightCard();
 };
 
 const clearControlPreflight = async () => {
   pendingControlPreflight = null;
   await chrome.storage?.local?.remove?.(STORAGE_KEYS.controlPreflight).catch(() => undefined);
+  renderControlPreflightCard();
 };
 
 const hydrateControlPreflight = async () => {
   const settings = await chrome.storage?.local?.get?.(STORAGE_KEYS.controlPreflight).catch(() => ({}));
   pendingControlPreflight = normalizeControlPreflight(settings?.[STORAGE_KEYS.controlPreflight]);
+  renderControlPreflightCard();
 };
 
 const runControlCommand = async (goal, options = {}) => {
@@ -981,6 +1001,8 @@ approvalApproveButton.addEventListener("click", () => void approvePendingControl
 approvalTrustSiteButton.addEventListener("click", () => void trustCurrentTaskForSafeActions());
 approvalDenyButton.addEventListener("click", () => void denyPendingControlStep());
 approvalDelegateButton.addEventListener("click", () => void delegateControlIssue());
+controlPreflightApproveButton.addEventListener("click", () => void approveControlPreflight(pendingControlPreflight?.id ?? ""));
+controlPreflightDenyButton.addEventListener("click", () => void denyControlPreflight(pendingControlPreflight?.id ?? ""));
 jobMonitorToggle.addEventListener("click", async () => {
   await browserJobStore.toggleMonitorCollapsed();
   renderJobMonitor();

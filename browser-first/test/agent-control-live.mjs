@@ -395,6 +395,11 @@ async function approveControlPreflightIfNeeded(panel, seenPreflightIds = new Set
     const match = matches.at(-1);
     if (match && !state.disabled) {
       await evaluate(panel, `(() => {
+        const button = document.querySelector("#control-preflight-approve");
+        if (button && !button.closest("[hidden]")) {
+          button.click();
+          return;
+        }
         const input = document.querySelector("#command-input");
         input.value = ${JSON.stringify(`/approve-control ${match[1]}`)};
         input.dispatchEvent(new Event("input", { bubbles: true }));
