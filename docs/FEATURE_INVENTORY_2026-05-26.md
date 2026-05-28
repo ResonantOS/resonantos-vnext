@@ -151,6 +151,8 @@ These are the features currently implemented in the browser-first version.
 - Current-site permission control appears in the side panel.
 - `/site block`, `/site ask`, and related site-permission commands exist.
 - Site permissions persist in extension storage.
+- Site permission changes and resets record audit entries with timestamp, source, previous mode, new mode, and reason.
+- The permission manager surfaces the latest site-permission audit evidence next to each stored site grant.
 - Inline Assistant hides on blocked sites.
 
 ### Approval Flow
@@ -159,6 +161,8 @@ These are the features currently implemented in the browser-first version.
 - User can approve once for eligible public-submit style actions.
 - User can deny an approval request.
 - User can trust safe actions for a site only when the boundary is safe.
+- Task-class consent grants and revocations record audit entries with timestamp, source, task class, mode, and reason.
+- The permission manager surfaces the latest task-consent audit evidence next to each stored consent.
 - Hard wallet/payment/login/credential boundaries do not expose an approval bypass.
 - Denied actions stop the current task and preserve the record.
 

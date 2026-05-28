@@ -103,7 +103,9 @@ function createHarness(overrides = {}) {
     getCurrentControlRun: () => state.currentControlRun,
     getJobMonitorCollapsed: () => state.jobMonitorCollapsed,
     getPendingApproval: () => state.pendingApproval,
+    getSitePermissionAudit: async () => overrides.sitePermissionAudit ?? {},
     getSitePermissions: async () => overrides.sitePermissions ?? {},
+    getTaskConsentAudit: async () => overrides.taskConsentAudit ?? {},
     getTaskConsents: async () => overrides.taskConsents ?? {},
     isReadableBrowserTab: (tab) => /^https?:\/\//i.test(tab?.url ?? ""),
     onContinueBrowserJob: (job) => state.continued.push(job.id),
@@ -281,7 +283,9 @@ test("monitor renderers show and revoke task consent history", async () => {
         taskClass: "booking",
         mode: "allow-safe",
         grantedAt: 1000,
-        expiresAt: 2000
+        expiresAt: 2000,
+        reason: "Trusted after approval",
+        source: "approval-card"
       },
       "other.com::research": {
         siteKey: "other.com",
@@ -298,6 +302,7 @@ test("monitor renderers show and revoke task consent history", async () => {
   assert.equal(harness.dom.window.document.querySelector("#consents").hidden, false);
   assert.match(harness.dom.window.document.querySelector("#consents-title").textContent, /1 trusted task class/);
   assert.match(harness.dom.window.document.querySelector("#consents-list").textContent, /booking/);
+  assert.match(harness.dom.window.document.querySelector("#consents-list").textContent, /Trusted after approval/);
   assert.doesNotMatch(harness.dom.window.document.querySelector("#consents-list").textContent, /research/);
   harness.dom.window.document.querySelector("#consents-list button").click();
   assert.deepEqual(harness.state.revoked, ["booking"]);
@@ -314,14 +319,22 @@ test("monitor renderers show permission manager across sites and grants", async 
       "default.example": "ask-before-action",
       "read.example": "read-only"
     },
+    sitePermissionAudit: {
+      "blocked.example": [{ action: "set", at: 1000, source: "slash-command", reason: "blocked for test" }]
+    },
     taskConsents: {
       "example.com::booking": {
         siteKey: "example.com",
         taskClass: "booking",
         mode: "allow-safe",
         grantedAt: 1000,
-        expiresAt: 2000
+        expiresAt: 2000,
+        reason: "trusted for booking",
+        source: "approval-card"
       }
+    },
+    taskConsentAudit: {
+      "example.com::booking": [{ action: "set", at: 1000, source: "approval-card", reason: "trusted for booking" }]
     }
   });
 
@@ -332,9 +345,11 @@ test("monitor renderers show permission manager across sites and grants", async 
   assert.equal(panel.hidden, false);
   assert.match(harness.dom.window.document.querySelector("#permission-manager-title").textContent, /3 stored browser grants/);
   assert.match(list.textContent, /blocked.example/);
+  assert.match(list.textContent, /blocked for test/);
   assert.match(list.textContent, /read.example/);
   assert.doesNotMatch(list.textContent, /default.example/);
   assert.match(list.textContent, /example.com · booking/);
+  assert.match(list.textContent, /trusted for booking/);
   list.querySelector("button").click();
   assert.deepEqual(harness.state.resetSites, ["blocked.example"]);
   list.querySelectorAll("button")[2].click();

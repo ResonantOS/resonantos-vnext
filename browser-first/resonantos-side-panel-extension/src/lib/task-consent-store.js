@@ -23,12 +23,14 @@ export function normalizeTaskConsent(consent, { now = Date.now } = {}) {
     mode: consent?.mode === "deny" ? "deny" : "allow-safe",
     grantedAt,
     expiresAt,
+    reason: String(consent?.reason ?? "Trusted safe task class").slice(0, 240),
     source: String(consent?.source ?? "human").slice(0, 80)
   };
 }
 
 export function createTaskConsentStore({
   storage,
+  taskConsentAuditStorageKey = "augmentorTaskConsentAudit",
   taskConsentStorageKey,
   now = Date.now,
   ttlMs = DEFAULT_CONSENT_TTL_MS
@@ -43,13 +45,37 @@ export function createTaskConsentStore({
     );
   };
 
+  const taskConsentAudit = async () => {
+    const result = await storage?.get?.(taskConsentAuditStorageKey).catch(() => ({}));
+    return result?.[taskConsentAuditStorageKey] ?? {};
+  };
+
+  const appendAudit = async ({ siteKey, taskClass, action, mode = "", reason = "", source = "human" }) => {
+    if (!siteKey || !taskClass) return null;
+    const key = taskConsentKey({ siteKey, taskClass });
+    const audit = await taskConsentAudit();
+    const entry = {
+      action,
+      at: now(),
+      key,
+      mode,
+      reason: String(reason || action).slice(0, 240),
+      siteKey,
+      source: String(source || "human").slice(0, 80),
+      taskClass
+    };
+    audit[key] = [entry, ...(audit[key] ?? [])].slice(0, 20);
+    await storage?.set?.({ [taskConsentAuditStorageKey]: audit });
+    return entry;
+  };
+
   const consentFor = async ({ siteKey, goal, taskClass = taskClassForGoal(goal) }) => {
     if (!siteKey) return null;
     const consents = await taskConsents();
     return consents[taskConsentKey({ siteKey, taskClass })] ?? null;
   };
 
-  const setTaskConsent = async ({ siteKey, goal, taskClass = taskClassForGoal(goal), mode = "allow-safe", source = "human" }) => {
+  const setTaskConsent = async ({ siteKey, goal, taskClass = taskClassForGoal(goal), mode = "allow-safe", reason = "Trusted safe task class", source = "human" }) => {
     if (!siteKey) throw new Error("No site is active.");
     const consents = await taskConsents();
     const grantedAt = now();
@@ -57,22 +83,27 @@ export function createTaskConsentStore({
       siteKey,
       taskClass,
       mode,
+      reason,
       source,
       grantedAt,
       expiresAt: grantedAt + ttlMs
     }, { now });
     consents[taskConsentKey(consent)] = consent;
     await storage?.set?.({ [taskConsentStorageKey]: consents });
+    await appendAudit({ siteKey, taskClass, action: "set", mode: consent.mode, reason, source });
     return consent;
   };
 
-  const revokeTaskConsent = async ({ siteKey, goal, taskClass = taskClassForGoal(goal) }) => {
+  const revokeTaskConsent = async ({ siteKey, goal, taskClass = taskClassForGoal(goal), reason = "Task consent revoked", source = "human" }) => {
     if (!siteKey) return false;
     const consents = await taskConsents();
     const key = taskConsentKey({ siteKey, taskClass });
     const existed = Boolean(consents[key]);
     delete consents[key];
     await storage?.set?.({ [taskConsentStorageKey]: consents });
+    if (existed) {
+      await appendAudit({ siteKey, taskClass, action: "revoke", mode: "revoked", reason, source });
+    }
     return existed;
   };
 
@@ -81,6 +112,7 @@ export function createTaskConsentStore({
     revokeTaskConsent,
     setTaskConsent,
     taskClassForGoal,
+    taskConsentAudit,
     taskConsents
   };
 }

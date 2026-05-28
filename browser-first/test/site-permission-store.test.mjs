@@ -57,13 +57,17 @@ test("site permission store persists permission updates by site key", async () =
 
   const result = await harness.store.setSitePermission("https://www.example.com/path", "read-only");
 
-  assert.deepEqual(result, { key: "example.com", mode: "read-only" });
-  assert.deepEqual(harness.writes.at(-1), {
+  assert.equal(result.key, "example.com");
+  assert.equal(result.mode, "read-only");
+  assert.equal(result.previousMode, "ask-before-action");
+  assert.equal(result.audit.action, "set");
+  assert.deepEqual(harness.writes.find((write) => write.augmentorSitePermissions), {
     augmentorSitePermissions: {
       "other.example": "blocked",
       "example.com": "read-only"
     }
   });
+  assert.equal((await harness.store.sitePermissionAudit())["example.com"][0].mode, "read-only");
 });
 
 test("site permission store resets persisted permissions by site key or URL", async () => {
@@ -75,11 +79,12 @@ test("site permission store resets persisted permissions by site key or URL", as
   });
 
   assert.equal(await harness.store.resetSitePermission("https://www.example.com/path"), true);
-  assert.deepEqual(harness.writes.at(-1), {
+  assert.deepEqual(harness.writes.find((write) => write.augmentorSitePermissions && !write.augmentorSitePermissions["example.com"]), {
     augmentorSitePermissions: {
       "other.example": "blocked"
     }
   });
+  assert.equal((await harness.store.sitePermissionAudit())["example.com"][0].action, "reset");
   assert.equal(await harness.store.resetSitePermission("missing.example"), false);
 });
 

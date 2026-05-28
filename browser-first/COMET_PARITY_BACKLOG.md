@@ -19,6 +19,7 @@ Intent: keep the browser-first ResonantOS work aligned with the AI-browser capab
 - Visible current-site permission control in the side panel.
 - Task-level consent v1: approve once, trust safe actions by site + task class, expire stale grants, or deny, while keeping wallet/payment/login/signing/credential/public-submit boundaries human-only.
 - Site Permission Controls v2: context dock manager lists stored site permissions and task-class consents across sites, with reset/revoke actions.
+- Site Permission Controls v2 audit trail: site permission changes/resets and task-class consents/revocations record timestamp, source, and reason, and the permission manager surfaces latest audit evidence.
 - `/capabilities` permission summary for the current page.
 - Browser History / Activity Search v2: `/history <query> | site:example.com | days:7 | tabs` supports date filtering, per-site filtering, readable open-tab synthesis, explicit incognito exclusion, and `/history <query> | intake` export into Living Archive intake with a review request.
 - Browser-first Add-ons workspace lists visible add-ons, availability, trust tier, and governed workspace actions without granting new capabilities.
@@ -33,23 +34,20 @@ Intent: keep the browser-first ResonantOS work aligned with the AI-browser capab
 
 ## Remaining Capability Work
 
-1. Site Permission Controls v2
-   - Add audit timestamps/reasons for approval and denial events.
-
-2. Parallel / Durable Browser Jobs
+1. Parallel / Durable Browser Jobs
    - Multiple concurrent browser tasks with separate monitors.
    - Long-running task reports into Living Archive intake.
    - Automatic resume from exact step/history after reload.
 
-3. Email / Calendar Add-ons
+2. Email / Calendar Add-ons
    - Gmail/Calendar-style integrations as add-ons with explicit approval.
    - Draft-only by default; sending/scheduling requires human approval.
 
-4. Secure Autofill Model
+3. Secure Autofill Model
    - Do not implement raw credential/payment autofill until vault, approval, and audit ADRs are complete.
    - Search/query field submission can remain allowed when content-script checks classify it as search-like.
 
-5. Permission / Consent UX
+4. Permission / Consent UX
    - Ask whether Augmentor may operate the browser for each task class.
    - Remember per-task preference only within safe scopes.
    - Make “what I can see/do now” visible in the control monitor.

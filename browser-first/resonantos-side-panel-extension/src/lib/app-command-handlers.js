@@ -159,7 +159,10 @@ export function createAppCommandHandlers({
       await addMessage("system", `Current site permission: ${tab?.url ? siteKeyForUrl(tab.url) : "no site"} · ${mode}`);
       return;
     }
-    const result = await setSitePermission(tab?.url, sitePermissionModeFromText(normalized));
+    const result = await setSitePermission(tab?.url, sitePermissionModeFromText(normalized), {
+      reason: `Slash command: /site ${normalized}`,
+      source: "slash-command"
+    });
     await renderSitePermissionPanel(tab);
     await addMessage("system", `Set ${result.key} Assistant permission to ${result.mode}.`);
   }

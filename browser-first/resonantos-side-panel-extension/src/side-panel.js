@@ -84,7 +84,9 @@ const STORAGE_KEYS = {
   thinkingDepth: "augmentorThinkingDepth",
   attachments: "augmentorBrowserAttachments",
   sitePermissions: "augmentorSitePermissions",
+  sitePermissionAudit: "augmentorSitePermissionAudit",
   taskConsents: "augmentorTaskConsents",
+  taskConsentAudit: "augmentorTaskConsentAudit",
   browserJobs: "augmentorBrowserJobs",
   jobMonitorCollapsed: "augmentorJobMonitorCollapsed",
   contextDockExpanded: "augmentorContextDockExpanded"
@@ -242,6 +244,7 @@ const setContextMeter = (snapshot) => {
 
 const sitePermissionStore = createSitePermissionStore({
   storage: chrome.storage?.local,
+  sitePermissionAuditStorageKey: STORAGE_KEYS.sitePermissionAudit,
   sitePermissionStorageKey: STORAGE_KEYS.sitePermissions
 });
 const permissionForUrl = sitePermissionStore.permissionForUrl;
@@ -251,6 +254,7 @@ const siteKeyForUrl = sitePermissionStore.siteKeyForUrl;
 const sitePermissions = sitePermissionStore.sitePermissions;
 const taskConsentStore = createTaskConsentStore({
   storage: chrome.storage?.local,
+  taskConsentAuditStorageKey: STORAGE_KEYS.taskConsentAudit,
   taskConsentStorageKey: STORAGE_KEYS.taskConsents
 });
 
@@ -435,7 +439,9 @@ monitorRenderers = createMonitorRenderers({
   getCurrentControlRun: () => currentControlRun,
   getJobMonitorCollapsed: () => browserJobStore.getMonitorCollapsed(),
   getPendingApproval: () => pendingApproval,
+  getSitePermissionAudit: () => sitePermissionStore.sitePermissionAudit(),
   getSitePermissions: () => sitePermissions(),
+  getTaskConsentAudit: () => taskConsentStore.taskConsentAudit(),
   getTaskConsents: () => taskConsentStore.taskConsents(),
   isReadableBrowserTab,
   onContinueBrowserJob: (job) => {
@@ -454,14 +460,19 @@ monitorRenderers = createMonitorRenderers({
   onRevokeTaskConsent: async (consent) => {
     await taskConsentStore.revokeTaskConsent({
       siteKey: consent.siteKey,
-      taskClass: consent.taskClass
+      taskClass: consent.taskClass,
+      reason: "Revoked from permission manager",
+      source: "permission-manager"
     });
     await addMessage("system", `Revoked safe-action consent for ${consent.siteKey} · ${consent.taskClass}.`);
     await renderTaskConsentPanel();
     await renderPermissionManager();
   },
   onResetSitePermission: async (siteKey) => {
-    await resetSitePermission(siteKey);
+    await resetSitePermission(siteKey, {
+      reason: "Reset from permission manager",
+      source: "permission-manager"
+    });
     await addMessage("system", `Reset site permission for ${siteKey} to ask-before-action.`);
     await renderSitePermissionPanel();
     await renderPermissionManager();
@@ -667,6 +678,7 @@ const trustCurrentTaskForSafeActions = async () => {
     siteKey: siteKeyForUrl(tab?.url),
     goal: currentControlRun.goal,
     mode: "allow-safe",
+    reason: `Trusted after approval for: ${controlStepLabel(approval.step)}`,
     source: "approval-card"
   });
   await addMessage("system", `Trusted safe ${consent.taskClass} actions on ${consent.siteKey} for this task class and approved this safe step once: ${controlStepLabel(approval.step)}`);
@@ -915,7 +927,10 @@ jobMonitorToggle.addEventListener("click", async () => {
 });
 sitePermissionMode.addEventListener("change", async () => {
   const tab = await activeTab();
-  const result = await setSitePermission(tab?.url, sitePermissionMode.value);
+  const result = await setSitePermission(tab?.url, sitePermissionMode.value, {
+    reason: "Changed from current-site permission selector",
+    source: "site-permission-panel"
+  });
   await renderSitePermissionPanel(tab);
   setStatus(`Site permission: ${result.mode}`);
   setActivity("completed", "Site permission updated", `${result.key} · ${result.mode}`);

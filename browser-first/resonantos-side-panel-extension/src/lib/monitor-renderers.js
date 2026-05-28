@@ -38,6 +38,17 @@ export function controlActionStateLabel(state = "pending") {
   return String(state || "queued");
 }
 
+function latestAudit(audit, key) {
+  const entries = audit?.[key] ?? [];
+  return entries[0] ?? null;
+}
+
+function auditLabel(entry) {
+  if (!entry) return "";
+  const date = Number.isFinite(Number(entry.at)) ? new Date(Number(entry.at)).toLocaleString() : "unknown time";
+  return `${entry.action} · ${date} · ${entry.source || "unknown"} · ${entry.reason || "no reason recorded"}`;
+}
+
 export function controlRunSummary(run) {
   const progress = controlRunProgress(run);
   const terminal = ["completed", "blocked", "failed", "denied", "cancelled"].includes(run?.status);
@@ -91,7 +102,9 @@ export function createMonitorRenderers({
   getCurrentControlRun,
   getJobMonitorCollapsed,
   getPendingApproval,
+  getSitePermissionAudit = async () => ({}),
   getSitePermissions = async () => ({}),
+  getTaskConsentAudit = async () => ({}),
   getTaskConsents,
   isReadableBrowserTab,
   onContinueBrowserJob,
@@ -303,7 +316,10 @@ export function createMonitorRenderers({
       const title = document.createElement("strong");
       title.textContent = consent.taskClass;
       const meta = document.createElement("small");
-      meta.textContent = `${consent.mode} · expires ${new Date(consent.expiresAt).toLocaleDateString()}`;
+      meta.textContent = [
+        `${consent.mode} · expires ${new Date(consent.expiresAt).toLocaleDateString()}`,
+        consent.reason ? `${consent.source || "human"} · ${consent.reason}` : ""
+      ].filter(Boolean).join(" · ");
       details.append(title, meta);
       const revoke = document.createElement("button");
       revoke.type = "button";
@@ -323,9 +339,11 @@ export function createMonitorRenderers({
       updateContextDockVisibility();
       return;
     }
-    const [sitePermissions, taskConsents] = await Promise.all([
+    const [sitePermissions, taskConsents, siteAudit, taskAudit] = await Promise.all([
       getSitePermissions().catch(() => ({})),
-      getTaskConsents().catch(() => ({}))
+      getTaskConsents().catch(() => ({})),
+      getSitePermissionAudit().catch(() => ({})),
+      getTaskConsentAudit().catch(() => ({}))
     ]);
     const permissionEntries = Object.entries(sitePermissions)
       .filter(([siteKey, mode]) => siteKey && mode && mode !== "ask-before-action")
@@ -346,7 +364,7 @@ export function createMonitorRenderers({
       const title = document.createElement("strong");
       title.textContent = siteKey;
       const meta = document.createElement("small");
-      meta.textContent = `site permission · ${mode}`;
+      meta.textContent = [`site permission · ${mode}`, auditLabel(latestAudit(siteAudit, siteKey))].filter(Boolean).join(" · ");
       details.append(title, meta);
       const reset = document.createElement("button");
       reset.type = "button";
@@ -362,7 +380,11 @@ export function createMonitorRenderers({
       const title = document.createElement("strong");
       title.textContent = `${consent.siteKey} · ${consent.taskClass}`;
       const meta = document.createElement("small");
-      meta.textContent = `task-class consent · ${consent.mode} · expires ${new Date(consent.expiresAt).toLocaleDateString()}`;
+      const auditKey = `${consent.siteKey}::${consent.taskClass}`;
+      meta.textContent = [
+        `task-class consent · ${consent.mode} · expires ${new Date(consent.expiresAt).toLocaleDateString()}`,
+        auditLabel(latestAudit(taskAudit, auditKey) ?? { action: "set", at: consent.grantedAt, source: consent.source, reason: consent.reason })
+      ].filter(Boolean).join(" · ");
       details.append(title, meta);
       const revoke = document.createElement("button");
       revoke.type = "button";
