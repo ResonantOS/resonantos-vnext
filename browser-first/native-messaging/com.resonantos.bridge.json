@@ -1,0 +1,9 @@
+{
+  "name": "com.resonantos.bridge",
+  "description": "ResonantOS Bridge Server",
+  "path": "/path/to/resonantos-bridge-host",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://cdpdmmalhmokbfcfgogoepnjplaakgnl/"
+  ]
+}
