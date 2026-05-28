@@ -158,13 +158,13 @@ export function createMonitorRenderers({
           ? "Hard boundary: wallet, payment, login, credential, signing, or irreversible value actions cannot be trusted by site."
           : boundary === "public-submit"
             ? "Public-submit boundary: use approve once only when you have reviewed the page state."
-            : "Safe-action boundary: you may approve once or trust safe actions for this site."
+            : "Safe-action boundary: you may approve once or trust this task class for this site."
       ].filter(Boolean).join("\n");
       approvalApproveButton.disabled = boundary === "hard";
       approvalTrustSiteButton.disabled = boundary !== "safe";
       approvalTrustSiteButton.title = boundary === "safe"
-        ? "Trust safe non-sensitive actions on this site."
-        : "Site trust never bypasses wallet, payment, login, credential, or public-submit boundaries.";
+        ? "Trust safe non-sensitive actions for this task class on this site."
+        : "Task trust never bypasses wallet, payment, login, credential, or public-submit boundaries.";
     } else {
       approvalCard.hidden = true;
       approvalApproveButton.disabled = false;

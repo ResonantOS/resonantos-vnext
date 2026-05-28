@@ -3,15 +3,18 @@ const hardApprovalBoundaryText = /\b(seed|private key|password|passphrase|wallet
 const publicSubmitBoundaryText = /\b(submit|publish|post|share|send|save|confirm)\b/i;
 
 export function approvalBoundaryForStep(step, reason = "") {
-  const haystack = [
+  const stepHaystack = [
     step?.type,
     step?.text,
     step?.field,
     step?.target,
-    step?.query,
-    reason
+    step?.query
   ].filter(Boolean).join(" ").toLowerCase();
-  if (hardApprovalBoundaryText.test(haystack)) return "hard";
+  const reasonHaystack = String(reason ?? "").toLowerCase();
+  if (hardApprovalBoundaryText.test(stepHaystack) || /\b(seed|private key|password|passphrase|wallet|phantom|sign|signature|buy|sell|swap|stake|unstake|bridge|mint|claim|pay|payment|checkout|login|delete|remove|destroy|credential|2fa|otp|transfer)\b/i.test(reasonHaystack)) {
+    return "hard";
+  }
+  const haystack = [stepHaystack, reasonHaystack].filter(Boolean).join(" ");
   if (publicSubmitBoundaryText.test(haystack)) return "public-submit";
   return "safe";
 }

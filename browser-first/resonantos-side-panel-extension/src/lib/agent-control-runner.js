@@ -39,6 +39,7 @@ export function createAgentControlRunner(deps) {
   const {
     addMessage,
     appendControlStep,
+    approvalBoundaryForStep = () => "safe",
     controlStepLabel,
     createBrowserJob,
     executeControlStep,
@@ -55,6 +56,7 @@ export function createAgentControlRunner(deps) {
     setStatus,
     sleep,
     startControlRun,
+    taskConsentForStep = async () => null,
     updateBrowserJob,
     updateControlRunArtifacts,
     updateControlStep
@@ -117,53 +119,60 @@ export function createAgentControlRunner(deps) {
         setActivity("tool-running", `Executing browser action ${stepIndex + 1}`, controlStepLabel(step));
         const result = await executeControlStep(step);
         await setPageControlOverlay(true, "Verifying page state...", "verifying");
-        results.push({ step, result });
+        const boundary = approvalBoundaryForStep(step, result?.error);
+        const consent = result?.approvalRequired && boundary === "safe"
+          ? await taskConsentForStep({ goal, step, result })
+          : null;
+        const finalStep = consent ? { ...step, userApproved: true } : step;
+        const finalResult = consent ? await executeControlStep(finalStep) : result;
+        results.push({ step: finalStep, result: finalResult });
         history.push({
-          action: step,
+          action: finalStep,
           result: {
-            ok: Boolean(result?.ok),
-            approvalRequired: Boolean(result?.approvalRequired),
-            error: result?.error ?? null,
-            clickedText: result?.clickedText ?? null,
-            typedText: result?.typedText ?? null,
-            url: result?.url ?? null,
-            query: result?.query ?? null
+            ok: Boolean(finalResult?.ok),
+            approvalRequired: Boolean(finalResult?.approvalRequired),
+            error: finalResult?.error ?? null,
+            clickedText: finalResult?.clickedText ?? null,
+            typedText: finalResult?.typedText ?? null,
+            url: finalResult?.url ?? null,
+            query: finalResult?.query ?? null,
+            taskConsent: consent ? `${consent.siteKey}::${consent.taskClass}` : null
           },
           observation: {
             title: getLastSnapshot()?.title ?? snapshot?.title ?? null,
             url: getLastSnapshot()?.url ?? snapshot?.url ?? null
           }
         });
-        if (!result?.ok) {
-          const status = result?.approvalRequired ? "approval" : "blocked";
-          const reason = result?.approvalRequired
+        if (!finalResult?.ok) {
+          const status = finalResult?.approvalRequired ? "approval" : "blocked";
+          const reason = finalResult?.approvalRequired
             ? "Stopped because this step requires human approval."
-            : `Stopped because this step failed: ${result?.error ?? "unknown error"}`;
-          updateControlStep(stepIndex, result?.approvalRequired ? "blocked" : "failed", controlResultSummary(result));
+            : `Stopped because this step failed: ${finalResult?.error ?? "unknown error"}`;
+          updateControlStep(stepIndex, finalResult?.approvalRequired ? "blocked" : "failed", controlResultSummary(finalResult));
           finishControlRun(status);
-          setStatus(result?.approvalRequired ? "Needs approval" : "Control blocked");
+          setStatus(finalResult?.approvalRequired ? "Needs approval" : "Control blocked");
           setActivity("failed", "Control mode blocked", controlStepLabel(step));
           await addMessage("system", `Agent Control Mode blocked at action ${stepIndex + 1}: ${controlStepLabel(step)}\n${reason}`);
-          if (result?.approvalRequired) {
+          if (finalResult?.approvalRequired) {
             setPendingApproval({
               step: { ...step },
               stepIndex,
-              reason: result?.error ?? "This browser action requires human approval.",
+              reason: finalResult?.error ?? "This browser action requires human approval.",
               results,
               history
             });
             renderControlMonitor();
           }
-          const archiveResult = await saveControlReportToArchive(results, result?.approvalRequired ? "approval-required" : "blocked");
+          const archiveResult = await saveControlReportToArchive(results, finalResult?.approvalRequired ? "approval-required" : "blocked");
           if (archiveResult?.path) {
             const artifacts = [...(getCurrentControlRun()?.artifacts ?? []), { type: "archive-intake", path: archiveResult.path }];
             updateControlRunArtifacts(artifacts);
             renderControlMonitor();
             await updateBrowserJob(getCurrentControlRun()?.id, { artifacts });
           }
-          return { ok: false, results, approvalRequired: Boolean(result?.approvalRequired) };
+          return { ok: false, results, approvalRequired: Boolean(finalResult?.approvalRequired) };
         }
-        updateControlStep(stepIndex, "completed", controlResultSummary(result));
+        updateControlStep(stepIndex, "completed", consent ? `trusted task consent · ${controlResultSummary(finalResult)}` : controlResultSummary(finalResult));
         await sleep(350);
       }
 

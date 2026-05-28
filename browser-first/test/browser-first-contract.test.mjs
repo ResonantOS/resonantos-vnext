@@ -180,6 +180,7 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   const monitorRenderers = await readText(path.join(extensionRoot, "src", "lib", "monitor-renderers.js"));
   const commandRouter = await readText(path.join(extensionRoot, "src", "lib", "side-panel-command-router.js"));
   const sitePermissionStore = await readText(path.join(extensionRoot, "src", "lib", "site-permission-store.js"));
+  const taskConsentStore = await readText(path.join(extensionRoot, "src", "lib", "task-consent-store.js"));
   const tabContextController = await readText(path.join(extensionRoot, "src", "lib", "tab-context-controller.js"));
   const background = await readText(path.join(extensionRoot, "src", "background.js"));
 
@@ -254,6 +255,10 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(sitePermissionStore, /permissionForUrl/);
   assert.match(sitePermissionStore, /setSitePermission/);
   assert.match(sitePermissionStore, /ask-before-action/);
+  assert.match(taskConsentStore, /taskClassForGoal/);
+  assert.match(taskConsentStore, /taskConsentKey/);
+  assert.match(script, /createTaskConsentStore/);
+  assert.match(script, /augmentorTaskConsents/);
   assert.match(script, /createMonitorRenderers/);
   assert.match(monitorRenderers, /sitePermissionDescription/);
   assert.match(monitorRenderers, /renderSitePermissionPanel/);
@@ -303,7 +308,7 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(agentControlPlanner, /deterministicNextAction/);
   assert.match(agentControlPlanner, /dedupeControlSteps/);
   assert.match(agentControlPlanner, /controlStepLabel/);
-  assert.match(script, /trustCurrentSiteForSafeActions/);
+  assert.match(script, /trustCurrentTaskForSafeActions/);
   assert.match(appCommandHandlers, /runJobsCommand/);
   assert.match(appCommandHandlers, /pauseBrowserJob/);
   assert.match(appCommandHandlers, /resumeBrowserJob/);

@@ -13,6 +13,8 @@ test("approval policy classifies hard wallet, credential, and signing boundaries
   assert.equal(approvalBoundaryForStep({ type: "click", text: "Connect Wallet" }), "hard");
   assert.equal(approvalBoundaryForStep({ type: "type", field: "Password", text: "secret" }), "hard");
   assert.equal(approvalBoundaryForStep({ type: "click", text: "Submit public form" }), "public-submit");
+  assert.equal(approvalBoundaryForStep({ type: "click", text: "Submit" }, "Clicking Submit requires human approval."), "public-submit");
+  assert.equal(approvalBoundaryForStep({ type: "click", text: "Details" }, "Safe action requires human approval."), "safe");
   assert.equal(approvalBoundaryForStep({ type: "click", text: "Details" }), "safe");
 });
 

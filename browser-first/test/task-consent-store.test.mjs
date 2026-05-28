@@ -1,0 +1,70 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import {
+  createTaskConsentStore,
+  taskClassForGoal,
+  taskConsentKey
+} from "../resonantos-side-panel-extension/src/lib/task-consent-store.js";
+
+function createHarness(overrides = {}) {
+  const state = overrides.state ?? {};
+  const storage = {
+    get: async (key) => ({ [key]: state[key] ?? {} }),
+    set: async (patch) => Object.assign(state, patch)
+  };
+  return {
+    state,
+    store: createTaskConsentStore({
+      storage,
+      taskConsentStorageKey: "augmentorTaskConsents",
+      now: overrides.now ?? (() => 1000),
+      ttlMs: overrides.ttlMs ?? 5000
+    })
+  };
+}
+
+test("task consent store classifies task goals conservatively", () => {
+  assert.equal(taskClassForGoal("find a booking slot"), "booking");
+  assert.equal(taskClassForGoal("go to amazon and compare headphones"), "shopping");
+  assert.equal(taskClassForGoal("find AI news"), "research");
+  assert.equal(taskClassForGoal("fill this form"), "form-edit");
+  assert.equal(taskClassForGoal("go to resonantos.com"), "navigation");
+  assert.equal(taskClassForGoal("do something"), "general");
+});
+
+test("task consent store persists scoped safe-action consent", async () => {
+  const harness = createHarness();
+  const consent = await harness.store.setTaskConsent({
+    siteKey: "example.com",
+    goal: "find a booking slot",
+    source: "test"
+  });
+
+  assert.equal(consent.siteKey, "example.com");
+  assert.equal(consent.taskClass, "booking");
+  assert.equal(consent.mode, "allow-safe");
+  assert.equal(consent.expiresAt, 6000);
+  assert.deepEqual(await harness.store.consentFor({ siteKey: "example.com", goal: "find a booking slot" }), consent);
+  assert.equal(await harness.store.consentFor({ siteKey: "example.com", goal: "shop for shoes" }), null);
+});
+
+test("task consent store expires and revokes consent by site and task class", async () => {
+  let clock = 1000;
+  const harness = createHarness({ now: () => clock, ttlMs: 5000 });
+
+  await harness.store.setTaskConsent({ siteKey: "example.com", goal: "research AI news" });
+  assert.ok(await harness.store.consentFor({ siteKey: "example.com", goal: "research AI news" }));
+
+  clock = 7001;
+  assert.equal(await harness.store.consentFor({ siteKey: "example.com", goal: "research AI news" }), null);
+
+  clock = 8000;
+  await harness.store.setTaskConsent({ siteKey: "example.com", goal: "research AI news" });
+  assert.equal(await harness.store.revokeTaskConsent({ siteKey: "example.com", goal: "research AI news" }), true);
+  assert.equal(await harness.store.consentFor({ siteKey: "example.com", goal: "research AI news" }), null);
+});
+
+test("task consent keys are explicit and portable", () => {
+  assert.equal(taskConsentKey({ siteKey: "example.com", taskClass: "booking" }), "example.com::booking");
+});

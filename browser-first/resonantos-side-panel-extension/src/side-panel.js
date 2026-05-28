@@ -20,6 +20,7 @@ import { createSidePanelCommandRouter } from "./lib/side-panel-command-router.js
 import { createSidePanelRenderers } from "./lib/side-panel-renderers.js";
 import { createSitePermissionStore } from "./lib/site-permission-store.js";
 import { createTabContextController } from "./lib/tab-context-controller.js";
+import { createTaskConsentStore } from "./lib/task-consent-store.js";
 
 const readButton = document.querySelector("#read-page");
 const newChatButton = document.querySelector("#new-chat");
@@ -75,6 +76,7 @@ const STORAGE_KEYS = {
   thinkingDepth: "augmentorThinkingDepth",
   attachments: "augmentorBrowserAttachments",
   sitePermissions: "augmentorSitePermissions",
+  taskConsents: "augmentorTaskConsents",
   browserJobs: "augmentorBrowserJobs",
   jobMonitorCollapsed: "augmentorJobMonitorCollapsed"
 };
@@ -226,6 +228,10 @@ const sitePermissionStore = createSitePermissionStore({
 const permissionForUrl = sitePermissionStore.permissionForUrl;
 const setSitePermission = sitePermissionStore.setSitePermission;
 const siteKeyForUrl = sitePermissionStore.siteKeyForUrl;
+const taskConsentStore = createTaskConsentStore({
+  storage: chrome.storage?.local,
+  taskConsentStorageKey: STORAGE_KEYS.taskConsents
+});
 
 const renderSitePermissionPanel = async (tab = null) => {
   await monitorRenderers.renderSitePermissionPanel(tab);
@@ -529,6 +535,7 @@ const observeControlPage = controlPageObserver.observeControlPage;
 const agentControlRunner = createAgentControlRunner({
   addMessage,
   appendControlStep,
+  approvalBoundaryForStep,
   controlStepLabel,
   createBrowserJob,
   executeControlStep,
@@ -548,6 +555,13 @@ const agentControlRunner = createAgentControlRunner({
   setStatus,
   sleep,
   startControlRun,
+  taskConsentForStep: async ({ goal }) => {
+    const tab = await activeTab();
+    return taskConsentStore.consentFor({
+      siteKey: siteKeyForUrl(tab?.url),
+      goal
+    });
+  },
   updateBrowserJob,
   updateControlRunArtifacts,
   updateControlStep
@@ -567,22 +581,26 @@ const approvePendingControlStep = async () => {
   await agentControlRunner.approvePendingControlStep(approval);
 };
 
-const trustCurrentSiteForSafeActions = async () => {
+const trustCurrentTaskForSafeActions = async () => {
   if (!pendingApproval || !currentControlRun) return;
   const approval = pendingApproval;
   const boundary = approvalBoundaryForStep(approval.step, approval.reason);
   const tab = await activeTab();
-  const result = await setSitePermission(tab?.url, "trusted-for-safe-actions");
-  await renderSitePermissionPanel(tab);
   if (boundary !== "safe") {
     await addMessage(
       "system",
-      `Set ${result.key} to trusted safe actions. The current blocked step still needs explicit once-only review because it is ${boundary}.`
+      `Cannot trust this task class for ${boundary} actions. Wallet, payment, login, credential, signing, public-submit, and transfer boundaries stay once-only human review.`
     );
     renderControlMonitor();
     return;
   }
-  await addMessage("system", `Set ${result.key} to trusted safe actions and approved this safe step once: ${controlStepLabel(approval.step)}`);
+  const consent = await taskConsentStore.setTaskConsent({
+    siteKey: siteKeyForUrl(tab?.url),
+    goal: currentControlRun.goal,
+    mode: "allow-safe",
+    source: "approval-card"
+  });
+  await addMessage("system", `Trusted safe ${consent.taskClass} actions on ${consent.siteKey} for this task class and approved this safe step once: ${controlStepLabel(approval.step)}`);
   await approvePendingControlStep();
 };
 
@@ -805,7 +823,7 @@ contextToggleButton.addEventListener("click", () => {
   renderJobMonitor();
 });
 approvalApproveButton.addEventListener("click", () => void approvePendingControlStep());
-approvalTrustSiteButton.addEventListener("click", () => void trustCurrentSiteForSafeActions());
+approvalTrustSiteButton.addEventListener("click", () => void trustCurrentTaskForSafeActions());
 approvalDenyButton.addEventListener("click", () => void denyPendingControlStep());
 approvalDelegateButton.addEventListener("click", () => void delegateControlIssue());
 jobMonitorToggle.addEventListener("click", async () => {

@@ -24,6 +24,7 @@ function createHarness(overrides = {}) {
   let pendingApproval = null;
   let decisionIndex = 0;
   const nextActionRequests = [];
+  const taskConsents = overrides.taskConsents ?? [];
   const decisions = overrides.decisions ?? [
     { status: "continue", thought: "click next", action: { type: "click", text: "Next" } },
     { status: "done", thought: "done", doneSummary: "Finished." }
@@ -37,6 +38,7 @@ function createHarness(overrides = {}) {
       controlRun.steps.push({ ...step, state: "pending" });
       return controlRun.steps.length - 1;
     },
+    approvalBoundaryForStep: overrides.approvalBoundaryForStep ?? ((_step, reason = "") => /safe/i.test(reason) ? "safe" : /submit/i.test(reason) ? "public-submit" : "safe"),
     controlStepLabel,
     createBrowserJob: async ({ goal, planner, summary }) => {
       activeJobId = "job-created";
@@ -80,6 +82,7 @@ function createHarness(overrides = {}) {
       controlRun = { ...controlRun, goal, planner: plan.source, summary: plan.summary, steps: [] };
       events.push(["start", goal]);
     },
+    taskConsentForStep: async () => taskConsents.shift() ?? null,
     updateBrowserJob: async (jobId, patch) => events.push(["job", jobId, patch]),
     updateControlRunArtifacts: (artifacts) => {
       controlRun = { ...controlRun, artifacts };
@@ -186,6 +189,42 @@ test("agent control runner stores pending approval when a step requires human re
   assert.equal(harness.getControlRun().status, "approval");
   assert.equal(harness.getPendingApproval().step.text, "Submit");
   assert.ok(harness.events.some((event) => event[0] === "pending" && event[1] === "click"));
+});
+
+test("agent control runner uses scoped task consent only for safe approval retries", async () => {
+  const harness = createHarness({
+    decisions: [
+      { status: "continue", thought: "click details", action: { type: "click", text: "Details" } },
+      { status: "done", thought: "done", doneSummary: "Done after trusted safe action." }
+    ],
+    stepResults: [
+      { ok: false, approvalRequired: true, error: "Safe action requires review." },
+      { ok: true, clickedText: "Details" }
+    ],
+    taskConsents: [{ siteKey: "example.test", taskClass: "research" }]
+  });
+
+  const result = await harness.runner.continueControlLoop({ goal: "research fixture" });
+
+  assert.equal(result.ok, true);
+  assert.equal(harness.events.filter((event) => event[0] === "execute").length, 2);
+  assert.equal(harness.events.find((event) => event[0] === "execute" && event[1].userApproved)?.[1].text, "Details");
+  assert.equal(harness.getControlRun().steps[0].note, 'trusted task consent · clicked "Details"');
+});
+
+test("agent control runner does not use task consent for public-submit approval", async () => {
+  const harness = createHarness({
+    decisions: [{ status: "continue", thought: "submit", action: { type: "click", text: "Submit" } }],
+    stepResults: [{ ok: false, approvalRequired: true, error: "Clicking Submit looks like a submit/public action and requires human approval." }],
+    taskConsents: [{ siteKey: "example.test", taskClass: "form-edit" }]
+  });
+
+  const result = await harness.runner.continueControlLoop({ goal: "fill this form" });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.approvalRequired, true);
+  assert.equal(harness.events.filter((event) => event[0] === "execute").length, 1);
+  assert.equal(harness.getControlRun().status, "approval");
 });
 
 test("agent control runner can approve or deny a pending step through injected state", async () => {
