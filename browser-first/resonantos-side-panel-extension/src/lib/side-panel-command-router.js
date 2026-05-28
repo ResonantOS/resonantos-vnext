@@ -34,6 +34,7 @@ export function createSidePanelCommandRouter(handlers) {
       if (name === "browser") return handlers.runBrowserCommand(body);
       if (name === "control") return handlers.runControlCommand(body);
       if (name === "save" || name === "archive" || name === "intake") return handlers.saveIntake(body);
+      if (name === "trail" || name === "researchtrail") return handlers.saveIntake(`trail ${body}`.trim());
     }
 
     const controlIntent = parseControlIntent(value);

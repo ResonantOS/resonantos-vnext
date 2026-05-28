@@ -69,6 +69,8 @@ The current command surface:
 /save page
 /save selection
 /save summary
+/save trail <title>
+/trail <title>
 ```
 
 Agent Control Mode starts with `/control <goal>` or natural browser-task requests such as `book a call`, `arrange a meeting`, `fill this form`, `find news`, or `use this page`.
@@ -112,8 +114,9 @@ Browser memory commands remain intake-only:
 - `/save page` captures the current page source context into Living Archive intake
 - `/save selection` captures selected page text into Living Archive intake
 - `/save summary` creates a provider-backed page summary intake artifact with source provenance and deterministic fallback
+- `/save trail <title>` or `/trail <title>` captures readable open web tabs as one multi-page research trail intake bundle
 
-All three memory commands queue review requests. They do not write trusted wiki pages directly.
+All browser memory commands queue review requests. They do not write trusted wiki pages directly.
 
 Allowed next actions are:
 

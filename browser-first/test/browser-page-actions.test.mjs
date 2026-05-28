@@ -19,10 +19,10 @@ function createHarness(overrides = {}) {
       get: async (tabId) => tabs.find((tab) => tab.id === tabId) ?? null,
       query: async () => tabs,
       reload: async (tabId) => events.push(["tab.reload", tabId]),
-      sendMessage: async (_tabId, message, options) => {
+      sendMessage: async (tabId, message, options) => {
         sendMessageCalls += 1;
         events.push(["sendMessage", message.type, options?.frameId]);
-        if (overrides.sendMessage) return overrides.sendMessage(sendMessageCalls, message, options);
+        if (overrides.sendMessage) return overrides.sendMessage(sendMessageCalls, message, options, tabId);
         return { ok: true, snapshot: { title: "Frame", url: "https://example.test/", text: "hello world", frame: { isTop: true } } };
       },
       update: async (tabId, payload) => {
@@ -276,4 +276,63 @@ test("browser page actions create deterministic summary intake when provider fai
   assert.match(bridgeCall[2].body.content, /fallback summary: yes/);
   assert.match(bridgeCall[2].body.content, /Provider summary failed/);
   assert.match(bridgeCall[2].body.content, /First fact/);
+});
+
+test("browser page actions save multi-tab research trail to reviewed intake", async () => {
+  const harness = createHarness({
+    controlledTabId: 1,
+    tabs: [
+      { id: 1, active: true, title: "Alpha", url: "https://alpha.test/" },
+      { id: 2, active: false, title: "Beta", url: "https://beta.test/" },
+      { id: 3, active: false, title: "Side Panel", url: "chrome-extension://abc/panel.html" }
+    ],
+    sendMessage: (_call, message, _options, tabId) => {
+      if (message.type !== "read_page") return { ok: false, error: "unexpected" };
+      return {
+        ok: true,
+        snapshot: {
+          title: tabId === 1 ? "Alpha" : "Beta",
+          url: tabId === 1 ? "https://alpha.test/" : "https://beta.test/",
+          text: tabId === 1 ? "Alpha research source text." : "Beta research source text.",
+          links: [{ text: "Source", href: `https://${tabId === 1 ? "alpha" : "beta"}.test/source` }],
+          controls: [],
+          fields: [],
+          frame: { isTop: true }
+        }
+      };
+    },
+    bridgeRequest: async (route) => route === "/archive/intake"
+      ? { path: "INTAKE/browser/research-trail.md", bytes: 300 }
+      : { path: "REVIEW/requests/research-trail.md", status: "pending" }
+  });
+
+  const result = await harness.actions.saveResearchTrailToArchive("trail ResonantOS market research");
+
+  assert.equal(result.ok, true);
+  assert.equal(result.pages, 2);
+  assert.equal(result.skipped, 0);
+  assert.equal(result.path, "INTAKE/browser/research-trail.md");
+  assert.equal(result.reviewRequestPath, "REVIEW/requests/research-trail.md");
+  const bridgeCall = harness.events.find((event) => event[0] === "bridge" && event[1] === "/archive/intake");
+  assert.equal(bridgeCall[2].body.origin, "browser-research-trail");
+  assert.equal(bridgeCall[2].body.title, "Research Trail: ResonantOS market research");
+  assert.match(bridgeCall[2].body.content, /Page 1: Alpha/);
+  assert.match(bridgeCall[2].body.content, /Page 2: Beta/);
+  assert.match(bridgeCall[2].body.content, /source material until the Living Archive review/);
+  const reviewCall = harness.events.find((event) => event[0] === "bridge" && event[1] === "/archive/review/request");
+  assert.equal(reviewCall[2].body.path, "INTAKE/browser/research-trail.md");
+  assert.match(reviewCall[2].body.reason, /multi-page browser research trail/);
+  assert.ok(harness.events.some((event) => event[0] === "message" && /2-page browser research trail/.test(event[2])));
+});
+
+test("browser page actions report when research trail has no readable tabs", async () => {
+  const harness = createHarness({
+    tabs: [{ id: 1, active: true, title: "Extension", url: "chrome-extension://abc/panel.html" }]
+  });
+
+  const result = await harness.actions.saveResearchTrailToArchive("trail");
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /No readable browser tabs/);
+  assert.ok(harness.events.some((event) => event[0] === "message" && /No readable browser tabs/.test(event[2])));
 });

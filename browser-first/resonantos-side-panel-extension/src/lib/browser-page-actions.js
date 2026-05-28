@@ -149,6 +149,23 @@ export function createBrowserPageActions(deps) {
     return responses.find((response) => response?.error) ?? { ok: false, error: "No frame handled this browser action." };
   }
 
+  async function readSpecificTabPage(tab, { includeBlocked = false } = {}) {
+    if (!tab?.id || !isReadableBrowserTab(tab)) {
+      return { ok: false, tab, error: "Tab is not a readable web page." };
+    }
+    const siteMode = await permissionForUrl(tab.url);
+    if (siteMode === "blocked" && !includeBlocked) {
+      return { ok: false, tab, error: `Assistant is blocked on ${siteKeyForUrl(tab.url)}.` };
+    }
+    const response = await sendContentActionToFrames(tab.id, {
+      channel: "resonantos.browser_first.content",
+      type: "read_page"
+    });
+    return response?.ok
+      ? { ok: true, tab, snapshot: response.snapshot }
+      : { ok: false, tab, error: response?.error ?? "No readable page context returned." };
+  }
+
   async function sendContentAction(payload) {
     const tab = await activeTab();
     if (!tab?.id || !isReadableBrowserTab(tab)) {
@@ -392,6 +409,50 @@ export function createBrowserPageActions(deps) {
     ].filter(Boolean).join("\n");
   }
 
+  function researchTrailIntakeMarkdown({ title, snapshots, skipped }) {
+    const collectedAt = new Date().toISOString();
+    const pages = snapshots.map((snapshot, index) => {
+      const text = String(snapshot.text ?? "").trim();
+      const links = (snapshot.links ?? [])
+        .slice(0, 8)
+        .map((link) => `  - [${link.text || link.href}](${link.href})`)
+        .join("\n");
+      return [
+        `## Page ${index + 1}: ${snapshot.title || "Untitled"}`,
+        "",
+        `- url: ${snapshot.url}`,
+        `- visible words: ${text.split(/\s+/).filter(Boolean).length}`,
+        `- controls captured: ${snapshot.controls?.length ?? 0}`,
+        `- fields captured: ${snapshot.fields?.length ?? 0}`,
+        "",
+        "### Visible Text",
+        text.slice(0, 6000) || "_No visible text captured._",
+        "",
+        links ? "### Source Links\n" + links : ""
+      ].filter(Boolean).join("\n");
+    });
+    const skippedLines = skipped.length
+      ? [
+        "## Skipped Tabs",
+        "",
+        ...skipped.map((item) => `- ${item.tab?.title || item.tab?.url || "unknown"}: ${item.error}`)
+      ]
+      : [];
+    return [
+      `# Research Trail: ${title}`,
+      "",
+      `- collectedAt: ${collectedAt}`,
+      `- pages captured: ${snapshots.length}`,
+      `- tabs skipped: ${skipped.length}`,
+      "",
+      "This is a browser research trail intake bundle. It remains source material until the Living Archive review, verification, and promotion pipeline accepts it as trusted AI Memory.",
+      "",
+      ...pages,
+      "",
+      ...skippedLines
+    ].join("\n").trim();
+  }
+
   async function summarizeCurrentPageToArchive() {
     const response = deps.getLastSnapshot() ? { ok: true, snapshot: deps.getLastSnapshot() } : await readActivePage({ announce: false });
     const snapshot = response?.snapshot;
@@ -463,6 +524,56 @@ export function createBrowserPageActions(deps) {
     setStatus("Page summary saved");
     setActivity("completed", "Saved page summary intake", result.path);
     return { ok: true, ...result, reviewRequestPath: review.path, fallback };
+  }
+
+  async function saveResearchTrailToArchive(rawTitle = "") {
+    const title = String(rawTitle ?? "").replace(/^(trail|research|research trail)\b/i, "").trim() || "Browser research trail";
+    setActivity("retrieving", "Collecting browser research trail", title);
+    setStatus("Collecting trail");
+    const tabs = (await chrome.tabs.query({ currentWindow: true }).catch(() => []))
+      .filter(isReadableBrowserTab)
+      .slice(0, 8);
+    if (!tabs.length) {
+      await addMessage("system", "No readable browser tabs are available for a research trail. Open one or more normal web pages first.");
+      setStatus("Trail unavailable");
+      setActivity("failed", "No readable tabs", "Research trail");
+      return { ok: false, error: "No readable browser tabs available." };
+    }
+    const reads = [];
+    for (const tab of tabs) {
+      reads.push(await readSpecificTabPage(tab));
+    }
+    const snapshots = reads.filter((item) => item.ok && item.snapshot).map((item) => item.snapshot);
+    const skipped = reads.filter((item) => !item.ok);
+    if (!snapshots.length) {
+      await addMessage("system", "I could not read any open web tabs for the research trail. Check site permissions or open readable pages.");
+      setStatus("Trail unavailable");
+      setActivity("failed", "No readable tab content", "Research trail");
+      return { ok: false, error: "No readable tab content available.", skipped };
+    }
+    const result = await bridgeRequest("/archive/intake", {
+      method: "POST",
+      body: {
+        title: `Research Trail: ${title}`,
+        url: snapshots[0]?.url ?? null,
+        origin: "browser-research-trail",
+        content: researchTrailIntakeMarkdown({ title, snapshots, skipped })
+      }
+    });
+    const review = await bridgeRequest("/archive/review/request", {
+      method: "POST",
+      body: {
+        path: result.path,
+        reason: "Evaluate this multi-page browser research trail for Living Archive ingestion, source provenance, entity extraction, contradictions, and durable wiki synthesis."
+      }
+    });
+    await addMessage(
+      "system",
+      `Saved a ${snapshots.length}-page browser research trail to Living Archive intake and queued it for review.\n\nIt remains raw source material until review, verification, and promotion accept it.`
+    );
+    setStatus("Research trail saved");
+    setActivity("completed", "Saved research trail intake", result.path);
+    return { ok: true, ...result, reviewRequestPath: review.path, pages: snapshots.length, skipped: skipped.length };
   }
 
   async function saveCurrentPageToArchive() {
@@ -556,6 +667,7 @@ export function createBrowserPageActions(deps) {
     sendContentActionToFrames,
     setPageControlOverlay,
     saveCurrentPageToArchive,
+    saveResearchTrailToArchive,
     saveSelectionToArchive,
     summarizeCurrentPageToArchive,
     summarizeSnapshot,

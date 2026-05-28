@@ -379,6 +379,7 @@ const {
   refreshTabContext,
   scrollActivePage,
   saveCurrentPageToArchive,
+  saveResearchTrailToArchive,
   saveSelectionToArchive,
   searchBrowser,
   sendContentAction,
@@ -470,6 +471,9 @@ const tabContextController = createTabContextController({
 const bindMentionedTab = tabContextController.bindMentionedTab;
 
 const saveIntake = async (target = "page") => {
+  if (/trail|research/i.test(String(target))) {
+    return saveResearchTrailToArchive(target);
+  }
   if (/summary|summari[sz]e|synthesis/i.test(String(target))) {
     return summarizeCurrentPageToArchive();
   }
