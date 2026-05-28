@@ -371,24 +371,60 @@ export function renderLivingArchiveWorkspace({ container, bridgeRequest, initial
       pathNode.textContent = result.path || request.draftArtifactPath;
       heading.append(title, pathNode);
       const meta = document.createElement("p");
+      const verificationStatus = result.verificationStatus || "not verified";
       meta.textContent = result.proposedPage
         ? `Proposed page: ${result.proposedPage}`
         : `Type: ${result.type || "archive artifact"}`;
+      meta.textContent = `${meta.textContent} · Verification: ${verificationStatus}`;
       const content = document.createElement("pre");
       content.textContent = result.content || "";
       const actions = document.createElement("div");
       actions.className = "memory-review-actions";
+      const verifyButton = document.createElement("button");
+      verifyButton.type = "button";
+      verifyButton.textContent = result.verificationStatus === "verified" ? "Verified" : "Verify";
+      verifyButton.disabled = result.status === "promoted" || result.verificationStatus === "verified";
+      verifyButton.addEventListener("click", () => {
+        void verifyDraftArtifact(result.path);
+      });
       const promoteButton = document.createElement("button");
       promoteButton.type = "button";
       promoteButton.textContent = result.status === "promoted" ? "Promoted" : "Promote";
-      promoteButton.disabled = result.status === "promoted";
+      promoteButton.disabled = result.status === "promoted" || result.verificationStatus !== "verified";
       promoteButton.addEventListener("click", () => {
         void promoteDraftArtifact(result.path);
       });
-      actions.append(promoteButton);
+      actions.append(verifyButton, promoteButton);
       draftPreview.append(heading, meta, content, actions);
       draftPreview.hidden = false;
       setStatus(reviewStatus, result.truncated ? "Draft preview loaded and truncated for safety." : "Draft preview loaded.", "success");
+    } catch (error) {
+      setStatus(reviewStatus, error instanceof Error ? error.message : String(error), "error");
+    }
+  };
+
+  const verifyDraftArtifact = async (path) => {
+    if (!path) {
+      setStatus(reviewStatus, "Draft artifact is missing its path.", "error");
+      return;
+    }
+    setStatus(reviewStatus, "Verifying draft wiki update…");
+    try {
+      const result = await bridgeRequest("/archive/review/artifact/verify", {
+        method: "POST",
+        body: { path }
+      });
+      await loadStatus();
+      await loadReviewQueue();
+      setStatus(
+        reviewStatus,
+        result.status === "verified"
+          ? `Verified draft: ${result.verifierArtifactPath}.`
+          : `Draft needs revision: ${(result.findings || []).join("; ")}`,
+        result.status === "verified" ? "success" : "warning"
+      );
+      draftPreview.hidden = true;
+      draftPreview.replaceChildren();
     } catch (error) {
       setStatus(reviewStatus, error instanceof Error ? error.message : String(error), "error");
     }

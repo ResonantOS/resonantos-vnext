@@ -1355,11 +1355,113 @@ async function executeArchiveReviewArtifactRead(payload = {}) {
     title: markdownTitle(content, path.basename(filePath, path.extname(filePath))),
     type: type || "archive-review-artifact",
     status: frontmatterValue(content, "promotionStatus") || frontmatterValue(content, "status") || "",
+    verificationStatus: frontmatterValue(content, "verificationStatus") || "",
+    verifierArtifactPath: frontmatterValue(content, "verifierArtifactPath") || "",
     proposedPage: frontmatterValue(content, "proposedPage") || "",
     bytes: details.size,
     modifiedAt: details.mtime.toISOString(),
     content: content.slice(0, 24_000),
     truncated: content.length > 24_000,
+  };
+}
+
+async function executeArchiveReviewArtifactVerify(payload = {}) {
+  const artifactPath = String(payload.path ?? "").trim();
+  const artifactFile = safeMemoryRelativePath(artifactPath, "REVIEW/artifacts");
+  if (!/\.(md|markdown)$/i.test(artifactFile)) {
+    throw new Error("Archive review verification only supports markdown draft artifacts.");
+  }
+  const artifactContent = await readFile(artifactFile, "utf8");
+  if (frontmatterValue(artifactContent, "type") !== "archive-draft-wiki-update") {
+    throw new Error("Only draft wiki-update artifacts can be verified.");
+  }
+  if (frontmatterValue(artifactContent, "promotionStatus") === "promoted") {
+    throw new Error("Promoted artifacts cannot be re-verified through this draft gate.");
+  }
+  const requestPath = frontmatterValue(artifactContent, "requestPath");
+  const requestFile = safeMemoryRelativePath(requestPath, "REVIEW/requests");
+  const requestContent = await readFile(requestFile, "utf8");
+  const proposedPage = frontmatterValue(artifactContent, "proposedPage");
+  const proposedContent = markdownSection(artifactContent, "Proposed Content");
+  const sourceArtifactPath = frontmatterValue(artifactContent, "artifactPath");
+  const findings = [];
+  if ((frontmatterValue(requestContent, "status") || "pending") !== "approved") {
+    findings.push("Source review request is not approved.");
+  }
+  if (!proposedPage) {
+    findings.push("Draft has no proposed wiki page.");
+  } else {
+    const pageFile = safeMemoryRelativePath(proposedPage, "AI_MEMORY/wiki");
+    if (!/\.(md|markdown)$/i.test(pageFile)) {
+      findings.push("Proposed wiki page is not a markdown file.");
+    }
+  }
+  if (!proposedContent || proposedContent.length < 80) {
+    findings.push("Proposed content is missing or too short to promote safely.");
+  }
+  let sourceTitle = "";
+  if (!sourceArtifactPath) {
+    findings.push("Draft has no source artifact path.");
+  } else {
+    const sourceFile = safeMemoryRelativePath(sourceArtifactPath, "INTAKE");
+    if (!/\.(md|markdown)$/i.test(sourceFile) || !existsSync(sourceFile)) {
+      findings.push("Source artifact is missing or is not markdown.");
+    } else {
+      const sourceContent = await readFile(sourceFile, "utf8");
+      sourceTitle = markdownTitle(sourceContent, path.basename(sourceFile, path.extname(sourceFile)));
+      if (!compactExcerpt(sourceContent, 120)) {
+        findings.push("Source artifact has no readable text.");
+      }
+    }
+  }
+  const now = new Date().toISOString();
+  const verificationStatus = findings.length ? "needs-revision" : "verified";
+  const verificationDir = path.join(memoryRoot(), "REVIEW", "verifications", "browser");
+  await mkdir(verificationDir, { recursive: true });
+  const verificationFile = `${now.replace(/[:.]/g, "-")}-${safeFileSlug(sourceTitle || proposedPage || artifactPath)}-verification.md`;
+  const verificationPath = path.join(verificationDir, verificationFile);
+  const verificationBody = [
+    "---",
+    `source: ${JSON.stringify("resonantos-browser-first")}`,
+    `type: ${JSON.stringify("archive-verification-result")}`,
+    `status: ${JSON.stringify(verificationStatus)}`,
+    `createdAt: ${JSON.stringify(now)}`,
+    `draftArtifactPath: ${JSON.stringify(artifactPath)}`,
+    `requestPath: ${JSON.stringify(requestPath)}`,
+    `sourceArtifactPath: ${JSON.stringify(sourceArtifactPath || "")}`,
+    `proposedPage: ${JSON.stringify(proposedPage || "")}`,
+    "---",
+    "",
+    `# Archive Verification: ${sourceTitle || proposedPage || "Draft artifact"}`,
+    "",
+    "## Result",
+    verificationStatus,
+    "",
+    "## Checks",
+    "- request approved",
+    "- proposed page scoped to AI_MEMORY/wiki",
+    "- proposed content present",
+    "- source artifact present under INTAKE",
+    "",
+    "## Findings",
+    findings.length ? findings.map((finding) => `- ${finding}`).join("\n") : "- No blocking deterministic findings.",
+    "",
+    "## Boundary",
+    "This is a deterministic host verifier. Future provider-backed verifier agents can add deeper semantic checks before this gate is accepted for promotion.",
+    "",
+  ].join("\n");
+  await writeFile(verificationPath, verificationBody);
+  let updatedArtifact = artifactContent;
+  updatedArtifact = writeFrontmatterValue(updatedArtifact, "verificationStatus", verificationStatus);
+  updatedArtifact = writeFrontmatterValue(updatedArtifact, "verifiedAt", now);
+  updatedArtifact = writeFrontmatterValue(updatedArtifact, "verifierArtifactPath", path.relative(memoryRoot(), verificationPath));
+  updatedArtifact = `${updatedArtifact.trimEnd()}\n\n## Verification Event\n- at: ${now}\n- actor: resonantos-browser-first\n- status: ${verificationStatus}\n- verifier artifact: ${path.relative(memoryRoot(), verificationPath)}\n`;
+  await writeFile(artifactFile, updatedArtifact);
+  return {
+    path: artifactPath,
+    status: verificationStatus,
+    verifierArtifactPath: path.relative(memoryRoot(), verificationPath),
+    findings,
   };
 }
 
@@ -1387,6 +1489,13 @@ async function executeArchiveReviewArtifactPromote(payload = {}) {
   const requestContent = await readFile(requestFile, "utf8");
   if ((frontmatterValue(requestContent, "status") || "pending") !== "approved") {
     throw new Error("Draft promotion requires the source review request to remain approved.");
+  }
+  if (frontmatterValue(artifactContent, "verificationStatus") !== "verified") {
+    throw new Error("Draft promotion requires verifier status verified.");
+  }
+  const verifierArtifactPath = frontmatterValue(artifactContent, "verifierArtifactPath");
+  if (!verifierArtifactPath || !existsSync(safeMemoryRelativePath(verifierArtifactPath, "REVIEW/verifications"))) {
+    throw new Error("Draft promotion requires a recorded verifier artifact.");
   }
   const proposedPage = frontmatterValue(artifactContent, "proposedPage");
   const pageFile = safeMemoryRelativePath(proposedPage, "AI_MEMORY/wiki");
@@ -1769,6 +1878,7 @@ const bridgeRoutes = [
   { method: "POST", path: "/archive/review/transition", handler: executeArchiveReviewTransition },
   { method: "POST", path: "/archive/review/draft", handler: executeArchiveReviewDraft },
   { method: "POST", path: "/archive/review/artifact/read", handler: executeArchiveReviewArtifactRead },
+  { method: "POST", path: "/archive/review/artifact/verify", handler: executeArchiveReviewArtifactVerify },
   { method: "POST", path: "/archive/review/artifact/promote", handler: executeArchiveReviewArtifactPromote },
   { method: "POST", path: "/archive/review/promotions/list", handler: executeArchivePromotionList },
   { method: "POST", path: "/archive/review/promotions/restore", handler: executeArchivePromotionRestore },
