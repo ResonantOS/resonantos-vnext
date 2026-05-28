@@ -190,6 +190,7 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(background, /open_side_panel/);
   assert.match(sidePanel, /consumePendingSidebarPrompt/);
   assert.match(sidePanel, /chrome\.storage\?\.onChanged/);
+  assert.doesNotMatch(background, /onInstalled[\s\S]*setTimeout/);
 });
 
 test("browser layer has a human approval boundary for wallet and credential actions", async () => {
@@ -280,6 +281,8 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(chatTurnController, /providerMessagesFromHistory/);
   assert.match(script, /createComposerController/);
   assert.match(script, /connectionLine\.innerHTML/);
+  assert.match(script, /connectionLine\.setAttribute\("aria-label", connectionLine\.title\)/);
+  assert.doesNotMatch(panel, /<span>Ready<\/span>/);
   assert.match(composerController, /handleClipboardShortcut/);
   assert.match(composerController, /resetUndoStack/);
   assert.match(composerController, /requestSubmit/);
@@ -466,6 +469,8 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(composerController, /event\.metaKey/);
   assert.match(composerController, /undoInput/);
   assert.match(composerController, /shortcutKey === "z"/);
+  assert.match(composerController, /shortcutKey === "a"/);
+  assert.match(composerController, /"x", "c", "v"/);
   assert.match(messageActionController, /forkFromMessage/);
   assert.match(messageActionController, /editMessage/);
   assert.match(messageActionController, /saveMessageToArchive/);

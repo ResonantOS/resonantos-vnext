@@ -1091,31 +1091,26 @@ textarea::placeholder {
 }
 
 .connection-line {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+  display: inline-grid;
+  place-items: center;
   justify-self: start;
+  width: 30px;
+  height: 30px;
   margin: 7px 8px 0;
-  max-width: 100%;
-  overflow: hidden;
+  border-radius: 999px;
+  background: transparent;
   color: rgba(143, 159, 149, 0.74);
-  font-size: 0.68rem;
-  font-weight: 850;
-  line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.connection-line span {
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .connection-line svg {
-  flex: 0 0 auto;
   width: 14px;
   height: 14px;
   color: rgba(36, 209, 143, 0.82);
+}
+
+.connection-line:hover {
+  background: var(--panel-soft);
+  color: var(--text);
 }
 
 .send-button {

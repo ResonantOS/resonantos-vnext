@@ -204,7 +204,6 @@ const updateConnectionLine = () => {
   connectionLine.setAttribute("aria-label", connectionLine.title);
   connectionLine.innerHTML = `
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h4l2-7 4 14 2-7h4"/></svg>
-    <span>${statusLabel}</span>
   `;
 };
 

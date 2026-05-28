@@ -385,7 +385,7 @@ async function waitForComposerReady(panel, label) {
   for (let index = 0; index < 100; index += 1) {
     const state = (await evaluate(panel, `({
       disabled: document.querySelector("#command-input").disabled,
-      connection: document.querySelector("#connection-line").textContent
+      connection: document.querySelector("#connection-line").getAttribute("aria-label") || document.querySelector("#connection-line").title || document.querySelector("#connection-line").textContent
     })`)).result.value;
     if (!state.disabled && /Ready|Needs approval|Denied|Control blocked/.test(state.connection)) return state;
     await new Promise((resolve) => setTimeout(resolve, 250));

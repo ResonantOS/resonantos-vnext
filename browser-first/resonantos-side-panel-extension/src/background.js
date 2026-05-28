@@ -16,11 +16,6 @@ const openResonantSidePanel = async (windowId) => {
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => undefined);
-  setTimeout(() => {
-    chrome.windows.getCurrent((window) => {
-      void openResonantSidePanel(window?.id);
-    });
-  }, 1500);
 });
 
 chrome.action.onClicked.addListener(async (tab) => {

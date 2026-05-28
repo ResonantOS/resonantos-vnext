@@ -438,26 +438,16 @@ textarea {
 }
 
 .connection-line {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
   color: rgba(143, 159, 149, 0.72);
-  font-size: 0.76rem;
-  font-weight: 850;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.connection-line span {
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .connection-line svg {
-  flex: 0 0 auto;
   width: 15px;
   height: 15px;
   fill: none;
@@ -465,6 +455,11 @@ textarea {
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 2;
+}
+
+.connection-line:hover {
+  background: rgba(255, 255, 255, 0.055);
+  color: rgba(247, 255, 249, 0.92);
 }
 
 .context-meter {
