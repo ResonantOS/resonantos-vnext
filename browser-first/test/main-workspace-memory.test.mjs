@@ -323,3 +323,86 @@ test("living archive workspace can run an initial routed search", async () => {
     cleanup();
   }
 });
+
+test("living archive workspace can revise a draft after verifier findings", async () => {
+  const { container, cleanup } = setupDom();
+  const calls = [];
+  let draftArtifactPath = "REVIEW/artifacts/browser/needs-revision-draft.md";
+  const bridgeRequest = async (route, options = {}) => {
+    calls.push([route, options]);
+    if (route === "/memory/status") {
+      return { exists: true, wiki: { pages: 2, index: { exists: true } }, intake: { artifacts: 1 }, review: { requests: 1, artifacts: 1 } };
+    }
+    if (route === "/archive/review/list") {
+      return {
+        root: "Memory/REVIEW/requests",
+        requests: [{
+          title: "Needs revision source",
+          status: "approved",
+          path: "REVIEW/requests/needs-revision.md",
+          artifactPath: "INTAKE/browser/needs-revision.md",
+          draftArtifactPath,
+          reason: "Verifier requested a stronger draft."
+        }]
+      };
+    }
+    if (route === "/archive/review/promotions/list") {
+      return { root: "Memory/REVIEW/artifacts", promotions: [] };
+    }
+    if (route === "/archive/review/artifact/read") {
+      return {
+        path: options.body.path,
+        title: "Draft Wiki Update: Needs revision source",
+        type: "archive-draft-wiki-update",
+        status: "draft",
+        verificationStatus: "needs-revision",
+        verifierArtifactPath: "REVIEW/verifications/browser/needs-revision-verification.md",
+        semanticVerifierStatus: "needs-revision",
+        semanticVerifierProvider: "openai",
+        semanticVerifierModel: "gpt-5.5",
+        proposedPage: "AI_MEMORY/wiki/needs-revision-source.md",
+        content: "# Draft Wiki Update: Needs revision source\n\n## Proposed Content\nToo little provenance.",
+        truncated: false
+      };
+    }
+    if (route === "/archive/review/artifact/revise") {
+      assert.equal(options.body.path, "REVIEW/artifacts/browser/needs-revision-draft.md");
+      draftArtifactPath = "REVIEW/artifacts/browser/needs-revision-revision.md";
+      return {
+        path: draftArtifactPath,
+        previousDraftPath: options.body.path,
+        requestPath: "REVIEW/requests/needs-revision.md",
+        proposedPage: "AI_MEMORY/wiki/needs-revision-source.md",
+        status: "draft-revised"
+      };
+    }
+    throw new Error(`Unexpected route ${route}`);
+  };
+
+  try {
+    renderLivingArchiveWorkspace({ container, bridgeRequest });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    Array.from(container.querySelectorAll(".memory-review-actions button"))
+      .find((button) => button.textContent === "Preview")
+      .click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.match(container.textContent, /Verification: needs-revision/);
+    assert.match(container.textContent, /Semantic: needs-revision/);
+    const reviseButton = Array.from(container.querySelectorAll(".memory-review-preview button"))
+      .find((button) => button.textContent === "Revise Draft");
+    assert.equal(reviseButton.disabled, false);
+    reviseButton.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.ok(calls.some(([route, options]) =>
+      route === "/archive/review/artifact/revise" &&
+      options.body.path === "REVIEW/artifacts/browser/needs-revision-draft.md"
+    ));
+    assert.match(container.textContent, /Revised draft ready: REVIEW\/artifacts\/browser\/needs-revision-revision\.md/);
+    assert.match(container.textContent, /REVIEW\/artifacts\/browser\/needs-revision-revision\.md/);
+  } finally {
+    cleanup();
+  }
+});

@@ -395,6 +395,13 @@ export function renderLivingArchiveWorkspace({ container, bridgeRequest, initial
       verifierPreviewButton.addEventListener("click", () => {
         void previewVerificationArtifact(result.verifierArtifactPath);
       });
+      const reviseButton = document.createElement("button");
+      reviseButton.type = "button";
+      reviseButton.textContent = "Revise Draft";
+      reviseButton.disabled = result.status === "promoted" || result.verificationStatus !== "needs-revision";
+      reviseButton.addEventListener("click", () => {
+        void reviseDraftArtifact(result.path);
+      });
       const promoteButton = document.createElement("button");
       promoteButton.type = "button";
       promoteButton.textContent = result.status === "promoted" ? "Promoted" : "Promote";
@@ -402,7 +409,7 @@ export function renderLivingArchiveWorkspace({ container, bridgeRequest, initial
       promoteButton.addEventListener("click", () => {
         void promoteDraftArtifact(result.path);
       });
-      actions.append(verifyButton, verifierPreviewButton, promoteButton);
+      actions.append(verifyButton, verifierPreviewButton, reviseButton, promoteButton);
       draftPreview.append(heading, meta, content, actions);
       draftPreview.hidden = false;
       setStatus(reviewStatus, result.truncated ? "Draft preview loaded and truncated for safety." : "Draft preview loaded.", "success");
@@ -461,6 +468,27 @@ export function renderLivingArchiveWorkspace({ container, bridgeRequest, initial
           : `Draft needs revision: ${(result.findings || []).join("; ")}`,
         result.status === "verified" ? "success" : "warning"
       );
+      draftPreview.hidden = true;
+      draftPreview.replaceChildren();
+    } catch (error) {
+      setStatus(reviewStatus, error instanceof Error ? error.message : String(error), "error");
+    }
+  };
+
+  const reviseDraftArtifact = async (path) => {
+    if (!path) {
+      setStatus(reviewStatus, "Draft artifact is missing its path.", "error");
+      return;
+    }
+    setStatus(reviewStatus, "Revising draft from verifier findings…");
+    try {
+      const result = await bridgeRequest("/archive/review/artifact/revise", {
+        method: "POST",
+        body: { path }
+      });
+      await loadStatus();
+      await loadReviewQueue();
+      setStatus(reviewStatus, `Revised draft ready: ${result.path}.`, "success");
       draftPreview.hidden = true;
       draftPreview.replaceChildren();
     } catch (error) {

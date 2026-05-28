@@ -1601,6 +1601,139 @@ async function executeArchiveReviewArtifactVerify(payload = {}) {
   };
 }
 
+async function executeArchiveReviewArtifactRevise(payload = {}) {
+  const artifactPath = String(payload.path ?? "").trim();
+  const artifactFile = safeMemoryRelativePath(artifactPath, "REVIEW/artifacts");
+  if (!/\.(md|markdown)$/i.test(artifactFile)) {
+    throw new Error("Archive review revision only supports markdown draft artifacts.");
+  }
+  const artifactContent = await readFile(artifactFile, "utf8");
+  if (frontmatterValue(artifactContent, "type") !== "archive-draft-wiki-update") {
+    throw new Error("Only draft wiki-update artifacts can be revised.");
+  }
+  if (frontmatterValue(artifactContent, "promotionStatus") === "promoted") {
+    throw new Error("Promoted artifacts cannot be revised through the draft gate.");
+  }
+  if (frontmatterValue(artifactContent, "verificationStatus") !== "needs-revision") {
+    throw new Error("Draft revision requires verifier status needs-revision.");
+  }
+
+  const requestPath = frontmatterValue(artifactContent, "requestPath");
+  const requestFile = safeMemoryRelativePath(requestPath, "REVIEW/requests");
+  const requestContent = await readFile(requestFile, "utf8");
+  if ((frontmatterValue(requestContent, "status") || "pending") !== "approved") {
+    throw new Error("Draft revision requires the source review request to remain approved.");
+  }
+
+  const sourceArtifactPath = frontmatterValue(artifactContent, "artifactPath");
+  const sourceFile = safeMemoryRelativePath(sourceArtifactPath, "INTAKE");
+  if (!/\.(md|markdown)$/i.test(sourceFile) || !existsSync(sourceFile)) {
+    throw new Error("Draft revision requires a readable markdown source artifact under INTAKE.");
+  }
+  const proposedPage = frontmatterValue(artifactContent, "proposedPage");
+  const pageFile = safeMemoryRelativePath(proposedPage, "AI_MEMORY/wiki");
+  if (!/\.(md|markdown)$/i.test(pageFile)) {
+    throw new Error("Revised draft proposed page must remain under AI_MEMORY/wiki.");
+  }
+
+  const verifierArtifactPath = frontmatterValue(artifactContent, "verifierArtifactPath");
+  let verifierContent = "";
+  if (verifierArtifactPath) {
+    const verifierFile = safeMemoryRelativePath(verifierArtifactPath, "REVIEW/verifications");
+    if (existsSync(verifierFile)) {
+      verifierContent = await readFile(verifierFile, "utf8");
+    }
+  }
+  const sourceContent = await readFile(sourceFile, "utf8");
+  const now = new Date().toISOString();
+  const sourceTitle = markdownTitle(sourceContent, path.basename(sourceFile, path.extname(sourceFile)));
+  const sourceExcerpt = compactExcerpt(sourceContent, 3_200);
+  const verifierFindings = markdownSection(verifierContent, "Findings").trim();
+  const semanticVerifier = markdownSection(verifierContent, "Semantic Verifier").trim();
+  const revisionFindings = verifierFindings || "- Verifier artifact was unavailable; revise by preserving source boundaries and strengthening provenance.";
+
+  const draftDir = path.join(memoryRoot(), "REVIEW", "artifacts", "browser");
+  await mkdir(draftDir, { recursive: true });
+  const revisionFile = `${now.replace(/[:.]/g, "-")}-${safeFileSlug(sourceTitle)}-revision.md`;
+  const revisionPath = path.join(draftDir, revisionFile);
+  const revisionBody = [
+    "---",
+    `source: ${JSON.stringify("resonantos-browser-first")}`,
+    `type: ${JSON.stringify("archive-draft-wiki-update")}`,
+    `status: ${JSON.stringify("draft")}`,
+    `createdAt: ${JSON.stringify(now)}`,
+    `requestPath: ${JSON.stringify(requestPath)}`,
+    `artifactPath: ${JSON.stringify(sourceArtifactPath)}`,
+    `proposedPage: ${JSON.stringify(proposedPage)}`,
+    `supersedesDraftPath: ${JSON.stringify(artifactPath)}`,
+    `verifierArtifactPath: ${JSON.stringify(verifierArtifactPath || "")}`,
+    `revisionReason: ${JSON.stringify("Verifier returned needs-revision.")}`,
+    "---",
+    "",
+    `# Revised Draft Wiki Update: ${sourceTitle}`,
+    "",
+    "## Summary",
+    "Revised after verifier findings. This draft keeps the original source as authority and records the verifier concerns it is intended to address.",
+    "",
+    sourceExcerpt || "No source text was available for deterministic revision.",
+    "",
+    "## Verifier Findings Addressed",
+    revisionFindings,
+    "",
+    ...(semanticVerifier ? ["## Semantic Verifier Context", semanticVerifier, ""] : []),
+    "## Proposed Wiki Page",
+    proposedPage,
+    "",
+    "## Proposed Content",
+    `# ${sourceTitle}`,
+    "",
+    "> Revised draft generated from an approved browser-first review request after verifier findings. This is not trusted AI Memory until the host-mediated verifier/promote path completes.",
+    "",
+    sourceExcerpt || "_No source excerpt available._",
+    "",
+    "## Revision Notes",
+    "- Preserves the raw intake source as the authority.",
+    "- Carries verifier findings forward for the next verification pass.",
+    "- Keeps promotion blocked until a fresh verifier result is recorded as verified.",
+    "",
+    "## Source Artifact",
+    sourceArtifactPath,
+    "",
+    "## Review Request",
+    requestPath,
+    "",
+    "## Superseded Draft",
+    artifactPath,
+    "",
+    "## Boundary",
+    "This artifact is a revised draft. It must not be treated as a trusted wiki page until the host-mediated ingest/review/promote path completes.",
+    "",
+  ].join("\n");
+  await writeFile(revisionPath, revisionBody);
+
+  const revisionRelPath = path.relative(memoryRoot(), revisionPath);
+  let updatedArtifact = artifactContent;
+  updatedArtifact = writeFrontmatterValue(updatedArtifact, "revisionStatus", "revised");
+  updatedArtifact = writeFrontmatterValue(updatedArtifact, "revisedDraftPath", revisionRelPath);
+  updatedArtifact = writeFrontmatterValue(updatedArtifact, "revisedAt", now);
+  updatedArtifact = `${updatedArtifact.trimEnd()}\n\n## Revision Event\n- at: ${now}\n- actor: resonantos-browser-first\n- from: ${artifactPath}\n- to: ${revisionRelPath}\n- reason: verifier needs-revision\n`;
+  await writeFile(artifactFile, updatedArtifact);
+
+  let updatedRequest = requestContent;
+  updatedRequest = writeFrontmatterValue(updatedRequest, "draftArtifactPath", revisionRelPath);
+  updatedRequest = writeFrontmatterValue(updatedRequest, "revisedAt", now);
+  updatedRequest = `${updatedRequest.trimEnd()}\n\n## Review Event\n- at: ${now}\n- actor: resonantos-browser-first\n- from: needs-revision\n- to: draft-revised\n- previous artifact: ${artifactPath}\n- artifact: ${revisionRelPath}\n`;
+  await writeFile(requestFile, updatedRequest);
+
+  return {
+    path: revisionRelPath,
+    previousDraftPath: artifactPath,
+    requestPath,
+    proposedPage,
+    status: "draft-revised",
+  };
+}
+
 async function executeArchiveVerificationRead(payload = {}) {
   const verifierPath = String(payload.path ?? "").trim();
   const filePath = safeMemoryRelativePath(verifierPath, "REVIEW/verifications");
@@ -2042,6 +2175,7 @@ const bridgeRoutes = [
   { method: "POST", path: "/archive/review/artifact/read", handler: executeArchiveReviewArtifactRead },
   { method: "POST", path: "/archive/review/artifact/verify", handler: executeArchiveReviewArtifactVerify },
   { method: "POST", path: "/archive/review/verification/read", handler: executeArchiveVerificationRead },
+  { method: "POST", path: "/archive/review/artifact/revise", handler: executeArchiveReviewArtifactRevise },
   { method: "POST", path: "/archive/review/artifact/promote", handler: executeArchiveReviewArtifactPromote },
   { method: "POST", path: "/archive/review/promotions/list", handler: executeArchivePromotionList },
   { method: "POST", path: "/archive/review/promotions/restore", handler: executeArchivePromotionRestore },
