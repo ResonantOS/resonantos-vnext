@@ -8,8 +8,9 @@ export function parseHistorySearchCommand(body) {
   const options = {
     days: 90,
     includeTabs: /\b(tabs?|recent tabs?|open tabs?)\b/i.test(first),
+    saveToIntake: /\b(save|intake|archive|export)\b/i.test(first),
     maxResults: 8,
-    query: first.replace(/\b(recent tabs?|open tabs?|tabs?)\b/gi, "").trim(),
+    query: first.replace(/\b(recent tabs?|open tabs?|tabs?|save|intake|archive|export)\b/gi, "").trim(),
     site: ""
   };
   sections.slice(1).forEach((section) => {
@@ -32,9 +33,45 @@ export function parseHistorySearchCommand(body) {
     }
     if (key === "tabs" || key === "recent-tabs") {
       options.includeTabs = !/^false|no|0$/i.test(value);
+      return;
+    }
+    if (["save", "intake", "archive", "export"].includes(key)) {
+      options.saveToIntake = !/^false|no|0$/i.test(value);
     }
   });
   return options;
+}
+
+const historyResultLine = (item) => `- ${item.title || item.url}\n  ${item.url}`;
+
+function formatHistorySearchMarkdown({ options, results, readableTabs }) {
+  const title = [
+    "# Browser Activity Search",
+    "",
+    `Query: ${options.query || "(none)"}`,
+    `Site filter: ${options.site || "(none)"}`,
+    `Window: ${options.days} day(s)`,
+    "Incognito activity: excluded",
+    `Captured at: ${new Date().toISOString()}`,
+    ""
+  ];
+  const sections = [...title];
+  if (readableTabs.length) {
+    sections.push("## Recent Readable Tabs", "", ...readableTabs.map(historyResultLine), "");
+  }
+  if (results.length) {
+    sections.push("## Browser History Matches", "", ...results.map(historyResultLine), "");
+  }
+  if (!readableTabs.length && !results.length) {
+    sections.push("No browser history or readable-tab matches were found.", "");
+  }
+  sections.push(
+    "## Boundary",
+    "",
+    "This artifact contains browser activity metadata only. It is raw intake evidence, not trusted AI Memory, until reviewed and promoted through the Living Archive workflow.",
+    ""
+  );
+  return sections.join("\n");
 }
 
 export function sitePermissionModeFromText(body) {
@@ -145,7 +182,7 @@ export function createAppCommandHandlers({
   async function runHistorySearchCommand(body) {
     const options = parseHistorySearchCommand(body);
     if (!options.query && !options.includeTabs) {
-      await addMessage("system", "Use `/history <query> | site:example.com | days:7 | tabs` to search local browser history metadata and recent readable tabs.");
+      await addMessage("system", "Use `/history <query> | site:example.com | days:7 | tabs | intake` to search local browser history metadata, recent readable tabs, and optionally save the result to Living Archive intake.");
       return;
     }
     if (!chrome.history?.search) {
@@ -191,8 +228,40 @@ export function createAppCommandHandlers({
         ? lines.join("\n")
         : `No browser history or readable tab match found for "${options.query || options.site}".\nWindow: ${options.days} day(s). Incognito activity is excluded.`
     );
+    if (options.saveToIntake) {
+      const content = formatHistorySearchMarkdown({ options, results, readableTabs });
+      const intake = await bridgeRequest("/archive/intake", {
+        method: "POST",
+        body: {
+          title: `Browser activity search: ${options.query || options.site || "recent tabs"}`,
+          content,
+          origin: "browser-history-search",
+          url: null,
+          metadata: {
+            query: options.query,
+            site: options.site,
+            days: options.days,
+            historyMatches: results.length,
+            readableTabs: readableTabs.length,
+            incognitoExcluded: true
+          }
+        }
+      });
+      const review = await bridgeRequest("/archive/review/request", {
+        method: "POST",
+        body: {
+          path: intake.path,
+          reason: "Evaluate browser activity metadata for durable research context, source provenance, and possible wiki updates."
+        }
+      });
+      await addMessage("system", `Saved browser activity search to Living Archive intake: ${intake.path}\nReview request created: ${review.path}`);
+    }
     setStatus("Ready");
-    setActivity("completed", "History search complete", `${results.length} history · ${readableTabs.length} tabs`);
+    setActivity(
+      "completed",
+      options.saveToIntake ? "History search saved to intake" : "History search complete",
+      `${results.length} history · ${readableTabs.length} tabs`
+    );
   }
 
   async function runCapabilitiesCommand() {
@@ -208,6 +277,7 @@ export function createAppCommandHandlers({
         "- Open/search pages, switch tabs, click visible safe controls, type into editable fields, and scroll.",
         "- Use Inline Assistant on selected text and send selected context into chat.",
         "- Search local browser history metadata and readable open tabs with `/history <query> | site:example.com | days:7 | tabs`.",
+        "- Save selected browser activity metadata to raw Living Archive intake with `/history <query> | intake`.",
         "- Save page/context artifacts into ResonantOS intake.",
         "",
         "Hard boundaries:",

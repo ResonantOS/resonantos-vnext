@@ -77,6 +77,7 @@ These are the features currently implemented in the browser-first version.
 - Inline selected text can be sent into the side panel.
 - Browser history/activity search supports `/history <query> | site:example.com | days:7 | tabs`.
 - History/activity search can filter by site, limit the date window, synthesize readable open tabs with history matches, and explicitly excludes incognito activity.
+- History/activity search can save selected browser activity metadata to raw Living Archive intake with `/history <query> | intake`, creating a review request instead of writing trusted AI Memory directly.
 
 ### Agent Control Mode
 
@@ -200,6 +201,7 @@ These are the features currently implemented in the browser-first version.
 ### Browser History And Page Commands
 
 - Browser history metadata search exists through `/history`.
+- Browser history metadata can be exported to governed intake with `/history <query> | intake`.
 - `/capabilities` explains what Augmentor can do on the current page.
 - `/browser read` reads the current page.
 - `/browser forms` inspects forms.

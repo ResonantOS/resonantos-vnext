@@ -20,7 +20,7 @@ Intent: keep the browser-first ResonantOS work aligned with the AI-browser capab
 - Task-level consent v1: approve once, trust safe actions by site + task class, expire stale grants, or deny, while keeping wallet/payment/login/signing/credential/public-submit boundaries human-only.
 - Site Permission Controls v2: context dock manager lists stored site permissions and task-class consents across sites, with reset/revoke actions.
 - `/capabilities` permission summary for the current page.
-- Browser History / Activity Search v2: `/history <query> | site:example.com | days:7 | tabs` supports date filtering, per-site filtering, readable open-tab synthesis, and explicit incognito exclusion.
+- Browser History / Activity Search v2: `/history <query> | site:example.com | days:7 | tabs` supports date filtering, per-site filtering, readable open-tab synthesis, explicit incognito exclusion, and `/history <query> | intake` export into Living Archive intake with a review request.
 - Browser-first Add-ons workspace lists visible add-ons, availability, trust tier, and governed workspace actions without granting new capabilities.
 - Main workspace chat now matches the side-panel chat command behavior for keyboard shortcuts, SVG message actions, model/depth controls, compact context usage, and page/archive handoff icons.
 - Durable Browser Jobs v1: persistent job registry, visible job monitor, `/jobs`, `/pause`, `/resume`, and `/cancel`.
@@ -33,26 +33,23 @@ Intent: keep the browser-first ResonantOS work aligned with the AI-browser capab
 
 ## Remaining Capability Work
 
-1. Browser History / Activity Search v2
-   - Add richer activity summaries and optional Living Archive intake export for selected history results.
-
-2. Site Permission Controls v2
+1. Site Permission Controls v2
    - Add audit timestamps/reasons for approval and denial events.
 
-3. Parallel / Durable Browser Jobs
+2. Parallel / Durable Browser Jobs
    - Multiple concurrent browser tasks with separate monitors.
    - Long-running task reports into Living Archive intake.
    - Automatic resume from exact step/history after reload.
 
-4. Email / Calendar Add-ons
+3. Email / Calendar Add-ons
    - Gmail/Calendar-style integrations as add-ons with explicit approval.
    - Draft-only by default; sending/scheduling requires human approval.
 
-5. Secure Autofill Model
+4. Secure Autofill Model
    - Do not implement raw credential/payment autofill until vault, approval, and audit ADRs are complete.
    - Search/query field submission can remain allowed when content-script checks classify it as search-like.
 
-6. Permission / Consent UX
+5. Permission / Consent UX
    - Ask whether Augmentor may operate the browser for each task class.
    - Remember per-task preference only within safe scopes.
    - Make “what I can see/do now” visible in the control monitor.

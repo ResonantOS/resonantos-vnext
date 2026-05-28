@@ -26,6 +26,8 @@ function createHarness(overrides = {}) {
       records: { goals: 1, delegations: 2 }
     },
     "/memory/search": { query: "resonant", matches: [{ title: "ResonantOS", path: "wiki/resonantos.md", excerpt: "OS" }] },
+    "/archive/intake": { path: "INTAKE/browser/history-search.md", bytes: 320 },
+    "/archive/review/request": { path: "REVIEW/requests/history-search.md", status: "pending" },
     ...overrides.bridgeResponses
   };
   const handlers = createAppCommandHandlers({
@@ -83,12 +85,15 @@ test("app command handlers parse history filters", () => {
   assert.deepEqual(parseHistorySearchCommand("resonant dao | site:www.resonantos.com/path | days:7 | limit:12 | tabs:yes"), {
     days: 7,
     includeTabs: true,
+    saveToIntake: false,
     maxResults: 12,
     query: "resonant dao",
     site: "resonantos.com"
   });
   assert.equal(parseHistorySearchCommand("recent tabs").includeTabs, true);
   assert.equal(parseHistorySearchCommand("recent tabs").query, "");
+  assert.equal(parseHistorySearchCommand("resonant | intake").saveToIntake, true);
+  assert.equal(parseHistorySearchCommand("resonant | export:no").saveToIntake, false);
 });
 
 test("app command handlers create goals and delegations", async () => {
@@ -133,6 +138,27 @@ test("app command handlers synthesize filtered history and recent readable tabs"
   assert.match(message, /Incognito activity is excluded/);
   assert.doesNotMatch(message, /Private tab/);
   assert.doesNotMatch(message, /Other tab/);
+});
+
+test("app command handlers save browser activity searches to archive intake", async () => {
+  const harness = createHarness();
+
+  await harness.handlers.runHistorySearchCommand("example | site:example.com | days:7 | tabs | intake");
+
+  const intakeCall = harness.calls.find((call) => call[0] === "bridge" && call[1] === "/archive/intake");
+  const reviewCall = harness.calls.find((call) => call[0] === "bridge" && call[1] === "/archive/review/request");
+  const savedMessage = harness.calls.find((call) => call[0] === "message" && /Saved browser activity search/.test(call[2]))?.[2] ?? "";
+
+  assert.equal(intakeCall[2].origin, "browser-history-search");
+  assert.equal(intakeCall[2].metadata.incognitoExcluded, true);
+  assert.equal(intakeCall[2].metadata.historyMatches, 1);
+  assert.equal(intakeCall[2].metadata.readableTabs, 1);
+  assert.match(intakeCall[2].content, /# Browser Activity Search/);
+  assert.match(intakeCall[2].content, /Incognito activity: excluded/);
+  assert.match(intakeCall[2].content, /Example tab/);
+  assert.doesNotMatch(intakeCall[2].content, /Private tab/);
+  assert.equal(reviewCall[2].path, "INTAKE/browser/history-search.md");
+  assert.match(savedMessage, /Review request created: REVIEW\/requests\/history-search\.md/);
 });
 
 test("app command handlers manage browser jobs", async () => {
