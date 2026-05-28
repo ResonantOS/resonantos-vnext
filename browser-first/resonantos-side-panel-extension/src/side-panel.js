@@ -56,6 +56,7 @@ const jobMonitorToggle = document.querySelector("#job-monitor-toggle");
 const jobList = document.querySelector("#job-list");
 const controlMonitor = document.querySelector("#control-monitor");
 const controlCurrentAction = document.querySelector("#control-current-action");
+const controlSummaryCard = document.querySelector("#control-summary-card");
 const controlMonitorTitle = document.querySelector("#control-monitor-title");
 const controlMonitorStatus = document.querySelector("#control-monitor-status");
 const controlStopButton = document.querySelector("#control-stop");
@@ -397,6 +398,7 @@ monitorRenderers = createMonitorRenderers({
     controlArtifacts,
     controlCurrentAction,
     controlMonitor,
+    controlSummaryCard,
     controlMonitorStatus,
     controlMonitorTitle,
     controlStopButton,

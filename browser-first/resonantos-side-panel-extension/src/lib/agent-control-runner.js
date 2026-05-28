@@ -114,7 +114,16 @@ export function createAgentControlRunner(deps) {
 
         const step = decision.action;
         const stepIndex = appendControlStep(step);
-        updateControlStep(stepIndex, "active", decision.thought);
+        updateControlStep(stepIndex, "active", decision.thought, {
+          phase: "acting",
+          observation: {
+            title: snapshot?.title ?? null,
+            url: snapshot?.url ?? null
+          },
+          decision: decision.thought ?? null,
+          action: controlStepLabel(step),
+          safetyClass: approvalBoundaryForStep(step)
+        });
         await setPageControlOverlay(true, controlStepLabel(step), step.type === "click" ? "clicking" : step.type === "type" ? "typing" : step.type === "read" ? "reading" : step.type === "wait" ? "waiting" : "working");
         setActivity("tool-running", `Executing browser action ${stepIndex + 1}`, controlStepLabel(step));
         const result = await executeControlStep(step);
@@ -148,7 +157,17 @@ export function createAgentControlRunner(deps) {
           const reason = finalResult?.approvalRequired
             ? "Stopped because this step requires human approval."
             : `Stopped because this step failed: ${finalResult?.error ?? "unknown error"}`;
-          updateControlStep(stepIndex, finalResult?.approvalRequired ? "blocked" : "failed", controlResultSummary(finalResult));
+          updateControlStep(stepIndex, finalResult?.approvalRequired ? "blocked" : "failed", controlResultSummary(finalResult), {
+            phase: finalResult?.approvalRequired ? "waiting-for-human" : "blocked",
+            observation: {
+              title: getLastSnapshot()?.title ?? snapshot?.title ?? null,
+              url: getLastSnapshot()?.url ?? snapshot?.url ?? null
+            },
+            decision: decision.thought ?? null,
+            action: controlStepLabel(finalStep),
+            result: controlResultSummary(finalResult),
+            safetyClass: boundary
+          });
           finishControlRun(status);
           setStatus(finalResult?.approvalRequired ? "Needs approval" : "Control blocked");
           setActivity("failed", "Control mode blocked", controlStepLabel(step));
@@ -172,7 +191,17 @@ export function createAgentControlRunner(deps) {
           }
           return { ok: false, results, approvalRequired: Boolean(finalResult?.approvalRequired) };
         }
-        updateControlStep(stepIndex, "completed", consent ? `trusted task consent · ${controlResultSummary(finalResult)}` : controlResultSummary(finalResult));
+        updateControlStep(stepIndex, "completed", consent ? `trusted task consent · ${controlResultSummary(finalResult)}` : controlResultSummary(finalResult), {
+          phase: "verified",
+          observation: {
+            title: getLastSnapshot()?.title ?? snapshot?.title ?? null,
+            url: getLastSnapshot()?.url ?? snapshot?.url ?? null
+          },
+          decision: decision.thought ?? null,
+          action: controlStepLabel(finalStep),
+          result: controlResultSummary(finalResult),
+          safetyClass: boundary
+        });
         await sleep(350);
       }
 
@@ -249,11 +278,26 @@ export function createAgentControlRunner(deps) {
 
     const step = { ...approval.step, userApproved: true };
     const results = approval.results.slice(0, approval.results.length - 1);
-    updateControlStep(approval.stepIndex, "active", "approved once");
+    updateControlStep(approval.stepIndex, "active", "approved once", {
+      phase: "acting",
+      decision: "Human approved this action once.",
+      action: controlStepLabel(step),
+      safetyClass: approvalBoundaryForStep(step)
+    });
     const result = await executeControlStep(step);
     results.push({ step, result });
     if (!result?.ok) {
-      updateControlStep(approval.stepIndex, result?.approvalRequired ? "blocked" : "failed", controlResultSummary(result));
+      updateControlStep(approval.stepIndex, result?.approvalRequired ? "blocked" : "failed", controlResultSummary(result), {
+        phase: result?.approvalRequired ? "waiting-for-human" : "blocked",
+        observation: {
+          title: getLastSnapshot()?.title ?? null,
+          url: getLastSnapshot()?.url ?? null
+        },
+        decision: "Human approved this action once, but the host still could not complete it safely.",
+        action: controlStepLabel(step),
+        result: controlResultSummary(result),
+        safetyClass: approvalBoundaryForStep(step, result?.error)
+      });
       finishControlRun(result?.approvalRequired ? "approval" : "blocked");
       setStatus(result?.approvalRequired ? "Needs approval" : "Control blocked");
       setActivity("failed", "Control mode blocked", controlStepLabel(step));
@@ -261,7 +305,17 @@ export function createAgentControlRunner(deps) {
       await saveControlReportToArchive(results, result?.approvalRequired ? "approval-required" : "blocked");
       return;
     }
-    updateControlStep(approval.stepIndex, "completed", controlResultSummary(result));
+    updateControlStep(approval.stepIndex, "completed", controlResultSummary(result), {
+      phase: "verified",
+      observation: {
+        title: getLastSnapshot()?.title ?? null,
+        url: getLastSnapshot()?.url ?? null
+      },
+      decision: "Human approved this action once.",
+      action: controlStepLabel(step),
+      result: controlResultSummary(result),
+      safetyClass: approvalBoundaryForStep(step, result?.error)
+    });
     const history = [
       ...(approval.history ?? []),
       {
@@ -290,7 +344,13 @@ export function createAgentControlRunner(deps) {
   async function denyPendingControlStep(denied) {
     if (!denied || !getCurrentControlRun()) return;
     setPendingApproval(null);
-    updateControlStep(denied.stepIndex, "blocked", "denied by human");
+    updateControlStep(denied.stepIndex, "blocked", "denied by human", {
+      phase: "blocked",
+      decision: "Human denied this browser action.",
+      action: controlStepLabel(denied.step),
+      result: "denied by human",
+      safetyClass: approvalBoundaryForStep(denied.step, denied.reason)
+    });
     finishControlRun("denied");
     renderControlMonitor();
     setStatus("Denied");

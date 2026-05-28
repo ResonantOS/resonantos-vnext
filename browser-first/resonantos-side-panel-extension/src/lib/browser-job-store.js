@@ -5,13 +5,32 @@ const VALID_JOB_STATUSES = [...ACTIVE_JOB_STATUSES, ...TERMINAL_JOB_STATUSES];
 const defaultNow = () => new Date().toISOString();
 const defaultId = () => `job-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 
+function normalizeStepDetails(details) {
+  if (!details || typeof details !== "object") return {};
+  return {
+    phase: details.phase ? String(details.phase).slice(0, 80) : null,
+    observation: details.observation && typeof details.observation === "object"
+      ? {
+        title: details.observation.title ? String(details.observation.title).slice(0, 180) : null,
+        url: details.observation.url ? String(details.observation.url).slice(0, 240) : null
+      }
+      : null,
+    decision: details.decision ? String(details.decision).slice(0, 500) : null,
+    action: details.action ? String(details.action).slice(0, 120) : null,
+    result: details.result ? String(details.result).slice(0, 500) : null,
+    safetyClass: details.safetyClass ? String(details.safetyClass).slice(0, 80) : null
+  };
+}
+
 export function normalizeBrowserJob(job, { now = defaultNow } = {}) {
   const steps = Array.isArray(job?.steps)
     ? job.steps.slice(0, 30).map((step) => ({
       type: String(step?.type ?? "step").slice(0, 80),
       label: String(step?.label ?? step?.text ?? step?.url ?? step?.query ?? step?.type ?? "step").slice(0, 180),
       state: String(step?.state ?? "pending").slice(0, 40),
-      note: String(step?.note ?? "").slice(0, 240)
+      note: String(step?.note ?? "").slice(0, 240),
+      details: normalizeStepDetails(step?.details),
+      updatedAt: step?.updatedAt ? String(step.updatedAt).slice(0, 40) : null
     }))
     : [];
   return {

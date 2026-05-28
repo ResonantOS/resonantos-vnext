@@ -7,6 +7,17 @@ export function createControlRunState({
   setPendingApproval,
   updateBrowserJob
 }) {
+  const createStepRecord = (step, state = "pending", note = "", details = {}) => ({
+    ...step,
+    state,
+    note,
+    details: {
+      ...(step?.details ?? {}),
+      ...details
+    },
+    updatedAt: new Date().toISOString()
+  });
+
   const startControlRun = ({ goal, plan }) => {
     const run = {
       id: browserJobStore.getActiveJobId() ?? `control-${Date.now()}`,
@@ -14,7 +25,7 @@ export function createControlRunState({
       planner: plan.source,
       summary: plan.summary,
       status: "running",
-      steps: plan.steps.map((step) => ({ ...step, state: "pending" })),
+      steps: plan.steps.map((step) => createStepRecord(step)),
       artifacts: [],
       startedAt: new Date().toISOString(),
       completedAt: null
@@ -26,11 +37,11 @@ export function createControlRunState({
     return run;
   };
 
-  const updateControlStep = (index, state, note = "") => {
+  const updateControlStep = (index, state, note = "", details = {}) => {
     const currentControlRun = getCurrentControlRun();
     if (!currentControlRun?.steps[index]) return;
     const steps = [...currentControlRun.steps];
-    steps[index] = { ...steps[index], state, note };
+    steps[index] = createStepRecord(steps[index], state, note, details);
     setCurrentControlRun({ ...currentControlRun, steps });
     renderControlMonitor();
   };
@@ -41,7 +52,7 @@ export function createControlRunState({
     const index = currentControlRun.steps.length;
     setCurrentControlRun({
       ...currentControlRun,
-      steps: [...currentControlRun.steps, { ...step, state: "pending" }]
+      steps: [...currentControlRun.steps, createStepRecord(step)]
     });
     renderControlMonitor();
     return index;

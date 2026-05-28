@@ -164,6 +164,8 @@ These are the features currently implemented in the browser-first version.
 ### Agent Control Visual Feedback
 
 - Agent Control Mode has a persistent green Matrix-style page perimeter overlay.
+- Agent Control monitor now records structured action traces with observation, decision, action, result, and safety details.
+- Completed, blocked, approval, and denied control runs now show compact summary cards before the replayable action list.
 - The overlay starts once when the agent begins operating the page.
 - The overlay remains active across the whole control session.
 - The overlay stops only when control returns to the human.
@@ -220,9 +222,7 @@ These are the next capability areas planned for the browser-first app.
 
 ### Agent Control Quality
 
-- Make the control monitor more Comet-level by showing a clearer live current action.
-- Add expandable per-action details: observation, decision, action, result, and safety classification.
-- Add task summary cards at completion.
+- Refine the control monitor with richer action timing, elapsed duration, and confidence/uncertainty markers.
 - Add visible blockers with recommended next human action.
 - Add better progress semantics for multi-step tasks.
 - Add replayable run reports so a completed control task can be inspected later.

@@ -42,7 +42,21 @@ test("browser job store normalizes job shape and status classes", () => {
     planner: "p".repeat(200),
     summary: "s".repeat(800),
     artifacts: Array.from({ length: 25 }, (_, index) => ({ index })),
-    steps: [{ type: "click", text: "Continue", state: "completed", note: "clicked" }],
+    steps: [{
+      type: "click",
+      text: "Continue",
+      state: "completed",
+      note: "clicked",
+      details: {
+        phase: "verified",
+        observation: { title: "Example", url: "https://example.com" },
+        decision: "Click the visible button.",
+        action: "Click Continue",
+        result: "clicked Continue",
+        safetyClass: "safe"
+      },
+      updatedAt: "2026-05-26T10:00:00.000Z"
+    }],
     lastError: "e"
   }, { now: () => "2026-05-26T10:00:00.000Z" });
 
@@ -52,7 +66,21 @@ test("browser job store normalizes job shape and status classes", () => {
   assert.equal(job.planner.length, 120);
   assert.equal(job.summary.length, 700);
   assert.equal(job.artifacts.length, 20);
-  assert.deepEqual(job.steps, [{ type: "click", label: "Continue", state: "completed", note: "clicked" }]);
+  assert.deepEqual(job.steps, [{
+    type: "click",
+    label: "Continue",
+    state: "completed",
+    note: "clicked",
+    details: {
+      phase: "verified",
+      observation: { title: "Example", url: "https://example.com" },
+      decision: "Click the visible button.",
+      action: "Click Continue",
+      result: "clicked Continue",
+      safetyClass: "safe"
+    },
+    updatedAt: "2026-05-26T10:00:00.000Z"
+  }]);
   assert.equal(isActiveBrowserJobStatus("running"), true);
   assert.equal(isTerminalBrowserJobStatus("cancelled"), true);
   assert.equal(isTerminalBrowserJobStatus("paused"), false);
@@ -108,7 +136,7 @@ test("browser job store updates terminal completion and monitor collapsed state"
   const withSteps = await harness.store.updateJob(job.id, {
     steps: [{ type: "read", label: "Read page", state: "completed", note: "saw result" }]
   });
-  assert.deepEqual(withSteps.steps, [{ type: "read", label: "Read page", state: "completed", note: "saw result" }]);
+  assert.deepEqual(withSteps.steps, [{ type: "read", label: "Read page", state: "completed", note: "saw result", details: {}, updatedAt: null }]);
 
   await harness.store.toggleMonitorCollapsed();
   assert.equal(harness.store.getMonitorCollapsed(), false);

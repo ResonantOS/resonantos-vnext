@@ -38,6 +38,49 @@ export function controlActionStateLabel(state = "pending") {
   return String(state || "queued");
 }
 
+export function controlRunSummary(run) {
+  const progress = controlRunProgress(run);
+  const terminal = ["completed", "blocked", "failed", "denied", "cancelled"].includes(run?.status);
+  if (!terminal && run?.status !== "approval") return null;
+  if (run?.status === "completed") {
+    return {
+      state: "completed",
+      title: "Task completed",
+      body: `${progress.completed}/${progress.total || progress.completed} actions completed. Review the trace below or save the report to Living Archive intake.`
+    };
+  }
+  if (run?.status === "approval") {
+    return {
+      state: "approval",
+      title: "Human approval needed",
+      body: "Augmentor stopped at a gated action. Review the page, then approve once, trust safe actions for this task class, deny, or delegate the issue."
+    };
+  }
+  if (run?.status === "denied") {
+    return {
+      state: "blocked",
+      title: "Action denied",
+      body: "The task stayed stopped because the human denied the proposed browser action."
+    };
+  }
+  return {
+    state: "blocked",
+    title: "Task stopped",
+    body: "Augmentor could not safely continue. The trace below shows the blocker and the recommended next human action."
+  };
+}
+
+function stepDetailRows(step) {
+  const details = step?.details ?? {};
+  return [
+    ["Observation", details.observation?.title || details.observation?.url || ""],
+    ["Decision", details.decision || ""],
+    ["Action", details.action || ""],
+    ["Result", details.result || step?.note || ""],
+    ["Safety", details.safetyClass || ""]
+  ].filter(([, value]) => Boolean(value));
+}
+
 export function createMonitorRenderers({
   activeTab,
   approvalBoundaryForStep,
@@ -66,6 +109,7 @@ export function createMonitorRenderers({
     controlArtifacts,
     controlCurrentAction,
     controlMonitor,
+    controlSummaryCard,
     controlMonitorStatus,
     controlMonitorTitle,
     controlStopButton,
@@ -89,6 +133,10 @@ export function createMonitorRenderers({
     if (!currentControlRun) {
       controlMonitor.hidden = true;
       approvalCard.hidden = true;
+      if (controlSummaryCard) {
+        controlSummaryCard.hidden = true;
+        controlSummaryCard.replaceChildren();
+      }
       updateContextDockVisibility();
       return;
     }
@@ -100,6 +148,19 @@ export function createMonitorRenderers({
     controlMonitorStatus.textContent = progress.label;
     controlMonitorStatus.dataset.status = currentControlRun.status;
     controlStopButton.hidden = !["running", "approval", "paused"].includes(currentControlRun.status);
+    if (controlSummaryCard) {
+      const summary = controlRunSummary(currentControlRun);
+      controlSummaryCard.hidden = !summary;
+      controlSummaryCard.replaceChildren();
+      if (summary) {
+        controlSummaryCard.dataset.state = summary.state;
+        const title = document.createElement("strong");
+        title.textContent = summary.title;
+        const body = document.createElement("p");
+        body.textContent = summary.body;
+        controlSummaryCard.append(title, body);
+      }
+    }
     controlCurrentAction.dataset.state = progress.currentStep?.state ?? currentControlRun.status;
     const actionKicker = controlCurrentAction.querySelector("small");
     const actionLabel = controlCurrentAction.querySelector("strong");
@@ -136,6 +197,24 @@ export function createMonitorRenderers({
       state.className = "control-step-state";
       state.textContent = controlActionStateLabel(step.state);
       item.append(state);
+      const rows = stepDetailRows(step);
+      if (rows.length) {
+        const detail = document.createElement("details");
+        detail.className = "control-step-detail";
+        const summary = document.createElement("summary");
+        summary.textContent = "Details";
+        detail.append(summary);
+        rows.forEach(([label, value]) => {
+          const row = document.createElement("p");
+          const key = document.createElement("span");
+          key.textContent = label;
+          const text = document.createElement("b");
+          text.textContent = value;
+          row.append(key, text);
+          detail.append(row);
+        });
+        item.append(detail);
+      }
       controlStepList.append(item);
     });
     if (currentControlRun.artifacts?.length) {

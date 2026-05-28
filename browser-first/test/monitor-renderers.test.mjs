@@ -5,6 +5,7 @@ import { JSDOM } from "jsdom";
 import {
   controlActionStateLabel,
   controlRunProgress,
+  controlRunSummary,
   createMonitorRenderers,
   sitePermissionDescription
 } from "../resonantos-side-panel-extension/src/lib/monitor-renderers.js";
@@ -35,6 +36,7 @@ function createHarness(overrides = {}) {
       <span id="control-status"></span>
       <button id="control-stop"></button>
       <div id="control-current"><small></small><strong></strong></div>
+      <div id="control-summary-card"></div>
       <ol id="control-steps"></ol>
       <div id="control-artifacts"></div>
     </section>
@@ -71,6 +73,7 @@ function createHarness(overrides = {}) {
       controlArtifacts: dom.window.document.querySelector("#control-artifacts"),
       controlCurrentAction: dom.window.document.querySelector("#control-current"),
       controlMonitor: dom.window.document.querySelector("#control"),
+      controlSummaryCard: dom.window.document.querySelector("#control-summary-card"),
       controlMonitorStatus: dom.window.document.querySelector("#control-status"),
       controlMonitorTitle: dom.window.document.querySelector("#control-title"),
       controlStopButton: dom.window.document.querySelector("#control-stop"),
@@ -133,6 +136,11 @@ test("monitor renderers calculate control run progress", () => {
   assert.equal(controlActionStateLabel("active"), "working");
   assert.equal(controlActionStateLabel("completed"), "done");
   assert.equal(controlActionStateLabel("blocked"), "needs review");
+  assert.deepEqual(controlRunSummary({ status: "completed", steps: [{ state: "completed" }] }), {
+    state: "completed",
+    title: "Task completed",
+    body: "1/1 actions completed. Review the trace below or save the report to Living Archive intake."
+  });
 });
 
 test("monitor renderers hide control monitor when no run exists", () => {
@@ -150,7 +158,21 @@ test("monitor renderers render control steps, artifacts, and approval boundaries
     currentControlRun: {
       goal: "find product",
       status: "approval",
-      steps: [{ type: "read", state: "completed", note: "saw page" }, { type: "click", label: "Click button", state: "blocked" }],
+      steps: [
+        {
+          type: "read",
+          state: "completed",
+          note: "saw page",
+          details: {
+            observation: { title: "Product page", url: "https://example.com/product" },
+            decision: "Read first.",
+            action: "Read page",
+            result: "saw page",
+            safetyClass: "safe"
+          }
+        },
+        { type: "click", label: "Click button", state: "blocked" }
+      ],
       artifacts: [{ type: "report", path: "/tmp/report.md" }]
     },
     pendingApproval: {
@@ -169,6 +191,9 @@ test("monitor renderers render control steps, artifacts, and approval boundaries
   assert.equal(harness.dom.window.document.querySelector("#control-current").dataset.state, "blocked");
   assert.equal(harness.dom.window.document.querySelector("#control-current small").textContent, "Needs approval");
   assert.equal(harness.dom.window.document.querySelector("#control-current strong").textContent, "Click button");
+  assert.equal(harness.dom.window.document.querySelector("#control-summary-card").hidden, false);
+  assert.equal(harness.dom.window.document.querySelector("#control-summary-card").dataset.state, "approval");
+  assert.match(harness.dom.window.document.querySelector("#control-summary-card").textContent, /Human approval needed/);
   assert.deepEqual([...harness.dom.window.document.querySelectorAll("#control-steps li")].map((item) => ({
     index: item.dataset.index,
     state: item.dataset.state,
@@ -179,6 +204,8 @@ test("monitor renderers render control steps, artifacts, and approval boundaries
     { index: "1", state: "completed", text: "read", note: "saw page", badge: "done" },
     { index: "2", state: "blocked", text: "Click button", note: "", badge: "needs review" }
   ]);
+  assert.match(harness.dom.window.document.querySelector(".control-step-detail").textContent, /Observation/);
+  assert.match(harness.dom.window.document.querySelector(".control-step-detail").textContent, /Product page/);
   assert.match(harness.dom.window.document.querySelector("#control-artifacts").textContent, /report: \/tmp\/report\.md/);
   assert.equal(harness.dom.window.document.querySelector("#approval").hidden, false);
   assert.equal(harness.dom.window.document.querySelector("#approval-approve").disabled, false);
