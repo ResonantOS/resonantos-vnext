@@ -21,6 +21,7 @@ export function createAppCommandHandlers({
   permissionForUrl,
   renderJobMonitor,
   renderSitePermissionPanel,
+  restartBrowserJob,
   setActivity,
   setSitePermission,
   setStatus,
@@ -195,6 +196,30 @@ export function createAppCommandHandlers({
     await addMessage("system", `Queued browser job ${job.id} for manual resume: ${job.goal}\nRun /control ${job.goal} to restart it from the current page state.`);
   }
 
+  async function continueBrowserJob(body = "") {
+    const job = browserJobStore.findJob(body);
+    if (!job) {
+      await addMessage("system", "No browser job is available to continue.");
+      return;
+    }
+    if (job.status === "running") {
+      await addMessage("system", `Browser job ${job.id} is already running: ${job.goal}`);
+      return;
+    }
+    if (typeof restartBrowserJob !== "function") {
+      await addMessage("system", `Browser job ${job.id} can be continued manually with /control ${job.goal}`);
+      return;
+    }
+    await addMessage(
+      "system",
+      [
+        `Continuing browser job ${job.id}: ${job.goal}`,
+        "Previous steps remain in the job monitor. The new run starts from the current page state and keeps the same approval boundaries."
+      ].join("\n")
+    );
+    await restartBrowserJob(job);
+  }
+
   async function cancelBrowserJob(body = "") {
     const job = browserJobStore.findJob(body);
     const currentControlRun = getCurrentControlRun();
@@ -211,6 +236,7 @@ export function createAppCommandHandlers({
 
   return {
     cancelBrowserJob,
+    continueBrowserJob,
     pauseBrowserJob,
     resumeBrowserJob,
     runCapabilitiesCommand,

@@ -69,7 +69,8 @@ export function createControlRunState({
       status,
       artifacts: completedRun.artifacts,
       summary: completedRun.summary,
-      planner: completedRun.planner
+      planner: completedRun.planner,
+      steps: completedRun.steps
     });
   };
 

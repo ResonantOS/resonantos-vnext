@@ -370,6 +370,27 @@ textarea:disabled {
   padding: 7px;
 }
 
+.job-actions {
+  display: flex;
+  align-items: start;
+  gap: 6px;
+}
+
+.job-actions button {
+  border: 1px solid rgba(36, 209, 143, 0.22);
+  border-radius: 999px;
+  background: rgba(36, 209, 143, 0.08);
+  color: rgba(238, 247, 240, 0.8);
+  font-size: 0.56rem;
+  font-weight: 900;
+  padding: 4px 6px;
+}
+
+.job-actions button:hover {
+  background: rgba(36, 209, 143, 0.16);
+  color: var(--text);
+}
+
 .job-list strong,
 .job-list small {
   display: block;
@@ -402,6 +423,32 @@ textarea:disabled {
   font-weight: 900;
   padding: 4px 6px;
   text-transform: uppercase;
+}
+
+.job-step-replay {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding: 2px 0 0 14px;
+}
+
+.job-step-replay li {
+  display: list-item;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: rgba(207, 219, 210, 0.58);
+  font-size: 0.56rem;
+  overflow: hidden;
+  padding: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.job-step-replay li[data-state="blocked"],
+.job-step-replay li[data-state="failed"] {
+  color: rgba(255, 179, 166, 0.78);
 }
 
 .activity-pulse {

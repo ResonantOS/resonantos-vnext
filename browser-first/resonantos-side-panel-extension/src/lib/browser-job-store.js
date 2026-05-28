@@ -6,6 +6,14 @@ const defaultNow = () => new Date().toISOString();
 const defaultId = () => `job-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 
 export function normalizeBrowserJob(job, { now = defaultNow } = {}) {
+  const steps = Array.isArray(job?.steps)
+    ? job.steps.slice(0, 30).map((step) => ({
+      type: String(step?.type ?? "step").slice(0, 80),
+      label: String(step?.label ?? step?.text ?? step?.url ?? step?.query ?? step?.type ?? "step").slice(0, 180),
+      state: String(step?.state ?? "pending").slice(0, 40),
+      note: String(step?.note ?? "").slice(0, 240)
+    }))
+    : [];
   return {
     id: String(job?.id ?? `job-${Date.now()}`),
     goal: String(job?.goal ?? "Browser job").slice(0, 300),
@@ -16,7 +24,8 @@ export function normalizeBrowserJob(job, { now = defaultNow } = {}) {
     planner: String(job?.planner ?? "observe-act-verify-loop").slice(0, 120),
     summary: String(job?.summary ?? "").slice(0, 700),
     artifacts: Array.isArray(job?.artifacts) ? job.artifacts.slice(0, 20) : [],
-    lastError: job?.lastError ? String(job.lastError).slice(0, 700) : null
+    lastError: job?.lastError ? String(job.lastError).slice(0, 700) : null,
+    steps
   };
 }
 

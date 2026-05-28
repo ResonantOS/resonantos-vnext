@@ -49,6 +49,7 @@ export function createMonitorRenderers({
   getJobMonitorCollapsed,
   getPendingApproval,
   isReadableBrowserTab,
+  onContinueBrowserJob,
   permissionForUrl,
   siteKeyForUrl,
   updateContextDockVisibility
@@ -218,7 +219,30 @@ export function createMonitorRenderers({
       const state = document.createElement("span");
       state.className = "job-state";
       state.textContent = job.status;
-      item.append(details, state);
+      const actions = document.createElement("div");
+      actions.className = "job-actions";
+      const canContinue = ["queued", "paused", "completed", "blocked", "failed", "cancelled", "denied"].includes(job.status);
+      if (canContinue && typeof onContinueBrowserJob === "function") {
+        const continueButton = document.createElement("button");
+        continueButton.type = "button";
+        continueButton.textContent = "Continue";
+        continueButton.title = `Continue ${job.goal}`;
+        continueButton.addEventListener("click", () => onContinueBrowserJob(job));
+        actions.append(continueButton);
+      }
+      actions.append(state);
+      item.append(details, actions);
+      if (job.steps?.length) {
+        const steps = document.createElement("ol");
+        steps.className = "job-step-replay";
+        job.steps.slice(0, 5).forEach((step) => {
+          const stepItem = document.createElement("li");
+          stepItem.dataset.state = step.state;
+          stepItem.textContent = `${controlActionStateLabel(step.state)} · ${step.label}`;
+          steps.append(stepItem);
+        });
+        item.append(steps);
+      }
       jobList.append(item);
     });
     updateContextDockVisibility();

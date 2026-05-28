@@ -388,6 +388,9 @@ monitorRenderers = createMonitorRenderers({
   getJobMonitorCollapsed: () => browserJobStore.getMonitorCollapsed(),
   getPendingApproval: () => pendingApproval,
   isReadableBrowserTab,
+  onContinueBrowserJob: (job) => {
+    void continueBrowserJob(job.id);
+  },
   permissionForUrl,
   siteKeyForUrl,
   updateContextDockVisibility
@@ -660,6 +663,7 @@ const runChatTurn = chatTurnController.runChatTurn;
 
 const {
   cancelBrowserJob,
+  continueBrowserJob,
   pauseBrowserJob,
   resumeBrowserJob,
   runCapabilitiesCommand,
@@ -681,6 +685,7 @@ const {
   permissionForUrl,
   renderJobMonitor,
   renderSitePermissionPanel,
+  restartBrowserJob: (job) => runControlCommand(job.goal),
   setActivity,
   setSitePermission,
   setStatus,
@@ -702,6 +707,7 @@ const commandRouter = createSidePanelCommandRouter({
   pauseBrowserJob,
   resumeBrowserJob,
   cancelBrowserJob,
+  continueBrowserJob,
   runBrowserCommand,
   runCapabilitiesCommand,
   runChatTurn,

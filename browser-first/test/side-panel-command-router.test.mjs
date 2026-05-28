@@ -11,6 +11,7 @@ function createHarness() {
   const router = createSidePanelCommandRouter({
     bindMentionedTab: handler("bind"),
     cancelBrowserJob: handler("cancel"),
+    continueBrowserJob: handler("continue"),
     clickActivePageText: handler("click"),
     detectActivePageForms: handler("forms"),
     explainStructuredPageEditBoundary: handler("structured"),
@@ -71,6 +72,7 @@ test("side panel command router dispatches browser state slash commands", async 
   await harness.router.respondToCommand("/jobs running");
   await harness.router.respondToCommand("/pause job-a");
   await harness.router.respondToCommand("/resume job-a");
+  await harness.router.respondToCommand("/continue job-a");
   await harness.router.respondToCommand("/cancel job-a");
 
   assert.deepEqual(harness.calls.map((call) => call[0]), [
@@ -81,6 +83,7 @@ test("side panel command router dispatches browser state slash commands", async 
     "bind", "jobs",
     "bind", "pause",
     "bind", "resume",
+    "bind", "continue",
     "bind", "cancel"
   ]);
 });

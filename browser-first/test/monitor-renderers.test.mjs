@@ -49,7 +49,8 @@ function createHarness(overrides = {}) {
     currentControlRun: overrides.currentControlRun ?? null,
     jobMonitorCollapsed: overrides.jobMonitorCollapsed ?? true,
     pendingApproval: overrides.pendingApproval ?? null,
-    tab: overrides.tab ?? { url: "https://example.com/page" }
+    tab: overrides.tab ?? { url: "https://example.com/page" },
+    continued: []
   };
   const renderers = createMonitorRenderers({
     activeTab: async () => state.tab,
@@ -83,6 +84,7 @@ function createHarness(overrides = {}) {
     getJobMonitorCollapsed: () => state.jobMonitorCollapsed,
     getPendingApproval: () => state.pendingApproval,
     isReadableBrowserTab: (tab) => /^https?:\/\//i.test(tab?.url ?? ""),
+    onContinueBrowserJob: (job) => state.continued.push(job.id),
     permissionForUrl: async () => overrides.permission ?? "trusted-for-safe-actions",
     siteKeyForUrl: (url) => new URL(url).hostname.replace(/^www\./, ""),
     updateContextDockVisibility: () => calls.push("dock")
@@ -175,7 +177,14 @@ test("monitor renderers render control steps, artifacts, and approval boundaries
 test("monitor renderers render collapsed and expanded browser jobs", () => {
   const browserJobs = [
     { id: "job-a", goal: "A task", status: "running", updatedAt: "2026-05-26T10:00:00.000Z", planner: "loop" },
-    { id: "job-b", goal: "B task", status: "completed", updatedAt: "2026-05-26T09:00:00.000Z", planner: "loop" }
+    {
+      id: "job-b",
+      goal: "B task",
+      status: "completed",
+      updatedAt: "2026-05-26T09:00:00.000Z",
+      planner: "loop",
+      steps: [{ state: "completed", label: "Read page" }, { state: "blocked", label: "Click Submit" }]
+    }
   ];
   const harness = createHarness({ browserJobs, jobMonitorCollapsed: true });
 
@@ -191,7 +200,10 @@ test("monitor renderers render collapsed and expanded browser jobs", () => {
 
   assert.equal(harness.dom.window.document.querySelector("#jobs-toggle").textContent, "Hide");
   assert.equal(harness.dom.window.document.querySelector("#jobs-list").hidden, false);
-  assert.deepEqual([...harness.dom.window.document.querySelectorAll("#jobs-list li")].map((item) => item.dataset.status), ["running", "completed"]);
+  assert.deepEqual([...harness.dom.window.document.querySelectorAll("#jobs-list > li")].map((item) => item.dataset.status), ["running", "completed"]);
+  assert.match(harness.dom.window.document.querySelector("#jobs-list").textContent, /done · Read page/);
+  harness.dom.window.document.querySelector(".job-actions button").click();
+  assert.deepEqual(harness.state.continued, ["job-b"]);
 });
 
 test("monitor renderers show and hide site permission panel", async () => {
