@@ -14,7 +14,7 @@ import {
 export function createSidePanelCommandRouter(handlers) {
   async function respondToCommand(value) {
     await handlers.bindMentionedTab(value);
-    const slash = /^\/\s*([a-z]+)(?:\s+([\s\S]*))?$/i.exec(value.trim());
+    const slash = /^\/\s*([a-z-]+)(?:\s+([\s\S]*))?$/i.exec(value.trim());
     if (slash) {
       const name = slash[1].toLowerCase();
       const body = (slash[2] ?? "").trim();
@@ -32,6 +32,8 @@ export function createSidePanelCommandRouter(handlers) {
       if (name === "continue") return handlers.continueBrowserJob(body);
       if (name === "report") return handlers.reportBrowserJob(body);
       if (name === "cancel") return handlers.cancelBrowserJob(body);
+      if (name === "approve-control") return handlers.approveControlPreflight(body);
+      if (name === "deny-control") return handlers.denyControlPreflight(body);
       if (name === "browser") return handlers.runBrowserCommand(body);
       if (name === "control") return handlers.runControlCommand(body);
       if (name === "save" || name === "archive" || name === "intake") return handlers.saveIntake(body);

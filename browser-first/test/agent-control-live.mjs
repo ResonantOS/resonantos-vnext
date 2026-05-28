@@ -372,6 +372,8 @@ async function waitForPanelText(panel, pattern, label) {
 }
 
 async function submitControlCommand(panel, command) {
+  const beforeText = (await evaluate(panel, "document.body.innerText")).result.value;
+  const seenPreflightIds = new Set([...beforeText.matchAll(/\/approve-control\s+(control-[a-z0-9-]+)/gi)].map((match) => match[1]));
   const expression = `(() => {
     const input = document.querySelector("#command-input");
     input.value = ${JSON.stringify(command)};
@@ -379,6 +381,30 @@ async function submitControlCommand(panel, command) {
     document.querySelector("#command-form").requestSubmit();
   })()`;
   await evaluate(panel, expression);
+  await approveControlPreflightIfNeeded(panel, seenPreflightIds);
+}
+
+async function approveControlPreflightIfNeeded(panel, seenPreflightIds = new Set()) {
+  for (let index = 0; index < 20; index += 1) {
+    const state = (await evaluate(panel, `({
+      text: document.body.innerText,
+      disabled: document.querySelector("#command-input")?.disabled ?? true
+    })`)).result.value;
+    const matches = [...state.text.matchAll(/\/approve-control\s+(control-[a-z0-9-]+)/gi)]
+      .filter((match) => !seenPreflightIds.has(match[1]));
+    const match = matches.at(-1);
+    if (match && !state.disabled) {
+      await evaluate(panel, `(() => {
+        const input = document.querySelector("#command-input");
+        input.value = ${JSON.stringify(`/approve-control ${match[1]}`)};
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        document.querySelector("#command-form").requestSubmit();
+      })()`);
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+  return false;
 }
 
 async function waitForComposerReady(panel, label) {

@@ -9,6 +9,12 @@ import { createBridgeClient } from "./lib/bridge-client.js";
 import { createChatSessionStore } from "./lib/chat-session-store.js";
 import { createChatTurnController } from "./lib/chat-turn-controller.js";
 import { createComposerController } from "./lib/composer-controller.js";
+import {
+  createControlPreflight,
+  formatControlPreflightMessage,
+  normalizeControlPreflight,
+  shouldRequireControlPreflight
+} from "./lib/control-preflight.js";
 import { createControlPageObserver } from "./lib/control-page-observer.js";
 import { createControlPlanningService } from "./lib/control-planning-service.js";
 import { createControlReportingService } from "./lib/control-reporting-service.js";
@@ -87,6 +93,7 @@ const STORAGE_KEYS = {
   taskConsentAudit: "augmentorTaskConsentAudit",
   browserJobs: "augmentorBrowserJobs",
   activeBrowserJob: "augmentorActiveBrowserJob",
+  controlPreflight: "augmentorControlPreflight",
   jobMonitorCollapsed: "augmentorJobMonitorCollapsed",
   contextDockExpanded: "augmentorContextDockExpanded"
 };
@@ -96,6 +103,7 @@ let turnBusy = false;
 let activityTimer = null;
 let currentControlRun = null;
 let pendingApproval = null;
+let pendingControlPreflight = null;
 let controlledTabId = null;
 let contextDockExpanded = false;
 let messageActions = null;
@@ -628,7 +636,90 @@ const agentControlRunner = createAgentControlRunner({
 });
 
 const continueControlLoop = agentControlRunner.continueControlLoop;
-const runControlCommand = agentControlRunner.runControlCommand;
+const startControlCommand = agentControlRunner.runControlCommand;
+
+const persistControlPreflight = async () => {
+  await chrome.storage?.local?.set?.({
+    [STORAGE_KEYS.controlPreflight]: pendingControlPreflight
+  }).catch(() => undefined);
+};
+
+const clearControlPreflight = async () => {
+  pendingControlPreflight = null;
+  await chrome.storage?.local?.remove?.(STORAGE_KEYS.controlPreflight).catch(() => undefined);
+};
+
+const hydrateControlPreflight = async () => {
+  const settings = await chrome.storage?.local?.get?.(STORAGE_KEYS.controlPreflight).catch(() => ({}));
+  pendingControlPreflight = normalizeControlPreflight(settings?.[STORAGE_KEYS.controlPreflight]);
+};
+
+const runControlCommand = async (goal, options = {}) => {
+  const tab = await activeTab();
+  const mode = tab?.url ? await permissionForUrl(tab.url) : "ask-before-action";
+  if (mode === "blocked") {
+    await addMessage("system", `Agent Control is blocked on ${siteKeyForUrl(tab?.url)}. Change the current-site permission before asking Augmentor to operate this page.`);
+    setStatus("Control blocked");
+    return null;
+  }
+  const existingConsent = await taskConsentStore.consentFor({
+    siteKey: siteKeyForUrl(tab?.url),
+    goal
+  });
+  if (shouldRequireControlPreflight({
+    goal,
+    mode,
+    existingConsent,
+    alreadyApproved: Boolean(options.preflightApproved),
+    resumedFromJob: Boolean(options.resumedFromJob)
+  })) {
+    pendingControlPreflight = createControlPreflight({
+      goal,
+      mode,
+      siteKey: siteKeyForUrl(tab?.url)
+    });
+    await persistControlPreflight();
+    contextDockExpanded = true;
+    await persistContextDockExpanded();
+    await renderSitePermissionPanel(tab);
+    await addMessage("system", formatControlPreflightMessage(pendingControlPreflight));
+    setStatus("Preflight required");
+    setActivity("approval", "Agent Control preflight required", pendingControlPreflight.taskClass);
+    return null;
+  }
+  await clearControlPreflight();
+  return startControlCommand(goal, options);
+};
+
+const resolvePreflightFromCommand = (body) => {
+  const requested = String(body ?? "").trim();
+  if (!pendingControlPreflight) return null;
+  if (!requested || requested === pendingControlPreflight.id) return pendingControlPreflight;
+  return null;
+};
+
+const approveControlPreflight = async (body) => {
+  const preflight = resolvePreflightFromCommand(body);
+  if (!preflight) {
+    await addMessage("system", "No matching Agent Control preflight is waiting. Start a browser-control task first, or use the exact preflight id.");
+    return;
+  }
+  await clearControlPreflight();
+  await addMessage("system", `Approved Agent Control preflight for ${preflight.taskClass} on ${preflight.siteKey}. Starting governed browser control now.`);
+  setStatus("Taking control");
+  await startControlCommand(preflight.goal, { preflightApproved: true });
+};
+
+const denyControlPreflight = async (body) => {
+  const preflight = resolvePreflightFromCommand(body);
+  if (!preflight) {
+    await addMessage("system", "No matching Agent Control preflight is waiting.");
+    return;
+  }
+  await clearControlPreflight();
+  setStatus("Denied");
+  await addMessage("system", `Denied Agent Control preflight for ${preflight.taskClass} on ${preflight.siteKey}. No browser actions were taken.`);
+};
 
 const approvePendingControlStep = async () => {
   if (!pendingApproval || !currentControlRun) return;
@@ -797,7 +888,9 @@ const commandRouter = createSidePanelCommandRouter({
   pauseBrowserJob,
   resumeBrowserJob,
   cancelBrowserJob,
+  approveControlPreflight,
   continueBrowserJob,
+  denyControlPreflight,
   runBrowserCommand,
   runCapabilitiesCommand,
   runChatTurn,
@@ -838,6 +931,7 @@ const hydrateChatSettings = async () => {
   await chatSessionStore.hydrate();
   const settings = await chrome.storage?.local?.get?.([STORAGE_KEYS.contextDockExpanded]).catch(() => ({}));
   contextDockExpanded = Boolean(settings?.[STORAGE_KEYS.contextDockExpanded]);
+  await hydrateControlPreflight();
   await chatSessionStore.ensureFreshSession();
   renderMessages();
   renderAttachments();

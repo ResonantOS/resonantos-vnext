@@ -162,6 +162,11 @@ These are the features currently implemented in the browser-first version.
 - User can deny an approval request.
 - User can trust safe actions for a site only when the boundary is safe.
 - The current-site context panel states what Augmentor can see and do now for each permission mode.
+- Long autonomous Agent Control tasks now start with a task-class preflight before Augmentor operates the page.
+- The preflight states the task class, site, permission mode, goal, what Augmentor may do, and which actions remain human-only.
+- `/approve-control <id>` starts the governed run after the preflight.
+- `/deny-control <id>` cancels the pending preflight without taking browser actions.
+- Stored safe task-class consent can skip the preflight only for safe scoped tasks.
 - Task-class consent grants and revocations record audit entries with timestamp, source, task class, mode, and reason.
 - The permission manager surfaces the latest task-consent audit evidence next to each stored consent.
 - Hard wallet/payment/login/credential boundaries do not expose an approval bypass.

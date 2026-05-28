@@ -217,6 +217,7 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   const composerController = await readText(path.join(extensionRoot, "src", "lib", "composer-controller.js"));
   const controlPageObserver = await readText(path.join(extensionRoot, "src", "lib", "control-page-observer.js"));
   const controlPlanningService = await readText(path.join(extensionRoot, "src", "lib", "control-planning-service.js"));
+  const controlPreflight = await readText(path.join(extensionRoot, "src", "lib", "control-preflight.js"));
   const controlReportingService = await readText(path.join(extensionRoot, "src", "lib", "control-reporting-service.js"));
   const controlRunState = await readText(path.join(extensionRoot, "src", "lib", "control-run-state.js"));
   const controlStepExecutor = await readText(path.join(extensionRoot, "src", "lib", "control-step-executor.js"));
@@ -414,6 +415,16 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(agentControlPlanner, /List open tabs/);
   assert.match(agentControlPlanner, /planControlSteps/);
   assert.match(script, /createControlPlanningService/);
+  assert.match(script, /createControlPreflight/);
+  assert.match(script, /formatControlPreflightMessage/);
+  assert.match(script, /augmentorControlPreflight/);
+  assert.match(script, /approveControlPreflight/);
+  assert.match(script, /denyControlPreflight/);
+  assert.match(commandRouter, /approve-control/);
+  assert.match(commandRouter, /deny-control/);
+  assert.match(controlPreflight, /taskClassForGoal/);
+  assert.match(controlPreflight, /Still human-only: wallet, login, credential, payment/);
+  assert.match(controlPreflight, /shouldRequireControlPreflight/);
   assert.match(controlPlanningService, /requestControlPlan/);
   assert.match(controlPlanningService, /requestNextControlAction/);
   assert.match(agentControlRunner, /continueControlLoop/);
