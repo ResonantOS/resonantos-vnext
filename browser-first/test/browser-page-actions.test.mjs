@@ -1,0 +1,156 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import { normalizeBrowserUrl } from "../resonantos-side-panel-extension/src/lib/browser-command-parser.js";
+import { createBrowserPageActions } from "../resonantos-side-panel-extension/src/lib/browser-page-actions.js";
+
+function createHarness(overrides = {}) {
+  const events = [];
+  let controlledTabId = overrides.controlledTabId ?? 1;
+  let lastSnapshot = overrides.lastSnapshot ?? null;
+  let sendMessageCalls = 0;
+  const tabs = overrides.tabs ?? [{ id: 1, active: true, title: "Example", url: "https://example.test/" }];
+  const chrome = {
+    tabs: {
+      create: async (payload) => {
+        events.push(["tab.create", payload]);
+        return { id: 2, active: true, title: "", url: payload.url };
+      },
+      get: async (tabId) => tabs.find((tab) => tab.id === tabId) ?? null,
+      query: async () => tabs,
+      reload: async (tabId) => events.push(["tab.reload", tabId]),
+      sendMessage: async (_tabId, message, options) => {
+        sendMessageCalls += 1;
+        events.push(["sendMessage", message.type, options?.frameId]);
+        if (overrides.sendMessage) return overrides.sendMessage(sendMessageCalls, message, options);
+        return { ok: true, snapshot: { title: "Frame", url: "https://example.test/", text: "hello world", frame: { isTop: true } } };
+      },
+      update: async (tabId, payload) => {
+        events.push(["tab.update", tabId, payload]);
+        return { id: tabId, ...payload };
+      }
+    },
+    scripting: overrides.scripting ?? {
+      executeScript: async (payload) => events.push(["inject", payload])
+    },
+    webNavigation: {
+      getAllFrames: async () => overrides.frames ?? [{ frameId: 0 }]
+    }
+  };
+
+  const actions = createBrowserPageActions({
+    addMessage: async (role, content) => events.push(["message", role, content]),
+    bridgeRequest: async (route, options) => {
+      events.push(["bridge", route, options]);
+      return overrides.bridgeResponse ?? { items: [{ title: "Headline", source: "Source" }] };
+    },
+    chrome,
+    getControlledTabId: () => controlledTabId,
+    getLastSnapshot: () => lastSnapshot,
+    isReadableBrowserTab: (tab) => typeof tab?.url === "string" && /^https?:\/\//i.test(tab.url),
+    normalizeBrowserUrl,
+    permissionForUrl: async () => overrides.permission ?? "ask-before-action",
+    renderSitePermissionPanel: async (tab) => events.push(["site-panel", tab?.id ?? null]),
+    setActivity: (phase, label, detail) => events.push(["activity", phase, label, detail]),
+    setContextMeter: (snapshot) => events.push(["context", snapshot?.title ?? null]),
+    setControlledTabId: (tabId) => {
+      controlledTabId = tabId;
+      events.push(["controlled", tabId]);
+    },
+    setLastSnapshot: (snapshot) => {
+      lastSnapshot = snapshot;
+      events.push(["snapshot", snapshot?.title ?? null]);
+    },
+    setReadButtonTitle: (title) => events.push(["read-title", title]),
+    setStatus: (status) => events.push(["status", status]),
+    siteKeyForUrl: (url) => new URL(url).host,
+    sleep: async () => undefined
+  });
+
+  return {
+    actions,
+    events,
+    getControlledTabId: () => controlledTabId,
+    getLastSnapshot: () => lastSnapshot
+  };
+}
+
+test("browser page actions open URLs in the controlled readable tab", async () => {
+  const harness = createHarness();
+
+  const result = await harness.actions.openBrowserUrl("resonantos.com");
+
+  assert.deepEqual(result, { ok: true, action: "open", url: "https://resonantos.com/" });
+  assert.equal(harness.getControlledTabId(), 1);
+  assert.ok(harness.events.some((event) => event[0] === "tab.update" && event[2].url === "https://resonantos.com/"));
+  assert.ok(harness.events.some((event) => event[0] === "message" && /Opened https:\/\/resonantos.com\//.test(event[2])));
+});
+
+test("browser page actions merge frame snapshots when reading the active page", async () => {
+  const harness = createHarness({
+    frames: [{ frameId: 0 }, { frameId: 7 }],
+    sendMessage: (_call, _message, options) => ({
+      ok: true,
+      snapshot: {
+        title: options.frameId === 0 ? "Top" : "Child",
+        url: "https://example.test/",
+        text: options.frameId === 0 ? "top text" : "child text",
+        links: [{ text: "Link" }],
+        controls: [{ text: "Button" }],
+        fields: [{ label: "Email" }],
+        frame: { isTop: options.frameId === 0 }
+      }
+    })
+  });
+
+  const result = await harness.actions.readActivePage({ announce: false });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.snapshot.title, "Top");
+  assert.match(result.snapshot.text, /top text/);
+  assert.match(result.snapshot.text, /child text/);
+  assert.equal(result.snapshot.frames.length, 2);
+  assert.equal(harness.getLastSnapshot().title, "Top");
+});
+
+test("browser page actions inject content script after missing receiver failure", async () => {
+  const harness = createHarness({
+    sendMessage: (call) => call === 1
+      ? { ok: false, error: "Could not establish connection. Receiving end does not exist." }
+      : { ok: true, clickedText: "Continue" }
+  });
+
+  const result = await harness.actions.clickActivePageText({ text: "Continue" });
+
+  assert.equal(result.ok, true);
+  assert.ok(harness.events.some((event) => event[0] === "inject"));
+  assert.ok(harness.events.some((event) => event[0] === "message" && /Clicked "Continue"/.test(event[2])));
+});
+
+test("browser page actions respect read-only site permission for mutations", async () => {
+  const harness = createHarness({ permission: "read-only" });
+
+  const result = await harness.actions.typeIntoActivePage({ text: "secret" });
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /read-only/);
+  assert.ok(harness.events.some((event) => event[0] === "status" && event[1] === "Page action failed"));
+});
+
+test("browser page actions summarize existing snapshots without rereading", async () => {
+  const harness = createHarness({
+    lastSnapshot: {
+      title: "Cached",
+      url: "https://example.test/cached",
+      text: "one two three",
+      links: [{ text: "A" }]
+    }
+  });
+
+  const result = await harness.actions.summarizeSnapshot();
+
+  assert.equal(result.ok, true);
+  assert.equal(result.snapshot.title, "Cached");
+  assert.ok(harness.events.some((event) => event[0] === "message" && /Visible text: about 3 words/.test(event[2])));
+  assert.equal(harness.events.some((event) => event[0] === "sendMessage"), false);
+});

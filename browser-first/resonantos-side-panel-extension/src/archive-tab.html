@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src http://127.0.0.1:47773; img-src 'self' data:;" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Archive — ResonantOS</title>
+  <link rel="stylesheet" href="./side-panel.css" />
+</head>
+<body>
+  <div class="sidecar-page">
+    <header class="sidecar-header">
+      <h1 class="sidecar-title">◈ Living Archive</h1>
+      <button type="button" class="sidecar-close" id="close-tab-btn">✕ Close Tab</button>
+    </header>
+    <div class="sidecar-body">
+      <div class="archive-search-row">
+        <input id="archive-search-input" type="search" class="archive-search" placeholder="Search Living Archive…" autocomplete="off" />
+        <button type="button" class="sidecar-action-btn" id="archive-search-btn">Search</button>
+      </div>
+      <div id="archive-results" class="archive-results">
+        <p class="sidecar-placeholder">Enter a query to search your archive.</p>
+      </div>
+      <hr class="sidecar-divider" />
+      <div class="archive-meta-row">
+        <div class="archive-meta-item"><span class="archive-meta-label">Wiki pages</span><span class="archive-meta-value" id="archive-wiki-pages">—</span></div>
+        <div class="archive-meta-item"><span class="archive-meta-label">Intakes</span><span class="archive-meta-value" id="archive-intakes">—</span></div>
+      </div>
+      <button type="button" class="sidecar-action-btn full-width" id="archive-quick-save">Quick Save Current Page</button>
+    </div>
+  </div>
+  <script src="./bridge-config.generated.js"></script>
+  <script type="module" src="./archive-tab.js"></script>
+</body>
+</html>

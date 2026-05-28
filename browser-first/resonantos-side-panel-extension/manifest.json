@@ -1,0 +1,84 @@
+{
+  "manifest_version": 3,
+  "name": "ResonantOS Browser Layer",
+  "version": "0.1.1",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApuNZYsaSNn4zSCLL5oqE7cdl8DnhoFUbMmZtcG+Sch5yqT8wob/1yjX/f3HFGRyxgLAW2tmpVA8PVruLCMSDed0YIKm99y6F7Zfmt+XU6bY+r/soP7dVZKVV6PEQdvtxFkd69/dVqS1lY9Y0BDwjxonP4D2AZsi1y2NghV2agjHaO3cu7/837GKv/ZOvtGXofm8ilprmZcwYkq3hU1HCTrJ6IM8NNyvzbeIHC0uMrG4m5ROhqqMXR7GauOiWFZiVaXbZ4EbeX0GzrvLjQ170/DmaW4ob7dxveK26mOx27r4L3G0hOn9gncbHr0kbMErC/+nT9gjm284OKnQiaWIhCQIDAQAB",
+  "description": "Browser-contained ResonantOS layer for Augmentor, Living Archive context, add-ons, task monitor, and approval gates.",
+  "minimum_chrome_version": "116",
+  "permissions": [
+    "activeTab",
+    "clipboardRead",
+    "clipboardWrite",
+    "history",
+    "scripting",
+    "sidePanel",
+    "storage",
+    "tabs",
+    "webNavigation"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; frame-src http://127.0.0.1:* http://localhost:*;"
+  },
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "src/content.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+  "side_panel": {
+    "default_path": "src/side-panel.html"
+  },
+  "action": {
+    "default_title": "Open ResonantOS"
+  },
+  "commands": {
+    "open-augmentor-side-panel": {
+      "suggested_key": {
+        "default": "Alt+Shift+A",
+        "mac": "Alt+Shift+A"
+      },
+      "description": "Open the Augmentor side panel"
+    }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "src/protocol-store.html",
+        "src/protocol-store.js",
+        "src/blackboard.html",
+        "src/blackboard.js",
+        "src/blackboard.css",
+        "src/side-panel.css",
+        "src/resonant-context.js",
+        "src/context-plugins.js",
+        "src/shield-tab.html",
+        "src/shield-tab.js",
+        "src/archive-tab.html",
+        "src/archive-tab.js",
+        "src/awareness-tab.html",
+        "src/awareness-tab.js"
+      ],
+      "matches": []
+    }
+  ],
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}

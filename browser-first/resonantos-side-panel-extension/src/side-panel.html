@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src http://127.0.0.1:47773; img-src 'self' data:;" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Augmentor</title>
+    <link rel="stylesheet" href="./side-panel.css" />
+  </head>
+  <body>
+    <!-- Bridge offline/online status banner (OURS) -->
+    <div id="bridge-banner" class="bridge-banner" hidden aria-live="assertive"></div>
+
+    <main class="chat-shell" aria-label="Augmentor chat">
+      <aside class="chat-rail" aria-label="Augmentor conversations">
+        <div class="rail-brand" aria-label="ResonantOS">R</div>
+        <button id="new-chat" type="button" class="new-chat-button" title="Start a new Augmentor chat">＋ New</button>
+        <div class="rail-section-label">History</div>
+        <ol id="chat-history" class="chat-history" aria-label="Chat history"></ol>
+      </aside>
+      <section class="chat-workspace" aria-label="Active Augmentor workspace">
+      <!-- Panel header with title + theme + settings (OURS) -->
+      <header class="panel-header">
+        <span class="panel-title">◈ ResonantOS</span>
+        <div class="header-actions">
+          <button id="theme-toggle" type="button" class="icon-button" title="Toggle light/dark mode" aria-label="Toggle theme">🌙</button>
+          <button id="popout-btn" type="button" class="icon-button" title="Pop out to desktop app" aria-label="Pop out">⧉</button>
+          <button id="settings-toggle" type="button" class="icon-button" title="Settings" aria-label="Open settings">⚙</button>
+        </div>
+      </header>
+
+      <section id="transcript" class="transcript" aria-live="polite"></section>
+
+      <!-- Context dock — site permissions, job monitor, control monitor (HIS) -->
+      <section id="context-dock" class="context-dock" aria-label="Browser context and task status" hidden>
+        <section id="activity-panel" class="activity-panel" aria-live="polite" hidden>
+          <span class="activity-pulse"></span>
+          <div>
+            <strong id="activity-label">Working</strong>
+            <small id="activity-detail">Preparing task...</small>
+          </div>
+        </section>
+        <section id="site-permission-panel" class="site-permission-panel" aria-label="Current site assistant permission" hidden>
+          <div>
+            <span class="eyebrow">Site</span>
+            <strong id="site-permission-host">No readable page</strong>
+            <small id="site-permission-note">Choose how much browser help Augmentor may use here.</small>
+          </div>
+          <select id="site-permission-mode" aria-label="Current site permission">
+            <option value="blocked">Blocked</option>
+            <option value="read-only">Read only</option>
+            <option value="ask-before-action">Ask before action</option>
+            <option value="trusted-for-safe-actions">Trusted safe actions</option>
+          </select>
+        </section>
+        <section id="job-monitor" class="job-monitor" aria-live="polite" hidden>
+          <div class="job-monitor-header">
+            <div>
+              <span class="eyebrow">Jobs</span>
+              <strong id="job-monitor-title">No durable browser jobs</strong>
+            </div>
+            <button id="job-monitor-toggle" type="button">Show</button>
+          </div>
+          <ol id="job-list" class="job-list" hidden></ol>
+        </section>
+        <section id="control-monitor" class="control-monitor" aria-live="polite" hidden>
+          <div class="control-monitor-header">
+            <div>
+              <span class="eyebrow">Agent Control</span>
+              <strong id="control-monitor-title">No active browser task</strong>
+            </div>
+            <span id="control-monitor-status" class="control-status">idle</span>
+          </div>
+          <ol id="control-step-list" class="control-step-list"></ol>
+          <div id="control-artifacts" class="control-artifacts" hidden></div>
+          <div id="approval-card" class="approval-card" hidden>
+            <strong id="approval-title">Approval required</strong>
+            <p id="approval-reason"></p>
+            <div class="approval-actions">
+              <button id="approval-approve" type="button">Approve once</button>
+              <button id="approval-trust-site" type="button">Trust safe actions here</button>
+              <button id="approval-deny" type="button">Deny</button>
+              <button id="approval-delegate" type="button">Delegate issue</button>
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <!-- Composer form (MERGED — his structure + our extras) -->
+      <form id="command-form" class="composer" aria-label="Message Augmentor">
+        <textarea id="command-input" rows="3" placeholder="Message Augmentor"></textarea>
+        <div id="attachment-strip" class="attachment-strip" hidden></div>
+        <div class="composer-toolbar">
+          <button id="attach-file" type="button" class="icon-button" title="Attach file" aria-label="Attach file">＋</button>
+          <input id="file-input" type="file" multiple hidden />
+          <button id="read-page" type="button" class="icon-button" title="Read current page" aria-label="Read current page">◎</button>
+          <button id="save-intake" type="button" class="toolbar-button" title="Prepare current page for Living Archive intake">Intake</button>
+          <button id="context-toggle" type="button" class="toolbar-button" title="Show browser context, site permissions, and jobs">Status</button>
+          <!-- Extended model select (OURS — 7 providers) -->
+          <select id="model-select" class="model-select" aria-label="Connected model">
+            <optgroup label="ResonantOS">
+              <option value="resonantos-alpha" selected>ResonantOS Alpha (Llama 70B)</option>
+            </optgroup>
+            <optgroup label="OpenAI">
+              <option value="gpt-5.5">GPT 5.5</option>
+              <option value="gpt-5.4-mini">GPT 5.4 Mini</option>
+              <option value="gpt-4o">GPT-4o</option>
+            </optgroup>
+            <optgroup label="Anthropic">
+              <option value="claude-sonnet-4">Claude Sonnet 4</option>
+              <option value="claude-opus-4">Claude Opus 4</option>
+            </optgroup>
+            <optgroup label="MiniMax">
+              <option value="MiniMax-M2.7">MiniMax 2.7</option>
+              <option value="MiniMax-M2.7-highspeed">MiniMax 2.7 High Speed</option>
+            </optgroup>
+            <optgroup label="Groq">
+              <option value="llama-3.3-70b-versatile">Llama 3.3 70B</option>
+              <option value="llama-4-scout">Llama 4 Scout</option>
+            </optgroup>
+            <optgroup label="DeepSeek">
+              <option value="deepseek-chat">DeepSeek Chat</option>
+              <option value="deepseek-reasoner">DeepSeek Reasoner</option>
+            </optgroup>
+            <optgroup label="xAI">
+              <option value="grok-4">Grok 4</option>
+              <option value="grok-3">Grok 3</option>
+            </optgroup>
+          </select>
+          <select id="thinking-depth" class="depth-select" aria-label="Thinking depth">
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </select>
+          <button id="dictate-button" type="button" class="icon-button muted" title="Audio dictate" aria-label="Dictate">mic</button>
+          <span id="context-meter" class="context-meter" title="Estimated browser context captured for this session.">0%</span>
+          <button type="submit" class="send-button" aria-label="Send message">➜</button>
+        </div>
+        <p id="connection-line" class="connection-line">Connected to ResonantOS Alpha · Ready</p>
+      </form>
+      </section>
+    </main>
+
+    <!-- Side panels container — nav buttons (open as sidecar tabs) -->
+    <div class="side-panels-container">
+      <div class="panel-section panel-section-link" id="store-section">
+        <button type="button" class="panel-section-summary panel-nav-btn" id="open-store-tab">◈ Protocol Store</button>
+      </div>
+      <div class="panel-section panel-section-link" id="shield-section">
+        <button type="button" class="panel-section-summary panel-nav-btn" id="open-shield-tab">◈ Shield</button>
+      </div>
+      <div class="panel-section panel-section-link" id="archive-section">
+        <button type="button" class="panel-section-summary panel-nav-btn" id="open-archive-tab">◈ Archive</button>
+      </div>
+      <div class="panel-section panel-section-link" id="awareness-section">
+        <button type="button" class="panel-section-summary panel-nav-btn" id="open-awareness-tab">◈ R-Awareness</button>
+      </div>
+    </div>
+
+    <!-- Settings overlay (OURS) -->
+    <div id="settings-overlay" class="settings-overlay" hidden role="dialog" aria-modal="true" aria-label="Settings">
+      <div class="settings-panel">
+        <div class="settings-header">
+          <strong>ResonantOS Settings</strong>
+          <button id="settings-close" type="button" class="icon-button" aria-label="Close settings">✕</button>
+        </div>
+        <p class="settings-hint">Enter provider API keys to enable AI models. Keys are stored locally on your machine.</p>
+        <div class="settings-fields">
+          <div>
+            <div class="settings-label">OpenAI API Key <span id="key-openai-current" class="settings-current"></span></div>
+            <input id="key-openai" type="password" class="settings-input" placeholder="sk-proj-…" autocomplete="off" />
+          </div>
+          <div>
+            <div class="settings-label">Anthropic API Key <span id="key-anthropic-current" class="settings-current"></span></div>
+            <input id="key-anthropic" type="password" class="settings-input" placeholder="sk-ant-…" autocomplete="off" />
+          </div>
+          <div>
+            <div class="settings-label">Groq API Key <span id="key-groq-current" class="settings-current"></span></div>
+            <input id="key-groq" type="password" class="settings-input" placeholder="gsk_…" autocomplete="off" />
+          </div>
+          <div>
+            <div class="settings-label">DeepSeek API Key <span id="key-deepseek-current" class="settings-current"></span></div>
+            <input id="key-deepseek" type="password" class="settings-input" placeholder="sk-…" autocomplete="off" />
+          </div>
+          <div>
+            <div class="settings-label">xAI (Grok) API Key <span id="key-xai-current" class="settings-current"></span></div>
+            <input id="key-xai" type="password" class="settings-input" placeholder="xai-…" autocomplete="off" />
+          </div>
+          <div>
+            <div class="settings-label">MiniMax API Key <span id="key-minimax-current" class="settings-current"></span></div>
+            <input id="key-minimax" type="password" class="settings-input" placeholder="eyJ…" autocomplete="off" />
+          </div>
+          <div>
+            <div class="settings-label">RunPod API Key <span id="key-runpod-current" class="settings-current"></span></div>
+            <input id="key-runpod" type="password" class="settings-input" placeholder="rpa_…" autocomplete="off" />
+          </div>
+        </div>
+        <div class="settings-panel-header" style="margin-top:14px;">
+          <span style="font-size:0.72rem;color:var(--muted);font-weight:600;">Appearance</span>
+          <button id="theme-toggle-settings" type="button" class="settings-theme-btn">Switch to Light Mode</button>
+        </div>
+        <div class="mobile-access-section">
+          <div class="mobile-url-row">
+            <span class="mobile-url">resonantclaw.com</span>
+            <button id="copy-mobile-url" type="button" class="mobile-copy-btn">Copy URL</button>
+          </div>
+          <p class="mobile-note">Scan or share this URL to use ResonantOS on mobile.</p>
+        </div>
+        <div class="settings-footer">
+          <button id="settings-save" type="button" class="settings-save-button">Save Keys</button>
+          <span id="settings-status" class="settings-status-text"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bridge config token (HIS — must load BEFORE module script) -->
+    <script src="./bridge-config.generated.js"></script>
+    <script type="module" src="./side-panel.js"></script>
+  </body>
+</html>

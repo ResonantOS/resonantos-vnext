@@ -1,0 +1,15 @@
+{
+  "name": "resonantos-electron-pwa",
+  "version": "0.1.0",
+  "description": "ResonantOS Desktop — lightweight Electron PWA wrapper around the browser-first extension",
+  "main": "main.mjs",
+  "type": "module",
+  "scripts": {
+    "start": "node start.mjs",
+    "build": "bash build.sh"
+  },
+  "dependencies": {
+    "electron": "^35.0.0",
+    "electron-builder": "^25.0.0"
+  }
+}

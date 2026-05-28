@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src http://127.0.0.1:* ws://127.0.0.1:*; frame-src https:;">
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ResonantOS</title>
+    <link rel="stylesheet" href="./main-workspace.css" />
+  </head>
+  <body>
+    <main class="workspace-shell" aria-label="ResonantOS main workspace">
+      <aside class="workspace-rail" aria-label="ResonantOS workspaces">
+        <div class="brand-mark">R</div>
+        <button id="new-chat" type="button" class="rail-action">＋ New</button>
+        <button type="button" class="rail-item active" data-workspace="answer">Answer</button>
+        <button type="button" class="rail-item" data-workspace="memory">Living Archive</button>
+        <button type="button" class="rail-item" data-workspace="hermes">Hermes</button>
+        <button type="button" class="rail-item" data-workspace="opencode">OpenCode</button>
+        <div class="rail-heading">History</div>
+        <ol id="chat-history" class="chat-history" aria-label="Chat history"></ol>
+      </aside>
+
+      <section class="answer-workspace" aria-label="Augmentor full-screen chat">
+        <header class="workspace-topbar">
+          <nav aria-label="Answer views">
+            <button class="topbar-tab active" type="button">Answer</button>
+            <button class="topbar-tab" type="button">Links</button>
+            <button class="topbar-tab" type="button">Images</button>
+          </nav>
+          <div class="topbar-actions">
+            <button id="open-sidebar" type="button" class="topbar-action-btn">Open Sidebar</button>
+          </div>
+        </header>
+
+        <section id="transcript" class="answer-thread" aria-live="polite"></section>
+
+        <form id="command-form" class="main-composer" aria-label="Ask Augmentor">
+          <textarea id="command-input" rows="2" placeholder="Ask Augmentor anything"></textarea>
+          <div id="attachment-strip" class="attachment-strip" hidden></div>
+          <div class="composer-row">
+            <button id="attach-file" type="button" class="icon-button" title="Attach file">＋</button>
+            <input id="file-input" type="file" multiple hidden />
+            <select id="mode-select" class="mode-select" aria-label="Interaction mode">
+              <option value="auto">Auto</option>
+              <option value="answer">Answer</option>
+              <option value="browser">Browser control</option>
+            </select>
+            <select id="model-select" class="model-select" aria-label="Connected model">
+              <option value="MiniMax-M2.7">MiniMax 2.7</option>
+              <option value="MiniMax-M2.7-highspeed">MiniMax 2.7 High Speed</option>
+              <option value="gpt-5.5">GPT 5.5</option>
+              <option value="gpt-5.4-mini">GPT 5.4 Mini</option>
+              <option value="batiai/gemma4-e2b:q4">Gemma 4 2B</option>
+            </select>
+            <select id="thinking-depth" class="depth-select" aria-label="Thinking depth">
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
+            <span id="connection-line" class="connection-line">Connected to MiniMax 2.7 · Ready</span>
+            <button type="submit" class="send-button" aria-label="Send">➜</button>
+          </div>
+        </form>
+      </section>
+    </main>
+    <script src="./bridge-config.generated.js"></script>
+    <script type="module" src="./main-workspace.js"></script>
+  </body>
+</html>
