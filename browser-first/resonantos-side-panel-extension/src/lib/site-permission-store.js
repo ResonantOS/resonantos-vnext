@@ -30,8 +30,19 @@ export function createSitePermissionStore({
     return { key, mode };
   };
 
+  const resetSitePermission = async (siteKeyOrUrl) => {
+    const key = String(siteKeyOrUrl ?? "").includes("://") ? siteKeyForUrl(siteKeyOrUrl) : String(siteKeyOrUrl ?? "");
+    if (!key) return false;
+    const permissions = await sitePermissions();
+    const existed = Object.hasOwn(permissions, key);
+    delete permissions[key];
+    await storage?.set?.({ [sitePermissionStorageKey]: permissions });
+    return existed;
+  };
+
   return {
     permissionForUrl,
+    resetSitePermission,
     setSitePermission,
     siteKeyForUrl,
     sitePermissions

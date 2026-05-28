@@ -91,9 +91,11 @@ export function createMonitorRenderers({
   getCurrentControlRun,
   getJobMonitorCollapsed,
   getPendingApproval,
+  getSitePermissions = async () => ({}),
   getTaskConsents,
   isReadableBrowserTab,
   onContinueBrowserJob,
+  onResetSitePermission,
   onSaveBrowserJobReport,
   onRevokeTaskConsent,
   permissionForUrl,
@@ -118,6 +120,9 @@ export function createMonitorRenderers({
     jobMonitor,
     jobMonitorTitle,
     jobMonitorToggle,
+    permissionManagerList,
+    permissionManagerPanel,
+    permissionManagerTitle,
     sitePermissionHost,
     sitePermissionMode,
     sitePermissionNote,
@@ -311,6 +316,65 @@ export function createMonitorRenderers({
     updateContextDockVisibility();
   }
 
+  async function renderPermissionManager() {
+    if (!permissionManagerPanel || !permissionManagerList || !permissionManagerTitle) return;
+    if (!getContextDockExpanded()) {
+      permissionManagerPanel.hidden = true;
+      updateContextDockVisibility();
+      return;
+    }
+    const [sitePermissions, taskConsents] = await Promise.all([
+      getSitePermissions().catch(() => ({})),
+      getTaskConsents().catch(() => ({}))
+    ]);
+    const permissionEntries = Object.entries(sitePermissions)
+      .filter(([siteKey, mode]) => siteKey && mode && mode !== "ask-before-action")
+      .sort(([a], [b]) => a.localeCompare(b));
+    const consentEntries = Object.values(taskConsents)
+      .filter((consent) => consent.siteKey && consent.taskClass)
+      .sort((a, b) => `${a.siteKey}::${a.taskClass}`.localeCompare(`${b.siteKey}::${b.taskClass}`));
+    permissionManagerPanel.hidden = permissionEntries.length === 0 && consentEntries.length === 0;
+    permissionManagerList.replaceChildren();
+    if (permissionManagerPanel.hidden) {
+      updateContextDockVisibility();
+      return;
+    }
+    permissionManagerTitle.textContent = `${permissionEntries.length + consentEntries.length} stored browser ${permissionEntries.length + consentEntries.length === 1 ? "grant" : "grants"}`;
+    permissionEntries.forEach(([siteKey, mode]) => {
+      const item = document.createElement("li");
+      const details = document.createElement("div");
+      const title = document.createElement("strong");
+      title.textContent = siteKey;
+      const meta = document.createElement("small");
+      meta.textContent = `site permission · ${mode}`;
+      details.append(title, meta);
+      const reset = document.createElement("button");
+      reset.type = "button";
+      reset.textContent = "Reset";
+      reset.title = `Reset site permission for ${siteKey}`;
+      reset.addEventListener("click", () => onResetSitePermission?.(siteKey));
+      item.append(details, reset);
+      permissionManagerList.append(item);
+    });
+    consentEntries.forEach((consent) => {
+      const item = document.createElement("li");
+      const details = document.createElement("div");
+      const title = document.createElement("strong");
+      title.textContent = `${consent.siteKey} · ${consent.taskClass}`;
+      const meta = document.createElement("small");
+      meta.textContent = `task-class consent · ${consent.mode} · expires ${new Date(consent.expiresAt).toLocaleDateString()}`;
+      details.append(title, meta);
+      const revoke = document.createElement("button");
+      revoke.type = "button";
+      revoke.textContent = "Revoke";
+      revoke.title = `Revoke ${consent.taskClass} consent for ${consent.siteKey}`;
+      revoke.addEventListener("click", () => onRevokeTaskConsent?.(consent));
+      item.append(details, revoke);
+      permissionManagerList.append(item);
+    });
+    updateContextDockVisibility();
+  }
+
   function renderJobMonitor() {
     const browserJobs = getBrowserJobs();
     const jobMonitorCollapsed = getJobMonitorCollapsed();
@@ -382,6 +446,7 @@ export function createMonitorRenderers({
   return {
     renderControlMonitor,
     renderJobMonitor,
+    renderPermissionManager,
     renderSitePermissionPanel,
     renderTaskConsentPanel
   };

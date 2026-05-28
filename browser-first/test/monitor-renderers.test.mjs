@@ -31,6 +31,10 @@ function createHarness(overrides = {}) {
       <strong id="consents-title"></strong>
       <ol id="consents-list"></ol>
     </section>
+    <section id="permission-manager" hidden>
+      <strong id="permission-manager-title"></strong>
+      <ol id="permission-manager-list"></ol>
+    </section>
     <section id="control" hidden>
       <strong id="control-title"></strong>
       <span id="control-status"></span>
@@ -58,6 +62,7 @@ function createHarness(overrides = {}) {
     tab: overrides.tab ?? { url: "https://example.com/page" },
     continued: [],
     reported: [],
+    resetSites: [],
     revoked: []
   };
   const renderers = createMonitorRenderers({
@@ -82,6 +87,9 @@ function createHarness(overrides = {}) {
       jobMonitor: dom.window.document.querySelector("#jobs"),
       jobMonitorTitle: dom.window.document.querySelector("#jobs-title"),
       jobMonitorToggle: dom.window.document.querySelector("#jobs-toggle"),
+      permissionManagerList: dom.window.document.querySelector("#permission-manager-list"),
+      permissionManagerPanel: dom.window.document.querySelector("#permission-manager"),
+      permissionManagerTitle: dom.window.document.querySelector("#permission-manager-title"),
       sitePermissionHost: dom.window.document.querySelector("#host"),
       sitePermissionMode: dom.window.document.querySelector("#mode"),
       sitePermissionNote: dom.window.document.querySelector("#note"),
@@ -95,10 +103,12 @@ function createHarness(overrides = {}) {
     getCurrentControlRun: () => state.currentControlRun,
     getJobMonitorCollapsed: () => state.jobMonitorCollapsed,
     getPendingApproval: () => state.pendingApproval,
+    getSitePermissions: async () => overrides.sitePermissions ?? {},
     getTaskConsents: async () => overrides.taskConsents ?? {},
     isReadableBrowserTab: (tab) => /^https?:\/\//i.test(tab?.url ?? ""),
     onContinueBrowserJob: (job) => state.continued.push(job.id),
     onSaveBrowserJobReport: (job) => state.reported.push(job.id),
+    onResetSitePermission: (siteKey) => state.resetSites.push(siteKey),
     onRevokeTaskConsent: (consent) => state.revoked.push(consent.taskClass),
     permissionForUrl: async () => overrides.permission ?? "trusted-for-safe-actions",
     siteKeyForUrl: (url) => new URL(url).hostname.replace(/^www\./, ""),
@@ -295,4 +305,42 @@ test("monitor renderers show and revoke task consent history", async () => {
   harness.state.contextDockExpanded = false;
   await harness.renderers.renderTaskConsentPanel();
   assert.equal(harness.dom.window.document.querySelector("#consents").hidden, true);
+});
+
+test("monitor renderers show permission manager across sites and grants", async () => {
+  const harness = createHarness({
+    sitePermissions: {
+      "blocked.example": "blocked",
+      "default.example": "ask-before-action",
+      "read.example": "read-only"
+    },
+    taskConsents: {
+      "example.com::booking": {
+        siteKey: "example.com",
+        taskClass: "booking",
+        mode: "allow-safe",
+        grantedAt: 1000,
+        expiresAt: 2000
+      }
+    }
+  });
+
+  await harness.renderers.renderPermissionManager();
+
+  const panel = harness.dom.window.document.querySelector("#permission-manager");
+  const list = harness.dom.window.document.querySelector("#permission-manager-list");
+  assert.equal(panel.hidden, false);
+  assert.match(harness.dom.window.document.querySelector("#permission-manager-title").textContent, /3 stored browser grants/);
+  assert.match(list.textContent, /blocked.example/);
+  assert.match(list.textContent, /read.example/);
+  assert.doesNotMatch(list.textContent, /default.example/);
+  assert.match(list.textContent, /example.com · booking/);
+  list.querySelector("button").click();
+  assert.deepEqual(harness.state.resetSites, ["blocked.example"]);
+  list.querySelectorAll("button")[2].click();
+  assert.deepEqual(harness.state.revoked, ["booking"]);
+
+  harness.state.contextDockExpanded = false;
+  await harness.renderers.renderPermissionManager();
+  assert.equal(panel.hidden, true);
 });

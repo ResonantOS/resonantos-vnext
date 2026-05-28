@@ -50,6 +50,9 @@ const sitePermissionMode = document.querySelector("#site-permission-mode");
 const taskConsentPanel = document.querySelector("#task-consent-panel");
 const taskConsentTitle = document.querySelector("#task-consent-title");
 const taskConsentList = document.querySelector("#task-consent-list");
+const permissionManagerPanel = document.querySelector("#permission-manager-panel");
+const permissionManagerTitle = document.querySelector("#permission-manager-title");
+const permissionManagerList = document.querySelector("#permission-manager-list");
 const jobMonitor = document.querySelector("#job-monitor");
 const jobMonitorTitle = document.querySelector("#job-monitor-title");
 const jobMonitorToggle = document.querySelector("#job-monitor-toggle");
@@ -242,8 +245,10 @@ const sitePermissionStore = createSitePermissionStore({
   sitePermissionStorageKey: STORAGE_KEYS.sitePermissions
 });
 const permissionForUrl = sitePermissionStore.permissionForUrl;
+const resetSitePermission = sitePermissionStore.resetSitePermission;
 const setSitePermission = sitePermissionStore.setSitePermission;
 const siteKeyForUrl = sitePermissionStore.siteKeyForUrl;
+const sitePermissions = sitePermissionStore.sitePermissions;
 const taskConsentStore = createTaskConsentStore({
   storage: chrome.storage?.local,
   taskConsentStorageKey: STORAGE_KEYS.taskConsents
@@ -252,11 +257,14 @@ const taskConsentStore = createTaskConsentStore({
 const renderSitePermissionPanel = async (tab = null) => {
   await monitorRenderers.renderSitePermissionPanel(tab);
   await renderTaskConsentPanel(tab);
+  await renderPermissionManager();
 };
 
 const renderTaskConsentPanel = async (tab = null) => {
   await monitorRenderers.renderTaskConsentPanel(tab);
 };
+
+const renderPermissionManager = () => monitorRenderers.renderPermissionManager();
 
 const renderJobMonitor = () => {
   monitorRenderers.renderJobMonitor();
@@ -411,6 +419,9 @@ monitorRenderers = createMonitorRenderers({
     jobMonitor,
     jobMonitorTitle,
     jobMonitorToggle,
+    permissionManagerList,
+    permissionManagerPanel,
+    permissionManagerTitle,
     sitePermissionHost,
     sitePermissionMode,
     sitePermissionNote,
@@ -424,6 +435,7 @@ monitorRenderers = createMonitorRenderers({
   getCurrentControlRun: () => currentControlRun,
   getJobMonitorCollapsed: () => browserJobStore.getMonitorCollapsed(),
   getPendingApproval: () => pendingApproval,
+  getSitePermissions: () => sitePermissions(),
   getTaskConsents: () => taskConsentStore.taskConsents(),
   isReadableBrowserTab,
   onContinueBrowserJob: (job) => {
@@ -446,6 +458,13 @@ monitorRenderers = createMonitorRenderers({
     });
     await addMessage("system", `Revoked safe-action consent for ${consent.siteKey} · ${consent.taskClass}.`);
     await renderTaskConsentPanel();
+    await renderPermissionManager();
+  },
+  onResetSitePermission: async (siteKey) => {
+    await resetSitePermission(siteKey);
+    await addMessage("system", `Reset site permission for ${siteKey} to ask-before-action.`);
+    await renderSitePermissionPanel();
+    await renderPermissionManager();
   },
   permissionForUrl,
   siteKeyForUrl,

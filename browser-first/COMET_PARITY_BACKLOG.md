@@ -17,6 +17,7 @@ Intent: keep the browser-first ResonantOS work aligned with the AI-browser capab
 - Site permission modes: blocked, read-only, ask-before-action, trusted-for-safe-actions.
 - Visible current-site permission control in the side panel.
 - Task-level consent v1: approve once, trust safe actions by site + task class, expire stale grants, or deny, while keeping wallet/payment/login/signing/credential/public-submit boundaries human-only.
+- Site Permission Controls v2: context dock manager lists stored site permissions and task-class consents across sites, with reset/revoke actions.
 - `/capabilities` permission summary for the current page.
 - Local browser history metadata search through `/history`.
 - Browser-first Add-ons workspace lists visible add-ons, availability, trust tier, and governed workspace actions without granting new capabilities.
@@ -40,7 +41,7 @@ Intent: keep the browser-first ResonantOS work aligned with the AI-browser capab
    - Add date filters and recent-tabs/history synthesis.
 
 3. Site Permission Controls v2
-   - Add a visible consent-history manager for reviewing and revoking site + task-class grants.
+   - Add audit timestamps/reasons for approval and denial events.
 
 4. Parallel / Durable Browser Jobs
    - Multiple concurrent browser tasks with separate monitors.

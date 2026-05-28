@@ -66,6 +66,23 @@ test("site permission store persists permission updates by site key", async () =
   });
 });
 
+test("site permission store resets persisted permissions by site key or URL", async () => {
+  const harness = createHarness({
+    augmentorSitePermissions: {
+      "example.com": "trusted-for-safe-actions",
+      "other.example": "blocked"
+    }
+  });
+
+  assert.equal(await harness.store.resetSitePermission("https://www.example.com/path"), true);
+  assert.deepEqual(harness.writes.at(-1), {
+    augmentorSitePermissions: {
+      "other.example": "blocked"
+    }
+  });
+  assert.equal(await harness.store.resetSitePermission("missing.example"), false);
+});
+
 test("site permission store rejects invalid write targets", async () => {
   const harness = createHarness();
 

@@ -239,7 +239,8 @@ textarea:disabled {
   padding: 5px 7px;
 }
 
-.task-consent-panel {
+.task-consent-panel,
+.permission-manager-panel {
   border: 1px solid rgba(36, 209, 143, 0.14);
   border-radius: 14px;
   background:
@@ -248,7 +249,8 @@ textarea:disabled {
   padding: 7px 10px;
 }
 
-.task-consent-panel[hidden] {
+.task-consent-panel[hidden],
+.permission-manager-panel[hidden] {
   display: none;
 }
 
@@ -265,7 +267,8 @@ textarea:disabled {
   font-size: 0.68rem;
 }
 
-.task-consent-list {
+.task-consent-list,
+.permission-manager-list {
   display: grid;
   gap: 6px;
   list-style: none;
@@ -273,7 +276,8 @@ textarea:disabled {
   padding: 0;
 }
 
-.task-consent-list li {
+.task-consent-list li,
+.permission-manager-list li {
   align-items: center;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.07);
@@ -285,23 +289,28 @@ textarea:disabled {
 }
 
 .task-consent-list strong,
-.task-consent-list small {
+.task-consent-list small,
+.permission-manager-list strong,
+.permission-manager-list small {
   display: block;
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
-.task-consent-list strong {
+.task-consent-list strong,
+.permission-manager-list strong {
   color: rgba(238, 247, 240, 0.88);
   font-size: 0.68rem;
 }
 
-.task-consent-list small {
+.task-consent-list small,
+.permission-manager-list small {
   color: rgba(207, 219, 210, 0.58);
   font-size: 0.58rem;
 }
 
-.task-consent-list button {
+.task-consent-list button,
+.permission-manager-list button {
   border: 1px solid rgba(255, 154, 138, 0.28);
   border-radius: 999px;
   background: rgba(255, 154, 138, 0.08);

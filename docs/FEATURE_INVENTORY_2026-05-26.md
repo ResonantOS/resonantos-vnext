@@ -259,6 +259,13 @@ These are the next capability areas planned for the browser-first app.
 - Add better site permission explanations.
 - Add audit trail for approvals and denials.
 
+Current browser-first implementation note:
+
+- The side-panel context dock now includes a permission manager that lists stored site permission overrides and task-class safe-action consents across sites.
+- The permission manager can reset a site permission back to the default `ask-before-action` posture.
+- The permission manager can revoke task-class safe-action consents without granting any new capability.
+- Wallet, payment, login, credential, signing, and public-submit boundaries remain human-only.
+
 ### Memory And Archive Integration In Browser-First
 
 - Connect browser-first Agent Control reports more deeply to Living Archive intake.
