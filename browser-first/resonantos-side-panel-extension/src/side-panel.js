@@ -29,6 +29,7 @@ const attachFileButton = document.querySelector("#attach-file");
 const fileInput = document.querySelector("#file-input");
 const attachmentStrip = document.querySelector("#attachment-strip");
 const saveIntakeButton = document.querySelector("#save-intake");
+const saveSelectionButton = document.querySelector("#save-selection");
 const contextToggleButton = document.querySelector("#context-toggle");
 const transcript = document.querySelector("#transcript");
 const contextDock = document.querySelector("#context-dock");
@@ -363,6 +364,8 @@ const {
   readActivePage,
   refreshTabContext,
   scrollActivePage,
+  saveCurrentPageToArchive,
+  saveSelectionToArchive,
   searchBrowser,
   sendContentAction,
   setPageControlOverlay,
@@ -450,18 +453,11 @@ const tabContextController = createTabContextController({
 });
 const bindMentionedTab = tabContextController.bindMentionedTab;
 
-const saveIntake = async () => {
-  const response = lastSnapshot ? { ok: true, snapshot: lastSnapshot } : await readActivePage({ announce: false });
-  if (!response?.snapshot) {
-    await addMessage("system", "There is no browser context to prepare for intake yet.");
-    return;
+const saveIntake = async (target = "page") => {
+  if (/selection|selected/i.test(String(target))) {
+    return saveSelectionToArchive();
   }
-  setActivity("tool-running", "Preparing archive intake", response.snapshot.title || response.snapshot.url);
-  await addMessage(
-    "system",
-    "Prepared this page as a Living Archive intake artifact. It remains raw/intake data only; trusted memory promotion must happen through the governed archive ingest path."
-  );
-  setStatus("Intake ready");
+  return saveCurrentPageToArchive();
 };
 
 const explainStructuredPageEditBoundary = async (instruction) => {
@@ -848,7 +844,8 @@ transcript.addEventListener("resonantos:use-prompt", (event) => {
 attachFileButton.addEventListener("click", () => fileInput.click());
 fileInput.addEventListener("change", () => void messageActions.attachFiles(fileInput.files));
 readButton.addEventListener("click", () => void readActivePage());
-saveIntakeButton.addEventListener("click", () => void saveIntake());
+saveIntakeButton.addEventListener("click", () => void saveIntake("page"));
+saveSelectionButton.addEventListener("click", () => void saveIntake("selection"));
 contextToggleButton.addEventListener("click", () => {
   contextDockExpanded = !contextDockExpanded;
   void renderSitePermissionPanel();

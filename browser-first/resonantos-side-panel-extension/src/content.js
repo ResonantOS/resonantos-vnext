@@ -754,6 +754,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === "get_selection") {
+    sendResponse({ ok: true, selection: currentSelectionDetails(), title: document.title, url: location.href });
+    return true;
+  }
+
   if (message.type === "control_overlay") {
     sendResponse(setControlSessionOverlay({ active: Boolean(message.active), label: message.label, phase: message.phase }));
     return true;

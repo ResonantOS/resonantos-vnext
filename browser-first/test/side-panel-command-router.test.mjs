@@ -47,6 +47,7 @@ test("side panel command router dispatches slash commands", async () => {
   await harness.router.respondToCommand("/status");
   await harness.router.respondToCommand("/browser open resonantos.com");
   await harness.router.respondToCommand("/control find a booking");
+  await harness.router.respondToCommand("/save selection");
 
   assert.deepEqual(harness.calls, [
     ["bind", "/goal build the app"],
@@ -58,7 +59,9 @@ test("side panel command router dispatches slash commands", async () => {
     ["bind", "/browser open resonantos.com"],
     ["browser", "open resonantos.com"],
     ["bind", "/control find a booking"],
-    ["control", "find a booking"]
+    ["control", "find a booking"],
+    ["bind", "/save selection"],
+    ["save", "selection"]
   ]);
 });
 

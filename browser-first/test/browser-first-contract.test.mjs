@@ -238,7 +238,8 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.doesNotMatch(panel, /Current page/);
   assert.match(panel, /Connected model/);
   assert.match(panel, /Thinking depth/);
-  assert.match(panel, /Intake/);
+  assert.match(panel, /Save Page/);
+  assert.match(panel, /Save Selection/);
   assert.match(background, /openPanelOnActionClick/);
   assert.match(background, /openResonantSidePanel/);
   assert.match(background, /open-augmentor-side-panel/);
@@ -247,6 +248,8 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(script, /isReadableBrowserTab/);
   assert.match(pageActions, /currentWindow: true/);
   assert.match(pageActions, /summarizeSnapshot/);
+  assert.match(pageActions, /saveCurrentPageToArchive/);
+  assert.match(pageActions, /saveSelectionToArchive/);
   assert.match(script, /saveIntake/);
   assert.match(script, /createChatSessionStore/);
   assert.match(script, /createChatTurnController/);

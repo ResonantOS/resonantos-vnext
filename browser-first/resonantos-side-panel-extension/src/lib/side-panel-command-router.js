@@ -33,6 +33,7 @@ export function createSidePanelCommandRouter(handlers) {
       if (name === "cancel") return handlers.cancelBrowserJob(body);
       if (name === "browser") return handlers.runBrowserCommand(body);
       if (name === "control") return handlers.runControlCommand(body);
+      if (name === "save" || name === "archive" || name === "intake") return handlers.saveIntake(body);
     }
 
     const controlIntent = parseControlIntent(value);
@@ -67,10 +68,6 @@ export function createSidePanelCommandRouter(handlers) {
 
     if (/^\/(read|context)\b/i.test(value) || /^\/(summari[sz]e)\b/i.test(value)) {
       return handlers.summarizeSnapshot();
-    }
-
-    if (/^\/(save|archive|intake)\b/i.test(value)) {
-      return handlers.saveIntake();
     }
 
     if (/wallet|phantom|seed phrase|private key/i.test(value)) {

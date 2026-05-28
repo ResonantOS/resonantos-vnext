@@ -156,7 +156,7 @@ export function createBrowserPageActions(deps) {
     if (siteMode === "blocked") {
       return { ok: false, error: `Assistant is blocked on ${siteKeyForUrl(tab.url)}.` };
     }
-    if (siteMode === "read-only" && payload.type !== "read_page" && payload.type !== "detect_forms" && payload.type !== "control_overlay") {
+    if (siteMode === "read-only" && payload.type !== "read_page" && payload.type !== "get_selection" && payload.type !== "detect_forms" && payload.type !== "control_overlay") {
       return { ok: false, error: `Assistant actions are read-only on ${siteKeyForUrl(tab.url)}.` };
     }
     const message = {
@@ -327,6 +327,92 @@ export function createBrowserPageActions(deps) {
     return { ok: true, snapshot };
   }
 
+  function pageIntakeMarkdown(snapshot) {
+    const text = String(snapshot.text ?? "").trim();
+    const links = (snapshot.links ?? [])
+      .slice(0, 24)
+      .map((link) => `- [${link.text || link.href}](${link.href})`)
+      .join("\n");
+    return [
+      `Captured from: ${snapshot.url}`,
+      "",
+      "## Page Context",
+      `- title: ${snapshot.title || "Untitled"}`,
+      `- url: ${snapshot.url}`,
+      `- links captured: ${snapshot.links?.length ?? 0}`,
+      `- controls captured: ${snapshot.controls?.length ?? 0}`,
+      `- fields captured: ${snapshot.fields?.length ?? 0}`,
+      "",
+      "## Visible Text",
+      text || "_No visible text captured._",
+      "",
+      links ? "## Links\n" + links : "",
+    ].filter(Boolean).join("\n");
+  }
+
+  async function saveCurrentPageToArchive() {
+    const response = deps.getLastSnapshot() ? { ok: true, snapshot: deps.getLastSnapshot() } : await readActivePage({ announce: false });
+    const snapshot = response?.snapshot;
+    if (!snapshot) {
+      await addMessage("system", "There is no browser page context to save yet. Open a normal web page and read it first.");
+      setStatus("Intake unavailable");
+      return { ok: false, error: "No browser page context available." };
+    }
+    setActivity("tool-running", "Saving page to Living Archive intake", snapshot.title || snapshot.url);
+    const result = await bridgeRequest("/archive/intake", {
+      method: "POST",
+      body: {
+        title: `Page: ${snapshot.title || snapshot.url || "Untitled"}`,
+        url: snapshot.url,
+        origin: "browser-current-page",
+        content: pageIntakeMarkdown(snapshot)
+      }
+    });
+    await addMessage(
+      "system",
+      `Saved current page to Living Archive intake: ${result.path}\n\nThis remains raw intake data. Trusted AI Memory promotion must happen through review, verification, and promotion.`
+    );
+    setStatus("Page saved to intake");
+    setActivity("completed", "Saved page intake", result.path);
+    return { ok: true, ...result };
+  }
+
+  async function saveSelectionToArchive() {
+    setActivity("tool-running", "Saving selection to Living Archive intake", "Reading selected page text");
+    const response = await sendContentAction({ type: "get_selection" });
+    const selection = response?.selection;
+    const text = String(selection?.text ?? "").trim();
+    if (!response?.ok || !text) {
+      await addMessage("system", "No selected text is available to save. Select text on the active web page and try again.");
+      setStatus("No selection");
+      setActivity("failed", "No selection available", response?.error ?? "");
+      return { ok: false, error: response?.error ?? "No selected text available." };
+    }
+    const title = response.title || selection.title || "Selected browser text";
+    const url = response.url || selection.url || "";
+    const result = await bridgeRequest("/archive/intake", {
+      method: "POST",
+      body: {
+        title: `Selection: ${title}`,
+        url,
+        origin: "browser-selection",
+        content: [
+          `Captured from: ${url || "unknown URL"}`,
+          "",
+          "## Selection",
+          text,
+        ].join("\n")
+      }
+    });
+    await addMessage(
+      "system",
+      `Saved selected text to Living Archive intake: ${result.path}\n\nThis remains raw intake data until the governed archive pipeline promotes it.`
+    );
+    setStatus("Selection saved to intake");
+    setActivity("completed", "Saved selection intake", result.path);
+    return { ok: true, ...result };
+  }
+
   return {
     activeTab,
     clickActivePageText,
@@ -340,6 +426,8 @@ export function createBrowserPageActions(deps) {
     sendContentAction,
     sendContentActionToFrames,
     setPageControlOverlay,
+    saveCurrentPageToArchive,
+    saveSelectionToArchive,
     summarizeSnapshot,
     typeIntoActivePage
   };

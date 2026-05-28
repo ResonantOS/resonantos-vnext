@@ -154,3 +154,45 @@ test("browser page actions summarize existing snapshots without rereading", asyn
   assert.ok(harness.events.some((event) => event[0] === "message" && /Visible text: about 3 words/.test(event[2])));
   assert.equal(harness.events.some((event) => event[0] === "sendMessage"), false);
 });
+
+test("browser page actions save current page to archive intake", async () => {
+  const harness = createHarness({
+    lastSnapshot: {
+      title: "Saved Page",
+      url: "https://example.test/page",
+      text: "Important page text for the archive.",
+      links: [{ text: "Source", href: "https://example.test/source" }],
+      controls: [],
+      fields: []
+    },
+    bridgeResponse: { path: "INTAKE/browser/saved-page.md", bytes: 100 }
+  });
+
+  const result = await harness.actions.saveCurrentPageToArchive();
+
+  assert.equal(result.ok, true);
+  assert.equal(result.path, "INTAKE/browser/saved-page.md");
+  const bridgeCall = harness.events.find((event) => event[0] === "bridge" && event[1] === "/archive/intake");
+  assert.equal(bridgeCall[2].body.origin, "browser-current-page");
+  assert.equal(bridgeCall[2].body.url, "https://example.test/page");
+  assert.match(bridgeCall[2].body.content, /Important page text/);
+  assert.ok(harness.events.some((event) => event[0] === "message" && /Saved current page/.test(event[2])));
+});
+
+test("browser page actions save selected text to archive intake", async () => {
+  const harness = createHarness({
+    sendMessage: (_call, message) => message.type === "get_selection"
+      ? { ok: true, title: "Selection Page", url: "https://example.test/selection", selection: { text: "Selected passage" } }
+      : { ok: false, error: "unexpected" },
+    bridgeResponse: { path: "INTAKE/browser/selection.md", bytes: 80 }
+  });
+
+  const result = await harness.actions.saveSelectionToArchive();
+
+  assert.equal(result.ok, true);
+  assert.equal(result.path, "INTAKE/browser/selection.md");
+  const bridgeCall = harness.events.find((event) => event[0] === "bridge" && event[1] === "/archive/intake");
+  assert.equal(bridgeCall[2].body.origin, "browser-selection");
+  assert.equal(bridgeCall[2].body.url, "https://example.test/selection");
+  assert.match(bridgeCall[2].body.content, /Selected passage/);
+});
