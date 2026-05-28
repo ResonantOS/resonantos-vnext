@@ -45,7 +45,7 @@ function createHarness(overrides = {}) {
     permissionForUrl: async () => "ask-before-action",
     renderJobMonitor: () => calls.push(["renderJobs"]),
     renderSitePermissionPanel: async () => calls.push(["renderSite"]),
-    restartBrowserJob: async (job) => calls.push(["restart", job.id, job.goal]),
+    restartBrowserJob: async (job) => calls.push(["restart", job.id, job.goal, job.steps?.length ?? 0]),
     setActivity: (...args) => calls.push(["activity", ...args]),
     setSitePermission: async (_url, mode) => ({ key: "example.com", mode }),
     setStatus: (status) => calls.push(["status", status]),
@@ -111,10 +111,17 @@ test("app command handlers manage browser jobs", async () => {
 });
 
 test("app command handlers continue a previous browser job through restart boundary", async () => {
-  const harness = createHarness({ jobs: [{ id: "job-b", goal: "Find product", status: "completed" }] });
+  const harness = createHarness({
+    jobs: [{
+      id: "job-b",
+      goal: "Find product",
+      status: "completed",
+      steps: [{ type: "read", label: "Read page", state: "completed" }]
+    }]
+  });
 
   await harness.handlers.continueBrowserJob("job-b");
 
   assert.ok(harness.calls.some((call) => call[0] === "message" && /Continuing browser job job-b/.test(call[2])));
-  assert.ok(harness.calls.some((call) => call[0] === "restart" && call[1] === "job-b" && call[2] === "Find product"));
+  assert.ok(harness.calls.some((call) => call[0] === "restart" && call[1] === "job-b" && call[2] === "Find product" && call[3] === 1));
 });

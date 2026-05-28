@@ -685,7 +685,7 @@ const {
   permissionForUrl,
   renderJobMonitor,
   renderSitePermissionPanel,
-  restartBrowserJob: (job) => runControlCommand(job.goal),
+  restartBrowserJob: (job) => runControlCommand(job.goal, { resumedFromJob: job }),
   setActivity,
   setSitePermission,
   setStatus,

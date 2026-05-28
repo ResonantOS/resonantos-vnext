@@ -15,6 +15,26 @@ export function controlResultSummary(result = {}) {
   return "completed";
 }
 
+export function browserJobStepHistory(job = {}) {
+  return Array.isArray(job?.steps)
+    ? job.steps.slice(0, 12).map((step) => ({
+      action: {
+        type: step.type ?? "step",
+        label: step.label ?? "Previous browser step"
+      },
+      result: {
+        ok: step.state === "completed",
+        approvalRequired: step.state === "blocked" || step.state === "approval",
+        error: step.note || null
+      },
+      observation: {
+        title: job.goal ?? null,
+        url: null
+      }
+    }))
+    : [];
+}
+
 export function createAgentControlRunner(deps) {
   const {
     addMessage,
@@ -165,39 +185,49 @@ export function createAgentControlRunner(deps) {
     }
   }
 
-  async function runControlCommand(body) {
+  async function runControlCommand(body, options = {}) {
     const goal = String(body ?? "").trim();
     if (!goal) {
       await addMessage("system", "Use `/control <browser goal>` or ask Augmentor to operate the current page.");
       return;
     }
+    const resumedFromJob = options?.resumedFromJob ?? null;
+    const seededHistory = browserJobStepHistory(resumedFromJob);
+    const continuationPrefix = resumedFromJob?.id ? `Continuation of ${resumedFromJob.id}. ` : "";
     setStatus("Taking control");
     setActivity("tool-running", "Agent Control Mode", goal);
     const job = await createBrowserJob({
       goal,
       planner: "observe-act-verify-loop",
-      summary: "Adaptive browser-agent loop. The host observes the page, asks for one safe next action, executes it, then verifies before continuing."
+      summary: `${continuationPrefix}Adaptive browser-agent loop. The host observes the page, asks for one safe next action, executes it, then verifies before continuing.`
     });
     startControlRun({
       goal,
       plan: {
         source: "observe-act-verify-loop",
-        summary: "Adaptive browser-agent loop. The host observes the page, asks for one safe next action, executes it, then verifies before continuing.",
+        summary: `${continuationPrefix}Adaptive browser-agent loop. The host observes the page, asks for one safe next action, executes it, then verifies before continuing.`,
         steps: []
       }
     });
     await addMessage(
       "system",
       [
-        "Agent Control Mode started.",
+        resumedFromJob ? "Agent Control Mode continued." : "Agent Control Mode started.",
         `Job: ${job.id}`,
+        ...(resumedFromJob ? [`Previous job: ${resumedFromJob.id}`, `Previous steps loaded: ${seededHistory.length}`] : []),
         `Goal: ${goal}`,
         "Mode: observe -> decide -> act -> verify.",
         "",
         "Approval boundary: wallet, login, payment, credential, public submit, and destructive actions remain blocked unless a human approval flow authorizes them."
       ].join("\n")
     );
-    return continueControlLoop({ goal, history: [], results: [] });
+    return continueControlLoop({
+      goal,
+      history: seededHistory,
+      results: [],
+      startIndex: seededHistory.length,
+      maxSteps: Math.max(12, seededHistory.length + 8)
+    });
   }
 
   async function approvePendingControlStep(approval) {

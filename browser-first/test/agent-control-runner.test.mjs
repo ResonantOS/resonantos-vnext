@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { controlStepLabel } from "../resonantos-side-panel-extension/src/lib/agent-control-planner.js";
 import {
+  browserJobStepHistory,
   controlResultSummary,
   createAgentControlRunner
 } from "../resonantos-side-panel-extension/src/lib/agent-control-runner.js";
@@ -22,6 +23,7 @@ function createHarness(overrides = {}) {
   let lastSnapshot = { title: "Fixture", url: "https://example.test/" };
   let pendingApproval = null;
   let decisionIndex = 0;
+  const nextActionRequests = [];
   const decisions = overrides.decisions ?? [
     { status: "continue", thought: "click next", action: { type: "click", text: "Next" } },
     { status: "done", thought: "done", doneSummary: "Finished." }
@@ -61,7 +63,10 @@ function createHarness(overrides = {}) {
       return lastSnapshot;
     },
     renderControlMonitor: () => events.push(["render"]),
-    requestNextControlAction: async () => decisions[decisionIndex++] ?? { status: "done", doneSummary: "Finished." },
+    requestNextControlAction: async (request) => {
+      nextActionRequests.push(request);
+      return decisions[decisionIndex++] ?? { status: "done", doneSummary: "Finished." };
+    },
     saveControlReportToArchive: async (_results, status) => ({ path: `/archive/${status}.md` }),
     setActivity: (phase, label, detail) => events.push(["activity", phase, label, detail]),
     setPageControlOverlay: async (active, label, phase) => events.push(["overlay", active, label, phase]),
@@ -89,6 +94,7 @@ function createHarness(overrides = {}) {
   return {
     events,
     getControlRun: () => controlRun,
+    nextActionRequests,
     getPendingApproval: () => pendingApproval,
     runner: createAgentControlRunner(deps),
     setLastSnapshot: (snapshot) => {
@@ -121,6 +127,23 @@ test("agent control runner summarizes browser action results for the timeline", 
   assert.equal(controlResultSummary({ ok: false }), "action failed");
 });
 
+test("agent control runner converts persisted browser job steps into planner history", () => {
+  const history = browserJobStepHistory({
+    id: "job-old",
+    goal: "find the booking slot",
+    steps: [
+      { type: "read", label: "Read booking page", state: "completed", note: "read page" },
+      { type: "click", label: "Click next month", state: "failed", note: "button missing" }
+    ]
+  });
+
+  assert.equal(history.length, 2);
+  assert.deepEqual(history[0].action, { type: "read", label: "Read booking page" });
+  assert.equal(history[0].result.ok, true);
+  assert.equal(history[1].result.ok, false);
+  assert.equal(history[1].result.error, "button missing");
+});
+
 test("agent control runner starts a control job and records the run shell", async () => {
   const harness = createHarness();
 
@@ -129,6 +152,25 @@ test("agent control runner starts a control job and records the run shell", asyn
   assert.equal(harness.getControlRun().id, "job-created");
   assert.equal(harness.getControlRun().planner, "observe-act-verify-loop");
   assert.ok(harness.events.some((event) => event[0] === "message" && /Agent Control Mode started/.test(event[2])));
+});
+
+test("agent control runner continues a previous job with seeded planner history", async () => {
+  const harness = createHarness({
+    decisions: [{ status: "done", thought: "done", doneSummary: "Already finished." }]
+  });
+
+  await harness.runner.runControlCommand("find a booking slot", {
+    resumedFromJob: {
+      id: "job-old",
+      goal: "find a booking slot",
+      steps: [{ type: "read", label: "Read booking page", state: "completed", note: "read page" }]
+    }
+  });
+
+  assert.match(harness.getControlRun().summary, /Continuation of job-old/);
+  assert.ok(harness.events.some((event) => event[0] === "message" && /Previous job: job-old/.test(event[2])));
+  assert.equal(harness.nextActionRequests[0].history.length, 1);
+  assert.equal(harness.nextActionRequests[0].history[0].action.label, "Read booking page");
 });
 
 test("agent control runner stores pending approval when a step requires human review", async () => {

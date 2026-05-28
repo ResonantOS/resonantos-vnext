@@ -328,6 +328,8 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(controlPlanningService, /requestControlPlan/);
   assert.match(controlPlanningService, /requestNextControlAction/);
   assert.match(agentControlRunner, /continueControlLoop/);
+  assert.match(agentControlRunner, /browserJobStepHistory/);
+  assert.match(agentControlRunner, /resumedFromJob/);
   assert.match(agentControlRunner, /observe-act-verify-loop/);
   assert.match(script, /createControlPageObserver/);
   assert.match(controlPageObserver, /observeControlPage/);
