@@ -188,6 +188,8 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(panel, /chat-history/);
   assert.match(panel, /bridge-config\.generated\.js/);
   assert.match(panel, /control-monitor/);
+  assert.match(panel, /control-current-action/);
+  assert.match(panel, /control-stop/);
   assert.match(panel, /context-dock"[^>]+hidden/);
   assert.match(panel, /context-toggle/);
   assert.match(panel, /approval-card/);
@@ -257,6 +259,8 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(monitorRenderers, /renderSitePermissionPanel/);
   assert.match(monitorRenderers, /renderJobMonitor/);
   assert.match(monitorRenderers, /renderControlMonitor/);
+  assert.match(monitorRenderers, /controlActionStateLabel/);
+  assert.match(script, /controlStopButton\.addEventListener/);
   assert.match(script, /createTabContextController/);
   assert.match(tabContextController, /resolveTabMention/);
   assert.match(tabContextController, /bindMentionedTab/);

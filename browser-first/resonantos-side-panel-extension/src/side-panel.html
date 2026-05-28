@@ -53,7 +53,17 @@
               <span class="eyebrow">Agent Control</span>
               <strong id="control-monitor-title">No active browser task</strong>
             </div>
-            <span id="control-monitor-status" class="control-status">idle</span>
+            <div class="control-monitor-actions">
+              <span id="control-monitor-status" class="control-status">idle</span>
+              <button id="control-stop" type="button" class="control-stop-button">Stop</button>
+            </div>
+          </div>
+          <div id="control-current-action" class="control-current-action">
+            <span class="control-current-orb"></span>
+            <div>
+              <small>Now</small>
+              <strong>Waiting for task state...</strong>
+            </div>
           </div>
           <ol id="control-step-list" class="control-step-list"></ol>
           <div id="control-artifacts" class="control-artifacts" hidden></div>

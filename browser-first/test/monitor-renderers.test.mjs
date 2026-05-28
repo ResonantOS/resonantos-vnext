@@ -3,6 +3,7 @@ import test from "node:test";
 import { JSDOM } from "jsdom";
 
 import {
+  controlActionStateLabel,
   controlRunProgress,
   createMonitorRenderers,
   sitePermissionDescription
@@ -28,6 +29,8 @@ function createHarness(overrides = {}) {
     <section id="control" hidden>
       <strong id="control-title"></strong>
       <span id="control-status"></span>
+      <button id="control-stop"></button>
+      <div id="control-current"><small></small><strong></strong></div>
       <ol id="control-steps"></ol>
       <div id="control-artifacts"></div>
     </section>
@@ -59,9 +62,11 @@ function createHarness(overrides = {}) {
       approvalTitle: dom.window.document.querySelector("#approval-title"),
       approvalTrustSiteButton: dom.window.document.querySelector("#approval-trust"),
       controlArtifacts: dom.window.document.querySelector("#control-artifacts"),
+      controlCurrentAction: dom.window.document.querySelector("#control-current"),
       controlMonitor: dom.window.document.querySelector("#control"),
       controlMonitorStatus: dom.window.document.querySelector("#control-status"),
       controlMonitorTitle: dom.window.document.querySelector("#control-title"),
+      controlStopButton: dom.window.document.querySelector("#control-stop"),
       controlStepList: dom.window.document.querySelector("#control-steps"),
       jobList: dom.window.document.querySelector("#jobs-list"),
       jobMonitor: dom.window.document.querySelector("#jobs"),
@@ -107,9 +112,13 @@ test("monitor renderers calculate control run progress", () => {
     activeLabel: "step 2/3",
     blocked: -1,
     completed: 1,
+    currentStep: { state: "active" },
     label: "running · step 2/3",
     total: 3
   });
+  assert.equal(controlActionStateLabel("active"), "working");
+  assert.equal(controlActionStateLabel("completed"), "done");
+  assert.equal(controlActionStateLabel("blocked"), "needs review");
 });
 
 test("monitor renderers hide control monitor when no run exists", () => {
@@ -142,14 +151,19 @@ test("monitor renderers render control steps, artifacts, and approval boundaries
   assert.equal(harness.dom.window.document.querySelector("#control-title").textContent, "find product");
   assert.equal(harness.dom.window.document.querySelector("#control-status").dataset.status, "approval");
   assert.equal(harness.dom.window.document.querySelector("#control-status").textContent, "approval · blocked at 2/2");
+  assert.equal(harness.dom.window.document.querySelector("#control-stop").hidden, false);
+  assert.equal(harness.dom.window.document.querySelector("#control-current").dataset.state, "blocked");
+  assert.equal(harness.dom.window.document.querySelector("#control-current small").textContent, "Needs approval");
+  assert.equal(harness.dom.window.document.querySelector("#control-current strong").textContent, "Click button");
   assert.deepEqual([...harness.dom.window.document.querySelectorAll("#control-steps li")].map((item) => ({
     index: item.dataset.index,
     state: item.dataset.state,
     text: item.querySelector(".control-step-main").textContent,
-    note: item.querySelector(".control-step-note")?.textContent ?? ""
+    note: item.querySelector(".control-step-note")?.textContent ?? "",
+    badge: item.querySelector(".control-step-state")?.textContent ?? ""
   })), [
-    { index: "1", state: "completed", text: "read", note: "saw page" },
-    { index: "2", state: "blocked", text: "Click button", note: "" }
+    { index: "1", state: "completed", text: "read", note: "saw page", badge: "done" },
+    { index: "2", state: "blocked", text: "Click button", note: "", badge: "needs review" }
   ]);
   assert.match(harness.dom.window.document.querySelector("#control-artifacts").textContent, /report: \/tmp\/report\.md/);
   assert.equal(harness.dom.window.document.querySelector("#approval").hidden, false);

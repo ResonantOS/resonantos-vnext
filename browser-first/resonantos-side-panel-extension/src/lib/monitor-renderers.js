@@ -13,14 +13,29 @@ export function controlRunProgress(run) {
   const blocked = steps.findIndex((step) => ["blocked", "failed"].includes(step.state));
   const status = run?.status ?? "idle";
   const activeLabel = active >= 0 ? `step ${active + 1}/${total || 1}` : blocked >= 0 ? `blocked at ${blocked + 1}/${total || 1}` : `${completed}/${total || 0}`;
+  const currentStep = active >= 0
+    ? steps[active]
+    : blocked >= 0
+      ? steps[blocked]
+      : steps.find((step) => step.state === "pending") ?? steps.at(-1) ?? null;
   return {
     active,
     activeLabel,
     blocked,
     completed,
+    currentStep,
     label: `${status} · ${activeLabel}`,
     total
   };
+}
+
+export function controlActionStateLabel(state = "pending") {
+  if (state === "active") return "working";
+  if (state === "completed") return "done";
+  if (state === "blocked") return "needs review";
+  if (state === "failed") return "failed";
+  if (state === "pending") return "queued";
+  return String(state || "queued");
 }
 
 export function createMonitorRenderers({
@@ -45,9 +60,11 @@ export function createMonitorRenderers({
     approvalTitle,
     approvalTrustSiteButton,
     controlArtifacts,
+    controlCurrentAction,
     controlMonitor,
     controlMonitorStatus,
     controlMonitorTitle,
+    controlStopButton,
     controlStepList,
     jobList,
     jobMonitor,
@@ -75,6 +92,24 @@ export function createMonitorRenderers({
     controlMonitorTitle.textContent = currentControlRun.goal;
     controlMonitorStatus.textContent = progress.label;
     controlMonitorStatus.dataset.status = currentControlRun.status;
+    controlStopButton.hidden = !["running", "approval", "paused"].includes(currentControlRun.status);
+    controlCurrentAction.dataset.state = progress.currentStep?.state ?? currentControlRun.status;
+    const actionKicker = controlCurrentAction.querySelector("small");
+    const actionLabel = controlCurrentAction.querySelector("strong");
+    if (actionKicker) {
+      actionKicker.textContent = currentControlRun.status === "running"
+        ? "Now"
+        : currentControlRun.status === "approval"
+          ? "Needs approval"
+          : "State";
+    }
+    if (actionLabel) {
+      actionLabel.textContent = progress.currentStep
+        ? controlStepLabel(progress.currentStep)
+        : currentControlRun.status === "running"
+          ? "Observing the active page..."
+          : currentControlRun.status;
+    }
     controlStepList.replaceChildren();
     currentControlRun.steps.forEach((step, index) => {
       const item = document.createElement("li");
@@ -90,6 +125,10 @@ export function createMonitorRenderers({
         note.textContent = step.note;
         item.append(note);
       }
+      const state = document.createElement("em");
+      state.className = "control-step-state";
+      state.textContent = controlActionStateLabel(step.state);
+      item.append(state);
       controlStepList.append(item);
     });
     if (currentControlRun.artifacts?.length) {

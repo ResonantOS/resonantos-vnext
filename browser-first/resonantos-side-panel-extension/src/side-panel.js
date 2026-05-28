@@ -50,8 +50,10 @@ const jobMonitorTitle = document.querySelector("#job-monitor-title");
 const jobMonitorToggle = document.querySelector("#job-monitor-toggle");
 const jobList = document.querySelector("#job-list");
 const controlMonitor = document.querySelector("#control-monitor");
+const controlCurrentAction = document.querySelector("#control-current-action");
 const controlMonitorTitle = document.querySelector("#control-monitor-title");
 const controlMonitorStatus = document.querySelector("#control-monitor-status");
+const controlStopButton = document.querySelector("#control-stop");
 const controlStepList = document.querySelector("#control-step-list");
 const controlArtifacts = document.querySelector("#control-artifacts");
 const approvalCard = document.querySelector("#approval-card");
@@ -365,9 +367,11 @@ monitorRenderers = createMonitorRenderers({
     approvalTitle,
     approvalTrustSiteButton,
     controlArtifacts,
+    controlCurrentAction,
     controlMonitor,
     controlMonitorStatus,
     controlMonitorTitle,
+    controlStopButton,
     controlStepList,
     jobList,
     jobMonitor,
@@ -682,6 +686,10 @@ const {
   setStatus,
   siteKeyForUrl,
   updateBrowserJob
+});
+
+controlStopButton.addEventListener("click", () => {
+  void cancelBrowserJob(currentControlRun?.id ?? browserJobStore.getActiveJobId() ?? "");
 });
 
 const commandRouter = createSidePanelCommandRouter({
