@@ -1,5 +1,5 @@
 import { existsSync, readdirSync } from "node:fs";
-import { appendFile, chmod, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { appendFile, chmod, copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -1081,6 +1081,11 @@ function compactExcerpt(content, limit = 1_800) {
     .slice(0, limit);
 }
 
+function markdownSection(content, heading) {
+  const pattern = new RegExp(`^##\\s+${heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\n([\\s\\S]*?)(?=\\n##\\s+|\\s*$)`, "m");
+  return pattern.exec(content)?.[1]?.trim() ?? "";
+}
+
 async function executeArchiveIntakeList(payload = {}) {
   const limit = Math.max(1, Math.min(100, Number(payload.limit ?? 40)));
   const intakeRoot = path.join(memoryRoot(), "INTAKE");
@@ -1347,12 +1352,97 @@ async function executeArchiveReviewArtifactRead(payload = {}) {
     path: path.relative(memoryRoot(), filePath),
     title: markdownTitle(content, path.basename(filePath, path.extname(filePath))),
     type: type || "archive-review-artifact",
-    status: frontmatterValue(content, "status") || "",
+    status: frontmatterValue(content, "promotionStatus") || frontmatterValue(content, "status") || "",
     proposedPage: frontmatterValue(content, "proposedPage") || "",
     bytes: details.size,
     modifiedAt: details.mtime.toISOString(),
     content: content.slice(0, 24_000),
     truncated: content.length > 24_000,
+  };
+}
+
+async function executeArchiveReviewArtifactPromote(payload = {}) {
+  const artifactPath = String(payload.path ?? "").trim();
+  const artifactFile = safeMemoryRelativePath(artifactPath, "REVIEW/artifacts");
+  if (!/\.(md|markdown)$/i.test(artifactFile)) {
+    throw new Error("Archive review artifact promotion only supports markdown files.");
+  }
+  const artifactContent = await readFile(artifactFile, "utf8");
+  if (frontmatterValue(artifactContent, "type") !== "archive-draft-wiki-update") {
+    throw new Error("Only browser-first draft wiki-update artifacts can be promoted here.");
+  }
+  if (frontmatterValue(artifactContent, "promotionStatus") === "promoted") {
+    return {
+      path: artifactPath,
+      status: "already-promoted",
+      promotedPage: frontmatterValue(artifactContent, "promotedPage") || frontmatterValue(artifactContent, "proposedPage"),
+      promotedAt: frontmatterValue(artifactContent, "promotedAt") || "",
+      backupPath: frontmatterValue(artifactContent, "backupPath") || "",
+    };
+  }
+  const requestPath = frontmatterValue(artifactContent, "requestPath");
+  const requestFile = safeMemoryRelativePath(requestPath, "REVIEW/requests");
+  const requestContent = await readFile(requestFile, "utf8");
+  if ((frontmatterValue(requestContent, "status") || "pending") !== "approved") {
+    throw new Error("Draft promotion requires the source review request to remain approved.");
+  }
+  const proposedPage = frontmatterValue(artifactContent, "proposedPage");
+  const pageFile = safeMemoryRelativePath(proposedPage, "AI_MEMORY/wiki");
+  if (!/\.(md|markdown)$/i.test(pageFile)) {
+    throw new Error("Promoted wiki page must be a markdown file under AI_MEMORY/wiki.");
+  }
+  const proposedContent = markdownSection(artifactContent, "Proposed Content");
+  if (!proposedContent) {
+    throw new Error("Draft artifact has no Proposed Content section to promote.");
+  }
+  const now = new Date().toISOString();
+  await mkdir(path.dirname(pageFile), { recursive: true });
+  let backupPath = "";
+  if (existsSync(pageFile)) {
+    const backupDir = path.join(memoryRoot(), "AI_MEMORY", "backups", "promotions", now.replace(/[:.]/g, "-"));
+    await mkdir(backupDir, { recursive: true });
+    const backupFile = path.join(backupDir, path.basename(pageFile));
+    await copyFile(pageFile, backupFile);
+    backupPath = path.relative(memoryRoot(), backupFile);
+  }
+  const pageTitle = markdownTitle(artifactContent, path.basename(pageFile, path.extname(pageFile))).replace(/^Draft Wiki Update:\s*/i, "");
+  const pageBody = [
+    "---",
+    `source: ${JSON.stringify("resonantos-browser-first")}`,
+    `type: ${JSON.stringify("ai-memory-page")}`,
+    `title: ${JSON.stringify(pageTitle)}`,
+    `updatedAt: ${JSON.stringify(now)}`,
+    `reviewArtifact: ${JSON.stringify(artifactPath)}`,
+    `sourceArtifact: ${JSON.stringify(frontmatterValue(artifactContent, "artifactPath") || "")}`,
+    "---",
+    "",
+    proposedContent,
+    "",
+    "<!-- resonantos-browser-first-promotion -->",
+    `Promoted at: ${now} from ${artifactPath}`,
+    "",
+  ].join("\n");
+  await writeFile(pageFile, pageBody);
+  let updatedArtifact = artifactContent;
+  updatedArtifact = writeFrontmatterValue(updatedArtifact, "promotionStatus", "promoted");
+  updatedArtifact = writeFrontmatterValue(updatedArtifact, "promotedAt", now);
+  updatedArtifact = writeFrontmatterValue(updatedArtifact, "promotedPage", proposedPage);
+  if (backupPath) {
+    updatedArtifact = writeFrontmatterValue(updatedArtifact, "backupPath", backupPath);
+  }
+  updatedArtifact = `${updatedArtifact.trimEnd()}\n\n## Promotion Event\n- at: ${now}\n- actor: resonantos-browser-first\n- page: ${proposedPage}\n${backupPath ? `- backup: ${backupPath}\n` : ""}`;
+  await writeFile(artifactFile, updatedArtifact);
+  const indexPath = path.join(memoryRoot(), "AI_MEMORY", "wiki", "index.md");
+  const logPath = path.join(memoryRoot(), "AI_MEMORY", "wiki", "log.md");
+  await mkdir(path.dirname(indexPath), { recursive: true });
+  await appendFile(indexPath, `- [[${path.basename(proposedPage, path.extname(proposedPage))}]] — promoted from ${artifactPath} at ${now}\n`);
+  await appendFile(logPath, `## [${now}] trusted_wiki_promote | ${pageTitle}\n- page: ${proposedPage}\n- review artifact: ${artifactPath}\n${backupPath ? `- backup: ${backupPath}\n` : ""}\n`);
+  return {
+    path: artifactPath,
+    status: "promoted",
+    promotedPage: proposedPage,
+    promotedAt: now,
+    backupPath,
   };
 }
 
@@ -1579,6 +1669,7 @@ const bridgeRoutes = [
   { method: "POST", path: "/archive/review/transition", handler: executeArchiveReviewTransition },
   { method: "POST", path: "/archive/review/draft", handler: executeArchiveReviewDraft },
   { method: "POST", path: "/archive/review/artifact/read", handler: executeArchiveReviewArtifactRead },
+  { method: "POST", path: "/archive/review/artifact/promote", handler: executeArchiveReviewArtifactPromote },
   { method: "GET", path: "/addons/status", handler: executeAddonsStatus },
   { method: "GET", path: "/opencode/status", handler: executeOpenCodeStatus },
   { method: "POST", path: "/hermes/dashboard/status", handler: executeHermesDashboardStatus },

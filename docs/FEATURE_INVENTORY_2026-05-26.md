@@ -89,6 +89,7 @@ These are the features currently implemented in the browser-first version.
 - Browser artifacts can request Living Archive review, and the browser-first Living Archive workspace now exposes an auditable review queue with `pending`, `in-progress`, `approved`, and `rejected` state transitions.
 - Approved browser-first review requests can generate draft wiki-update artifacts under `Memory/REVIEW/artifacts`; these drafts are not trusted AI Memory until a later host-mediated ingest/verifier/promote path completes.
 - Draft wiki-update artifacts can be previewed through a scoped `REVIEW/artifacts` host read path before any trusted promotion work is attempted.
+- Browser-first draft artifacts can now be explicitly promoted into `AI_MEMORY/wiki` through a scoped host action that requires an approved source review request, backs up overwritten wiki pages, marks the artifact as promoted, and appends to `index.md` / `log.md`.
 
 ### Browser Tools Available To Augmentor
 

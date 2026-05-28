@@ -273,9 +273,38 @@ export function renderLivingArchiveWorkspace({ container, bridgeRequest, initial
         : `Type: ${result.type || "archive artifact"}`;
       const content = document.createElement("pre");
       content.textContent = result.content || "";
-      draftPreview.append(heading, meta, content);
+      const actions = document.createElement("div");
+      actions.className = "memory-review-actions";
+      const promoteButton = document.createElement("button");
+      promoteButton.type = "button";
+      promoteButton.textContent = result.status === "promoted" ? "Promoted" : "Promote";
+      promoteButton.disabled = result.status === "promoted";
+      promoteButton.addEventListener("click", () => {
+        void promoteDraftArtifact(result.path);
+      });
+      actions.append(promoteButton);
+      draftPreview.append(heading, meta, content, actions);
       draftPreview.hidden = false;
       setStatus(reviewStatus, result.truncated ? "Draft preview loaded and truncated for safety." : "Draft preview loaded.", "success");
+    } catch (error) {
+      setStatus(reviewStatus, error instanceof Error ? error.message : String(error), "error");
+    }
+  };
+
+  const promoteDraftArtifact = async (path) => {
+    if (!path) {
+      setStatus(reviewStatus, "Draft artifact is missing its path.", "error");
+      return;
+    }
+    setStatus(reviewStatus, "Promoting draft into trusted AI Memory…");
+    try {
+      const result = await bridgeRequest("/archive/review/artifact/promote", {
+        method: "POST",
+        body: { path }
+      });
+      await loadStatus();
+      await loadReviewQueue();
+      setStatus(reviewStatus, `Promoted ${result.promotedPage}.`, "success");
     } catch (error) {
       setStatus(reviewStatus, error instanceof Error ? error.message : String(error), "error");
     }

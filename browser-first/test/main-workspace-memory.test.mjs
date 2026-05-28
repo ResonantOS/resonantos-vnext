@@ -81,6 +81,15 @@ test("living archive workspace renders status, search, and intake through bridge
         truncated: false
       };
     }
+    if (route === "/archive/review/artifact/promote") {
+      return {
+        path: options.body.path,
+        status: "promoted",
+        promotedPage: "AI_MEMORY/wiki/browser-job-completed.md",
+        promotedAt: "2026-05-28T11:00:00.000Z",
+        backupPath: ""
+      };
+    }
     if (route === "/archive/intake") {
       return { path: "INTAKE/browser/note.md", bytes: 42 };
     }
@@ -127,6 +136,16 @@ test("living archive workspace renders status, search, and intake through bridge
     ));
     assert.match(container.textContent, /Proposed page: AI_MEMORY\/wiki\/browser-job-completed\.md/);
     assert.match(container.textContent, /Browser job summary/);
+    Array.from(container.querySelectorAll(".memory-review-preview button"))
+      .find((button) => button.textContent === "Promote")
+      .click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.ok(calls.some(([route, options]) =>
+      route === "/archive/review/artifact/promote" &&
+      options.body.path === "REVIEW/artifacts/browser/browser-job-completed-draft.md"
+    ));
+    assert.match(container.textContent, /Promoted AI_MEMORY\/wiki\/browser-job-completed\.md/);
 
     const searchInput = container.querySelector("input[type='search']");
     searchInput.value = "resonant";
