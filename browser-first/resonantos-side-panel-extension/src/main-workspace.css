@@ -37,13 +37,13 @@ button {
 
 .workspace-shell {
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
+  grid-template-columns: 156px minmax(0, 1fr);
   height: 100vh;
 }
 
 .workspace-rail {
   display: grid;
-  grid-template-rows: auto auto repeat(6, auto) auto minmax(0, 1fr);
+  grid-template-rows: auto repeat(7, auto) minmax(0, 1fr);
   gap: 8px;
   min-height: 0;
   border-right: 1px solid var(--line);
@@ -202,6 +202,13 @@ button {
   gap: 20px;
 }
 
+.topbar-actions {
+  display: flex;
+  gap: 8px;
+  position: absolute;
+  right: 18px;
+}
+
 body:not([data-workspace="answer"]) .workspace-topbar nav {
   visibility: hidden;
 }
@@ -223,8 +230,6 @@ body[data-workspace="hermes"] .workspace-topbar {
 }
 
 .share-button {
-  position: absolute;
-  right: 18px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
@@ -426,6 +431,16 @@ body[data-workspace="hermes"] .answer-workspace {
   color: rgba(247, 255, 249, 0.92);
 }
 
+.message-action svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
 .main-composer {
   justify-self: center;
   width: min(650px, calc(100% - 56px));
@@ -455,6 +470,7 @@ textarea {
 .composer-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -511,60 +527,26 @@ textarea {
 .context-meter {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
   flex: 0 0 auto;
-  min-width: 86px;
+  min-width: 0;
   height: 34px;
-  border: 1px solid rgba(36, 209, 143, 0.26);
+  border: 1px solid rgba(138, 128, 112, 0.1);
   border-radius: 999px;
-  background: rgba(36, 209, 143, 0.04);
-  color: var(--accent);
-  font-size: 0.72rem;
+  background: rgba(255, 248, 236, 0.02);
+  color: rgba(207, 219, 210, 0.74);
+  font-size: 0.68rem;
   font-weight: 850;
-  padding: 0 8px;
-}
-
-.context-meter-track {
-  position: relative;
-  flex: 1 1 auto;
-  height: 5px;
-  min-width: 40px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: rgba(143, 159, 149, 0.18);
-}
-
-.context-meter-used {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: var(--context-used, 0%);
-  border-radius: inherit;
-  background: linear-gradient(90deg, rgba(36, 209, 143, 0.6), rgba(36, 209, 143, 0.96));
-}
-
-.context-meter-threshold {
-  position: absolute;
-  top: -2px;
-  bottom: -2px;
-  width: 1px;
-  background: rgba(238, 247, 240, 0.35);
-}
-
-.context-meter-threshold.compact {
-  left: 70%;
-}
-
-.context-meter-threshold.hard {
-  left: 90%;
-  background: rgba(255, 183, 77, 0.66);
+  padding: 0 9px;
 }
 
 .context-meter-label {
   flex: 0 0 auto;
-  min-width: 24px;
+  min-width: 2.2em;
 }
 
 .send-button {
+  margin-left: auto;
   width: 38px;
   height: 38px;
   background: var(--accent);
@@ -771,6 +753,7 @@ textarea {
   padding: 9px 12px;
 }
 
+.addons-workspace,
 .memory-workspace,
 .artifacts-workspace {
   display: grid;
@@ -780,12 +763,14 @@ textarea {
   padding-bottom: 40px;
 }
 
+.addons-hero,
 .memory-hero,
 .artifacts-hero {
   display: grid;
   gap: 10px;
 }
 
+.addons-hero h1,
 .memory-hero h1,
 .artifacts-hero h1 {
   max-width: 760px;
@@ -796,11 +781,115 @@ textarea {
   line-height: 0.95;
 }
 
+.addons-hero p,
 .memory-hero p,
 .artifacts-hero p {
   max-width: 680px;
   margin: 0;
   color: rgba(214, 229, 219, 0.76);
+}
+
+.addons-status {
+  border: 1px solid rgba(36, 209, 143, 0.14);
+  border-radius: 16px;
+  background: rgba(17, 22, 19, 0.58);
+  color: rgba(214, 229, 219, 0.78);
+  margin: 0;
+  padding: 12px 14px;
+}
+
+.addons-status[data-tone="success"] {
+  color: rgba(117, 255, 187, 0.88);
+}
+
+.addons-status[data-tone="warning"] {
+  color: rgba(255, 214, 138, 0.88);
+}
+
+.addons-status[data-tone="error"] {
+  color: rgba(255, 154, 138, 0.88);
+}
+
+.addons-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.addon-card {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid rgba(36, 209, 143, 0.15);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(36, 209, 143, 0.12), transparent 44%),
+    rgba(17, 22, 19, 0.72);
+  padding: 16px;
+}
+
+.addon-card[data-tone="warning"] {
+  border-color: rgba(255, 214, 138, 0.2);
+}
+
+.addon-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.addon-card-header strong {
+  color: rgba(247, 255, 249, 0.96);
+  font-size: 1rem;
+}
+
+.addon-card-header span {
+  border: 1px solid rgba(36, 209, 143, 0.2);
+  border-radius: 999px;
+  color: rgba(36, 209, 143, 0.9);
+  font-size: 0.62rem;
+  font-weight: 950;
+  padding: 4px 7px;
+  text-transform: uppercase;
+}
+
+.addon-card-header span[data-tone="warning"] {
+  border-color: rgba(255, 214, 138, 0.24);
+  color: rgba(255, 214, 138, 0.9);
+}
+
+.addon-card p,
+.addon-card small {
+  margin: 0;
+  color: rgba(214, 229, 219, 0.68);
+  line-height: 1.45;
+}
+
+.addon-card p {
+  font-weight: 800;
+}
+
+.addon-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.addon-card-actions button {
+  border: 1px solid rgba(36, 209, 143, 0.22);
+  border-radius: 999px;
+  background: rgba(36, 209, 143, 0.1);
+  color: rgba(247, 255, 249, 0.92);
+  font-weight: 950;
+  padding: 8px 11px;
+}
+
+.addon-card-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
 }
 
 .artifacts-hero button {
@@ -1290,6 +1379,7 @@ textarea {
 }
 
 @media (max-width: 1120px) {
+  .addons-grid,
   .memory-metrics,
   .artifacts-layout {
     grid-template-columns: 1fr;

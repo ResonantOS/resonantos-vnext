@@ -60,8 +60,9 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
 
   assert.equal(manifest.chrome_url_overrides.newtab, "src/main-workspace.html");
   assert.match(workspace, /ResonantOS main workspace/);
-  assert.match(workspace, /chat-history/);
+  assert.doesNotMatch(workspace, /chat-history/);
   assert.match(workspace, /Artifacts/);
+  assert.match(workspace, /Add-ons/);
   assert.match(workspace, /Living Archive/);
   assert.match(workspace, /Hermes/);
   assert.match(workspace, /OpenCode/);
@@ -69,6 +70,10 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(workspace, /mode-select/);
   assert.match(workspace, /model-select/);
   assert.match(workspace, /thinking-depth/);
+  assert.match(workspace, /read-page/);
+  assert.match(workspace, /save-intake/);
+  assert.match(workspace, /save-selection/);
+  assert.match(workspace, /context-toggle/);
   assert.match(workspace, /context-meter/);
   assert.match(workspace, /dictate-button/);
   assert.match(workspace, /Open Sidebar/);
@@ -76,9 +81,9 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(workspaceScript, /createChatSessionStore/);
   assert.match(workspaceScript, /createComposerController/);
   assert.match(workspaceScript, /renderArtifactsWorkspace/);
+  assert.match(workspaceScript, /renderAddOnsWorkspace/);
   assert.match(workspaceScript, /continueFromArtifact/);
-  assert.match(workspaceScript, /renameChatSession/);
-  assert.match(workspaceScript, /deleteChatSession/);
+  assert.match(workspaceScript, /if \(!chatHistory\) return/);
   assert.match(workspaceScript, /workspaceLabel/);
   assert.match(workspaceScript, /setActiveSessionWorkspace/);
   assert.match(workspaceScript, /\/augmentor\/chat/);
@@ -86,6 +91,7 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(workspaceScript, /parseAutonomousBrowserActionIntent/);
   assert.match(workspaceScript, /parseNaturalBrowserIntent/);
   assert.match(workspaceScript, /augmentorPendingSidebarPrompt/);
+  assert.match(workspaceScript, /handoffSidebarPrompt/);
   assert.match(workspaceScript, /open_side_panel/);
   assert.match(workspaceScript, /chrome\.tabs\.update/);
   assert.match(workspaceScript, /composerController\.bind\(\)/);
@@ -108,6 +114,7 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(workspaceScript, /AI browser workspace/);
   assert.match(workspaceScript, /data-workspace-command="browser"/);
   assert.match(workspaceScript, /data-workspace-command="artifacts"/);
+  assert.match(workspaceScript, /data-workspace-command="addons"/);
   assert.match(workspaceScript, /data-workspace-command="memory"/);
   assert.match(workspaceScript, /data-workspace-command="hermes"/);
   assert.match(workspaceScript, /data-workspace-command="opencode"/);
@@ -115,22 +122,24 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(workspaceScript, /iframe\.src = dashboard\.url/);
   assert.match(workspaceScript, /augmentorMainWorkspace/);
   assert.match(workspaceScript, /hydrateActiveWorkspace/);
+  assert.match(workspaceScript, /ACTION_ICONS/);
   assert.match(workspaceScript, /messageActionButton/);
   assert.match(workspaceScript, /copyMessage/);
   assert.match(workspaceScript, /forkFromMessage/);
   assert.match(workspaceScript, /deleteMessage/);
+  assert.match(workspaceScript, /editMessage/);
+  assert.match(workspaceScript, /saveMessageToArchive/);
   assert.match(workspaceScript, /regenerateFromMessage/);
   assert.match(workspaceScript, /setActiveWorkspace\("hermes"/);
   assert.match(workspaceStyles, /message-actions/);
   assert.match(workspaceStyles, /message-action/);
   assert.match(workspaceStyles, /workspace-shell/);
-  assert.match(workspaceStyles, /history-item/);
-  assert.match(workspaceStyles, /history-meta/);
-  assert.match(workspaceStyles, /history-action/);
   assert.match(workspaceStyles, /capability-grid/);
   assert.match(workspaceStyles, /hero-kicker/);
   assert.match(workspaceStyles, /answer-workspace/);
   assert.match(workspaceStyles, /artifacts-workspace/);
+  assert.match(workspaceStyles, /addons-workspace/);
+  assert.match(workspaceStyles, /addon-card/);
   assert.match(workspaceStyles, /artifact-preview/);
   assert.match(workspaceStyles, /artifact-actions/);
   assert.match(workspaceStyles, /module-workspace/);
@@ -243,7 +252,7 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(panel, /Thinking depth/);
   assert.match(panel, /Save current page to Living Archive intake/);
   assert.match(panel, /Save selected page text to Living Archive intake/);
-  assert.match(panel, /Intake/);
+  assert.match(panel, /intake/i);
   assert.match(background, /openPanelOnActionClick/);
   assert.match(background, /openResonantSidePanel/);
   assert.match(background, /open-augmentor-side-panel/);

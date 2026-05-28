@@ -40,6 +40,11 @@ These are the features currently implemented in the browser-first version.
 ### Augmentor Chat
 
 - Augmentor chat works inside the browser side panel.
+- Augmentor chat also works in the browser new-tab main workspace as a full-screen chat surface.
+- The main workspace and side-panel chat share the same keyboard behavior for Enter, Shift+Enter, select-all, copy, cut, paste, and undo.
+- The main workspace and side-panel chat share the same message-action semantics: copy, fork, edit user prompt, regenerate, save assistant output to Living Archive intake, stats when available, and delete.
+- The main workspace rail is navigation-only; chat history is no longer shown in that rail.
+- New chat creation is available from the main workspace top bar rather than the workspace rail history area.
 - Provider calls route through the local browser-first bridge.
 - Current provider profile display is visible in the composer.
 - Model selection is present in the composer.
@@ -48,6 +53,7 @@ These are the features currently implemented in the browser-first version.
 - Attachment affordance is present in the composer.
 - Microphone affordance is present, but full dictation remains dependent on runtime permission/provider support.
 - Context percentage indicator is present.
+- Context percentage uses the compact vNext-style pill affordance.
 - Send button is icon-based.
 - The chat starts without the earlier hardcoded placeholder assistant message.
 - Chat supports Markdown rendering.
@@ -87,6 +93,9 @@ These are the features currently implemented in the browser-first version.
 - The control monitor persists job state through browser storage.
 - Agent Control reports can be saved into Living Archive intake through the bridge path.
 - The Augmentor sidebar can save the current browser page or selected page text directly into Living Archive intake and immediately create a governed review request; these captures remain raw intake artifacts and still require review, verification, and promotion before becoming trusted AI Memory.
+- The main workspace exposes matching icon affordances for page read, page save, selection save, and browser status by handing those operations to the governed side-panel/browser-control surface.
+- The Augmentor sidebar can summarize the current browser page into a source-grounded Living Archive intake artifact through the selected provider, with a deterministic source-excerpt fallback when the provider is unavailable.
+- The Augmentor sidebar can capture a multi-tab browser research trail into one Living Archive intake artifact, preserving per-page visible text, links, tab provenance, skipped-tab reasons, and a governed review request.
 - Browser artifacts can request Living Archive review, and the browser-first Living Archive workspace now exposes an auditable review queue with `pending`, `in-progress`, `approved`, and `rejected` state transitions.
 - Review queue cards now show an archive pipeline timeline for `Intake`, `Review`, `Draft`, `Verify`, `Revise`, `Promote`, and `Restore`, using host-read artifact metadata rather than UI guesses.
 - Approved browser-first review requests can generate draft wiki-update artifacts under `Memory/REVIEW/artifacts`; these drafts are not trusted AI Memory until a later host-mediated ingest/verifier/promote path completes.
@@ -164,6 +173,8 @@ These are the features currently implemented in the browser-first version.
 ### Agent Control Visual Feedback
 
 - Agent Control Mode has a persistent green Matrix-style page perimeter overlay.
+- Agent Control monitor now records structured action traces with observation, decision, action, result, and safety details.
+- Completed, blocked, approval, and denied control runs now show compact summary cards before the replayable action list.
 - The overlay starts once when the agent begins operating the page.
 - The overlay remains active across the whole control session.
 - The overlay stops only when control returns to the human.
@@ -220,9 +231,7 @@ These are the next capability areas planned for the browser-first app.
 
 ### Agent Control Quality
 
-- Make the control monitor more Comet-level by showing a clearer live current action.
-- Add expandable per-action details: observation, decision, action, result, and safety classification.
-- Add task summary cards at completion.
+- Refine the control monitor with richer action timing, elapsed duration, and confidence/uncertainty markers.
 - Add visible blockers with recommended next human action.
 - Add better progress semantics for multi-step tasks.
 - Add replayable run reports so a completed control task can be inspected later.
@@ -253,17 +262,14 @@ These are the next capability areas planned for the browser-first app.
 ### Memory And Archive Integration In Browser-First
 
 - Connect browser-first Agent Control reports more deeply to Living Archive intake.
-- Add saved page/context artifacts into intake from the browser side panel.
-- Add “save this page to memory” flow.
-- Add “summarize this page into memory” flow.
-- Add “create research trail” flow for multi-page browsing.
-- Add source provenance for browser-collected artifacts.
+- Improve saved page/context artifacts with richer metadata and user-facing artifact previews.
+- Improve browser-collected source provenance with better previews, filtering, and artifact grouping.
 - Keep direct trusted wiki writes blocked; browser artifacts must enter intake/review.
 
 ### Add-on Integration In Browser-First
 
-- Port the Add-on Registry visibility into the browser-first environment.
-- Expose Hermes and OpenCode as controlled add-on targets from the browser-first side panel.
+- Expand the browser-first Add-ons workspace from visibility/status into install, enable, disable, and permission review flows.
+- Expose Hermes and OpenCode as controlled add-on targets from both the browser-first main workspace and side panel.
 - Route delegation through approved add-on manifests, not raw command execution.
 - Add task handoff artifacts from browser-first Agent Control into delegation workspaces.
 - Keep add-ons untrusted by default.

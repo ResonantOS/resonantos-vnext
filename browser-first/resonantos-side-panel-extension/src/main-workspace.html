@@ -10,15 +10,13 @@
     <main class="workspace-shell" aria-label="ResonantOS main workspace">
       <aside class="workspace-rail" aria-label="ResonantOS workspaces">
         <div class="brand-mark">R</div>
-        <button id="new-chat" type="button" class="rail-action">＋ New</button>
         <button type="button" class="rail-item active" data-workspace="answer">Answer</button>
         <button type="button" class="rail-item" data-workspace="artifacts">Artifacts</button>
+        <button type="button" class="rail-item" data-workspace="addons">Add-ons</button>
         <button type="button" class="rail-item" data-workspace="memory">Living Archive</button>
         <button type="button" class="rail-item" data-workspace="hermes">Hermes</button>
         <button type="button" class="rail-item" data-workspace="opencode">OpenCode</button>
         <button type="button" class="rail-item" data-workspace="settings">Settings</button>
-        <div class="rail-heading">History</div>
-        <ol id="chat-history" class="chat-history" aria-label="Chat history"></ol>
       </aside>
 
       <section class="answer-workspace" aria-label="Augmentor full-screen chat">
@@ -28,7 +26,10 @@
             <button class="topbar-tab" type="button">Links</button>
             <button class="topbar-tab" type="button">Images</button>
           </nav>
-          <button id="open-sidebar" type="button" class="share-button">Open Sidebar</button>
+          <div class="topbar-actions">
+            <button id="new-chat" type="button" class="share-button">New Chat</button>
+            <button id="open-sidebar" type="button" class="share-button">Open Sidebar</button>
+          </div>
         </header>
 
         <section id="transcript" class="answer-thread" aria-live="polite"></section>
@@ -37,8 +38,22 @@
           <textarea id="command-input" rows="2" placeholder="Ask Augmentor anything"></textarea>
           <div id="attachment-strip" class="attachment-strip" hidden></div>
           <div class="composer-row">
-            <button id="attach-file" type="button" class="icon-button" title="Attach file" aria-label="Attach file">＋</button>
+            <button id="attach-file" type="button" class="icon-button" title="Attach file" aria-label="Attach file">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+            </button>
             <input id="file-input" type="file" multiple hidden />
+            <button id="read-page" type="button" class="icon-button" title="Read current browser page from sidebar" aria-label="Read current browser page">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Z"/><circle cx="12" cy="12" r="2.5"/></svg>
+            </button>
+            <button id="save-intake" type="button" class="icon-button" title="Save current browser page to Living Archive intake" aria-label="Save current browser page to Living Archive intake">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h11l3 3v13H5z"/><path d="M8 4v6h8V4"/><path d="M8 16h8"/></svg>
+            </button>
+            <button id="save-selection" type="button" class="icon-button" title="Save selected browser text to Living Archive intake" aria-label="Save selected browser text to Living Archive intake">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v14H5z"/><path d="M8 9h8"/><path d="M8 13h5"/><path d="m15 15 2 2 3-4"/></svg>
+            </button>
+            <button id="context-toggle" type="button" class="icon-button context-usage-button" title="Open browser context status in sidebar" aria-label="Open browser context status in sidebar">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16"/><path d="M4 12h10"/><path d="M4 18h7"/><path d="M18 14v6"/><path d="m15 17 3 3 3-3"/></svg>
+            </button>
             <select id="mode-select" class="mode-select" aria-label="Interaction mode">
               <option value="auto">Auto</option>
               <option value="answer">Answer</option>
@@ -60,7 +75,6 @@
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V7a3 3 0 0 0-3-3Z"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>
             </button>
             <button id="context-meter" type="button" class="context-meter" title="Estimated conversation context captured for this session." aria-label="Context usage 0 percent">
-              <span class="context-meter-track"><span class="context-meter-used"></span><span class="context-meter-threshold compact"></span><span class="context-meter-threshold hard"></span></span>
               <span class="context-meter-label">0%</span>
             </button>
             <span id="connection-line" class="connection-line">Connected to MiniMax 2.7 · Ready</span>
