@@ -1146,10 +1146,4 @@ textarea::placeholder {
     display: none;
   }
 
-  .chat-history {
-    grid-column: 1 / -1;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(96px, 1fr);
-    overflow-x: auto;
-  }
 }

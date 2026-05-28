@@ -35,7 +35,6 @@ const MODEL_LABELS = {
 };
 
 const transcript = document.querySelector("#transcript");
-const chatHistory = document.querySelector("#chat-history");
 const workspaceButtons = [...document.querySelectorAll("[data-workspace]")];
 const newChatButton = document.querySelector("#new-chat");
 const openSidebarButton = document.querySelector("#open-sidebar");
@@ -79,15 +78,6 @@ const providerMessagesFromHistory = (messages, limit = 18) => messages
   .filter((message) => ["user", "assistant"].includes(message.role))
   .slice(-limit)
   .map((message) => ({ role: message.role, content: message.content }));
-const workspaceLabel = (workspaceId) => ({
-  answer: "Answer",
-  artifacts: "Artifacts",
-  addons: "Add-ons",
-  memory: "Memory",
-  hermes: "Hermes",
-  opencode: "OpenCode",
-  settings: "Settings"
-}[workspaceId] ?? "Answer");
 
 const chatSessionStore = createChatSessionStore({
   storage: chrome.storage?.local,
@@ -117,71 +107,6 @@ function updateContextMeter() {
   contextMeter.style.setProperty("--context-used", `${roughPercent}%`);
   contextMeter.querySelector(".context-meter-label").textContent = `${roughPercent}%`;
   contextMeter.setAttribute("aria-label", `Context usage ${roughPercent} percent`);
-}
-
-function renderChatHistory() {
-  if (!chatHistory) return;
-  chatHistory.replaceChildren();
-  chatSessionStore.getSessions().forEach((session) => {
-    const item = document.createElement("li");
-    item.className = "history-item";
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "history-open";
-    button.textContent = session.title || "New chat";
-    button.title = session.title || "New chat";
-    if (session.id === chatSessionStore.getActiveSessionId()) {
-      button.setAttribute("aria-current", "true");
-    }
-    button.addEventListener("click", async () => {
-      await chatSessionStore.switchSession(session.id);
-      activeWorkspace = allowedWorkspaces.has(session.workspaceId) ? session.workspaceId : "answer";
-      await persistActiveWorkspace();
-      renderAll();
-    });
-    const meta = document.createElement("span");
-    meta.className = "history-meta";
-    meta.textContent = workspaceLabel(session.workspaceId);
-    const actions = document.createElement("div");
-    actions.className = "history-actions";
-    actions.append(
-      historyActionButton("Rename chat", "✎", () => void renameChatSession(session)),
-      historyActionButton("Delete chat", "×", () => void deleteChatSession(session))
-    );
-    item.append(button, meta, actions);
-    chatHistory.append(item);
-  });
-}
-
-function historyActionButton(label, glyph, onClick) {
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "history-action";
-  button.title = label;
-  button.setAttribute("aria-label", label);
-  button.textContent = glyph;
-  button.addEventListener("click", (event) => {
-    event.stopPropagation();
-    onClick();
-  });
-  return button;
-}
-
-async function renameChatSession(session) {
-  const nextTitle = globalThis.prompt?.("Rename chat", session.title || "New chat");
-  if (nextTitle === null || nextTitle === undefined) return;
-  await chatSessionStore.renameSession(session.id, nextTitle);
-  renderAll();
-}
-
-async function deleteChatSession(session) {
-  const ok = globalThis.confirm?.(`Delete "${session.title || "New chat"}"?`) ?? false;
-  if (!ok) return;
-  await chatSessionStore.deleteSession(session.id);
-  const activeSession = chatSessionStore.getActiveSession();
-  activeWorkspace = allowedWorkspaces.has(activeSession?.workspaceId) ? activeSession.workspaceId : "answer";
-  await persistActiveWorkspace();
-  renderAll();
 }
 
 function setActiveWorkspace(workspaceId, { persist = false } = {}) {
@@ -483,7 +408,6 @@ function renderAll() {
   setActiveWorkspace(activeWorkspace);
   renderMessages();
   renderAttachments();
-  renderChatHistory();
   updateContextMeter();
   updateConnectionLine();
 }

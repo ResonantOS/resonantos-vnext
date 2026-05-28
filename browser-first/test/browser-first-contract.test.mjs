@@ -83,8 +83,9 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(workspaceScript, /renderArtifactsWorkspace/);
   assert.match(workspaceScript, /renderAddOnsWorkspace/);
   assert.match(workspaceScript, /continueFromArtifact/);
-  assert.match(workspaceScript, /if \(!chatHistory\) return/);
-  assert.match(workspaceScript, /workspaceLabel/);
+  assert.doesNotMatch(workspaceScript, /renderChatHistory/);
+  assert.doesNotMatch(workspaceScript, /chatHistory/);
+  assert.doesNotMatch(workspaceScript, /historyActionButton/);
   assert.match(workspaceScript, /setActiveSessionWorkspace/);
   assert.match(workspaceScript, /\/augmentor\/chat/);
   assert.match(workspaceScript, /response\?\.reply/);
