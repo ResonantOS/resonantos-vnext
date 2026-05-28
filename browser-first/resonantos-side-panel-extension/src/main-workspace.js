@@ -47,7 +47,6 @@ const readPageButton = document.querySelector("#read-page");
 const saveIntakeButton = document.querySelector("#save-intake");
 const saveSelectionButton = document.querySelector("#save-selection");
 const contextToggleButton = document.querySelector("#context-toggle");
-const modeSelect = document.querySelector("#mode-select");
 const modelSelect = document.querySelector("#model-select");
 const thinkingDepthSelect = document.querySelector("#thinking-depth");
 const dictateButton = document.querySelector("#dictate-button");
@@ -97,7 +96,12 @@ const chatSessionStore = createChatSessionStore({
 function updateConnectionLine(status = "Ready") {
   const model = MODEL_LABELS[modelSelect.value] ?? modelSelect.value;
   thinkingDepthSelect.hidden = !supportsThinkingDepth(modelSelect.value);
-  connectionLine.textContent = `Connected to ${model} · ${status}`;
+  connectionLine.title = `Connected to ${model} · ${status}`;
+  connectionLine.setAttribute("aria-label", connectionLine.title);
+  connectionLine.innerHTML = `
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h4l2-7 4 14 2-7h4"/></svg>
+    <span>${status}</span>
+  `;
 }
 
 function updateContextMeter() {
@@ -684,8 +688,7 @@ commandForm.addEventListener("submit", async (event) => {
     await addMessage("user", prompt);
     commandInput.value = "";
     composerController.resetUndoStack("");
-    const shouldControl = modeSelect.value === "browser" ||
-      parseAutonomousBrowserActionIntent(prompt) ||
+    const shouldControl = parseAutonomousBrowserActionIntent(prompt) ||
       parseNaturalBrowserIntent(prompt);
     if (parseMemorySlashCommand(prompt) !== null) {
       await runMemoryCommand(prompt);

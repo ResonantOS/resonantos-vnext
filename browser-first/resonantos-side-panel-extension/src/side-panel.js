@@ -23,8 +23,6 @@ import { createTabContextController } from "./lib/tab-context-controller.js";
 import { createTaskConsentStore } from "./lib/task-consent-store.js";
 
 const readButton = document.querySelector("#read-page");
-const newChatButton = document.querySelector("#new-chat");
-const chatHistory = document.querySelector("#chat-history");
 const attachFileButton = document.querySelector("#attach-file");
 const fileInput = document.querySelector("#file-input");
 const attachmentStrip = document.querySelector("#attachment-strip");
@@ -201,37 +199,12 @@ const renderControlMonitor = () => {
 const updateConnectionLine = () => {
   const model = MODEL_LABELS[modelSelect.value] ?? modelSelect.value;
   thinkingDepthSelect.hidden = !supportsThinkingDepth(modelSelect.value);
-  connectionLine.textContent = `Connected to ${model} · ${statusLabel}`;
-};
-
-const renderChatHistory = () => {
-  if (!chatHistory) return;
-  chatHistory.replaceChildren();
-  chatSessionStore.getSessions().forEach((session) => {
-    const item = document.createElement("li");
-    const button = document.createElement("button");
-    button.type = "button";
-    button.textContent = session.title || "New chat";
-    button.title = session.title || "New chat";
-    button.dataset.sessionId = session.id;
-    if (session.id === chatSessionStore.getActiveSessionId()) {
-      button.setAttribute("aria-current", "true");
-    }
-    button.addEventListener("click", async () => {
-      if (session.id === chatSessionStore.getActiveSessionId()) return;
-      await chatSessionStore.switchSession(session.id);
-      lastSnapshot = null;
-      currentControlRun = null;
-      pendingApproval = null;
-      renderMessages();
-      renderAttachments();
-      renderChatHistory();
-      renderControlMonitor();
-      setStatus("Ready");
-    });
-    item.append(button);
-    chatHistory.append(item);
-  });
+  connectionLine.title = `Connected to ${model} · ${statusLabel}`;
+  connectionLine.setAttribute("aria-label", connectionLine.title);
+  connectionLine.innerHTML = `
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h4l2-7 4 14 2-7h4"/></svg>
+    <span>${statusLabel}</span>
+  `;
 };
 
 const setContextMeter = (snapshot) => {
@@ -313,16 +286,13 @@ const {
   onCopyMessage: (id) => messageActions.copyMessage(id),
   onDeleteMessage: async (id) => {
     await messageActions.deleteMessage(id);
-    renderChatHistory();
   },
   onEditMessage: (id) => messageActions.editMessage(id),
   onForkMessage: async (id) => {
     await messageActions.forkFromMessage(id);
-    renderChatHistory();
   },
   onRegenerateMessage: async (id) => {
     await messageActions.regenerateFromMessage(id);
-    renderChatHistory();
   },
   onSaveMessageToArchive: (id) => messageActions.saveMessageToArchive(id),
   onShowMessageStats: (id) => messageActions.showMessageStats(id),
@@ -334,7 +304,6 @@ const addMessage = async (role, content, { persist = true, usage = null } = {}) 
   const message = await chatSessionStore.addMessage(role, content, { persist, usage });
   if (!message) return null;
   renderMessages();
-  renderChatHistory();
   return message;
 };
 
@@ -858,7 +827,6 @@ const hydrateChatSettings = async () => {
   await chatSessionStore.ensureFreshSession();
   renderMessages();
   renderAttachments();
-  renderChatHistory();
   updateConnectionLine();
 };
 
@@ -885,22 +853,6 @@ chrome.storage?.onChanged?.addListener?.((changes, areaName) => {
   void consumePendingSidebarPrompt();
 });
 
-newChatButton?.addEventListener("click", async () => {
-  await chatSessionStore.createSession();
-  lastSnapshot = null;
-  currentControlRun = null;
-  pendingApproval = null;
-  contextDockExpanded = false;
-  commandInput.value = "";
-  composerController.resetUndoStack("");
-  renderMessages();
-  renderAttachments();
-  renderChatHistory();
-  renderControlMonitor();
-  clearActivity();
-  setStatus("Ready");
-  commandInput.focus();
-});
 transcript.addEventListener("resonantos:use-prompt", (event) => {
   commandInput.value = event.detail?.prompt ?? "";
   commandInput.dispatchEvent(new Event("input", { bubbles: true }));

@@ -425,7 +425,6 @@ textarea {
   font-weight: 950;
 }
 
-.mode-select,
 .model-select,
 .depth-select {
   border: 0;
@@ -439,34 +438,60 @@ textarea {
 }
 
 .connection-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   flex: 1;
   min-width: 0;
   overflow: hidden;
   color: rgba(143, 159, 149, 0.72);
   font-size: 0.76rem;
+  font-weight: 850;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.context-meter {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.connection-line span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.connection-line svg {
   flex: 0 0 auto;
-  min-width: 0;
-  height: 34px;
-  border: 1px solid rgba(138, 128, 112, 0.1);
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: rgba(36, 209, 143, 0.85);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.context-meter {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  border: 0;
   border-radius: 999px;
-  background: rgba(255, 248, 236, 0.02);
-  color: rgba(207, 219, 210, 0.74);
+  background:
+    radial-gradient(circle at center, rgba(17, 22, 19, 0.98) 58%, transparent 60%),
+    conic-gradient(var(--accent) var(--context-used, 0%), rgba(255, 255, 255, 0.1) 0);
+  color: rgba(36, 209, 143, 0.96);
   font-size: 0.68rem;
-  font-weight: 850;
-  padding: 0 9px;
+  font-weight: 950;
+  padding: 0;
 }
 
 .context-meter-label {
-  flex: 0 0 auto;
-  min-width: 2.2em;
+  display: grid;
+  place-items: center;
+  min-width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: rgba(17, 22, 19, 0.96);
 }
 
 .send-button {

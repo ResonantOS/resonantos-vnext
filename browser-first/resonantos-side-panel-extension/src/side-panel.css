@@ -62,8 +62,10 @@ textarea:disabled {
 }
 
 .context-meter {
-  display: inline-flex;
-  align-items: center;
+  display: inline-grid;
+  place-items: center;
+  position: relative;
+  isolation: isolate;
   gap: 6px;
 }
 
@@ -77,6 +79,7 @@ textarea:disabled {
 
 .icon-button svg,
 .send-button svg,
+.connection-line svg,
 .context-meter svg {
   width: 16px;
   height: 16px;
@@ -1087,13 +1090,31 @@ textarea::placeholder {
 }
 
 .connection-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: start;
   margin: 7px 8px 0;
+  max-width: 100%;
   overflow: hidden;
   color: rgba(143, 159, 149, 0.74);
   font-size: 0.68rem;
+  font-weight: 850;
   line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.connection-line span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.connection-line svg {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  color: rgba(36, 209, 143, 0.82);
 }
 
 .send-button {
@@ -1111,21 +1132,28 @@ textarea::placeholder {
 
 .context-meter {
   flex: 0 0 auto;
-  min-width: 0;
-  height: 32px;
-  border: 1px solid rgba(138, 128, 112, 0.1);
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  border: 0;
   border-radius: 999px;
-  background: rgba(255, 248, 236, 0.02);
-  color: rgba(207, 219, 210, 0.74);
-  font-size: 0.66rem;
-  font-weight: 850;
-  padding: 0 7px;
+  background:
+    radial-gradient(circle at center, rgba(5, 8, 7, 0.96) 58%, transparent 60%),
+    conic-gradient(var(--accent) var(--context-used, 0%), rgba(255, 255, 255, 0.1) 0);
+  color: rgba(36, 209, 143, 0.95);
+  font-size: 0.62rem;
+  font-weight: 950;
+  padding: 0;
   text-align: center;
 }
 
 .context-meter-label {
-  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
   min-width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: rgba(5, 8, 7, 0.94);
 }
 
 .send-button:hover {

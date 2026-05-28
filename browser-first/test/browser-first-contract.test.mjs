@@ -67,7 +67,6 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(workspace, /Hermes/);
   assert.match(workspace, /OpenCode/);
   assert.match(workspace, /Settings/);
-  assert.match(workspace, /mode-select/);
   assert.match(workspace, /model-select/);
   assert.match(workspace, /thinking-depth/);
   assert.match(workspace, /read-page/);
@@ -76,6 +75,7 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(workspace, /context-toggle/);
   assert.match(workspace, /context-meter/);
   assert.match(workspace, /dictate-button/);
+  assert.doesNotMatch(workspace, /mode-select/);
   assert.match(workspace, /Open Sidebar/);
   assert.match(workspace, /main-workspace\.js/);
   assert.match(workspaceScript, /createChatSessionStore/);
@@ -96,6 +96,7 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(workspaceScript, /open_side_panel/);
   assert.match(workspaceScript, /chrome\.tabs\.update/);
   assert.match(workspaceScript, /composerController\.bind\(\)/);
+  assert.match(workspaceScript, /connectionLine\.innerHTML/);
   assert.match(workspaceScript, /renderHermesWorkspace/);
   assert.match(workspaceScript, /renderOpenCodeWorkspace/);
   assert.match(workspaceScript, /renderSettingsWorkspace/);
@@ -134,6 +135,7 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(workspaceScript, /setActiveWorkspace\("hermes"/);
   assert.match(workspaceStyles, /message-actions/);
   assert.match(workspaceStyles, /message-action/);
+  assert.match(workspaceStyles, /conic-gradient\(var\(--accent\) var\(--context-used/);
   assert.match(workspaceStyles, /workspace-shell/);
   assert.match(workspaceStyles, /capability-grid/);
   assert.match(workspaceStyles, /hero-kicker/);
@@ -268,12 +270,16 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(pageActions, /\/archive\/review\/request/);
   assert.match(script, /saveIntake/);
   assert.match(script, /createChatSessionStore/);
+  assert.doesNotMatch(script, /renderChatHistory/);
+  assert.doesNotMatch(script, /chatHistory/);
+  assert.doesNotMatch(script, /newChatButton/);
   assert.match(script, /createChatTurnController/);
   assert.match(chatTurnController, /\/augmentor\/chat/);
   assert.match(chatTurnController, /pageContextForSnapshot/);
   assert.match(chatTurnController, /runtimeContextForAttachments/);
   assert.match(chatTurnController, /providerMessagesFromHistory/);
   assert.match(script, /createComposerController/);
+  assert.match(script, /connectionLine\.innerHTML/);
   assert.match(composerController, /handleClipboardShortcut/);
   assert.match(composerController, /resetUndoStack/);
   assert.match(composerController, /requestSubmit/);
