@@ -19,6 +19,8 @@ Intent: keep the browser-first ResonantOS work aligned with the AI-browser capab
 - Task-level consent v1: approve once, trust safe actions by site + task class, expire stale grants, or deny, while keeping wallet/payment/login/signing/credential/public-submit boundaries human-only.
 - `/capabilities` permission summary for the current page.
 - Local browser history metadata search through `/history`.
+- Browser-first Add-ons workspace lists visible add-ons, availability, trust tier, and governed workspace actions without granting new capabilities.
+- Main workspace chat now matches the side-panel chat command behavior for keyboard shortcuts, SVG message actions, model/depth controls, compact context usage, and page/archive handoff icons.
 - Durable Browser Jobs v1: persistent job registry, visible job monitor, `/jobs`, `/pause`, `/resume`, and `/cancel`.
 - Browser page summaries can be generated into Living Archive intake with source provenance, review queueing, and a deterministic fallback when the provider is unavailable.
 - Multi-tab browser research trails can be captured into one Living Archive intake bundle with per-page provenance and review queueing.

@@ -7,11 +7,12 @@ import {
 import { createBridgeClient } from "./lib/bridge-client.js";
 import { createChatSessionStore } from "./lib/chat-session-store.js";
 import { createComposerController } from "./lib/composer-controller.js";
+import { renderAddOnsWorkspace } from "./lib/main-workspace-addons.js";
 import { renderArtifactsWorkspace } from "./lib/main-workspace-artifacts.js";
 import { renderLivingArchiveWorkspace } from "./lib/main-workspace-memory.js";
 import { renderOpenCodeWorkspace } from "./lib/main-workspace-opencode.js";
 import { renderSettingsWorkspace } from "./lib/main-workspace-settings.js";
-import { markdownToSafeHtml } from "./lib/side-panel-renderers.js";
+import { ACTION_ICONS, markdownToSafeHtml } from "./lib/side-panel-renderers.js";
 
 const STORAGE_KEYS = {
   messages: "augmentorBrowserMessages",
@@ -43,6 +44,10 @@ const commandInput = document.querySelector("#command-input");
 const attachFileButton = document.querySelector("#attach-file");
 const fileInput = document.querySelector("#file-input");
 const attachmentStrip = document.querySelector("#attachment-strip");
+const readPageButton = document.querySelector("#read-page");
+const saveIntakeButton = document.querySelector("#save-intake");
+const saveSelectionButton = document.querySelector("#save-selection");
+const contextToggleButton = document.querySelector("#context-toggle");
 const modeSelect = document.querySelector("#mode-select");
 const modelSelect = document.querySelector("#model-select");
 const thinkingDepthSelect = document.querySelector("#thinking-depth");
@@ -53,7 +58,7 @@ const bridgeRequest = createBridgeClient();
 let busy = false;
 let activeWorkspace = "answer";
 let pendingWorkspaceAction = null;
-const allowedWorkspaces = new Set(["answer", "artifacts", "memory", "hermes", "opencode", "settings"]);
+const allowedWorkspaces = new Set(["answer", "artifacts", "addons", "memory", "hermes", "opencode", "settings"]);
 
 const supportsThinkingDepth = (model) => model.startsWith("gpt-5.");
 const composerController = createComposerController({ commandForm, commandInput, navigator });
@@ -77,6 +82,7 @@ const providerMessagesFromHistory = (messages, limit = 18) => messages
 const workspaceLabel = (workspaceId) => ({
   answer: "Answer",
   artifacts: "Artifacts",
+  addons: "Add-ons",
   memory: "Memory",
   hermes: "Hermes",
   opencode: "OpenCode",
@@ -114,6 +120,7 @@ function updateContextMeter() {
 }
 
 function renderChatHistory() {
+  if (!chatHistory) return;
   chatHistory.replaceChildren();
   chatSessionStore.getSessions().forEach((session) => {
     const item = document.createElement("li");
@@ -249,6 +256,11 @@ function emptyHero() {
         <strong>Review browser reports</strong>
         <small>Open saved Agent Control reports and intake evidence.</small>
       </button>
+      <button type="button" data-workspace-command="addons" data-prompt="">
+        <span>Add-ons</span>
+        <strong>Inspect replaceable tools</strong>
+        <small>See available add-ons, trust tier, and governed launch targets.</small>
+      </button>
       <button type="button" data-workspace-command="hermes" data-prompt="/hermes">
         <span>Hermes</span>
         <strong>Open coordination workspace</strong>
@@ -268,7 +280,7 @@ function emptyHero() {
   `;
   hero.querySelectorAll("[data-workspace-command]").forEach((button) => {
     button.addEventListener("click", async () => {
-      if (["settings", "artifacts"].includes(button.dataset.workspaceCommand)) {
+      if (["settings", "artifacts", "addons"].includes(button.dataset.workspaceCommand)) {
         setActiveWorkspace(button.dataset.workspaceCommand, { persist: true });
         renderAll();
         return;
@@ -304,6 +316,17 @@ function renderMessages() {
     });
     return;
   }
+  if (activeWorkspace === "addons") {
+    renderAddOnsWorkspace({
+      container: transcript,
+      bridgeRequest,
+      onOpenWorkspace: async (workspaceId) => {
+        setActiveWorkspace(workspaceId, { persist: true });
+        renderAll();
+      }
+    });
+    return;
+  }
   if (activeWorkspace === "opencode") {
     const initialMission = pendingWorkspaceAction?.workspace === "opencode" ? pendingWorkspaceAction.mission : "";
     pendingWorkspaceAction = null;
@@ -334,14 +357,19 @@ function renderMessages() {
     body.innerHTML = markdownToSafeHtml(message.content);
     const actions = document.createElement("div");
     actions.className = "message-actions";
-    actions.append(
-      messageActionButton("Copy", "⧉", () => void copyMessage(message)),
-      messageActionButton("Fork", "⑂", () => void forkFromMessage(message.id)),
-      messageActionButton("Delete", "⌫", () => void deleteMessage(message.id))
-    );
-    if (message.role === "assistant") {
-      actions.append(messageActionButton("Regenerate", "↻", () => void regenerateFromMessage(message.id)));
+    actions.append(messageActionButton("copy", "Copy", "Copy this message", () => void copyMessage(message)));
+    actions.append(messageActionButton("fork", "Fork", "Fork the conversation up to this message", () => void forkFromMessage(message.id)));
+    if (message.role === "user") {
+      actions.append(messageActionButton("edit", "Edit", "Edit this message in the composer", () => editMessage(message.id)));
     }
+    if (message.role === "assistant") {
+      actions.append(messageActionButton("archive", "Save to Living Archive", "Save this message to Living Archive intake", () => void saveMessageToArchive(message.id)));
+      actions.append(messageActionButton("refresh", "Regenerate", "Regenerate from the previous user message", () => void regenerateFromMessage(message.id)));
+      if (message.usage) {
+        actions.append(messageActionButton("stats", "Stats", "Show generation stats", () => void showMessageStats(message.id)));
+      }
+    }
+    actions.append(messageActionButton("delete", "Delete", "Delete this message", () => void deleteMessage(message.id)));
     article.append(header, body, actions);
     transcript.append(article);
   });
@@ -350,13 +378,14 @@ function renderMessages() {
   });
 }
 
-function messageActionButton(label, glyph, onClick) {
+function messageActionButton(action, label, title, onClick) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "message-action";
-  button.title = label;
+  button.dataset.action = action;
+  button.title = title;
   button.setAttribute("aria-label", label);
-  button.textContent = glyph;
+  button.innerHTML = ACTION_ICONS[action];
   button.addEventListener("click", onClick);
   return button;
 }
@@ -377,6 +406,47 @@ async function copyMessage(message) {
     type: "copy_text",
     text
   }).catch(() => undefined);
+}
+
+function editMessage(messageId) {
+  const message = chatSessionStore.findMessage(messageId);
+  if (!message || message.role !== "user") return;
+  commandInput.value = message.content;
+  composerController.resetUndoStack(message.content);
+  commandInput.focus();
+  updateConnectionLine("Editing");
+}
+
+async function saveMessageToArchive(messageId) {
+  const message = chatSessionStore.findMessage(messageId);
+  if (!message) return;
+  updateConnectionLine("Saving");
+  try {
+    const result = await bridgeRequest("/archive/intake", {
+      method: "POST",
+      body: {
+        title: `Augmentor main workspace message ${new Date(message.createdAt).toLocaleString()}`,
+        content: message.content,
+        sourceMessageId: message.id,
+        url: null
+      }
+    });
+    await addMessage("system", `Saved to Living Archive intake: ${result.path}`);
+    updateConnectionLine("Ready");
+  } catch (error) {
+    updateConnectionLine("Archive failed");
+    await addMessage("system", error instanceof Error ? error.message : String(error));
+  }
+}
+
+async function showMessageStats(messageId) {
+  const message = chatSessionStore.findMessage(messageId);
+  await addMessage(
+    "system",
+    message?.usage
+      ? `Generation stats:\n${JSON.stringify(message.usage, null, 2)}`
+      : "No generation telemetry is available for this message."
+  );
 }
 
 async function forkFromMessage(messageId) {
@@ -565,6 +635,19 @@ async function openSidebar() {
   }).catch(() => undefined);
 }
 
+async function handoffSidebarPrompt(prompt, message) {
+  await chrome.storage.local.set({
+    [STORAGE_KEYS.pendingSidebarPrompt]: {
+      prompt,
+      createdAt: new Date().toISOString()
+    }
+  });
+  if (message) {
+    await addMessage("system", message);
+  }
+  await openSidebar();
+}
+
 async function continueFromArtifact(artifact) {
   await chrome.storage.local.set({
     [STORAGE_KEYS.pendingSidebarPrompt]: {
@@ -702,7 +785,7 @@ commandForm.addEventListener("submit", async (event) => {
 
 composerController.bind();
 
-newChatButton.addEventListener("click", async () => {
+newChatButton?.addEventListener("click", async () => {
   activeWorkspace = "answer";
   await persistActiveWorkspace();
   await chatSessionStore.createSession({ workspaceId: "answer" });
@@ -713,6 +796,19 @@ newChatButton.addEventListener("click", async () => {
 });
 
 openSidebarButton.addEventListener("click", () => void openSidebar());
+readPageButton?.addEventListener("click", () => void handoffSidebarPrompt(
+  "/browser read",
+  "Opened the sidebar to read the current browser page."
+));
+saveIntakeButton?.addEventListener("click", () => void handoffSidebarPrompt(
+  "/save page",
+  "Opened the sidebar to save the current browser page to Living Archive intake."
+));
+saveSelectionButton?.addEventListener("click", () => void handoffSidebarPrompt(
+  "/save selection",
+  "Opened the sidebar to save selected browser text to Living Archive intake."
+));
+contextToggleButton?.addEventListener("click", () => void openSidebar());
 workspaceButtons.forEach((button) => {
   button.addEventListener("click", () => {
     setActiveWorkspace(button.dataset.workspace, { persist: true });

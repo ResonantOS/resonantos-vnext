@@ -1102,51 +1102,16 @@ textarea::placeholder {
 
 .context-meter {
   flex: 0 0 auto;
-  min-width: 76px;
+  min-width: 0;
   height: 32px;
-  border: 1px solid rgba(36, 209, 143, 0.26);
+  border: 1px solid rgba(138, 128, 112, 0.1);
   border-radius: 999px;
-  background: rgba(36, 209, 143, 0.04);
-  color: var(--accent);
+  background: rgba(255, 248, 236, 0.02);
+  color: rgba(207, 219, 210, 0.74);
   font-size: 0.66rem;
   font-weight: 850;
   padding: 0 7px;
   text-align: center;
-}
-
-.context-meter-track {
-  position: relative;
-  flex: 1 1 auto;
-  height: 5px;
-  min-width: 34px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: rgba(143, 159, 149, 0.18);
-}
-
-.context-meter-used {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: var(--context-used, 0%);
-  border-radius: inherit;
-  background: linear-gradient(90deg, rgba(36, 209, 143, 0.6), rgba(36, 209, 143, 0.96));
-}
-
-.context-meter-threshold {
-  position: absolute;
-  top: -2px;
-  bottom: -2px;
-  width: 1px;
-  background: rgba(238, 247, 240, 0.35);
-}
-
-.context-meter-threshold.compact {
-  left: 70%;
-}
-
-.context-meter-threshold.hard {
-  left: 90%;
-  background: rgba(255, 183, 77, 0.66);
 }
 
 .context-meter-label {
