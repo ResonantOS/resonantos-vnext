@@ -311,6 +311,78 @@ textarea:disabled {
   padding: 5px 7px;
 }
 
+.task-consent-panel {
+  border: 1px solid rgba(36, 209, 143, 0.14);
+  border-radius: 14px;
+  background:
+    linear-gradient(135deg, rgba(36, 209, 143, 0.07), rgba(255, 255, 255, 0.025)),
+    rgba(5, 8, 7, 0.62);
+  padding: 7px 10px;
+}
+
+.task-consent-panel[hidden] {
+  display: none;
+}
+
+.task-consent-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.task-consent-header strong {
+  color: var(--text);
+  display: block;
+  font-size: 0.68rem;
+}
+
+.task-consent-list {
+  display: grid;
+  gap: 6px;
+  list-style: none;
+  margin: 7px 0 0;
+  padding: 0;
+}
+
+.task-consent-list li {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  display: grid;
+  gap: 7px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 7px 8px;
+}
+
+.task-consent-list strong,
+.task-consent-list small {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.task-consent-list strong {
+  color: rgba(238, 247, 240, 0.88);
+  font-size: 0.68rem;
+}
+
+.task-consent-list small {
+  color: rgba(207, 219, 210, 0.58);
+  font-size: 0.58rem;
+}
+
+.task-consent-list button {
+  border: 1px solid rgba(255, 154, 138, 0.28);
+  border-radius: 999px;
+  background: rgba(255, 154, 138, 0.08);
+  color: rgba(255, 231, 227, 0.82);
+  font-size: 0.58rem;
+  font-weight: 800;
+  padding: 5px 7px;
+}
+
 .job-monitor {
   border: 1px solid rgba(36, 209, 143, 0.14);
   border-radius: 14px;

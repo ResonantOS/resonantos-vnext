@@ -26,6 +26,10 @@ function createHarness(overrides = {}) {
       <button id="jobs-toggle"></button>
       <ul id="jobs-list"></ul>
     </section>
+    <section id="consents" hidden>
+      <strong id="consents-title"></strong>
+      <ol id="consents-list"></ol>
+    </section>
     <section id="control" hidden>
       <strong id="control-title"></strong>
       <span id="control-status"></span>
@@ -50,7 +54,8 @@ function createHarness(overrides = {}) {
     jobMonitorCollapsed: overrides.jobMonitorCollapsed ?? true,
     pendingApproval: overrides.pendingApproval ?? null,
     tab: overrides.tab ?? { url: "https://example.com/page" },
-    continued: []
+    continued: [],
+    revoked: []
   };
   const renderers = createMonitorRenderers({
     activeTab: async () => state.tab,
@@ -76,15 +81,20 @@ function createHarness(overrides = {}) {
       sitePermissionHost: dom.window.document.querySelector("#host"),
       sitePermissionMode: dom.window.document.querySelector("#mode"),
       sitePermissionNote: dom.window.document.querySelector("#note"),
-      sitePermissionPanel: dom.window.document.querySelector("#site")
+      sitePermissionPanel: dom.window.document.querySelector("#site"),
+      taskConsentList: dom.window.document.querySelector("#consents-list"),
+      taskConsentPanel: dom.window.document.querySelector("#consents"),
+      taskConsentTitle: dom.window.document.querySelector("#consents-title")
     },
     getBrowserJobs: () => state.browserJobs,
     getContextDockExpanded: () => state.contextDockExpanded,
     getCurrentControlRun: () => state.currentControlRun,
     getJobMonitorCollapsed: () => state.jobMonitorCollapsed,
     getPendingApproval: () => state.pendingApproval,
+    getTaskConsents: async () => overrides.taskConsents ?? {},
     isReadableBrowserTab: (tab) => /^https?:\/\//i.test(tab?.url ?? ""),
     onContinueBrowserJob: (job) => state.continued.push(job.id),
+    onRevokeTaskConsent: (consent) => state.revoked.push(consent.taskClass),
     permissionForUrl: async () => overrides.permission ?? "trusted-for-safe-actions",
     siteKeyForUrl: (url) => new URL(url).hostname.replace(/^www\./, ""),
     updateContextDockVisibility: () => calls.push("dock")
@@ -220,4 +230,38 @@ test("monitor renderers show and hide site permission panel", async () => {
   await harness.renderers.renderSitePermissionPanel();
 
   assert.equal(harness.dom.window.document.querySelector("#site").hidden, true);
+});
+
+test("monitor renderers show and revoke task consent history", async () => {
+  const harness = createHarness({
+    taskConsents: {
+      "example.com::booking": {
+        siteKey: "example.com",
+        taskClass: "booking",
+        mode: "allow-safe",
+        grantedAt: 1000,
+        expiresAt: 2000
+      },
+      "other.com::research": {
+        siteKey: "other.com",
+        taskClass: "research",
+        mode: "allow-safe",
+        grantedAt: 1000,
+        expiresAt: 2000
+      }
+    }
+  });
+
+  await harness.renderers.renderTaskConsentPanel();
+
+  assert.equal(harness.dom.window.document.querySelector("#consents").hidden, false);
+  assert.match(harness.dom.window.document.querySelector("#consents-title").textContent, /1 trusted task class/);
+  assert.match(harness.dom.window.document.querySelector("#consents-list").textContent, /booking/);
+  assert.doesNotMatch(harness.dom.window.document.querySelector("#consents-list").textContent, /research/);
+  harness.dom.window.document.querySelector("#consents-list button").click();
+  assert.deepEqual(harness.state.revoked, ["booking"]);
+
+  harness.state.contextDockExpanded = false;
+  await harness.renderers.renderTaskConsentPanel();
+  assert.equal(harness.dom.window.document.querySelector("#consents").hidden, true);
 });

@@ -46,6 +46,9 @@ const sitePermissionPanel = document.querySelector("#site-permission-panel");
 const sitePermissionHost = document.querySelector("#site-permission-host");
 const sitePermissionNote = document.querySelector("#site-permission-note");
 const sitePermissionMode = document.querySelector("#site-permission-mode");
+const taskConsentPanel = document.querySelector("#task-consent-panel");
+const taskConsentTitle = document.querySelector("#task-consent-title");
+const taskConsentList = document.querySelector("#task-consent-list");
 const jobMonitor = document.querySelector("#job-monitor");
 const jobMonitorTitle = document.querySelector("#job-monitor-title");
 const jobMonitorToggle = document.querySelector("#job-monitor-toggle");
@@ -135,7 +138,7 @@ const scrollTranscriptToBottom = () => {
 };
 
 const updateContextDockVisibility = () => {
-  const hasVisiblePanel = [activityPanel, sitePermissionPanel, jobMonitor, controlMonitor]
+  const hasVisiblePanel = [activityPanel, sitePermissionPanel, taskConsentPanel, jobMonitor, controlMonitor]
     .some((panel) => !panel.hidden);
   contextDock.hidden = !hasVisiblePanel;
   contextToggleButton.textContent = contextDockExpanded ? "Hide Status" : "Status";
@@ -235,6 +238,11 @@ const taskConsentStore = createTaskConsentStore({
 
 const renderSitePermissionPanel = async (tab = null) => {
   await monitorRenderers.renderSitePermissionPanel(tab);
+  await renderTaskConsentPanel(tab);
+};
+
+const renderTaskConsentPanel = async (tab = null) => {
+  await monitorRenderers.renderTaskConsentPanel(tab);
 };
 
 const renderJobMonitor = () => {
@@ -386,16 +394,28 @@ monitorRenderers = createMonitorRenderers({
     sitePermissionHost,
     sitePermissionMode,
     sitePermissionNote,
-    sitePermissionPanel
+    sitePermissionPanel,
+    taskConsentList,
+    taskConsentPanel,
+    taskConsentTitle
   },
   getBrowserJobs: () => browserJobStore.getJobs(),
   getContextDockExpanded: () => contextDockExpanded,
   getCurrentControlRun: () => currentControlRun,
   getJobMonitorCollapsed: () => browserJobStore.getMonitorCollapsed(),
   getPendingApproval: () => pendingApproval,
+  getTaskConsents: () => taskConsentStore.taskConsents(),
   isReadableBrowserTab,
   onContinueBrowserJob: (job) => {
     void continueBrowserJob(job.id);
+  },
+  onRevokeTaskConsent: async (consent) => {
+    await taskConsentStore.revokeTaskConsent({
+      siteKey: consent.siteKey,
+      taskClass: consent.taskClass
+    });
+    await addMessage("system", `Revoked safe-action consent for ${consent.siteKey} · ${consent.taskClass}.`);
+    await renderTaskConsentPanel();
   },
   permissionForUrl,
   siteKeyForUrl,
@@ -602,6 +622,7 @@ const trustCurrentTaskForSafeActions = async () => {
   });
   await addMessage("system", `Trusted safe ${consent.taskClass} actions on ${consent.siteKey} for this task class and approved this safe step once: ${controlStepLabel(approval.step)}`);
   await approvePendingControlStep();
+  await renderTaskConsentPanel(tab);
 };
 
 const denyPendingControlStep = async () => {

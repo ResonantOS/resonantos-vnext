@@ -196,6 +196,8 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(panel, /approval-card/);
   assert.match(panel, /approval-trust-site/);
   assert.match(panel, /site-permission-panel/);
+  assert.match(panel, /task-consent-panel/);
+  assert.match(panel, /Trust this task class/);
   assert.match(panel, /job-monitor/);
   assert.match(panel, /trusted-for-safe-actions/);
   assert.doesNotMatch(panel, /I.m here in the browser side bar/);
@@ -259,6 +261,8 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(taskConsentStore, /taskConsentKey/);
   assert.match(script, /createTaskConsentStore/);
   assert.match(script, /augmentorTaskConsents/);
+  assert.match(monitorRenderers, /renderTaskConsentPanel/);
+  assert.match(monitorRenderers, /onRevokeTaskConsent/);
   assert.match(script, /createMonitorRenderers/);
   assert.match(monitorRenderers, /sitePermissionDescription/);
   assert.match(monitorRenderers, /renderSitePermissionPanel/);

@@ -48,8 +48,10 @@ export function createMonitorRenderers({
   getCurrentControlRun,
   getJobMonitorCollapsed,
   getPendingApproval,
+  getTaskConsents,
   isReadableBrowserTab,
   onContinueBrowserJob,
+  onRevokeTaskConsent,
   permissionForUrl,
   siteKeyForUrl,
   updateContextDockVisibility
@@ -74,7 +76,10 @@ export function createMonitorRenderers({
     sitePermissionHost,
     sitePermissionMode,
     sitePermissionNote,
-    sitePermissionPanel
+    sitePermissionPanel,
+    taskConsentList,
+    taskConsentPanel,
+    taskConsentTitle
   } = elements;
 
   function renderControlMonitor() {
@@ -188,6 +193,44 @@ export function createMonitorRenderers({
     updateContextDockVisibility();
   }
 
+  async function renderTaskConsentPanel(tab = null) {
+    const current = tab ?? await activeTab();
+    if (!getContextDockExpanded() || !isReadableBrowserTab(current)) {
+      taskConsentPanel.hidden = true;
+      updateContextDockVisibility();
+      return;
+    }
+    const siteKey = siteKeyForUrl(current.url);
+    const consents = Object.values(await getTaskConsents())
+      .filter((consent) => consent.siteKey === siteKey)
+      .sort((a, b) => b.grantedAt - a.grantedAt)
+      .slice(0, 8);
+    taskConsentPanel.hidden = consents.length === 0;
+    taskConsentList.replaceChildren();
+    if (!consents.length) {
+      updateContextDockVisibility();
+      return;
+    }
+    taskConsentTitle.textContent = `${consents.length} trusted task ${consents.length === 1 ? "class" : "classes"} for ${siteKey}`;
+    consents.forEach((consent) => {
+      const item = document.createElement("li");
+      const details = document.createElement("div");
+      const title = document.createElement("strong");
+      title.textContent = consent.taskClass;
+      const meta = document.createElement("small");
+      meta.textContent = `${consent.mode} · expires ${new Date(consent.expiresAt).toLocaleDateString()}`;
+      details.append(title, meta);
+      const revoke = document.createElement("button");
+      revoke.type = "button";
+      revoke.textContent = "Revoke";
+      revoke.title = `Revoke ${consent.taskClass} consent for ${siteKey}`;
+      revoke.addEventListener("click", () => onRevokeTaskConsent?.(consent));
+      item.append(details, revoke);
+      taskConsentList.append(item);
+    });
+    updateContextDockVisibility();
+  }
+
   function renderJobMonitor() {
     const browserJobs = getBrowserJobs();
     const jobMonitorCollapsed = getJobMonitorCollapsed();
@@ -251,6 +294,7 @@ export function createMonitorRenderers({
   return {
     renderControlMonitor,
     renderJobMonitor,
-    renderSitePermissionPanel
+    renderSitePermissionPanel,
+    renderTaskConsentPanel
   };
 }
