@@ -1332,6 +1332,30 @@ async function executeArchiveReviewDraft(payload = {}) {
   };
 }
 
+async function executeArchiveReviewArtifactRead(payload = {}) {
+  const artifactPath = String(payload.path ?? "").trim();
+  const filePath = safeMemoryRelativePath(artifactPath, "REVIEW/artifacts");
+  if (!/\.(md|markdown)$/i.test(filePath)) {
+    throw new Error("Archive review artifact preview only supports markdown files.");
+  }
+  const [details, content] = await Promise.all([stat(filePath), readFile(filePath, "utf8")]);
+  const type = frontmatterValue(content, "type");
+  if (type && !String(type).startsWith("archive-")) {
+    throw new Error("Archive review artifact preview requires an archive artifact file.");
+  }
+  return {
+    path: path.relative(memoryRoot(), filePath),
+    title: markdownTitle(content, path.basename(filePath, path.extname(filePath))),
+    type: type || "archive-review-artifact",
+    status: frontmatterValue(content, "status") || "",
+    proposedPage: frontmatterValue(content, "proposedPage") || "",
+    bytes: details.size,
+    modifiedAt: details.mtime.toISOString(),
+    content: content.slice(0, 24_000),
+    truncated: content.length > 24_000,
+  };
+}
+
 async function executeGoalRecord(payload) {
   const mission = String(payload.mission ?? "").trim();
   if (mission.length < 8) {
@@ -1554,6 +1578,7 @@ const bridgeRoutes = [
   { method: "POST", path: "/archive/review/list", handler: executeArchiveReviewList },
   { method: "POST", path: "/archive/review/transition", handler: executeArchiveReviewTransition },
   { method: "POST", path: "/archive/review/draft", handler: executeArchiveReviewDraft },
+  { method: "POST", path: "/archive/review/artifact/read", handler: executeArchiveReviewArtifactRead },
   { method: "GET", path: "/addons/status", handler: executeAddonsStatus },
   { method: "GET", path: "/opencode/status", handler: executeOpenCodeStatus },
   { method: "POST", path: "/hermes/dashboard/status", handler: executeHermesDashboardStatus },

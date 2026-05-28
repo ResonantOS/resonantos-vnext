@@ -29,7 +29,7 @@ function resultCard(match) {
   return card;
 }
 
-function reviewRequestCard(request, onTransition, onDraft) {
+function reviewRequestCard(request, onTransition, onDraft, onPreviewDraft) {
   const card = document.createElement("article");
   card.className = "memory-review-request";
   const heading = document.createElement("div");
@@ -68,6 +68,12 @@ function reviewRequestCard(request, onTransition, onDraft) {
   draftButton.disabled = request.status !== "approved" || Boolean(request.draftArtifactPath);
   draftButton.addEventListener("click", () => onDraft(request));
   actions.append(draftButton);
+  const previewButton = document.createElement("button");
+  previewButton.type = "button";
+  previewButton.textContent = "Preview";
+  previewButton.disabled = !request.draftArtifactPath;
+  previewButton.addEventListener("click", () => onPreviewDraft(request));
+  actions.append(previewButton);
   card.append(heading, artifact, draft, reason, actions);
   return card;
 }
@@ -152,7 +158,10 @@ export function renderLivingArchiveWorkspace({ container, bridgeRequest, initial
   reviewStatus.className = "memory-status";
   const reviewList = document.createElement("div");
   reviewList.className = "memory-review-list";
-  reviewPanel.append(reviewHeader, reviewStatus, reviewList);
+  const draftPreview = document.createElement("article");
+  draftPreview.className = "memory-review-preview";
+  draftPreview.hidden = true;
+  reviewPanel.append(reviewHeader, reviewStatus, reviewList, draftPreview);
 
   section.append(header, metrics, reviewPanel, searchForm, intakeForm);
   container.append(section);
@@ -187,7 +196,7 @@ export function renderLivingArchiveWorkspace({ container, bridgeRequest, initial
         setStatus(reviewStatus, "No pending review requests. Browser artifacts can request review from the Artifacts workspace.", "warning");
         return;
       }
-      reviewList.append(...requests.map((request) => reviewRequestCard(request, transitionReviewRequest, draftReviewRequest)));
+      reviewList.append(...requests.map((request) => reviewRequestCard(request, transitionReviewRequest, draftReviewRequest, previewDraftArtifact)));
       setStatus(reviewStatus, `${requests.length} review request(s) waiting in ${result.root}.`, "success");
     } catch (error) {
       setStatus(reviewStatus, error instanceof Error ? error.message : String(error), "error");
@@ -233,6 +242,40 @@ export function renderLivingArchiveWorkspace({ container, bridgeRequest, initial
       setStatus(reviewStatus, `Draft artifact ready: ${result.path}.`, "success");
       await loadStatus();
       await loadReviewQueue();
+    } catch (error) {
+      setStatus(reviewStatus, error instanceof Error ? error.message : String(error), "error");
+    }
+  };
+
+  const previewDraftArtifact = async (request) => {
+    if (!request.draftArtifactPath) {
+      setStatus(reviewStatus, "Review request has no draft artifact yet.", "warning");
+      return;
+    }
+    setStatus(reviewStatus, "Loading draft artifact preview…");
+    draftPreview.hidden = true;
+    draftPreview.replaceChildren();
+    try {
+      const result = await bridgeRequest("/archive/review/artifact/read", {
+        method: "POST",
+        body: { path: request.draftArtifactPath }
+      });
+      const heading = document.createElement("div");
+      heading.className = "memory-preview-heading";
+      const title = document.createElement("strong");
+      title.textContent = result.title || "Draft artifact";
+      const pathNode = document.createElement("code");
+      pathNode.textContent = result.path || request.draftArtifactPath;
+      heading.append(title, pathNode);
+      const meta = document.createElement("p");
+      meta.textContent = result.proposedPage
+        ? `Proposed page: ${result.proposedPage}`
+        : `Type: ${result.type || "archive artifact"}`;
+      const content = document.createElement("pre");
+      content.textContent = result.content || "";
+      draftPreview.append(heading, meta, content);
+      draftPreview.hidden = false;
+      setStatus(reviewStatus, result.truncated ? "Draft preview loaded and truncated for safety." : "Draft preview loaded.", "success");
     } catch (error) {
       setStatus(reviewStatus, error instanceof Error ? error.message : String(error), "error");
     }

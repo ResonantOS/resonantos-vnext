@@ -70,6 +70,17 @@ test("living archive workspace renders status, search, and intake through bridge
         status: "draft-created"
       };
     }
+    if (route === "/archive/review/artifact/read") {
+      return {
+        path: options.body.path,
+        title: "Draft Wiki Update: Browser job completed",
+        type: "archive-draft-wiki-update",
+        status: "draft",
+        proposedPage: "AI_MEMORY/wiki/browser-job-completed.md",
+        content: "# Draft Wiki Update: Browser job completed\n\n## Proposed Content\nBrowser job summary.",
+        truncated: false
+      };
+    }
     if (route === "/archive/intake") {
       return { path: "INTAKE/browser/note.md", bytes: 42 };
     }
@@ -96,7 +107,9 @@ test("living archive workspace renders status, search, and intake through bridge
       options.body.status === "approved"
     ));
     assert.match(container.textContent, /approved/i);
-    container.querySelector(".memory-review-actions button:last-child").click();
+    Array.from(container.querySelectorAll(".memory-review-actions button"))
+      .find((button) => button.textContent === "Draft")
+      .click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.ok(calls.some(([route, options]) =>
@@ -104,6 +117,16 @@ test("living archive workspace renders status, search, and intake through bridge
       options.body.path === "REVIEW/requests/browser-job-completed.md"
     ));
     assert.match(container.textContent, /REVIEW\/artifacts\/browser\/browser-job-completed-draft\.md/);
+    Array.from(container.querySelectorAll(".memory-review-actions button"))
+      .find((button) => button.textContent === "Preview")
+      .click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.ok(calls.some(([route, options]) =>
+      route === "/archive/review/artifact/read" &&
+      options.body.path === "REVIEW/artifacts/browser/browser-job-completed-draft.md"
+    ));
+    assert.match(container.textContent, /Proposed page: AI_MEMORY\/wiki\/browser-job-completed\.md/);
+    assert.match(container.textContent, /Browser job summary/);
 
     const searchInput = container.querySelector("input[type='search']");
     searchInput.value = "resonant";

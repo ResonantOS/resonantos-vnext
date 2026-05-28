@@ -882,6 +882,37 @@ textarea {
   color: rgba(255, 205, 120, 0.88);
 }
 
+.memory-review-preview {
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(255, 205, 120, 0.22);
+  border-radius: 18px;
+  background: rgba(255, 205, 120, 0.06);
+  padding: 13px;
+}
+
+.memory-review-preview[hidden] {
+  display: none;
+}
+
+.memory-preview-heading {
+  display: grid;
+  gap: 5px;
+}
+
+.memory-review-preview pre {
+  overflow: auto;
+  max-height: 360px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.24);
+  color: rgba(215, 239, 226, 0.9);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  margin: 0;
+  padding: 12px;
+  white-space: pre-wrap;
+}
+
 .memory-review-heading {
   display: flex;
   align-items: start;
