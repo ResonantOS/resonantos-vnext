@@ -81,6 +81,9 @@ test("living archive workspace renders status, search, and intake through bridge
         status: "draft",
         verificationStatus: verified ? "verified" : "",
         verifierArtifactPath: verified ? "REVIEW/verifications/browser/browser-job-completed-verification.md" : "",
+        semanticVerifierStatus: verified ? "unavailable" : "",
+        semanticVerifierProvider: "",
+        semanticVerifierModel: "",
         proposedPage: "AI_MEMORY/wiki/browser-job-completed.md",
         content: "# Draft Wiki Update: Browser job completed\n\n## Proposed Content\nBrowser job summary with enough deterministic source detail for verifier acceptance.",
         truncated: false
@@ -92,6 +95,10 @@ test("living archive workspace renders status, search, and intake through bridge
         path: options.body.path,
         status: "verified",
         verifierArtifactPath: "REVIEW/verifications/browser/browser-job-completed-verification.md",
+        semanticVerifierStatus: "unavailable",
+        semanticVerifierProvider: "",
+        semanticVerifierModel: "",
+        semanticVerifierSummary: "No configured provider was available for semantic archive verification.",
         findings: []
       };
     }
@@ -180,6 +187,7 @@ test("living archive workspace renders status, search, and intake through bridge
     assert.match(container.textContent, /Proposed page: AI_MEMORY\/wiki\/browser-job-completed\.md/);
     assert.match(container.textContent, /Browser job summary/);
     assert.match(container.textContent, /Verification: not verified/);
+    assert.match(container.textContent, /Semantic: not run/);
     assert.equal(
       Array.from(container.querySelectorAll(".memory-review-preview button"))
         .find((button) => button.textContent === "Promote")
@@ -195,12 +203,13 @@ test("living archive workspace renders status, search, and intake through bridge
       route === "/archive/review/artifact/verify" &&
       options.body.path === "REVIEW/artifacts/browser/browser-job-completed-draft.md"
     ));
-    assert.match(container.textContent, /Verified draft: REVIEW\/verifications\/browser\/browser-job-completed-verification\.md/);
+    assert.match(container.textContent, /Verified draft: REVIEW\/verifications\/browser\/browser-job-completed-verification\.md \(unavailable\)/);
     Array.from(container.querySelectorAll(".memory-review-actions button"))
       .find((button) => button.textContent === "Preview")
       .click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.match(container.textContent, /Verification: verified/);
+    assert.match(container.textContent, /Semantic: unavailable/);
     Array.from(container.querySelectorAll(".memory-review-preview button"))
       .find((button) => button.textContent === "Promote")
       .click();
@@ -261,7 +270,12 @@ test("living archive workspace can run an initial routed search", async () => {
       return { root: "Memory/REVIEW/artifacts", promotions: [] };
     }
     if (route === "/archive/review/artifact/verify") {
-      return { status: "verified", verifierArtifactPath: "REVIEW/verifications/browser/test.md", findings: [] };
+      return {
+        status: "verified",
+        verifierArtifactPath: "REVIEW/verifications/browser/test.md",
+        semanticVerifierStatus: "unavailable",
+        findings: []
+      };
     }
     if (route === "/archive/review/promotions/restore") {
       return { status: "restored" };

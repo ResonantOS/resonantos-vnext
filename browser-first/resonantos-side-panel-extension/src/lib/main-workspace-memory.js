@@ -372,10 +372,11 @@ export function renderLivingArchiveWorkspace({ container, bridgeRequest, initial
       heading.append(title, pathNode);
       const meta = document.createElement("p");
       const verificationStatus = result.verificationStatus || "not verified";
+      const semanticStatus = result.semanticVerifierStatus || "not run";
       meta.textContent = result.proposedPage
         ? `Proposed page: ${result.proposedPage}`
         : `Type: ${result.type || "archive artifact"}`;
-      meta.textContent = `${meta.textContent} · Verification: ${verificationStatus}`;
+      meta.textContent = `${meta.textContent} · Verification: ${verificationStatus} · Semantic: ${semanticStatus}`;
       const content = document.createElement("pre");
       content.textContent = result.content || "";
       const actions = document.createElement("div");
@@ -419,7 +420,7 @@ export function renderLivingArchiveWorkspace({ container, bridgeRequest, initial
       setStatus(
         reviewStatus,
         result.status === "verified"
-          ? `Verified draft: ${result.verifierArtifactPath}.`
+          ? `Verified draft: ${result.verifierArtifactPath} (${result.semanticVerifierStatus || "semantic unavailable"}).`
           : `Draft needs revision: ${(result.findings || []).join("; ")}`,
         result.status === "verified" ? "success" : "warning"
       );

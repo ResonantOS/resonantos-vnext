@@ -370,6 +370,19 @@ function providerRouteForModel(model) {
   };
 }
 
+function providerRouteForArchiveVerifier(secrets, requestedModel = "") {
+  if (requestedModel) {
+    const requestedRoute = providerRouteForModel(requestedModel);
+    return secrets[requestedRoute.providerId] ? requestedRoute : null;
+  }
+  const openAiRoute = providerRouteForModel("gpt-5.5");
+  if (secrets[openAiRoute.providerId]) {
+    return openAiRoute;
+  }
+  const miniMaxRoute = providerRouteForModel("MiniMax-M2.7");
+  return secrets[miniMaxRoute.providerId] ? miniMaxRoute : null;
+}
+
 function extractAssistantContent(payload) {
   const content = payload?.choices?.[0]?.message?.content;
   if (typeof content === "string") {
@@ -382,6 +395,86 @@ function extractAssistantContent(payload) {
       .join("\n");
   }
   return "";
+}
+
+async function runArchiveSemanticVerifier({ artifactPath, requestPath, sourceContent, proposedPage, proposedContent, requestedModel }) {
+  const secrets = await readProviderSecrets();
+  const route = providerRouteForArchiveVerifier(secrets, requestedModel);
+  if (!route) {
+    return {
+      semanticStatus: "unavailable",
+      semanticSummary: "No configured provider was available for semantic archive verification.",
+      semanticFindings: [],
+      providerId: "",
+      model: "",
+      usage: null,
+    };
+  }
+  const systemPrompt = [
+    "You are the ResonantOS Living Archive semantic verifier.",
+    "Return strict JSON only. Do not include markdown.",
+    "Your job is to challenge a draft wiki update before it enters trusted AI Memory.",
+    "Check whether the proposed content is grounded in the source, whether it overclaims, loses important caveats, or creates misleading synthesis.",
+    "Do not rewrite the page. Only verify it.",
+    "Return JSON schema: {\"status\":\"verified|needs-revision\", \"summary\":\"short\", \"findings\":[\"...\"]}",
+  ].join("\n");
+  const userPrompt = JSON.stringify({
+    artifactPath,
+    requestPath,
+    proposedPage,
+    sourceExcerpt: String(sourceContent ?? "").slice(0, 10_000),
+    proposedContent: String(proposedContent ?? "").slice(0, 10_000),
+  });
+  try {
+    const response = await fetch(`${route.apiBaseUrl.replace(/\/$/, "")}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${secrets[route.providerId]}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: route.wireModel,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        ...(route.providerType === "openai" ? { reasoning_effort: "minimal", response_format: { type: "json_object" } } : {}),
+      }),
+    });
+    const responsePayload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return {
+        semanticStatus: "unavailable",
+        semanticSummary: responsePayload?.error?.message ?? `Semantic verifier failed with HTTP ${response.status}.`,
+        semanticFindings: [],
+        providerId: route.providerId,
+        model: route.wireModel,
+        usage: responsePayload?.usage ?? null,
+      };
+    }
+    const content = sanitizeAssistantContent(route.providerType, extractAssistantContent(responsePayload));
+    const parsed = extractJsonObject(content);
+    const status = String(parsed.status ?? "").toLowerCase() === "needs-revision" ? "needs-revision" : "verified";
+    return {
+      semanticStatus: status,
+      semanticSummary: String(parsed.summary ?? (status === "verified" ? "Semantic verifier found no blocking issue." : "Semantic verifier requested revision.")).slice(0, 800),
+      semanticFindings: Array.isArray(parsed.findings)
+        ? parsed.findings.map((finding) => String(finding).trim()).filter(Boolean).slice(0, 8)
+        : [],
+      providerId: route.providerId,
+      model: route.wireModel,
+      usage: responsePayload?.usage ?? null,
+    };
+  } catch (error) {
+    return {
+      semanticStatus: "unavailable",
+      semanticSummary: error instanceof Error ? error.message : String(error),
+      semanticFindings: [],
+      providerId: route.providerId,
+      model: route.wireModel,
+      usage: null,
+    };
+  }
 }
 
 function decodeXmlEntities(value) {
@@ -1357,6 +1450,9 @@ async function executeArchiveReviewArtifactRead(payload = {}) {
     status: frontmatterValue(content, "promotionStatus") || frontmatterValue(content, "status") || "",
     verificationStatus: frontmatterValue(content, "verificationStatus") || "",
     verifierArtifactPath: frontmatterValue(content, "verifierArtifactPath") || "",
+    semanticVerifierStatus: frontmatterValue(content, "semanticVerifierStatus") || "",
+    semanticVerifierProvider: frontmatterValue(content, "semanticVerifierProvider") || "",
+    semanticVerifierModel: frontmatterValue(content, "semanticVerifierModel") || "",
     proposedPage: frontmatterValue(content, "proposedPage") || "",
     bytes: details.size,
     modifiedAt: details.mtime.toISOString(),
@@ -1385,6 +1481,7 @@ async function executeArchiveReviewArtifactVerify(payload = {}) {
   const proposedContent = markdownSection(artifactContent, "Proposed Content");
   const sourceArtifactPath = frontmatterValue(artifactContent, "artifactPath");
   const findings = [];
+  let sourceContent = "";
   if ((frontmatterValue(requestContent, "status") || "pending") !== "approved") {
     findings.push("Source review request is not approved.");
   }
@@ -1407,12 +1504,34 @@ async function executeArchiveReviewArtifactVerify(payload = {}) {
     if (!/\.(md|markdown)$/i.test(sourceFile) || !existsSync(sourceFile)) {
       findings.push("Source artifact is missing or is not markdown.");
     } else {
-      const sourceContent = await readFile(sourceFile, "utf8");
+      sourceContent = await readFile(sourceFile, "utf8");
       sourceTitle = markdownTitle(sourceContent, path.basename(sourceFile, path.extname(sourceFile)));
       if (!compactExcerpt(sourceContent, 120)) {
         findings.push("Source artifact has no readable text.");
       }
     }
+  }
+  const semantic = findings.length
+    ? {
+        semanticStatus: "skipped",
+        semanticSummary: "Semantic verification skipped because deterministic checks found blocking issues.",
+        semanticFindings: [],
+        providerId: "",
+        model: "",
+        usage: null,
+      }
+    : await runArchiveSemanticVerifier({
+        artifactPath,
+        requestPath,
+        sourceContent,
+        proposedPage,
+        proposedContent,
+        requestedModel: payload.model,
+      });
+  if (semantic.semanticStatus === "needs-revision") {
+    findings.push(...semantic.semanticFindings.length
+      ? semantic.semanticFindings.map((finding) => `Semantic verifier: ${finding}`)
+      : ["Semantic verifier requested revision."]);
   }
   const now = new Date().toISOString();
   const verificationStatus = findings.length ? "needs-revision" : "verified";
@@ -1430,6 +1549,9 @@ async function executeArchiveReviewArtifactVerify(payload = {}) {
     `requestPath: ${JSON.stringify(requestPath)}`,
     `sourceArtifactPath: ${JSON.stringify(sourceArtifactPath || "")}`,
     `proposedPage: ${JSON.stringify(proposedPage || "")}`,
+    `semanticVerifierStatus: ${JSON.stringify(semantic.semanticStatus)}`,
+    `semanticVerifierProvider: ${JSON.stringify(semantic.providerId)}`,
+    `semanticVerifierModel: ${JSON.stringify(semantic.model)}`,
     "---",
     "",
     `# Archive Verification: ${sourceTitle || proposedPage || "Draft artifact"}`,
@@ -1446,8 +1568,15 @@ async function executeArchiveReviewArtifactVerify(payload = {}) {
     "## Findings",
     findings.length ? findings.map((finding) => `- ${finding}`).join("\n") : "- No blocking deterministic findings.",
     "",
+    "## Semantic Verifier",
+    `- status: ${semantic.semanticStatus}`,
+    `- provider: ${semantic.providerId || "none"}`,
+    `- model: ${semantic.model || "none"}`,
+    `- summary: ${semantic.semanticSummary}`,
+    ...(semantic.semanticFindings.length ? semantic.semanticFindings.map((finding) => `- finding: ${finding}`) : ["- finding: none"]),
+    "",
     "## Boundary",
-    "This is a deterministic host verifier. Future provider-backed verifier agents can add deeper semantic checks before this gate is accepted for promotion.",
+    "This verifier always runs deterministic host checks. When a provider is configured, it also records semantic challenge output before promotion.",
     "",
   ].join("\n");
   await writeFile(verificationPath, verificationBody);
@@ -1455,12 +1584,19 @@ async function executeArchiveReviewArtifactVerify(payload = {}) {
   updatedArtifact = writeFrontmatterValue(updatedArtifact, "verificationStatus", verificationStatus);
   updatedArtifact = writeFrontmatterValue(updatedArtifact, "verifiedAt", now);
   updatedArtifact = writeFrontmatterValue(updatedArtifact, "verifierArtifactPath", path.relative(memoryRoot(), verificationPath));
-  updatedArtifact = `${updatedArtifact.trimEnd()}\n\n## Verification Event\n- at: ${now}\n- actor: resonantos-browser-first\n- status: ${verificationStatus}\n- verifier artifact: ${path.relative(memoryRoot(), verificationPath)}\n`;
+  updatedArtifact = writeFrontmatterValue(updatedArtifact, "semanticVerifierStatus", semantic.semanticStatus);
+  updatedArtifact = writeFrontmatterValue(updatedArtifact, "semanticVerifierProvider", semantic.providerId);
+  updatedArtifact = writeFrontmatterValue(updatedArtifact, "semanticVerifierModel", semantic.model);
+  updatedArtifact = `${updatedArtifact.trimEnd()}\n\n## Verification Event\n- at: ${now}\n- actor: resonantos-browser-first\n- status: ${verificationStatus}\n- semantic verifier: ${semantic.semanticStatus}\n- verifier artifact: ${path.relative(memoryRoot(), verificationPath)}\n`;
   await writeFile(artifactFile, updatedArtifact);
   return {
     path: artifactPath,
     status: verificationStatus,
     verifierArtifactPath: path.relative(memoryRoot(), verificationPath),
+    semanticVerifierStatus: semantic.semanticStatus,
+    semanticVerifierProvider: semantic.providerId,
+    semanticVerifierModel: semantic.model,
+    semanticVerifierSummary: semantic.semanticSummary,
     findings,
   };
 }
