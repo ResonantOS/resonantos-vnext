@@ -37,6 +37,17 @@ test("living archive workspace renders status, search, and intake through bridge
         matches: [{ title: "ResonantOS", path: "AI_MEMORY/wiki/resonantos.md", excerpt: "ResonantOS memory result" }]
       };
     }
+    if (route === "/archive/review/list") {
+      return {
+        root: "Memory/REVIEW/requests",
+        requests: [{
+          title: "Browser job completed: compare a product",
+          status: "pending",
+          artifactPath: "INTAKE/browser/job-report.md",
+          reason: "Evaluate browser artifact for durable wiki updates."
+        }]
+      };
+    }
     if (route === "/archive/intake") {
       return { path: "INTAKE/browser/note.md", bytes: 42 };
     }
@@ -51,6 +62,9 @@ test("living archive workspace renders status, search, and intake through bridge
     assert.match(container.textContent, /12/);
     assert.match(container.textContent, /4/);
     assert.match(container.textContent, /5/);
+    assert.ok(calls.some(([route]) => route === "/archive/review/list"));
+    assert.match(container.textContent, /Browser job completed: compare a product/);
+    assert.match(container.textContent, /INTAKE\/browser\/job-report\.md/);
 
     const searchInput = container.querySelector("input[type='search']");
     searchInput.value = "resonant";
@@ -81,6 +95,9 @@ test("living archive workspace can run an initial routed search", async () => {
     }
     if (route === "/memory/search") {
       return { matches: [{ title: "Augmentor", path: "AI_MEMORY/wiki/augmentor.md", excerpt: "Augmentor search result" }] };
+    }
+    if (route === "/archive/review/list") {
+      return { root: "Memory/REVIEW/requests", requests: [] };
     }
     throw new Error(`Unexpected route ${route}`);
   };

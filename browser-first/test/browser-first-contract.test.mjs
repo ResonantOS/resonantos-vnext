@@ -133,6 +133,7 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(workspaceStyles, /dashboard-frame-card/);
   assert.match(workspaceStyles, /settings-workspace/);
   assert.match(workspaceStyles, /settings-provider-card/);
+  assert.match(workspaceStyles, /memory-review-queue/);
   assert.match(launcher, /defaultMainWorkspaceUrl/);
   assert.match(launcher, /\/hermes\/dashboard\/status/);
   assert.match(launcher, /\/hermes\/dashboard\/start/);
@@ -143,6 +144,7 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(launcher, /\/archive\/intake\/list/);
   assert.match(launcher, /\/archive\/intake\/read/);
   assert.match(launcher, /\/archive\/review\/request/);
+  assert.match(launcher, /\/archive\/review\/list/);
   assert.match(launcher, /executeProviderCredentialSave/);
   assert.match(launcher, /executeOpenCodeStatus/);
   assert.match(launcher, /workspaceLaunch: "not-enabled-in-browser-first-v1"/);

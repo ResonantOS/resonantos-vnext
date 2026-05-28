@@ -29,6 +29,24 @@ function resultCard(match) {
   return card;
 }
 
+function reviewRequestCard(request) {
+  const card = document.createElement("article");
+  card.className = "memory-review-request";
+  const heading = document.createElement("div");
+  heading.className = "memory-review-heading";
+  const title = document.createElement("strong");
+  title.textContent = request.title || "Untitled review request";
+  const status = document.createElement("span");
+  status.textContent = request.status || "pending";
+  heading.append(title, status);
+  const artifact = document.createElement("code");
+  artifact.textContent = request.artifactPath || request.path || "REVIEW/requests";
+  const reason = document.createElement("p");
+  reason.textContent = request.reason || "No review reason recorded.";
+  card.append(heading, artifact, reason);
+  return card;
+}
+
 function setStatus(node, text, tone = "neutral") {
   node.textContent = text;
   node.dataset.tone = tone;
@@ -95,7 +113,23 @@ export function renderLivingArchiveWorkspace({ container, bridgeRequest, initial
   intakeStatus.className = "memory-status";
   intakeForm.append(intakeLabel, titleInput, contentInput, intakeButton, intakeStatus);
 
-  section.append(header, metrics, searchForm, intakeForm);
+  const reviewPanel = document.createElement("section");
+  reviewPanel.className = "memory-card memory-review-queue";
+  const reviewHeader = document.createElement("div");
+  reviewHeader.className = "memory-review-top";
+  const reviewLabel = document.createElement("label");
+  reviewLabel.textContent = "Review Queue";
+  const refreshReview = document.createElement("button");
+  refreshReview.type = "button";
+  refreshReview.textContent = "Refresh";
+  reviewHeader.append(reviewLabel, refreshReview);
+  const reviewStatus = document.createElement("p");
+  reviewStatus.className = "memory-status";
+  const reviewList = document.createElement("div");
+  reviewList.className = "memory-review-list";
+  reviewPanel.append(reviewHeader, reviewStatus, reviewList);
+
+  section.append(header, metrics, reviewPanel, searchForm, intakeForm);
   container.append(section);
 
   const loadStatus = async () => {
@@ -111,6 +145,29 @@ export function renderLivingArchiveWorkspace({ container, bridgeRequest, initial
       reviewMeta.textContent = `${formatCount(status.review?.requests)} requests · ${formatCount(status.review?.artifacts)} artifacts`;
     } catch (error) {
       metrics.append(metric("Status", "Unavailable", error instanceof Error ? error.message : String(error)));
+    }
+  };
+
+  const loadReviewQueue = async () => {
+    refreshReview.disabled = true;
+    reviewList.replaceChildren();
+    setStatus(reviewStatus, "Loading review queue…");
+    try {
+      const result = await bridgeRequest("/archive/review/list", {
+        method: "POST",
+        body: { limit: 12 }
+      });
+      const requests = Array.isArray(result.requests) ? result.requests : [];
+      if (!requests.length) {
+        setStatus(reviewStatus, "No pending review requests. Browser artifacts can request review from the Artifacts workspace.", "warning");
+        return;
+      }
+      reviewList.append(...requests.map(reviewRequestCard));
+      setStatus(reviewStatus, `${requests.length} review request(s) waiting in ${result.root}.`, "success");
+    } catch (error) {
+      setStatus(reviewStatus, error instanceof Error ? error.message : String(error), "error");
+    } finally {
+      refreshReview.disabled = false;
     }
   };
 
@@ -160,6 +217,7 @@ export function renderLivingArchiveWorkspace({ container, bridgeRequest, initial
       setStatus(intakeStatus, `Saved to ${result.path} (${formatCount(result.bytes)} bytes).`, "success");
       contentInput.value = "";
       await loadStatus();
+      await loadReviewQueue();
     } catch (error) {
       setStatus(intakeStatus, error instanceof Error ? error.message : String(error), "error");
     } finally {
@@ -168,6 +226,7 @@ export function renderLivingArchiveWorkspace({ container, bridgeRequest, initial
   });
 
   void loadStatus();
+  void loadReviewQueue();
   if (initialQuery.trim()) {
     searchInput.value = initialQuery.trim();
     queueMicrotask(() => {

@@ -1145,6 +1145,30 @@ async function executeArchiveReviewRequest(payload) {
   };
 }
 
+async function executeArchiveReviewList(payload = {}) {
+  const limit = Math.max(1, Math.min(100, Number(payload.limit ?? 30)));
+  const requestsRoot = path.join(memoryRoot(), "REVIEW", "requests");
+  const files = await listFilesRecursive(requestsRoot, (filePath) => /\.(md|markdown)$/i.test(filePath), 1_000);
+  const requests = await Promise.all(files.map(async (filePath) => {
+    const [details, content] = await Promise.all([
+      stat(filePath),
+      readFile(filePath, "utf8").catch(() => ""),
+    ]);
+    const reasonMatch = /## Reason\s+([\s\S]*?)(?:\n## |\s*$)/m.exec(content);
+    return {
+      path: path.relative(memoryRoot(), filePath),
+      title: markdownTitle(content, path.basename(filePath, path.extname(filePath))).replace(/^Review Request:\s*/i, ""),
+      status: frontmatterValue(content, "status") || "pending",
+      artifactPath: frontmatterValue(content, "artifactPath") || "",
+      createdAt: frontmatterValue(content, "createdAt") || details.birthtime.toISOString(),
+      modifiedAt: details.mtime.toISOString(),
+      reason: String(reasonMatch?.[1] ?? "").replace(/\s+/g, " ").trim().slice(0, 300),
+    };
+  }));
+  requests.sort((left, right) => String(right.modifiedAt).localeCompare(String(left.modifiedAt)));
+  return { root: path.relative(userRoot(), requestsRoot), requests: requests.slice(0, limit) };
+}
+
 async function executeGoalRecord(payload) {
   const mission = String(payload.mission ?? "").trim();
   if (mission.length < 8) {
@@ -1364,6 +1388,7 @@ const bridgeRoutes = [
   { method: "POST", path: "/archive/intake/list", handler: executeArchiveIntakeList },
   { method: "POST", path: "/archive/intake/read", handler: executeArchiveIntakeRead },
   { method: "POST", path: "/archive/review/request", handler: executeArchiveReviewRequest },
+  { method: "POST", path: "/archive/review/list", handler: executeArchiveReviewList },
   { method: "GET", path: "/addons/status", handler: executeAddonsStatus },
   { method: "GET", path: "/opencode/status", handler: executeOpenCodeStatus },
   { method: "POST", path: "/hermes/dashboard/status", handler: executeHermesDashboardStatus },
