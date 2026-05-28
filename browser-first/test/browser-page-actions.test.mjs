@@ -42,6 +42,7 @@ function createHarness(overrides = {}) {
     addMessage: async (role, content) => events.push(["message", role, content]),
     bridgeRequest: async (route, options) => {
       events.push(["bridge", route, options]);
+      if (overrides.bridgeRequest) return overrides.bridgeRequest(route, options);
       return overrides.bridgeResponse ?? { items: [{ title: "Headline", source: "Source" }] };
     },
     chrome,
@@ -165,18 +166,24 @@ test("browser page actions save current page to archive intake", async () => {
       controls: [],
       fields: []
     },
-    bridgeResponse: { path: "INTAKE/browser/saved-page.md", bytes: 100 }
+    bridgeRequest: async (route) => route === "/archive/intake"
+      ? { path: "INTAKE/browser/saved-page.md", bytes: 100 }
+      : { path: "REVIEW/requests/saved-page.md", status: "pending" }
   });
 
   const result = await harness.actions.saveCurrentPageToArchive();
 
   assert.equal(result.ok, true);
   assert.equal(result.path, "INTAKE/browser/saved-page.md");
+  assert.equal(result.reviewRequestPath, "REVIEW/requests/saved-page.md");
   const bridgeCall = harness.events.find((event) => event[0] === "bridge" && event[1] === "/archive/intake");
   assert.equal(bridgeCall[2].body.origin, "browser-current-page");
   assert.equal(bridgeCall[2].body.url, "https://example.test/page");
   assert.match(bridgeCall[2].body.content, /Important page text/);
+  const reviewCall = harness.events.find((event) => event[0] === "bridge" && event[1] === "/archive/review/request");
+  assert.equal(reviewCall[2].body.path, "INTAKE/browser/saved-page.md");
   assert.ok(harness.events.some((event) => event[0] === "message" && /Saved current page/.test(event[2])));
+  assert.ok(harness.events.some((event) => event[0] === "message" && /Review request created/.test(event[2])));
 });
 
 test("browser page actions save selected text to archive intake", async () => {
@@ -184,15 +191,20 @@ test("browser page actions save selected text to archive intake", async () => {
     sendMessage: (_call, message) => message.type === "get_selection"
       ? { ok: true, title: "Selection Page", url: "https://example.test/selection", selection: { text: "Selected passage" } }
       : { ok: false, error: "unexpected" },
-    bridgeResponse: { path: "INTAKE/browser/selection.md", bytes: 80 }
+    bridgeRequest: async (route) => route === "/archive/intake"
+      ? { path: "INTAKE/browser/selection.md", bytes: 80 }
+      : { path: "REVIEW/requests/selection.md", status: "pending" }
   });
 
   const result = await harness.actions.saveSelectionToArchive();
 
   assert.equal(result.ok, true);
   assert.equal(result.path, "INTAKE/browser/selection.md");
+  assert.equal(result.reviewRequestPath, "REVIEW/requests/selection.md");
   const bridgeCall = harness.events.find((event) => event[0] === "bridge" && event[1] === "/archive/intake");
   assert.equal(bridgeCall[2].body.origin, "browser-selection");
   assert.equal(bridgeCall[2].body.url, "https://example.test/selection");
   assert.match(bridgeCall[2].body.content, /Selected passage/);
+  const reviewCall = harness.events.find((event) => event[0] === "bridge" && event[1] === "/archive/review/request");
+  assert.equal(reviewCall[2].body.path, "INTAKE/browser/selection.md");
 });

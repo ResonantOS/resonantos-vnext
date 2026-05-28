@@ -368,13 +368,20 @@ export function createBrowserPageActions(deps) {
         content: pageIntakeMarkdown(snapshot)
       }
     });
+    const review = await bridgeRequest("/archive/review/request", {
+      method: "POST",
+      body: {
+        path: result.path,
+        reason: "Evaluate this saved browser page for Living Archive ingestion, entities, contradictions, durable wiki updates, and source-backed synthesis."
+      }
+    });
     await addMessage(
       "system",
-      `Saved current page to Living Archive intake: ${result.path}\n\nThis remains raw intake data. Trusted AI Memory promotion must happen through review, verification, and promotion.`
+      `Saved current page to Living Archive intake: ${result.path}\nReview request created: ${review.path}\n\nThis remains raw intake data. Trusted AI Memory promotion must happen through review, verification, and promotion.`
     );
     setStatus("Page saved to intake");
     setActivity("completed", "Saved page intake", result.path);
-    return { ok: true, ...result };
+    return { ok: true, ...result, reviewRequestPath: review.path };
   }
 
   async function saveSelectionToArchive() {
@@ -404,13 +411,20 @@ export function createBrowserPageActions(deps) {
         ].join("\n")
       }
     });
+    const review = await bridgeRequest("/archive/review/request", {
+      method: "POST",
+      body: {
+        path: result.path,
+        reason: "Evaluate this selected browser text for Living Archive ingestion, entities, contradictions, durable wiki updates, and source-backed synthesis."
+      }
+    });
     await addMessage(
       "system",
-      `Saved selected text to Living Archive intake: ${result.path}\n\nThis remains raw intake data until the governed archive pipeline promotes it.`
+      `Saved selected text to Living Archive intake: ${result.path}\nReview request created: ${review.path}\n\nThis remains raw intake data until the governed archive pipeline promotes it.`
     );
     setStatus("Selection saved to intake");
     setActivity("completed", "Saved selection intake", result.path);
-    return { ok: true, ...result };
+    return { ok: true, ...result, reviewRequestPath: review.path };
   }
 
   return {

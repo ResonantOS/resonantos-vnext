@@ -86,7 +86,7 @@ These are the features currently implemented in the browser-first version.
 - The control monitor shows current status and progress.
 - The control monitor persists job state through browser storage.
 - Agent Control reports can be saved into Living Archive intake through the bridge path.
-- The Augmentor sidebar can save the current browser page or selected page text directly into Living Archive intake; these captures remain raw intake artifacts and still require review, verification, and promotion before becoming trusted AI Memory.
+- The Augmentor sidebar can save the current browser page or selected page text directly into Living Archive intake and immediately create a governed review request; these captures remain raw intake artifacts and still require review, verification, and promotion before becoming trusted AI Memory.
 - Browser artifacts can request Living Archive review, and the browser-first Living Archive workspace now exposes an auditable review queue with `pending`, `in-progress`, `approved`, and `rejected` state transitions.
 - Review queue cards now show an archive pipeline timeline for `Intake`, `Review`, `Draft`, `Verify`, `Revise`, `Promote`, and `Restore`, using host-read artifact metadata rather than UI guesses.
 - Approved browser-first review requests can generate draft wiki-update artifacts under `Memory/REVIEW/artifacts`; these drafts are not trusted AI Memory until a later host-mediated ingest/verifier/promote path completes.
