@@ -889,6 +889,79 @@ textarea {
   color: rgba(255, 205, 120, 0.88);
 }
 
+.memory-pipeline {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(82px, 1fr));
+  gap: 6px;
+  list-style: none;
+  margin: 5px 0 3px;
+  padding: 0;
+}
+
+.memory-pipeline-step {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 6px;
+  align-items: center;
+  min-width: 0;
+  border: 1px solid rgba(143, 159, 149, 0.14);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+  padding: 7px;
+}
+
+.memory-pipeline-marker {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(143, 159, 149, 0.62);
+  box-shadow: 0 0 0 3px rgba(143, 159, 149, 0.08);
+}
+
+.memory-pipeline-step strong {
+  overflow: hidden;
+  color: rgba(238, 247, 240, 0.86);
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memory-pipeline-step small {
+  grid-column: 2;
+  overflow: hidden;
+  color: rgba(143, 159, 149, 0.8);
+  font-size: 0.62rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memory-pipeline-step[data-state="complete"] {
+  border-color: rgba(36, 209, 143, 0.22);
+  background: rgba(36, 209, 143, 0.06);
+}
+
+.memory-pipeline-step[data-state="complete"] .memory-pipeline-marker,
+.memory-pipeline-step[data-state="active"] .memory-pipeline-marker,
+.memory-pipeline-step[data-state="available"] .memory-pipeline-marker {
+  background: var(--accent);
+  box-shadow: 0 0 0 3px rgba(36, 209, 143, 0.12);
+}
+
+.memory-pipeline-step[data-state="active"] {
+  border-color: rgba(36, 209, 143, 0.34);
+  background: rgba(36, 209, 143, 0.1);
+}
+
+.memory-pipeline-step[data-state="blocked"] {
+  border-color: rgba(255, 124, 124, 0.24);
+  background: rgba(255, 124, 124, 0.07);
+}
+
+.memory-pipeline-step[data-state="blocked"] .memory-pipeline-marker {
+  background: rgba(255, 124, 124, 0.94);
+  box-shadow: 0 0 0 3px rgba(255, 124, 124, 0.1);
+}
+
 .memory-review-preview {
   display: grid;
   gap: 10px;
@@ -1128,6 +1201,10 @@ textarea {
   .memory-metrics,
   .artifacts-layout {
     grid-template-columns: 1fr;
+  }
+
+  .memory-pipeline {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

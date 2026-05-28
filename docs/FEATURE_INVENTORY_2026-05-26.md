@@ -87,6 +87,7 @@ These are the features currently implemented in the browser-first version.
 - The control monitor persists job state through browser storage.
 - Agent Control reports can be saved into Living Archive intake through the bridge path.
 - Browser artifacts can request Living Archive review, and the browser-first Living Archive workspace now exposes an auditable review queue with `pending`, `in-progress`, `approved`, and `rejected` state transitions.
+- Review queue cards now show an archive pipeline timeline for `Intake`, `Review`, `Draft`, `Verify`, `Revise`, `Promote`, and `Restore`, using host-read artifact metadata rather than UI guesses.
 - Approved browser-first review requests can generate draft wiki-update artifacts under `Memory/REVIEW/artifacts`; these drafts are not trusted AI Memory until a later host-mediated ingest/verifier/promote path completes.
 - Draft wiki-update artifacts can be previewed through a scoped `REVIEW/artifacts` host read path before any trusted promotion work is attempted.
 - Draft wiki-update artifacts must pass a host-owned verifier gate before promotion; the verifier writes an auditable verification artifact under `Memory/REVIEW/verifications` and records `verificationStatus: verified` on the draft.

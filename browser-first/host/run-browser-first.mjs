@@ -1281,15 +1281,42 @@ async function executeArchiveReviewList(payload = {}) {
       readFile(filePath, "utf8").catch(() => ""),
     ]);
     const reasonMatch = /## Reason\s+([\s\S]*?)(?:\n## |\s*$)/m.exec(content);
+    const draftArtifactPath = frontmatterValue(content, "draftArtifactPath") || "";
+    let draftState = {};
+    if (draftArtifactPath) {
+      try {
+        const draftFile = safeMemoryRelativePath(draftArtifactPath, "REVIEW/artifacts");
+        if (existsSync(draftFile)) {
+          const draftContent = await readFile(draftFile, "utf8");
+          draftState = {
+            draftStatus: frontmatterValue(draftContent, "status") || "",
+            draftVerificationStatus: frontmatterValue(draftContent, "verificationStatus") || "",
+            draftVerifierArtifactPath: frontmatterValue(draftContent, "verifierArtifactPath") || "",
+            draftRevisionStatus: frontmatterValue(draftContent, "revisionStatus") || "",
+            revisedDraftPath: frontmatterValue(draftContent, "revisedDraftPath") || "",
+            supersedesDraftPath: frontmatterValue(draftContent, "supersedesDraftPath") || "",
+            promotionStatus: frontmatterValue(draftContent, "promotionStatus") || "",
+            promotedPage: frontmatterValue(draftContent, "promotedPage") || "",
+            promotedAt: frontmatterValue(draftContent, "promotedAt") || "",
+            backupPath: frontmatterValue(draftContent, "backupPath") || "",
+            rollbackStatus: frontmatterValue(draftContent, "rollbackStatus") || "",
+            restoredAt: frontmatterValue(draftContent, "restoredAt") || "",
+          };
+        }
+      } catch {
+        draftState = { draftStatus: "unreadable" };
+      }
+    }
     return {
       path: path.relative(memoryRoot(), filePath),
       title: markdownTitle(content, path.basename(filePath, path.extname(filePath))).replace(/^Review Request:\s*/i, ""),
       status: frontmatterValue(content, "status") || "pending",
       artifactPath: frontmatterValue(content, "artifactPath") || "",
-      draftArtifactPath: frontmatterValue(content, "draftArtifactPath") || "",
+      draftArtifactPath,
       createdAt: frontmatterValue(content, "createdAt") || details.birthtime.toISOString(),
       modifiedAt: details.mtime.toISOString(),
       reason: String(reasonMatch?.[1] ?? "").replace(/\s+/g, " ").trim().slice(0, 300),
+      ...draftState,
     };
   }));
   requests.sort((left, right) => String(right.modifiedAt).localeCompare(String(left.modifiedAt)));

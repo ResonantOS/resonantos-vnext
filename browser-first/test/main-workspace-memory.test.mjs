@@ -51,6 +51,11 @@ test("living archive workspace renders status, search, and intake through bridge
           path: "REVIEW/requests/browser-job-completed.md",
           artifactPath: "INTAKE/browser/job-report.md",
           draftArtifactPath,
+          draftVerificationStatus: verified ? "verified" : "",
+          promotionStatus: promoted ? "promoted" : "",
+          promotedPage: promoted ? "AI_MEMORY/wiki/browser-job-completed.md" : "",
+          backupPath: promoted ? "AI_MEMORY/backups/promotions/2026-05-28/browser-job-completed.md" : "",
+          rollbackStatus: restored ? "restored" : "",
           reason: "Evaluate browser artifact for durable wiki updates."
         }]
       };
@@ -169,6 +174,14 @@ test("living archive workspace renders status, search, and intake through bridge
     assert.ok(calls.some(([route]) => route === "/archive/review/promotions/list"));
     assert.match(container.textContent, /Browser job completed: compare a product/);
     assert.match(container.textContent, /INTAKE\/browser\/job-report\.md/);
+    assert.match(container.textContent, /Intake/);
+    assert.match(container.textContent, /Review/);
+    assert.match(container.textContent, /Draft/);
+    assert.match(container.textContent, /Verify/);
+    assert.match(container.textContent, /Revise/);
+    assert.match(container.textContent, /Promote/);
+    assert.match(container.textContent, /Restore/);
+    assert.equal(container.querySelectorAll(".memory-pipeline-step").length, 7);
     container.querySelector("[data-review-status='approved']").click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -216,6 +229,8 @@ test("living archive workspace renders status, search, and intake through bridge
       options.body.path === "REVIEW/artifacts/browser/browser-job-completed-draft.md"
     ));
     assert.match(container.textContent, /Verified draft: REVIEW\/verifications\/browser\/browser-job-completed-verification\.md \(unavailable\)/);
+    assert.ok(Array.from(container.querySelectorAll(".memory-pipeline-step"))
+      .some((step) => step.textContent.includes("Verify") && step.dataset.state === "complete"));
     Array.from(container.querySelectorAll(".memory-review-actions button"))
       .find((button) => button.textContent === "Preview")
       .click();
@@ -246,6 +261,8 @@ test("living archive workspace renders status, search, and intake through bridge
       options.body.path === "REVIEW/artifacts/browser/browser-job-completed-draft.md"
     ));
     assert.match(container.textContent, /Promoted AI_MEMORY\/wiki\/browser-job-completed\.md/);
+    assert.ok(Array.from(container.querySelectorAll(".memory-pipeline-step"))
+      .some((step) => step.textContent.includes("Promote") && step.dataset.state === "complete"));
     assert.match(container.textContent, /Promotion History/);
     assert.match(container.textContent, /AI_MEMORY\/backups\/promotions\/2026-05-28\/browser-job-completed\.md/);
     Array.from(container.querySelectorAll(".memory-promotion-card button"))
@@ -342,6 +359,9 @@ test("living archive workspace can revise a draft after verifier findings", asyn
           path: "REVIEW/requests/needs-revision.md",
           artifactPath: "INTAKE/browser/needs-revision.md",
           draftArtifactPath,
+          draftVerificationStatus: draftArtifactPath.endsWith("needs-revision-revision.md") ? "" : "needs-revision",
+          draftRevisionStatus: "",
+          revisedDraftPath: "",
           reason: "Verifier requested a stronger draft."
         }]
       };
@@ -382,6 +402,7 @@ test("living archive workspace can revise a draft after verifier findings", asyn
   try {
     renderLivingArchiveWorkspace({ container, bridgeRequest });
     await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
     Array.from(container.querySelectorAll(".memory-review-actions button"))
       .find((button) => button.textContent === "Preview")
@@ -389,6 +410,10 @@ test("living archive workspace can revise a draft after verifier findings", asyn
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.match(container.textContent, /Verification: needs-revision/);
     assert.match(container.textContent, /Semantic: needs-revision/);
+    assert.ok(Array.from(container.querySelectorAll(".memory-pipeline-step"))
+      .some((step) => step.textContent.includes("Verify") && step.dataset.state === "blocked"));
+    assert.ok(Array.from(container.querySelectorAll(".memory-pipeline-step"))
+      .some((step) => step.textContent.includes("Revise") && step.dataset.state === "active"));
     const reviseButton = Array.from(container.querySelectorAll(".memory-review-preview button"))
       .find((button) => button.textContent === "Revise Draft");
     assert.equal(reviseButton.disabled, false);

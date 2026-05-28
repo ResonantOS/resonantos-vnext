@@ -29,6 +29,71 @@ function resultCard(match) {
   return card;
 }
 
+function pipelineStep(label, state, detail = "") {
+  const node = document.createElement("li");
+  node.className = "memory-pipeline-step";
+  node.dataset.state = state;
+  const marker = document.createElement("span");
+  marker.className = "memory-pipeline-marker";
+  marker.setAttribute("aria-hidden", "true");
+  const labelNode = document.createElement("strong");
+  labelNode.textContent = label;
+  const detailNode = document.createElement("small");
+  detailNode.textContent = detail;
+  node.append(marker, labelNode, detailNode);
+  return node;
+}
+
+function reviewPipeline(request) {
+  const node = document.createElement("ol");
+  node.className = "memory-pipeline";
+  node.setAttribute("aria-label", "Archive pipeline timeline");
+  const reviewStatus = request.status || "pending";
+  const verificationStatus = request.draftVerificationStatus || "";
+  const promotionStatus = request.promotionStatus || "";
+  const rollbackStatus = request.rollbackStatus || "";
+  const revisionStatus = request.draftRevisionStatus || "";
+  const hasDraft = Boolean(request.draftArtifactPath);
+
+  const reviewState = reviewStatus === "approved"
+    ? "complete"
+    : reviewStatus === "rejected"
+      ? "blocked"
+      : reviewStatus === "in-progress"
+        ? "active"
+        : "waiting";
+  const draftState = hasDraft ? "complete" : reviewStatus === "approved" ? "active" : "waiting";
+  const verifyState = verificationStatus === "verified"
+    ? "complete"
+    : verificationStatus === "needs-revision"
+      ? "blocked"
+      : hasDraft
+        ? "active"
+        : "waiting";
+  const reviseState = revisionStatus === "revised" || request.supersedesDraftPath
+    ? "complete"
+    : verificationStatus === "needs-revision"
+      ? "active"
+      : "waiting";
+  const promoteState = promotionStatus === "promoted"
+    ? "complete"
+    : verificationStatus === "verified"
+      ? "active"
+      : "waiting";
+  const restoreState = rollbackStatus === "restored" ? "complete" : request.backupPath ? "available" : "waiting";
+
+  node.append(
+    pipelineStep("Intake", request.artifactPath ? "complete" : "blocked", request.artifactPath ? "source captured" : "missing source"),
+    pipelineStep("Review", reviewState, reviewStatus),
+    pipelineStep("Draft", draftState, hasDraft ? "artifact ready" : "not generated"),
+    pipelineStep("Verify", verifyState, verificationStatus || "not run"),
+    pipelineStep("Revise", reviseState, revisionStatus || (verificationStatus === "needs-revision" ? "needed" : "optional")),
+    pipelineStep("Promote", promoteState, promotionStatus || "blocked until verified"),
+    pipelineStep("Restore", restoreState, rollbackStatus || (request.backupPath ? "backup available" : "no backup"))
+  );
+  return node;
+}
+
 function reviewRequestCard(request, onTransition, onDraft, onPreviewDraft) {
   const card = document.createElement("article");
   card.className = "memory-review-request";
@@ -46,6 +111,7 @@ function reviewRequestCard(request, onTransition, onDraft, onPreviewDraft) {
   draft.textContent = request.draftArtifactPath ? `draft: ${request.draftArtifactPath}` : "draft: not generated";
   const reason = document.createElement("p");
   reason.textContent = request.reason || "No review reason recorded.";
+  const pipeline = reviewPipeline(request);
   const actions = document.createElement("div");
   actions.className = "memory-review-actions";
   const makeAction = (label, nextStatus) => {
@@ -74,7 +140,7 @@ function reviewRequestCard(request, onTransition, onDraft, onPreviewDraft) {
   previewButton.disabled = !request.draftArtifactPath;
   previewButton.addEventListener("click", () => onPreviewDraft(request));
   actions.append(previewButton);
-  card.append(heading, artifact, draft, reason, actions);
+  card.append(heading, artifact, draft, reason, pipeline, actions);
   return card;
 }
 
