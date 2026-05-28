@@ -29,7 +29,7 @@ function resultCard(match) {
   return card;
 }
 
-function reviewRequestCard(request, onTransition) {
+function reviewRequestCard(request, onTransition, onDraft) {
   const card = document.createElement("article");
   card.className = "memory-review-request";
   const heading = document.createElement("div");
@@ -41,6 +41,9 @@ function reviewRequestCard(request, onTransition) {
   heading.append(title, status);
   const artifact = document.createElement("code");
   artifact.textContent = request.artifactPath || request.path || "REVIEW/requests";
+  const draft = document.createElement("code");
+  draft.className = "memory-review-draft";
+  draft.textContent = request.draftArtifactPath ? `draft: ${request.draftArtifactPath}` : "draft: not generated";
   const reason = document.createElement("p");
   reason.textContent = request.reason || "No review reason recorded.";
   const actions = document.createElement("div");
@@ -59,7 +62,13 @@ function reviewRequestCard(request, onTransition) {
     makeAction("Approve", "approved"),
     makeAction("Reject", "rejected")
   );
-  card.append(heading, artifact, reason, actions);
+  const draftButton = document.createElement("button");
+  draftButton.type = "button";
+  draftButton.textContent = request.draftArtifactPath ? "Drafted" : "Draft";
+  draftButton.disabled = request.status !== "approved" || Boolean(request.draftArtifactPath);
+  draftButton.addEventListener("click", () => onDraft(request));
+  actions.append(draftButton);
+  card.append(heading, artifact, draft, reason, actions);
   return card;
 }
 
@@ -178,7 +187,7 @@ export function renderLivingArchiveWorkspace({ container, bridgeRequest, initial
         setStatus(reviewStatus, "No pending review requests. Browser artifacts can request review from the Artifacts workspace.", "warning");
         return;
       }
-      reviewList.append(...requests.map((request) => reviewRequestCard(request, transitionReviewRequest)));
+      reviewList.append(...requests.map((request) => reviewRequestCard(request, transitionReviewRequest, draftReviewRequest)));
       setStatus(reviewStatus, `${requests.length} review request(s) waiting in ${result.root}.`, "success");
     } catch (error) {
       setStatus(reviewStatus, error instanceof Error ? error.message : String(error), "error");
@@ -203,6 +212,25 @@ export function renderLivingArchiveWorkspace({ container, bridgeRequest, initial
         }
       });
       setStatus(reviewStatus, `Updated ${result.path} to ${result.status}.`, "success");
+      await loadStatus();
+      await loadReviewQueue();
+    } catch (error) {
+      setStatus(reviewStatus, error instanceof Error ? error.message : String(error), "error");
+    }
+  };
+
+  const draftReviewRequest = async (request) => {
+    if (!request.path) {
+      setStatus(reviewStatus, "Review request is missing its path.", "error");
+      return;
+    }
+    setStatus(reviewStatus, "Generating draft wiki update artifact…");
+    try {
+      const result = await bridgeRequest("/archive/review/draft", {
+        method: "POST",
+        body: { path: request.path }
+      });
+      setStatus(reviewStatus, `Draft artifact ready: ${result.path}.`, "success");
       await loadStatus();
       await loadReviewQueue();
     } catch (error) {

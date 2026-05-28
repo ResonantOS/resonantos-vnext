@@ -878,6 +878,10 @@ textarea {
   opacity: 0.38;
 }
 
+.memory-review-draft {
+  color: rgba(255, 205, 120, 0.88);
+}
+
 .memory-review-heading {
   display: flex;
   align-items: start;

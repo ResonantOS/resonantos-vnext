@@ -1070,6 +1070,17 @@ function artifactKind(content, filePath) {
   return "intake";
 }
 
+function markdownBody(content) {
+  return content.replace(/^---[\s\S]*?---\s*/m, "").trim();
+}
+
+function compactExcerpt(content, limit = 1_800) {
+  return markdownBody(content)
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, limit);
+}
+
 async function executeArchiveIntakeList(payload = {}) {
   const limit = Math.max(1, Math.min(100, Number(payload.limit ?? 40)));
   const intakeRoot = path.join(memoryRoot(), "INTAKE");
@@ -1175,6 +1186,7 @@ async function executeArchiveReviewList(payload = {}) {
       title: markdownTitle(content, path.basename(filePath, path.extname(filePath))).replace(/^Review Request:\s*/i, ""),
       status: frontmatterValue(content, "status") || "pending",
       artifactPath: frontmatterValue(content, "artifactPath") || "",
+      draftArtifactPath: frontmatterValue(content, "draftArtifactPath") || "",
       createdAt: frontmatterValue(content, "createdAt") || details.birthtime.toISOString(),
       modifiedAt: details.mtime.toISOString(),
       reason: String(reasonMatch?.[1] ?? "").replace(/\s+/g, " ").trim().slice(0, 300),
@@ -1228,6 +1240,95 @@ async function executeArchiveReviewTransition(payload = {}) {
     previousStatus,
     status: nextStatus,
     updatedAt: now,
+  };
+}
+
+async function executeArchiveReviewDraft(payload = {}) {
+  const requestPath = String(payload.path ?? "").trim();
+  const requestFile = safeMemoryRelativePath(requestPath, "REVIEW/requests");
+  if (!/\.(md|markdown)$/i.test(requestFile)) {
+    throw new Error("Archive review drafting only supports markdown review requests.");
+  }
+  const requestContent = await readFile(requestFile, "utf8");
+  if (frontmatterValue(requestContent, "type") !== "archive-review-request") {
+    throw new Error("Archive review drafting requires a review request file.");
+  }
+  const requestStatus = frontmatterValue(requestContent, "status") || "pending";
+  if (requestStatus !== "approved") {
+    throw new Error("Only approved review requests can generate draft wiki update artifacts.");
+  }
+  const existingDraft = frontmatterValue(requestContent, "draftArtifactPath");
+  if (existingDraft) {
+    const existingDraftPath = safeMemoryRelativePath(existingDraft, "REVIEW/artifacts");
+    if (existsSync(existingDraftPath)) {
+      return {
+        path: existingDraft,
+        requestPath,
+        status: "draft-existing",
+      };
+    }
+  }
+  const artifactPath = frontmatterValue(requestContent, "artifactPath");
+  const sourceFile = safeMemoryRelativePath(artifactPath, "INTAKE");
+  if (!/\.(md|markdown)$/i.test(sourceFile)) {
+    throw new Error("Draft wiki updates currently require a markdown intake source.");
+  }
+  const sourceContent = await readFile(sourceFile, "utf8");
+  const now = new Date().toISOString();
+  const sourceTitle = markdownTitle(sourceContent, path.basename(sourceFile, path.extname(sourceFile)));
+  const draftDir = path.join(memoryRoot(), "REVIEW", "artifacts", "browser");
+  await mkdir(draftDir, { recursive: true });
+  const draftFile = `${now.replace(/[:.]/g, "-")}-${safeFileSlug(sourceTitle)}-draft.md`;
+  const draftPath = path.join(draftDir, draftFile);
+  const sourceExcerpt = compactExcerpt(sourceContent, 2_400);
+  const proposedPage = `AI_MEMORY/wiki/${safeFileSlug(sourceTitle)}.md`;
+  const draftBody = [
+    "---",
+    `source: ${JSON.stringify("resonantos-browser-first")}`,
+    `type: ${JSON.stringify("archive-draft-wiki-update")}`,
+    `status: ${JSON.stringify("draft")}`,
+    `createdAt: ${JSON.stringify(now)}`,
+    `requestPath: ${JSON.stringify(requestPath)}`,
+    `artifactPath: ${JSON.stringify(artifactPath)}`,
+    `proposedPage: ${JSON.stringify(proposedPage)}`,
+    "---",
+    "",
+    `# Draft Wiki Update: ${sourceTitle}`,
+    "",
+    "## Summary",
+    sourceExcerpt || "No source text was available for deterministic summarization.",
+    "",
+    "## Proposed Wiki Page",
+    proposedPage,
+    "",
+    "## Proposed Content",
+    `# ${sourceTitle}`,
+    "",
+    "> Draft generated from an approved browser-first review request. This is not trusted AI Memory until a Strategist-owned ingest/verifier path promotes it.",
+    "",
+    sourceExcerpt || "_No source excerpt available._",
+    "",
+    "## Source Artifact",
+    artifactPath,
+    "",
+    "## Review Request",
+    requestPath,
+    "",
+    "## Boundary",
+    "This artifact is a draft. It must not be treated as a trusted wiki page until the host-mediated ingest/review/promote path completes.",
+    "",
+  ].join("\n");
+  await writeFile(draftPath, draftBody);
+  let updatedRequest = requestContent;
+  updatedRequest = writeFrontmatterValue(updatedRequest, "draftArtifactPath", path.relative(memoryRoot(), draftPath));
+  updatedRequest = writeFrontmatterValue(updatedRequest, "draftedAt", now);
+  updatedRequest = `${updatedRequest.trimEnd()}\n\n## Review Event\n- at: ${now}\n- actor: resonantos-browser-first\n- from: approved\n- to: draft-created\n- artifact: ${path.relative(memoryRoot(), draftPath)}\n`;
+  await writeFile(requestFile, updatedRequest);
+  return {
+    path: path.relative(memoryRoot(), draftPath),
+    requestPath,
+    proposedPage,
+    status: "draft-created",
   };
 }
 
@@ -1452,6 +1553,7 @@ const bridgeRoutes = [
   { method: "POST", path: "/archive/review/request", handler: executeArchiveReviewRequest },
   { method: "POST", path: "/archive/review/list", handler: executeArchiveReviewList },
   { method: "POST", path: "/archive/review/transition", handler: executeArchiveReviewTransition },
+  { method: "POST", path: "/archive/review/draft", handler: executeArchiveReviewDraft },
   { method: "GET", path: "/addons/status", handler: executeAddonsStatus },
   { method: "GET", path: "/opencode/status", handler: executeOpenCodeStatus },
   { method: "POST", path: "/hermes/dashboard/status", handler: executeHermesDashboardStatus },
