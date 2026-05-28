@@ -18,7 +18,10 @@
     "browser-native:build:required": "node scripts/build-native-browser.mjs --required",
     "tauri": "tauri",
     "tauri:dev": "GDK_BACKEND=x11 WEBKIT_DISABLE_COMPOSITING_MODE=1 GSK_RENDERER=cairo tauri dev",
-    "tauri:build": "npm run browser-native:build && tauri build"
+    "tauri:build": "npm run browser-native:build && tauri build",
+    "test:browser-first": "node --test browser-first/test/*.test.mjs",
+    "browser-first:install": "node scripts/install-browser-first-app.mjs",
+    "browser-first:dev": "node browser-first/host/run-browser-first.mjs"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.3",

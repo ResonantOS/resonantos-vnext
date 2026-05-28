@@ -379,6 +379,50 @@ void PrintProbeContract() {
       << "}" << std::endl;
 }
 
+// ── Browser-First mode ────────────────────────────────────────────────────
+// Activated via --resonantos-browser-first flag.  In this mode the native host
+// launches a Chromium-family browser profile with the ResonantOS side-panel
+// extension pre-loaded, registers a remote debugging port via
+// --resonantos-remote-debugging-port, and writes the user data dir path via
+// --resonantos-user-data-dir so that run-browser-first.mjs can pin the
+// extension and auto-open the side panel.
+//
+// Keyboard handler: intercepts Cmd+Q (windows_key_code == 'Q' +
+// EVENTFLAG_COMMAND_DOWN) to allow the browser-first session to shut down
+// cleanly before CEF tears down.
+
+class BrowserFirstKeyboardHandler final : public CefKeyboardHandler {
+ public:
+  BrowserFirstKeyboardHandler() = default;
+
+  bool OnPreKeyEvent(CefRefPtr<CefBrowser> browser,
+                     const CefKeyEvent& event,
+                     CefEventHandle os_event,
+                     bool* is_keyboard_shortcut) override {
+    // Intercept Cmd+Q so the browser-first session can perform a clean shutdown.
+    if (event.type == KEYEVENT_RAWKEYDOWN &&
+        event.windows_key_code == 'Q' &&
+        (event.modifiers & EVENTFLAG_COMMAND_DOWN) != 0) {
+      std::cout << "{\"event\":\"browser.first.shutdown_requested\"}" << std::endl;
+      browser->GetHost()->CloseBrowser(true);
+      return true;
+    }
+    return false;
+  }
+
+ private:
+  IMPLEMENT_REFCOUNTING(BrowserFirstKeyboardHandler);
+  DISALLOW_COPY_AND_ASSIGN(BrowserFirstKeyboardHandler);
+};
+
+inline void EmitBrowserFirstStarted(const std::string& user_data_dir,
+                                    int remote_debugging_port) {
+  std::cout << "{\"event\":\"browser.first.started\","
+            << "\"resonantos-user-data-dir\":\"" << user_data_dir << "\","
+            << "\"resonantos-remote-debugging-port\":" << remote_debugging_port
+            << "}" << std::endl;
+}
+
 }  // namespace resonantos
 
 int resonant_browser_native_cef_main(int argc, char* argv[]) {
