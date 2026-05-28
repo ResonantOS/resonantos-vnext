@@ -81,6 +81,38 @@ test("control reporting service saves reports to archive intake", async () => {
   assert.match(bridgeCall[2].content, /Read active page — ok/);
 });
 
+test("control reporting service builds and saves durable browser job reports", async () => {
+  const harness = createHarness();
+  const job = {
+    id: "job-2",
+    goal: "compare a product",
+    status: "completed",
+    planner: "observe-act-verify-loop",
+    createdAt: "2026-05-26T09:00:00.000Z",
+    updatedAt: "2026-05-26T09:02:00.000Z",
+    summary: "Observed and compared",
+    steps: [
+      { label: "Read page", state: "completed", note: "read product page" },
+      { label: "Click details", state: "completed", note: "clicked details" }
+    ],
+    artifacts: [{ type: "archive-intake", path: "/archive/existing.md" }]
+  };
+
+  const report = harness.service.buildBrowserJobReport(job);
+  assert.match(report, /# Browser Job Report/);
+  assert.match(report, /compare a product/);
+  assert.match(report, /Read page — completed — read product page/);
+  assert.match(report, /archive-intake: \/archive\/existing\.md/);
+
+  const result = await harness.service.saveBrowserJobReportToArchive(job);
+  assert.deepEqual(result, { path: "/archive/browser-report.md" });
+  const bridgeCall = harness.events.find((event) => event[0] === "bridge");
+  assert.equal(bridgeCall[1], "/archive/intake");
+  assert.equal(bridgeCall[2].sourceMessageId, "job-2");
+  assert.match(bridgeCall[2].title, /Browser job completed/);
+  assert.match(bridgeCall[2].content, /# Browser Job Report/);
+});
+
 test("control reporting service returns null when no run exists", async () => {
   const harness = createHarness({ currentControlRun: null });
 

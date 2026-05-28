@@ -51,6 +51,7 @@ export function createMonitorRenderers({
   getTaskConsents,
   isReadableBrowserTab,
   onContinueBrowserJob,
+  onSaveBrowserJobReport,
   onRevokeTaskConsent,
   permissionForUrl,
   siteKeyForUrl,
@@ -272,6 +273,14 @@ export function createMonitorRenderers({
         continueButton.title = `Continue ${job.goal}`;
         continueButton.addEventListener("click", () => onContinueBrowserJob(job));
         actions.append(continueButton);
+      }
+      if (typeof onSaveBrowserJobReport === "function") {
+        const reportButton = document.createElement("button");
+        reportButton.type = "button";
+        reportButton.textContent = "Report";
+        reportButton.title = `Save report for ${job.goal}`;
+        reportButton.addEventListener("click", () => onSaveBrowserJobReport(job));
+        actions.append(reportButton);
       }
       actions.append(state);
       item.append(details, actions);

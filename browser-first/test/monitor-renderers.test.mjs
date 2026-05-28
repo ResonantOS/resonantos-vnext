@@ -55,6 +55,7 @@ function createHarness(overrides = {}) {
     pendingApproval: overrides.pendingApproval ?? null,
     tab: overrides.tab ?? { url: "https://example.com/page" },
     continued: [],
+    reported: [],
     revoked: []
   };
   const renderers = createMonitorRenderers({
@@ -94,6 +95,7 @@ function createHarness(overrides = {}) {
     getTaskConsents: async () => overrides.taskConsents ?? {},
     isReadableBrowserTab: (tab) => /^https?:\/\//i.test(tab?.url ?? ""),
     onContinueBrowserJob: (job) => state.continued.push(job.id),
+    onSaveBrowserJobReport: (job) => state.reported.push(job.id),
     onRevokeTaskConsent: (consent) => state.revoked.push(consent.taskClass),
     permissionForUrl: async () => overrides.permission ?? "trusted-for-safe-actions",
     siteKeyForUrl: (url) => new URL(url).hostname.replace(/^www\./, ""),
@@ -212,8 +214,10 @@ test("monitor renderers render collapsed and expanded browser jobs", () => {
   assert.equal(harness.dom.window.document.querySelector("#jobs-list").hidden, false);
   assert.deepEqual([...harness.dom.window.document.querySelectorAll("#jobs-list > li")].map((item) => item.dataset.status), ["running", "completed"]);
   assert.match(harness.dom.window.document.querySelector("#jobs-list").textContent, /done · Read page/);
-  harness.dom.window.document.querySelector(".job-actions button").click();
+  harness.dom.window.document.querySelectorAll(".job-actions button")[1].click();
   assert.deepEqual(harness.state.continued, ["job-b"]);
+  harness.dom.window.document.querySelectorAll(".job-actions button")[2].click();
+  assert.deepEqual(harness.state.reported, ["job-b"]);
 });
 
 test("monitor renderers show and hide site permission panel", async () => {

@@ -51,6 +51,55 @@ export function createControlReportingService({
     }).catch((error) => ({ error: error instanceof Error ? error.message : String(error) }));
   };
 
+  const buildBrowserJobReport = (job) => {
+    if (!job) return "";
+    const steps = Array.isArray(job.steps) ? job.steps : [];
+    const artifacts = Array.isArray(job.artifacts) ? job.artifacts : [];
+    return [
+      "# Browser Job Report",
+      "",
+      `- id: ${job.id}`,
+      `- status: ${job.status}`,
+      `- planner: ${job.planner}`,
+      `- createdAt: ${job.createdAt}`,
+      `- updatedAt: ${job.updatedAt}`,
+      "",
+      "## Goal",
+      job.goal,
+      "",
+      "## Summary",
+      job.summary || "No summary recorded.",
+      "",
+      "## Steps",
+      ...(steps.length
+        ? steps.map((step, index) => `${index + 1}. ${step.label} — ${step.state}${step.note ? ` — ${step.note}` : ""}`)
+        : ["No persisted step transcript is available for this job."]),
+      "",
+      "## Artifacts",
+      ...(artifacts.length
+        ? artifacts.map((artifact) => `- ${artifact.type ?? "artifact"}: ${artifact.path ?? JSON.stringify(artifact)}`)
+        : ["No artifacts recorded yet."]),
+      "",
+      "## Boundary",
+      "This is an intake artifact only. Wallet, credential, public-submit, payment, and destructive actions require explicit human approval.",
+      ""
+    ].join("\n");
+  };
+
+  const saveBrowserJobReportToArchive = async (job) => {
+    const content = buildBrowserJobReport(job);
+    if (!content) return null;
+    return bridgeRequest("/archive/intake", {
+      method: "POST",
+      body: {
+        title: `Browser job ${job.status}: ${job.goal ?? "task"}`.slice(0, 160),
+        content,
+        url: null,
+        sourceMessageId: job.id ?? null
+      }
+    }).catch((error) => ({ error: error instanceof Error ? error.message : String(error) }));
+  };
+
   const delegateControlIssue = async () => {
     const pendingApproval = getPendingApproval();
     const currentControlRun = getCurrentControlRun();
@@ -75,8 +124,10 @@ export function createControlReportingService({
   };
 
   return {
+    buildBrowserJobReport,
     buildControlReport,
     delegateControlIssue,
+    saveBrowserJobReportToArchive,
     saveControlReportToArchive
   };
 }

@@ -409,6 +409,16 @@ monitorRenderers = createMonitorRenderers({
   onContinueBrowserJob: (job) => {
     void continueBrowserJob(job.id);
   },
+  onSaveBrowserJobReport: async (job) => {
+    const result = await saveBrowserJobReportToArchive(job);
+    if (result?.error) {
+      await addMessage("system", `Browser job report failed: ${result.error}`);
+      return;
+    }
+    const artifacts = [...(job.artifacts ?? []), { type: "archive-intake", path: result.path }];
+    await updateBrowserJob(job.id, { artifacts });
+    await addMessage("system", `Saved browser job report to Living Archive intake: ${result.path}`);
+  },
   onRevokeTaskConsent: async (consent) => {
     await taskConsentStore.revokeTaskConsent({
       siteKey: consent.siteKey,
@@ -519,6 +529,7 @@ const controlReportingService = createControlReportingService({
   getPendingApproval: () => pendingApproval
 });
 const delegateControlIssue = controlReportingService.delegateControlIssue;
+const saveBrowserJobReportToArchive = controlReportingService.saveBrowserJobReportToArchive;
 const saveControlReportToArchive = controlReportingService.saveControlReportToArchive;
 
 const controlRunState = createControlRunState({
