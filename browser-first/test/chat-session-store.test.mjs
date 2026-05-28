@@ -90,6 +90,33 @@ test("chat session store creates and switches durable chat workspaces", async ()
   assert.equal(harness.store.getActiveSessionId(), firstSessionId);
 });
 
+test("chat session store starts a fresh blank session on app launch without erasing history", async () => {
+  const harness = createHarness({
+    sessions: [
+      {
+        id: "old-session",
+        title: "Old task",
+        workspaceId: "answer",
+        createdAt: "2026-05-25T00:00:00.000Z",
+        updatedAt: "2026-05-25T00:00:00.000Z",
+        messages: [{ id: "old-message", role: "user", content: "old task", createdAt: "2026-05-25T00:00:00.000Z" }]
+      }
+    ],
+    activeSessionId: "old-session"
+  });
+
+  await harness.store.hydrate();
+  const fresh = await harness.store.ensureFreshSession();
+
+  assert.notEqual(fresh.id, "old-session");
+  assert.equal(harness.store.getMessages().length, 0);
+  assert.equal(harness.store.getSessions().some((session) => session.id === "old-session"), true);
+  assert.equal(harness.store.getActiveSessionId(), fresh.id);
+
+  const sameFresh = await harness.store.ensureFreshSession();
+  assert.equal(sameFresh.id, fresh.id);
+});
+
 test("chat session store renames, deletes, and tracks session workspace metadata", async () => {
   const harness = createHarness();
 

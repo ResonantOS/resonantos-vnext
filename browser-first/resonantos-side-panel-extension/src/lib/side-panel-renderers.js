@@ -15,6 +15,37 @@ export function messageLabel(role) {
   return "Augmentor";
 }
 
+const escapeHtml = (value) => String(value ?? "")
+  .replace(/&/g, "&amp;")
+  .replace(/</g, "&lt;")
+  .replace(/>/g, "&gt;")
+  .replace(/"/g, "&quot;")
+  .replace(/'/g, "&#39;");
+
+const renderInlineMarkdown = (value) => escapeHtml(value)
+  .replace(/`([^`]+)`/g, "<code>$1</code>")
+  .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+  .replace(/\*([^*\n]+)\*/g, "<em>$1</em>")
+  .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+
+export function markdownToSafeHtml(content) {
+  const blocks = String(content ?? "").trim().split(/\n{2,}/);
+  return blocks.map((block) => {
+    const lines = block.split("\n");
+    if (lines.every((line) => /^\s*[-*]\s+/.test(line))) {
+      return `<ul>${lines.map((line) => `<li>${renderInlineMarkdown(line.replace(/^\s*[-*]\s+/, ""))}</li>`).join("")}</ul>`;
+    }
+    if (lines.every((line) => /^\s*\d+\.\s+/.test(line))) {
+      return `<ol>${lines.map((line) => `<li>${renderInlineMarkdown(line.replace(/^\s*\d+\.\s+/, ""))}</li>`).join("")}</ol>`;
+    }
+    if (/^#{1,3}\s+/.test(block)) {
+      const level = Math.min(3, block.match(/^#+/)?.[0]?.length ?? 3);
+      return `<h${level}>${renderInlineMarkdown(block.replace(/^#{1,3}\s+/, ""))}</h${level}>`;
+    }
+    return `<p>${lines.map(renderInlineMarkdown).join("<br>")}</p>`;
+  }).join("");
+}
+
 export function createSidePanelRenderers({
   attachmentStrip,
   transcript,
@@ -102,8 +133,9 @@ export function createSidePanelRenderers({
       time.textContent = new Date(message.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
       header.append(strong, time);
 
-      const paragraph = document.createElement("p");
-      paragraph.textContent = message.content;
+      const paragraph = document.createElement("div");
+      paragraph.className = "message-content";
+      paragraph.innerHTML = markdownToSafeHtml(message.content);
 
       const actions = document.createElement("div");
       actions.className = "message-actions";

@@ -152,7 +152,8 @@ test("browser page actions summarize existing snapshots without rereading", asyn
 
   assert.equal(result.ok, true);
   assert.equal(result.snapshot.title, "Cached");
-  assert.ok(harness.events.some((event) => event[0] === "message" && /Visible text: about 3 words/.test(event[2])));
+  assert.ok(harness.events.some((event) => event[0] === "message" && /I can read this page/.test(event[2])));
+  assert.ok(harness.events.some((event) => event[0] === "message" && /What is visible now: one two three/.test(event[2])));
   assert.equal(harness.events.some((event) => event[0] === "sendMessage"), false);
 });
 

@@ -368,13 +368,38 @@ body[data-workspace="hermes"] .answer-workspace {
   font-weight: 850;
 }
 
-.message p {
+.message-content {
   margin: 8px 0 0;
   color: rgba(247, 255, 249, 0.95);
-  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
-.message.system p {
+.message-content p,
+.message-content ul,
+.message-content ol,
+.message-content h1,
+.message-content h2,
+.message-content h3 {
+  margin: 10px 0 0;
+}
+
+.message-content ul,
+.message-content ol {
+  padding-left: 22px;
+}
+
+.message-content code {
+  border: 1px solid rgba(36, 209, 143, 0.22);
+  border-radius: 7px;
+  background: rgba(36, 209, 143, 0.09);
+  padding: 1px 6px;
+}
+
+.message-content a {
+  color: #70e7bd;
+}
+
+.message.system .message-content {
   color: rgba(207, 219, 210, 0.7);
 }
 

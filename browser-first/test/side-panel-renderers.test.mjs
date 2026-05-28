@@ -5,6 +5,7 @@ import { JSDOM } from "jsdom";
 import {
   ACTION_ICONS,
   createSidePanelRenderers,
+  markdownToSafeHtml,
   messageLabel
 } from "../resonantos-side-panel-extension/src/lib/side-panel-renderers.js";
 
@@ -76,6 +77,22 @@ test("side panel renderers render role-specific message actions", () => {
   articles[1].querySelector('[data-action="archive"]').click();
   assert.ok(harness.calls.some((call) => call[0] === "archive" && call[1] === "a1"));
   assert.ok(harness.calls.some((call) => call[0] === "scroll"));
+});
+
+test("side panel renderers format safe markdown without exposing raw markup", () => {
+  const html = markdownToSafeHtml("I'm **Augmentor**\n\n- one\n- `two`\n\n<script>alert(1)</script>");
+
+  assert.match(html, /<strong>Augmentor<\/strong>/);
+  assert.match(html, /<ul><li>one<\/li><li><code>two<\/code><\/li><\/ul>/);
+  assert.doesNotMatch(html, /<script>/);
+  assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+
+  const harness = createHarness({
+    messages: [{ id: "a1", role: "assistant", content: "I'm **Augmentor**", createdAt: "2026-05-26T10:01:00.000Z" }]
+  });
+  harness.renderers.renderMessages();
+
+  assert.equal(harness.transcript.querySelector(".message-content strong").textContent, "Augmentor");
 });
 
 test("side panel renderers flash copied icon and then restore it", async () => {

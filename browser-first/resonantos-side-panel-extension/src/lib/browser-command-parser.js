@@ -72,10 +72,12 @@ export function parseReadPageIntent(message) {
     return null;
   }
   return (
-    /\b(read|scan|summari[sz]e|inspect|look at|check|analyse|analyze|understand|see|view|access)\b/i.test(normalized) ||
-    /\b(can you|do you)\s+(see|view|access)\b/i.test(normalized)
+    /\b(read|scan|summari[sz]e|inspect|look at|check|analyse|analyze|understand|see|view|access|tell me about)\b/i.test(normalized) ||
+    /\b(can you|do you)\s+(see|view|access)\b/i.test(normalized) ||
+    /\b(what'?s|what is|what can you see)\b/i.test(normalized)
   ) &&
-    /\b(this|current|active|the|open|loaded)\s+(page|website|webpage|site|tab|browser|window)\b/i.test(normalized)
+    (/\b(this|current|active|the|open|loaded)\s+(page|website|webpage|site|tab|browser|window)\b/i.test(normalized) ||
+      /\b(here|on screen|in front of you)\b/i.test(normalized))
     ? { action: "read_page" }
     : null;
 }

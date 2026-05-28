@@ -10,6 +10,7 @@ import { renderArtifactsWorkspace } from "./lib/main-workspace-artifacts.js";
 import { renderLivingArchiveWorkspace } from "./lib/main-workspace-memory.js";
 import { renderOpenCodeWorkspace } from "./lib/main-workspace-opencode.js";
 import { renderSettingsWorkspace } from "./lib/main-workspace-settings.js";
+import { markdownToSafeHtml } from "./lib/side-panel-renderers.js";
 
 const STORAGE_KEYS = {
   messages: "augmentorBrowserMessages",
@@ -315,8 +316,9 @@ function renderMessages() {
     const time = document.createElement("time");
     time.textContent = new Date(message.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     header.append(label, time);
-    const body = document.createElement("p");
-    body.textContent = message.content;
+    const body = document.createElement("div");
+    body.className = "message-content";
+    body.innerHTML = markdownToSafeHtml(message.content);
     const actions = document.createElement("div");
     actions.className = "message-actions";
     actions.append(
@@ -726,4 +728,7 @@ await Promise.all([
   chatSessionStore.hydrate(),
   hydrateActiveWorkspace()
 ]);
+await chatSessionStore.ensureFreshSession({ workspaceId: "answer" });
+activeWorkspace = "answer";
+await persistActiveWorkspace();
 renderAll();

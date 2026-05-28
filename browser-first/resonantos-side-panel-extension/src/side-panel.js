@@ -82,7 +82,8 @@ const STORAGE_KEYS = {
   sitePermissions: "augmentorSitePermissions",
   taskConsents: "augmentorTaskConsents",
   browserJobs: "augmentorBrowserJobs",
-  jobMonitorCollapsed: "augmentorJobMonitorCollapsed"
+  jobMonitorCollapsed: "augmentorJobMonitorCollapsed",
+  contextDockExpanded: "augmentorContextDockExpanded"
 };
 let lastSnapshot = null;
 let statusLabel = "Ready";
@@ -145,6 +146,12 @@ const updateContextDockVisibility = () => {
   contextToggleButton.textContent = contextDockExpanded ? "Hide Status" : "Status";
   contextToggleButton.setAttribute("aria-expanded", contextDockExpanded ? "true" : "false");
   scrollTranscriptToBottom();
+};
+
+const persistContextDockExpanded = async () => {
+  await chrome.storage?.local?.set?.({
+    [STORAGE_KEYS.contextDockExpanded]: contextDockExpanded
+  }).catch(() => undefined);
 };
 
 const setActivity = (phase, label, detail = "") => {
@@ -739,6 +746,14 @@ const {
   updateBrowserJob
 });
 
+const showBrowserJobsCommand = async (body) => {
+  contextDockExpanded = true;
+  await persistContextDockExpanded();
+  await browserJobStore.setMonitorCollapsed(false);
+  renderJobMonitor();
+  return runJobsCommand(body);
+};
+
 controlStopButton.addEventListener("click", () => {
   void cancelBrowserJob(currentControlRun?.id ?? browserJobStore.getActiveJobId() ?? "");
 });
@@ -761,7 +776,7 @@ const commandRouter = createSidePanelCommandRouter({
   runDelegateCommand,
   runGoalCommand,
   runHistorySearchCommand,
-  runJobsCommand,
+  runJobsCommand: showBrowserJobsCommand,
   runMemorySearchCommand,
   runSitePermissionCommand,
   runStatusCommand,
@@ -791,6 +806,9 @@ chrome.runtime?.onMessage?.addListener?.((message, _sender, sendResponse) => {
 
 const hydrateChatSettings = async () => {
   await chatSessionStore.hydrate();
+  const settings = await chrome.storage?.local?.get?.([STORAGE_KEYS.contextDockExpanded]).catch(() => ({}));
+  contextDockExpanded = Boolean(settings?.[STORAGE_KEYS.contextDockExpanded]);
+  await chatSessionStore.ensureFreshSession();
   renderMessages();
   renderAttachments();
   renderChatHistory();
@@ -848,6 +866,7 @@ saveIntakeButton.addEventListener("click", () => void saveIntake("page"));
 saveSelectionButton.addEventListener("click", () => void saveIntake("selection"));
 contextToggleButton.addEventListener("click", () => {
   contextDockExpanded = !contextDockExpanded;
+  void persistContextDockExpanded();
   void renderSitePermissionPanel();
   renderJobMonitor();
 });

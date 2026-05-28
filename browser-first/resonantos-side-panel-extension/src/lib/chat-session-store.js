@@ -207,6 +207,16 @@ export function createChatSessionStore({
     return session;
   }
 
+  async function ensureFreshSession({ workspaceId = "answer" } = {}) {
+    ensureSession();
+    const active = getActiveSession();
+    const activeIsBlank = active && active.messages.length === 0 && active.title === "New chat";
+    if (activeIsBlank) {
+      return active;
+    }
+    return createSession({ workspaceId });
+  }
+
   async function switchSession(id) {
     writeActiveSession();
     const session = sessions.find((item) => item.id === id);
@@ -340,6 +350,7 @@ export function createChatSessionStore({
     createSession,
     deleteMessage,
     deleteSession,
+    ensureFreshSession,
     findMessage,
     forkFromMessage,
     getActiveSession,

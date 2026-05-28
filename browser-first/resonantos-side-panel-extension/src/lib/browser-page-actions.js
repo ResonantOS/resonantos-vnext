@@ -312,17 +312,23 @@ export function createBrowserPageActions(deps) {
     const response = deps.getLastSnapshot() ? { ok: true, snapshot: deps.getLastSnapshot() } : await readActivePage({ announce: false });
     const snapshot = response?.snapshot;
     if (!snapshot) {
-      await addMessage("system", "No page context is attached yet. Use the plus button first.");
+      await addMessage("system", "I cannot read this page yet. Open a normal web page, then ask me again.");
       return;
     }
 
     const text = snapshot.text || "";
     setActivity("reading", "Summarising page context", snapshot.title || snapshot.url);
     const words = text.split(/\s+/).filter(Boolean);
-    const excerpt = words.slice(0, 46).join(" ");
+    const excerpt = words.slice(0, 80).join(" ");
     await addMessage(
       "system",
-      `Page context captured.\n\nTitle: ${snapshot.title || "Untitled"}\nURL: ${snapshot.url}\nVisible text: about ${words.length} words.\nLinks found: ${snapshot.links?.length ?? 0}.\n\nOpening signal: ${excerpt}${words.length > 46 ? "..." : ""}`
+      [
+        `I can read this page: **${snapshot.title || "Untitled"}**`,
+        "",
+        excerpt ? `What is visible now: ${excerpt}${words.length > 80 ? "..." : ""}` : "There is very little readable text visible on the page.",
+        "",
+        "If you want me to act on it, use a direct instruction like: `/control click \"Add to cart\"` or `/control find the next available booking slot`."
+      ].join("\n")
     );
     return { ok: true, snapshot };
   }
