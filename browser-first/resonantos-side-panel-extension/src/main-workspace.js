@@ -6,6 +6,7 @@ import {
 } from "./lib/browser-command-parser.js";
 import { createBridgeClient } from "./lib/bridge-client.js";
 import { createChatSessionStore } from "./lib/chat-session-store.js";
+import { renderArtifactsWorkspace } from "./lib/main-workspace-artifacts.js";
 import { renderLivingArchiveWorkspace } from "./lib/main-workspace-memory.js";
 import { renderOpenCodeWorkspace } from "./lib/main-workspace-opencode.js";
 import { renderSettingsWorkspace } from "./lib/main-workspace-settings.js";
@@ -48,7 +49,7 @@ const bridgeRequest = createBridgeClient();
 let busy = false;
 let activeWorkspace = "answer";
 let pendingWorkspaceAction = null;
-const allowedWorkspaces = new Set(["answer", "memory", "hermes", "opencode", "settings"]);
+const allowedWorkspaces = new Set(["answer", "artifacts", "memory", "hermes", "opencode", "settings"]);
 
 const supportsThinkingDepth = (model) => model.startsWith("gpt-5.");
 const assistantTextFromResponse = (response) => String(response?.content ?? response?.reply ?? "").trim();
@@ -70,6 +71,7 @@ const providerMessagesFromHistory = (messages, limit = 18) => messages
   .map((message) => ({ role: message.role, content: message.content }));
 const workspaceLabel = (workspaceId) => ({
   answer: "Answer",
+  artifacts: "Artifacts",
   memory: "Memory",
   hermes: "Hermes",
   opencode: "OpenCode",
@@ -228,6 +230,11 @@ function emptyHero() {
         <strong>Search AI Memory</strong>
         <small>Query the LLM Wiki and save notes to governed intake.</small>
       </button>
+      <button type="button" data-workspace-command="artifacts" data-prompt="">
+        <span>Artifacts</span>
+        <strong>Review browser reports</strong>
+        <small>Open saved Agent Control reports and intake evidence.</small>
+      </button>
       <button type="button" data-workspace-command="hermes" data-prompt="/hermes">
         <span>Hermes</span>
         <strong>Open coordination workspace</strong>
@@ -247,8 +254,8 @@ function emptyHero() {
   `;
   hero.querySelectorAll("[data-workspace-command]").forEach((button) => {
     button.addEventListener("click", async () => {
-      if (button.dataset.workspaceCommand === "settings") {
-        setActiveWorkspace("settings", { persist: true });
+      if (["settings", "artifacts"].includes(button.dataset.workspaceCommand)) {
+        setActiveWorkspace(button.dataset.workspaceCommand, { persist: true });
         renderAll();
         return;
       }
@@ -273,6 +280,10 @@ function renderMessages() {
     const initialQuery = pendingWorkspaceAction?.workspace === "memory" ? pendingWorkspaceAction.query : "";
     pendingWorkspaceAction = null;
     renderLivingArchiveWorkspace({ container: transcript, bridgeRequest, initialQuery });
+    return;
+  }
+  if (activeWorkspace === "artifacts") {
+    renderArtifactsWorkspace({ container: transcript, bridgeRequest });
     return;
   }
   if (activeWorkspace === "opencode") {

@@ -127,6 +127,42 @@ async function captureScreenshotArtifact(client, filePath) {
     await writeFile(filePath, Buffer.from(shot.data, "base64"));
     return { ok: true, path: filePath };
   } catch (error) {
+    const domPng = await client.send("Runtime.evaluate", {
+      expression: `new Promise((resolve) => {
+        try {
+          const width = Math.max(320, Math.min(1600, window.innerWidth || 1280));
+          const height = Math.max(240, Math.min(1200, window.innerHeight || 900));
+          const clone = document.documentElement.cloneNode(true);
+          clone.querySelectorAll("script").forEach((node) => node.remove());
+          const html = new XMLSerializer().serializeToString(clone);
+          const svg = "<svg xmlns='http://www.w3.org/2000/svg' width='" + width + "' height='" + height + "'>" +
+            "<foreignObject width='100%' height='100%'>" + html + "</foreignObject></svg>";
+          const image = new Image();
+          image.onload = () => {
+            const canvas = document.createElement("canvas");
+            canvas.width = width;
+            canvas.height = height;
+            const context = canvas.getContext("2d");
+            context.fillStyle = getComputedStyle(document.body).backgroundColor || "#fff";
+            context.fillRect(0, 0, width, height);
+            context.drawImage(image, 0, 0);
+            resolve({ ok: true, data: canvas.toDataURL("image/png").split(",")[1] });
+          };
+          image.onerror = () => resolve({ ok: false, error: "DOM image render failed." });
+          image.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+        } catch (renderError) {
+          resolve({ ok: false, error: String(renderError && renderError.message ? renderError.message : renderError) });
+        }
+      })`,
+      awaitPromise: true,
+      returnByValue: true,
+    }).catch((fallbackError) => ({
+      result: { value: { ok: false, error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError) } },
+    }));
+    if (domPng?.result?.value?.ok && domPng.result.value.data) {
+      await writeFile(filePath, Buffer.from(domPng.result.value.data, "base64"));
+      return { ok: true, path: filePath, fallback: "dom-rendered-png" };
+    }
     const fallbackPath = filePath.replace(/\.png$/i, ".txt");
     const snapshot = await client.send("Runtime.evaluate", {
       expression: "document.body.innerText",

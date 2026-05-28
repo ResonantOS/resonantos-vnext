@@ -1015,6 +1015,93 @@ async function executeArchiveIntake(payload) {
   };
 }
 
+function safeMemoryRelativePath(relativePath, requiredPrefix = "INTAKE") {
+  const normalized = String(relativePath ?? "").replace(/\\/g, "/");
+  if (!normalized || normalized.includes("\0") || path.isAbsolute(normalized)) {
+    throw new Error("Archive path must be a relative memory path.");
+  }
+  const prefix = `${requiredPrefix}/`;
+  if (normalized !== requiredPrefix && !normalized.startsWith(prefix)) {
+    throw new Error(`Archive path must stay inside ${requiredPrefix}.`);
+  }
+  const root = path.resolve(memoryRoot());
+  const resolved = path.resolve(root, normalized);
+  if (resolved !== root && !resolved.startsWith(`${root}${path.sep}`)) {
+    throw new Error("Archive path escapes the memory root.");
+  }
+  return resolved;
+}
+
+function frontmatterValue(content, key) {
+  const match = new RegExp(`^${key}:\\s*(.+)$`, "m").exec(content);
+  if (!match) return "";
+  try {
+    return JSON.parse(match[1]);
+  } catch {
+    return match[1].replace(/^["']|["']$/g, "");
+  }
+}
+
+function markdownTitle(content, fallback) {
+  return frontmatterValue(content, "title") ||
+    /^#\s+(.+)$/m.exec(content)?.[1]?.trim() ||
+    fallback;
+}
+
+function artifactKind(content, filePath) {
+  if (content.includes("# Browser Job Report")) return "browser-job-report";
+  if (content.includes("# Browser Agent Control Report")) return "browser-control-report";
+  if (filePath.includes(`${path.sep}browser${path.sep}`)) return "browser-intake";
+  return "intake";
+}
+
+async function executeArchiveIntakeList(payload = {}) {
+  const limit = Math.max(1, Math.min(100, Number(payload.limit ?? 40)));
+  const intakeRoot = path.join(memoryRoot(), "INTAKE");
+  const files = await listFilesRecursive(intakeRoot, (filePath) => /\.(md|markdown)$/i.test(filePath), 2_000);
+  const entries = await Promise.all(files
+    .filter((filePath) => path.basename(filePath).toLowerCase() !== "log.md")
+    .map(async (filePath) => {
+      const [details, content] = await Promise.all([
+        stat(filePath),
+        readFile(filePath, "utf8").catch(() => ""),
+      ]);
+      const relativePath = path.relative(memoryRoot(), filePath);
+      return {
+        path: relativePath,
+        title: markdownTitle(content, path.basename(filePath, path.extname(filePath))),
+        kind: artifactKind(content, filePath),
+        bytes: details.size,
+        createdAt: frontmatterValue(content, "createdAt") || details.birthtime.toISOString(),
+        modifiedAt: details.mtime.toISOString(),
+        excerpt: content
+          .replace(/^---[\s\S]*?---\s*/m, "")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 260),
+      };
+    }));
+  entries.sort((left, right) => String(right.modifiedAt).localeCompare(String(left.modifiedAt)));
+  return { root: path.relative(userRoot(), intakeRoot), entries: entries.slice(0, limit) };
+}
+
+async function executeArchiveIntakeRead(payload) {
+  const filePath = safeMemoryRelativePath(payload.path, "INTAKE");
+  if (!/\.(md|markdown)$/i.test(filePath)) {
+    throw new Error("Archive artifact preview only supports markdown intake files.");
+  }
+  const [details, content] = await Promise.all([stat(filePath), readFile(filePath, "utf8")]);
+  return {
+    path: path.relative(memoryRoot(), filePath),
+    title: markdownTitle(content, path.basename(filePath, path.extname(filePath))),
+    kind: artifactKind(content, filePath),
+    bytes: details.size,
+    modifiedAt: details.mtime.toISOString(),
+    content: content.slice(0, 24_000),
+    truncated: content.length > 24_000,
+  };
+}
+
 async function executeGoalRecord(payload) {
   const mission = String(payload.mission ?? "").trim();
   if (mission.length < 8) {
@@ -1231,6 +1318,8 @@ const bridgeRoutes = [
   { method: "GET", path: "/memory/status", handler: executeMemoryStatus },
   { method: "POST", path: "/memory/search", handler: executeMemorySearch },
   { method: "POST", path: "/archive/intake", handler: executeArchiveIntake },
+  { method: "POST", path: "/archive/intake/list", handler: executeArchiveIntakeList },
+  { method: "POST", path: "/archive/intake/read", handler: executeArchiveIntakeRead },
   { method: "GET", path: "/addons/status", handler: executeAddonsStatus },
   { method: "GET", path: "/opencode/status", handler: executeOpenCodeStatus },
   { method: "POST", path: "/hermes/dashboard/status", handler: executeHermesDashboardStatus },

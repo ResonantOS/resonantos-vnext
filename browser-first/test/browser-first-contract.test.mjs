@@ -60,6 +60,7 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.equal(manifest.chrome_url_overrides.newtab, "src/main-workspace.html");
   assert.match(workspace, /ResonantOS main workspace/);
   assert.match(workspace, /chat-history/);
+  assert.match(workspace, /Artifacts/);
   assert.match(workspace, /Living Archive/);
   assert.match(workspace, /Hermes/);
   assert.match(workspace, /OpenCode/);
@@ -70,6 +71,7 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(workspace, /Open Sidebar/);
   assert.match(workspace, /main-workspace\.js/);
   assert.match(workspaceScript, /createChatSessionStore/);
+  assert.match(workspaceScript, /renderArtifactsWorkspace/);
   assert.match(workspaceScript, /renameChatSession/);
   assert.match(workspaceScript, /deleteChatSession/);
   assert.match(workspaceScript, /workspaceLabel/);
@@ -100,6 +102,7 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(workspaceScript, /pendingWorkspaceAction/);
   assert.match(workspaceScript, /AI browser workspace/);
   assert.match(workspaceScript, /data-workspace-command="browser"/);
+  assert.match(workspaceScript, /data-workspace-command="artifacts"/);
   assert.match(workspaceScript, /data-workspace-command="memory"/);
   assert.match(workspaceScript, /data-workspace-command="hermes"/);
   assert.match(workspaceScript, /data-workspace-command="opencode"/);
@@ -122,6 +125,8 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(workspaceStyles, /capability-grid/);
   assert.match(workspaceStyles, /hero-kicker/);
   assert.match(workspaceStyles, /answer-workspace/);
+  assert.match(workspaceStyles, /artifacts-workspace/);
+  assert.match(workspaceStyles, /artifact-preview/);
   assert.match(workspaceStyles, /module-workspace/);
   assert.match(workspaceStyles, /dashboard-frame-card/);
   assert.match(workspaceStyles, /settings-workspace/);
@@ -133,6 +138,8 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(launcher, /\/opencode\/status/);
   assert.match(launcher, /\/providers\/status/);
   assert.match(launcher, /\/providers\/credentials/);
+  assert.match(launcher, /\/archive\/intake\/list/);
+  assert.match(launcher, /\/archive\/intake\/read/);
   assert.match(launcher, /executeProviderCredentialSave/);
   assert.match(launcher, /executeOpenCodeStatus/);
   assert.match(launcher, /workspaceLaunch: "not-enabled-in-browser-first-v1"/);
