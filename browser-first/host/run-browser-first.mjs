@@ -1601,6 +1601,32 @@ async function executeArchiveReviewArtifactVerify(payload = {}) {
   };
 }
 
+async function executeArchiveVerificationRead(payload = {}) {
+  const verifierPath = String(payload.path ?? "").trim();
+  const filePath = safeMemoryRelativePath(verifierPath, "REVIEW/verifications");
+  if (!/\.(md|markdown)$/i.test(filePath)) {
+    throw new Error("Archive verification preview only supports markdown verifier artifacts.");
+  }
+  const [details, content] = await Promise.all([stat(filePath), readFile(filePath, "utf8")]);
+  if (frontmatterValue(content, "type") !== "archive-verification-result") {
+    throw new Error("Archive verification preview requires a verification result artifact.");
+  }
+  return {
+    path: path.relative(memoryRoot(), filePath),
+    title: markdownTitle(content, path.basename(filePath, path.extname(filePath))),
+    status: frontmatterValue(content, "status") || "",
+    semanticVerifierStatus: frontmatterValue(content, "semanticVerifierStatus") || "",
+    semanticVerifierProvider: frontmatterValue(content, "semanticVerifierProvider") || "",
+    semanticVerifierModel: frontmatterValue(content, "semanticVerifierModel") || "",
+    draftArtifactPath: frontmatterValue(content, "draftArtifactPath") || "",
+    proposedPage: frontmatterValue(content, "proposedPage") || "",
+    bytes: details.size,
+    modifiedAt: details.mtime.toISOString(),
+    content: content.slice(0, 24_000),
+    truncated: content.length > 24_000,
+  };
+}
+
 async function executeArchiveReviewArtifactPromote(payload = {}) {
   const artifactPath = String(payload.path ?? "").trim();
   const artifactFile = safeMemoryRelativePath(artifactPath, "REVIEW/artifacts");
@@ -2015,6 +2041,7 @@ const bridgeRoutes = [
   { method: "POST", path: "/archive/review/draft", handler: executeArchiveReviewDraft },
   { method: "POST", path: "/archive/review/artifact/read", handler: executeArchiveReviewArtifactRead },
   { method: "POST", path: "/archive/review/artifact/verify", handler: executeArchiveReviewArtifactVerify },
+  { method: "POST", path: "/archive/review/verification/read", handler: executeArchiveVerificationRead },
   { method: "POST", path: "/archive/review/artifact/promote", handler: executeArchiveReviewArtifactPromote },
   { method: "POST", path: "/archive/review/promotions/list", handler: executeArchivePromotionList },
   { method: "POST", path: "/archive/review/promotions/restore", handler: executeArchivePromotionRestore },

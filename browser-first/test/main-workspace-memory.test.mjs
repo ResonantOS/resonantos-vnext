@@ -102,6 +102,18 @@ test("living archive workspace renders status, search, and intake through bridge
         findings: []
       };
     }
+    if (route === "/archive/review/verification/read") {
+      return {
+        path: options.body.path,
+        title: "Archive Verification: Browser job completed",
+        status: "verified",
+        semanticVerifierStatus: "unavailable",
+        semanticVerifierProvider: "",
+        semanticVerifierModel: "",
+        content: "# Archive Verification: Browser job completed\n\n## Semantic Verifier\n- status: unavailable\n- summary: No configured provider was available.",
+        truncated: false
+      };
+    }
     if (route === "/archive/review/artifact/promote") {
       assert.equal(verified, true);
       promoted = true;
@@ -211,6 +223,20 @@ test("living archive workspace renders status, search, and intake through bridge
     assert.match(container.textContent, /Verification: verified/);
     assert.match(container.textContent, /Semantic: unavailable/);
     Array.from(container.querySelectorAll(".memory-review-preview button"))
+      .find((button) => button.textContent === "Preview Verification")
+      .click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.ok(calls.some(([route, options]) =>
+      route === "/archive/review/verification/read" &&
+      options.body.path === "REVIEW/verifications/browser/browser-job-completed-verification.md"
+    ));
+    assert.match(container.textContent, /Archive Verification: Browser job completed/);
+    assert.match(container.textContent, /No configured provider was available/);
+    Array.from(container.querySelectorAll(".memory-review-actions button"))
+      .find((button) => button.textContent === "Preview")
+      .click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    Array.from(container.querySelectorAll(".memory-review-preview button"))
       .find((button) => button.textContent === "Promote")
       .click();
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -276,6 +302,9 @@ test("living archive workspace can run an initial routed search", async () => {
         semanticVerifierStatus: "unavailable",
         findings: []
       };
+    }
+    if (route === "/archive/review/verification/read") {
+      return { status: "verified", semanticVerifierStatus: "unavailable", content: "verification" };
     }
     if (route === "/archive/review/promotions/restore") {
       return { status: "restored" };

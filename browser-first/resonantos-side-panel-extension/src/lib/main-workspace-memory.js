@@ -388,6 +388,13 @@ export function renderLivingArchiveWorkspace({ container, bridgeRequest, initial
       verifyButton.addEventListener("click", () => {
         void verifyDraftArtifact(result.path);
       });
+      const verifierPreviewButton = document.createElement("button");
+      verifierPreviewButton.type = "button";
+      verifierPreviewButton.textContent = "Preview Verification";
+      verifierPreviewButton.disabled = !result.verifierArtifactPath;
+      verifierPreviewButton.addEventListener("click", () => {
+        void previewVerificationArtifact(result.verifierArtifactPath);
+      });
       const promoteButton = document.createElement("button");
       promoteButton.type = "button";
       promoteButton.textContent = result.status === "promoted" ? "Promoted" : "Promote";
@@ -395,10 +402,40 @@ export function renderLivingArchiveWorkspace({ container, bridgeRequest, initial
       promoteButton.addEventListener("click", () => {
         void promoteDraftArtifact(result.path);
       });
-      actions.append(verifyButton, promoteButton);
+      actions.append(verifyButton, verifierPreviewButton, promoteButton);
       draftPreview.append(heading, meta, content, actions);
       draftPreview.hidden = false;
       setStatus(reviewStatus, result.truncated ? "Draft preview loaded and truncated for safety." : "Draft preview loaded.", "success");
+    } catch (error) {
+      setStatus(reviewStatus, error instanceof Error ? error.message : String(error), "error");
+    }
+  };
+
+  const previewVerificationArtifact = async (path) => {
+    if (!path) {
+      setStatus(reviewStatus, "Draft artifact has no verifier artifact yet.", "warning");
+      return;
+    }
+    setStatus(reviewStatus, "Loading verifier artifact preview…");
+    try {
+      const result = await bridgeRequest("/archive/review/verification/read", {
+        method: "POST",
+        body: { path }
+      });
+      const heading = document.createElement("div");
+      heading.className = "memory-preview-heading";
+      const title = document.createElement("strong");
+      title.textContent = result.title || "Archive verification";
+      const pathNode = document.createElement("code");
+      pathNode.textContent = result.path || path;
+      heading.append(title, pathNode);
+      const meta = document.createElement("p");
+      meta.textContent = `Status: ${result.status || "unknown"} · Semantic: ${result.semanticVerifierStatus || "unknown"} · Provider: ${result.semanticVerifierProvider || "none"}`;
+      const content = document.createElement("pre");
+      content.textContent = result.content || "";
+      draftPreview.replaceChildren(heading, meta, content);
+      draftPreview.hidden = false;
+      setStatus(reviewStatus, result.truncated ? "Verifier preview loaded and truncated for safety." : "Verifier preview loaded.", "success");
     } catch (error) {
       setStatus(reviewStatus, error instanceof Error ? error.message : String(error), "error");
     }

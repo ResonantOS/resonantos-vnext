@@ -155,6 +155,7 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(launcher, /\/archive\/review\/draft/);
   assert.match(launcher, /\/archive\/review\/artifact\/read/);
   assert.match(launcher, /\/archive\/review\/artifact\/verify/);
+  assert.match(launcher, /\/archive\/review\/verification\/read/);
   assert.match(launcher, /providerRouteForArchiveVerifier/);
   assert.match(launcher, /runArchiveSemanticVerifier/);
   assert.match(launcher, /semanticVerifierStatus/);
