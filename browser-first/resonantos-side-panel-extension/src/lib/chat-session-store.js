@@ -32,9 +32,12 @@ export function createChatSessionStore({
 
   const normalizeSession = (session) => {
     const normalizedMessages = Array.isArray(session?.messages) ? session.messages.filter(validMessage) : [];
+    const titleEdited = Boolean(session?.titleEdited);
     return {
       id: String(session?.id || `session-${createId()}`),
       title: String(session?.title || sessionTitleFromMessages(normalizedMessages)).trim() || "New chat",
+      titleEdited,
+      workspaceId: typeof session?.workspaceId === "string" ? session.workspaceId : "answer",
       createdAt: session?.createdAt || now(),
       updatedAt: session?.updatedAt || session?.createdAt || now(),
       messages: normalizedMessages
@@ -76,7 +79,7 @@ export function createChatSessionStore({
     sessions = sessions.map((session) => session.id === activeSessionId
       ? {
           ...session,
-          title: sessionTitleFromMessages(messages),
+          title: session.titleEdited ? session.title : sessionTitleFromMessages(messages),
           updatedAt: now(),
           messages: messages.map((message) => ({ ...message }))
         }
@@ -187,10 +190,11 @@ export function createChatSessionStore({
     return message;
   }
 
-  async function createSession() {
+  async function createSession({ workspaceId = "answer" } = {}) {
     writeActiveSession();
     const session = normalizeSession({
       title: "New chat",
+      workspaceId,
       messages: [],
       createdAt: now(),
       updatedAt: now()
@@ -212,6 +216,58 @@ export function createChatSessionStore({
     attachments = [];
     await persist();
     return session;
+  }
+
+  async function renameSession(id, title) {
+    const nextTitle = String(title ?? "").replace(/\s+/g, " ").trim();
+    if (!nextTitle) return null;
+    let renamed = null;
+    sessions = sessions.map((session) => {
+      if (session.id !== id) return session;
+      renamed = {
+        ...session,
+        title: nextTitle.length > 60 ? `${nextTitle.slice(0, 57)}...` : nextTitle,
+        titleEdited: true,
+        updatedAt: now()
+      };
+      return renamed;
+    });
+    if (!renamed) return null;
+    await persist();
+    return renamed;
+  }
+
+  async function deleteSession(id) {
+    if (!sessions.some((session) => session.id === id)) {
+      return false;
+    }
+    sessions = sessions.filter((session) => session.id !== id);
+    if (!sessions.length) {
+      const session = normalizeSession({
+        title: "New chat",
+        messages: [],
+        createdAt: now(),
+        updatedAt: now()
+      });
+      sessions = [session];
+      activeSessionId = session.id;
+      messages = [];
+    } else if (activeSessionId === id) {
+      activeSessionId = sessions[0].id;
+      messages = sessions[0].messages.map((message) => ({ ...message }));
+    }
+    attachments = [];
+    await persist();
+    return true;
+  }
+
+  async function setActiveSessionWorkspace(workspaceId) {
+    const normalized = String(workspaceId || "answer");
+    sessions = sessions.map((session) => session.id === activeSessionId
+      ? { ...session, workspaceId: normalized, updatedAt: now() }
+      : session);
+    await persist();
+    return getActiveSession();
   }
 
   async function forkFromMessage(id) {
@@ -283,6 +339,7 @@ export function createChatSessionStore({
     clearAttachments,
     createSession,
     deleteMessage,
+    deleteSession,
     findMessage,
     forkFromMessage,
     getActiveSession,
@@ -293,7 +350,9 @@ export function createChatSessionStore({
     getSessions,
     hydrate,
     persist,
+    renameSession,
     removeAttachment,
+    setActiveSessionWorkspace,
     snapshot,
     switchSession,
     trimToPreviousUserMessage

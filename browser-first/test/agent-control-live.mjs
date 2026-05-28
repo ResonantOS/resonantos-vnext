@@ -28,6 +28,7 @@ async function freeLoopbackPort() {
 const fixturePort = await freeLoopbackPort();
 const debugPort = await freeLoopbackPort();
 const bridgePort = await freeLoopbackPort();
+const cdpTimeoutMs = Number.parseInt(process.env.RESONANTOS_LIVE_CDP_TIMEOUT_MS ?? "10000", 10);
 
 class CdpClient {
   constructor(url) {
@@ -70,14 +71,38 @@ class CdpClient {
     const timeout = new Promise((_, reject) => {
       timeoutId = setTimeout(() => {
         this.pending.delete(id);
-        reject(new Error(`CDP ${method} timed out after 10000ms.`));
-      }, 10000);
+        reject(new Error(`CDP ${method} timed out after ${cdpTimeoutMs}ms.`));
+      }, cdpTimeoutMs);
     });
     return Promise.race([response, timeout]);
   }
 
   close() {
     this.ws?.close();
+  }
+}
+
+async function captureScreenshotArtifact(client, filePath) {
+  try {
+    const shot = await client.send("Page.captureScreenshot", { format: "png" });
+    await writeFile(filePath, Buffer.from(shot.data, "base64"));
+    return { ok: true, path: filePath };
+  } catch (error) {
+    const fallbackPath = filePath.replace(/\.png$/i, ".txt");
+    const snapshot = await client.send("Runtime.evaluate", {
+      expression: "document.body.innerText",
+      returnByValue: true,
+    }).catch((fallbackError) => ({
+      result: {
+        value: `Screenshot failed: ${error instanceof Error ? error.message : String(error)}\nText snapshot failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`,
+      },
+    }));
+    await writeFile(fallbackPath, String(snapshot?.result?.value ?? ""));
+    return {
+      ok: false,
+      path: fallbackPath,
+      error: error instanceof Error ? error.message : String(error),
+    };
   }
 }
 
@@ -614,10 +639,10 @@ try {
   const approvalState = (await evaluate(page, `({ submitted: window.__submitted, status: document.querySelector("#status").textContent })`)).result.value;
   assert(approvalState.status !== "wallet-clicked", `Wallet action executed unexpectedly: ${JSON.stringify(approvalState)}`);
 
-  const panelShot = await panel.send("Page.captureScreenshot", { format: "png" });
-  const pageShot = await page.send("Page.captureScreenshot", { format: "png" });
-  await writeFile("/tmp/resonantos-agent-control-live-panel.png", Buffer.from(panelShot.data, "base64"));
-  await writeFile("/tmp/resonantos-agent-control-live-page.png", Buffer.from(pageShot.data, "base64"));
+  const screenshots = [
+    await captureScreenshotArtifact(panel, "/tmp/resonantos-agent-control-live-panel.png"),
+    await captureScreenshotArtifact(page, "/tmp/resonantos-agent-control-live-page.png"),
+  ];
 
   console.log(JSON.stringify({
     ok: true,
@@ -628,10 +653,7 @@ try {
     documentState,
     blockedState,
     approvalState,
-    screenshots: [
-      "/tmp/resonantos-agent-control-live-panel.png",
-      "/tmp/resonantos-agent-control-live-page.png",
-    ],
+    screenshots,
   }, null, 2));
 
   panel.close();

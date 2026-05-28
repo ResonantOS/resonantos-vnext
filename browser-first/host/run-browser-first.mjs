@@ -1,5 +1,5 @@
 import { existsSync, readdirSync } from "node:fs";
-import { appendFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { appendFile, chmod, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -172,6 +172,33 @@ function hermesCommand(profileHome) {
   return candidates.find((candidate) => existsSync(candidate)) ?? null;
 }
 
+function executableCandidates(commandName) {
+  const names = process.platform === "win32"
+    ? [`${commandName}.cmd`, `${commandName}.exe`, commandName]
+    : [commandName];
+  return String(process.env.PATH ?? "")
+    .split(path.delimiter)
+    .flatMap((entry) => names.map((name) => path.join(entry, name)));
+}
+
+function opencodeCommand() {
+  if (process.env.OPENCODE_COMMAND && existsSync(process.env.OPENCODE_COMMAND)) {
+    return process.env.OPENCODE_COMMAND;
+  }
+  const home = os.homedir();
+  const candidates = [
+    ...executableCandidates("opencode"),
+    ...executableCandidates("opencode-ai"),
+    path.join(home, ".local", "bin", "opencode"),
+    path.join(home, ".npm-global", "bin", "opencode"),
+    path.join(home, "node_modules", ".bin", process.platform === "win32" ? "opencode.cmd" : "opencode"),
+    ...(process.platform === "darwin"
+      ? ["/Applications/OpenCode.app/Contents/MacOS/opencode-cli"]
+      : []),
+  ];
+  return candidates.find((candidate) => existsSync(candidate)) ?? null;
+}
+
 function dashboardTarget(host = "127.0.0.1", port = 9119) {
   const normalizedHost = String(host || "127.0.0.1").trim().toLowerCase();
   if (!["127.0.0.1", "localhost"].includes(normalizedHost)) {
@@ -254,6 +281,64 @@ async function readProviderSecrets() {
     return {};
   }
   return JSON.parse(await readFile(filePath, "utf8"));
+}
+
+const providerProfiles = [
+  {
+    id: "shared-minimax",
+    label: "MiniMax",
+    authType: "api-key",
+    models: ["MiniMax-M2.7", "MiniMax-M2.7-highspeed"],
+    role: "Default Augmentor and agent-control provider",
+  },
+  {
+    id: "shared-openai",
+    label: "OpenAI",
+    authType: "api-key",
+    models: ["gpt-5.5", "gpt-5.4-mini"],
+    role: "High-reasoning fallback and archive-quality provider",
+  },
+];
+
+function providerProfileById(providerId) {
+  return providerProfiles.find((profile) => profile.id === providerId) ?? null;
+}
+
+async function executeProviderStatus() {
+  const secrets = await readProviderSecrets();
+  return {
+    vault: {
+      configured: existsSync(providerSecretsPath()),
+      location: "ResonantOS local provider vault",
+    },
+    providers: providerProfiles.map((profile) => ({
+      ...profile,
+      configured: Boolean(secrets[profile.id]),
+      credentialPreview: secrets[profile.id] ? "stored" : "missing",
+    })),
+  };
+}
+
+async function executeProviderCredentialSave(payload) {
+  const providerId = String(payload.providerId ?? "").trim();
+  const credential = String(payload.credential ?? "").trim();
+  const profile = providerProfileById(providerId);
+  if (!profile) {
+    throw new Error("Unknown provider profile.");
+  }
+  if (credential.length < 8) {
+    throw new Error("Credential is too short to save.");
+  }
+  const current = await readProviderSecrets();
+  const filePath = providerSecretsPath();
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, `${JSON.stringify({ ...current, [providerId]: credential }, null, 2)}\n`, { mode: 0o600 });
+  await chmod(filePath, 0o600).catch(() => undefined);
+  return {
+    providerId,
+    configured: true,
+    savedAt: new Date().toISOString(),
+  };
 }
 
 function sanitizeAssistantContent(providerType, content) {
@@ -1010,6 +1095,23 @@ async function executeAddonsStatus() {
   };
 }
 
+async function executeOpenCodeStatus() {
+  const command = opencodeCommand();
+  const delegationRoot = path.join(browserFirstRoot(), "Delegations", "opencode");
+  return {
+    installed: Boolean(command),
+    command,
+    mode: "delegation-addon",
+    workspaceLaunch: "not-enabled-in-browser-first-v1",
+    detail: command
+      ? "OpenCode runtime was detected. Browser-first V1 can create governed delegation packets; embedded process launch remains host-boundary work."
+      : "OpenCode runtime was not detected. Install or configure OpenCode before enabling embedded coding sessions.",
+    delegationPackets: await countFiles(delegationRoot, (filePath) => filePath.endsWith(".md")),
+    requiredGrants: ["filesystem", "shell", "providers", "ui-embedding"],
+    boundary: "OpenCode is an add-on agent. Provider secrets, wallet actions, and trusted memory writes remain mediated by ResonantOS.",
+  };
+}
+
 async function executeHermesDashboardStatus(payload = {}) {
   const target = dashboardTarget(payload.host, payload.port);
   const command = hermesCommand(payload.profileHome);
@@ -1120,6 +1222,8 @@ async function executeSystemStatus() {
 
 const bridgeRoutes = [
   { method: "GET", path: "/status", handler: executeSystemStatus },
+  { method: "GET", path: "/providers/status", handler: executeProviderStatus },
+  { method: "POST", path: "/providers/credentials", handler: executeProviderCredentialSave },
   { method: "POST", path: "/augmentor/chat", handler: executeBridgeChat },
   { method: "POST", path: "/augmentor/inline", handler: executeInlineAssistant },
   { method: "POST", path: "/augmentor/control-plan", handler: executeControlPlan },
@@ -1128,6 +1232,7 @@ const bridgeRoutes = [
   { method: "POST", path: "/memory/search", handler: executeMemorySearch },
   { method: "POST", path: "/archive/intake", handler: executeArchiveIntake },
   { method: "GET", path: "/addons/status", handler: executeAddonsStatus },
+  { method: "GET", path: "/opencode/status", handler: executeOpenCodeStatus },
   { method: "POST", path: "/hermes/dashboard/status", handler: executeHermesDashboardStatus },
   { method: "POST", path: "/hermes/dashboard/start", handler: executeHermesDashboardStart },
   { method: "POST", path: "/hermes/dashboard/stop", handler: executeHermesDashboardStop },

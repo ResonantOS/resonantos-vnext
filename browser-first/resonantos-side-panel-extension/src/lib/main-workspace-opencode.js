@@ -1,0 +1,123 @@
+// Intent citation: docs/architecture/addon-skills/opencode/CODING_HANDOFF.md
+// Intent citation: docs/architecture/ADR-015-delegation-fabric-addon-catalog-native-tools.md
+
+function setStatus(node, text, tone = "neutral") {
+  node.textContent = text;
+  node.dataset.tone = tone;
+}
+
+function boundaryItem(text) {
+  const item = document.createElement("li");
+  item.textContent = text;
+  return item;
+}
+
+export function renderOpenCodeWorkspace({ container, bridgeRequest, initialMission = "" }) {
+  const section = document.createElement("section");
+  section.className = "opencode-main-workspace";
+  section.setAttribute("aria-label", "OpenCode workspace");
+
+  const header = document.createElement("header");
+  header.className = "opencode-hero";
+  const eyebrow = document.createElement("span");
+  eyebrow.className = "module-eyebrow";
+  eyebrow.textContent = "OpenCode";
+  const title = document.createElement("h1");
+  title.textContent = "Scoped coding work, delegated as an add-on task.";
+  const body = document.createElement("p");
+  body.textContent = "Create a governed coding handoff for OpenCode. Browser-first V1 records the task packet and keeps execution boundaries explicit until the embedded service bridge is enabled.";
+  header.append(eyebrow, title, body);
+
+  const statusCard = document.createElement("section");
+  statusCard.className = "opencode-card opencode-status-card";
+  const statusTitle = document.createElement("strong");
+  statusTitle.textContent = "Runtime status";
+  const statusBody = document.createElement("p");
+  statusBody.textContent = "Checking OpenCode…";
+  const statusMeta = document.createElement("code");
+  statusMeta.textContent = "";
+  const refreshButton = document.createElement("button");
+  refreshButton.type = "button";
+  refreshButton.textContent = "Refresh";
+  statusCard.append(statusTitle, statusBody, statusMeta, refreshButton);
+
+  const boundaryCard = document.createElement("section");
+  boundaryCard.className = "opencode-card";
+  const boundaryTitle = document.createElement("strong");
+  boundaryTitle.textContent = "Governance boundary";
+  const boundaries = document.createElement("ul");
+  boundaries.append(
+    boundaryItem("OpenCode is an add-on agent, not a trusted core Strategist."),
+    boundaryItem("Filesystem and shell access must stay scoped to an approved workspace."),
+    boundaryItem("Changed files, commands run, tests, and residual risks must come back as artifacts."),
+    boundaryItem("Provider secrets, wallet actions, and trusted Living Archive writes stay host-mediated.")
+  );
+  boundaryCard.append(boundaryTitle, boundaries);
+
+  const taskForm = document.createElement("form");
+  taskForm.className = "opencode-card opencode-task-form";
+  const taskLabel = document.createElement("label");
+  taskLabel.textContent = "Create OpenCode Delegation";
+  const missionInput = document.createElement("textarea");
+  missionInput.rows = 6;
+  missionInput.placeholder = "Describe a bounded coding task. Include files/folders in scope, expected verification, and what OpenCode must return.";
+  const taskButton = document.createElement("button");
+  taskButton.type = "submit";
+  taskButton.textContent = "Create Delegation Packet";
+  const taskStatus = document.createElement("p");
+  taskStatus.className = "opencode-workspace-status";
+  taskForm.append(taskLabel, missionInput, taskButton, taskStatus);
+
+  section.append(header, statusCard, boundaryCard, taskForm);
+  container.append(section);
+
+  const loadStatus = async () => {
+    refreshButton.disabled = true;
+    try {
+      const status = await bridgeRequest("/opencode/status", { method: "GET" });
+      statusBody.textContent = status.detail;
+      statusMeta.textContent = status.command || "OpenCode command not detected";
+      statusCard.dataset.ready = status.installed ? "true" : "false";
+    } catch (error) {
+      statusBody.textContent = error instanceof Error ? error.message : String(error);
+      statusMeta.textContent = "Status unavailable";
+      statusCard.dataset.ready = "false";
+    } finally {
+      refreshButton.disabled = false;
+    }
+  };
+
+  refreshButton.addEventListener("click", () => void loadStatus());
+
+  taskForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const mission = missionInput.value.trim();
+    if (mission.length < 8) {
+      setStatus(taskStatus, "Describe a concrete OpenCode mission before creating a delegation.", "warning");
+      return;
+    }
+    taskButton.disabled = true;
+    setStatus(taskStatus, "Creating governed OpenCode delegation packet…");
+    try {
+      const result = await bridgeRequest("/addons/delegate", {
+        method: "POST",
+        body: { target: "opencode", mission }
+      });
+      setStatus(taskStatus, `Delegation queued: ${result.id} · ${result.path}`, "success");
+      missionInput.value = "";
+      await loadStatus();
+    } catch (error) {
+      setStatus(taskStatus, error instanceof Error ? error.message : String(error), "error");
+    } finally {
+      taskButton.disabled = false;
+    }
+  });
+
+  void loadStatus();
+  if (initialMission.trim()) {
+    missionInput.value = initialMission.trim();
+    queueMicrotask(() => {
+      taskForm.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+  }
+}

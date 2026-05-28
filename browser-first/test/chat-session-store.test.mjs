@@ -90,6 +90,28 @@ test("chat session store creates and switches durable chat workspaces", async ()
   assert.equal(harness.store.getActiveSessionId(), firstSessionId);
 });
 
+test("chat session store renames, deletes, and tracks session workspace metadata", async () => {
+  const harness = createHarness();
+
+  await harness.store.hydrate();
+  const first = harness.store.getActiveSession();
+  await harness.store.setActiveSessionWorkspace("memory");
+  await harness.store.renameSession(first.id, "Research memory work");
+  await harness.store.addMessage("user", "this should not overwrite the edited title");
+
+  assert.equal(harness.store.getActiveSession().title, "Research memory work");
+  assert.equal(harness.store.getActiveSession().titleEdited, true);
+  assert.equal(harness.store.getActiveSession().workspaceId, "memory");
+
+  const second = await harness.store.createSession({ workspaceId: "opencode" });
+  assert.equal(second.workspaceId, "opencode");
+  assert.equal(harness.store.getActiveSessionId(), second.id);
+
+  await harness.store.deleteSession(second.id);
+  assert.equal(harness.store.getActiveSessionId(), first.id);
+  assert.equal(harness.store.getActiveSession().workspaceId, "memory");
+});
+
 test("chat session store adds, deletes, forks, and trims messages", async () => {
   const harness = createHarness();
 

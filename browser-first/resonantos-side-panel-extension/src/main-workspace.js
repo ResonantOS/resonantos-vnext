@@ -6,6 +6,9 @@ import {
 } from "./lib/browser-command-parser.js";
 import { createBridgeClient } from "./lib/bridge-client.js";
 import { createChatSessionStore } from "./lib/chat-session-store.js";
+import { renderLivingArchiveWorkspace } from "./lib/main-workspace-memory.js";
+import { renderOpenCodeWorkspace } from "./lib/main-workspace-opencode.js";
+import { renderSettingsWorkspace } from "./lib/main-workspace-settings.js";
 
 const STORAGE_KEYS = {
   messages: "augmentorBrowserMessages",
@@ -15,7 +18,8 @@ const STORAGE_KEYS = {
   model: "augmentorModel",
   thinkingDepth: "augmentorThinkingDepth",
   attachments: "augmentorBrowserAttachments",
-  pendingSidebarPrompt: "augmentorPendingSidebarPrompt"
+  pendingSidebarPrompt: "augmentorPendingSidebarPrompt",
+  activeWorkspace: "augmentorMainWorkspace"
 };
 
 const MODEL_LABELS = {
@@ -43,6 +47,8 @@ const connectionLine = document.querySelector("#connection-line");
 const bridgeRequest = createBridgeClient();
 let busy = false;
 let activeWorkspace = "answer";
+let pendingWorkspaceAction = null;
+const allowedWorkspaces = new Set(["answer", "memory", "hermes", "opencode", "settings"]);
 
 const supportsThinkingDepth = (model) => model.startsWith("gpt-5.");
 const assistantTextFromResponse = (response) => String(response?.content ?? response?.reply ?? "").trim();
@@ -50,10 +56,25 @@ const parseHermesSlashCommand = (value) => {
   const match = /^\/\s*hermes(?:\s+([\s\S]*))?$/i.exec(String(value ?? "").trim());
   return match ? (match[1] ?? "").trim() : null;
 };
+const parseMemorySlashCommand = (value) => {
+  const match = /^\/\s*(?:memory|archive)(?:\s+([\s\S]*))?$/i.exec(String(value ?? "").trim());
+  return match ? (match[1] ?? "").trim() : null;
+};
+const parseOpenCodeSlashCommand = (value) => {
+  const match = /^\/\s*(?:opencode|open\s+code)(?:\s+([\s\S]*))?$/i.exec(String(value ?? "").trim());
+  return match ? (match[1] ?? "").trim() : null;
+};
 const providerMessagesFromHistory = (messages, limit = 18) => messages
   .filter((message) => ["user", "assistant"].includes(message.role))
   .slice(-limit)
   .map((message) => ({ role: message.role, content: message.content }));
+const workspaceLabel = (workspaceId) => ({
+  answer: "Answer",
+  memory: "Memory",
+  hermes: "Hermes",
+  opencode: "OpenCode",
+  settings: "Settings"
+}[workspaceId] ?? "Answer");
 
 const chatSessionStore = createChatSessionStore({
   storage: chrome.storage?.local,
@@ -80,8 +101,10 @@ function renderChatHistory() {
   chatHistory.replaceChildren();
   chatSessionStore.getSessions().forEach((session) => {
     const item = document.createElement("li");
+    item.className = "history-item";
     const button = document.createElement("button");
     button.type = "button";
+    button.className = "history-open";
     button.textContent = session.title || "New chat";
     button.title = session.title || "New chat";
     if (session.id === chatSessionStore.getActiveSessionId()) {
@@ -89,15 +112,57 @@ function renderChatHistory() {
     }
     button.addEventListener("click", async () => {
       await chatSessionStore.switchSession(session.id);
+      activeWorkspace = allowedWorkspaces.has(session.workspaceId) ? session.workspaceId : "answer";
+      await persistActiveWorkspace();
       renderAll();
     });
-    item.append(button);
+    const meta = document.createElement("span");
+    meta.className = "history-meta";
+    meta.textContent = workspaceLabel(session.workspaceId);
+    const actions = document.createElement("div");
+    actions.className = "history-actions";
+    actions.append(
+      historyActionButton("Rename chat", "✎", () => void renameChatSession(session)),
+      historyActionButton("Delete chat", "×", () => void deleteChatSession(session))
+    );
+    item.append(button, meta, actions);
     chatHistory.append(item);
   });
 }
 
-function setActiveWorkspace(workspaceId) {
-  activeWorkspace = workspaceId;
+function historyActionButton(label, glyph, onClick) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "history-action";
+  button.title = label;
+  button.setAttribute("aria-label", label);
+  button.textContent = glyph;
+  button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    onClick();
+  });
+  return button;
+}
+
+async function renameChatSession(session) {
+  const nextTitle = globalThis.prompt?.("Rename chat", session.title || "New chat");
+  if (nextTitle === null || nextTitle === undefined) return;
+  await chatSessionStore.renameSession(session.id, nextTitle);
+  renderAll();
+}
+
+async function deleteChatSession(session) {
+  const ok = globalThis.confirm?.(`Delete "${session.title || "New chat"}"?`) ?? false;
+  if (!ok) return;
+  await chatSessionStore.deleteSession(session.id);
+  const activeSession = chatSessionStore.getActiveSession();
+  activeWorkspace = allowedWorkspaces.has(activeSession?.workspaceId) ? activeSession.workspaceId : "answer";
+  await persistActiveWorkspace();
+  renderAll();
+}
+
+function setActiveWorkspace(workspaceId, { persist = false } = {}) {
+  activeWorkspace = allowedWorkspaces.has(workspaceId) ? workspaceId : "answer";
   document.body.dataset.workspace = activeWorkspace;
   workspaceButtons.forEach((button) => {
     const active = button.dataset.workspace === activeWorkspace;
@@ -109,6 +174,23 @@ function setActiveWorkspace(workspaceId) {
     }
   });
   commandForm.hidden = activeWorkspace !== "answer";
+  if (persist) {
+    void persistActiveWorkspace();
+    void chatSessionStore.setActiveSessionWorkspace(activeWorkspace);
+  }
+}
+
+async function persistActiveWorkspace() {
+  await chrome.storage?.local?.set?.({
+    [STORAGE_KEYS.activeWorkspace]: activeWorkspace
+  }).catch(() => undefined);
+}
+
+async function hydrateActiveWorkspace() {
+  const settings = await chrome.storage?.local?.get?.([STORAGE_KEYS.activeWorkspace]).catch(() => ({}));
+  activeWorkspace = allowedWorkspaces.has(settings?.[STORAGE_KEYS.activeWorkspace])
+    ? settings[STORAGE_KEYS.activeWorkspace]
+    : "answer";
 }
 
 function renderAttachments() {
@@ -127,18 +209,55 @@ function emptyHero() {
   const hero = document.createElement("section");
   hero.className = "empty-hero";
   hero.innerHTML = `
-    <h1>ResonantOS</h1>
-    <p>Ask Augmentor from the full workspace. If the task needs the web, ResonantOS will move into browser + sidebar control mode.</p>
-    <div class="prompt-grid">
-      <button type="button" data-prompt="Find the most relevant context about ResonantOS and summarize it.">Research the web</button>
-      <button type="button" data-prompt="Help me plan the next implementation step for ResonantOS.">Plan work</button>
-      <button type="button" data-prompt="Go to resonantos.com and inspect the DAO page.">Control browser</button>
+    <span class="hero-kicker">AI browser workspace</span>
+    <h1>Ask, browse, remember, delegate.</h1>
+    <p>Start in full-screen Augmentor. When a task needs the web, memory, Hermes, or OpenCode, ResonantOS routes it into the right workspace with the same governed boundaries.</p>
+    <div class="capability-grid" aria-label="ResonantOS quick starts">
+      <button type="button" data-workspace-command="answer" data-prompt="Help me think through the best next step for this project.">
+        <span>Answer</span>
+        <strong>Think with Augmentor</strong>
+        <small>Strategy, planning, synthesis, and direct conversation.</small>
+      </button>
+      <button type="button" data-workspace-command="browser" data-prompt="Go to resonantos.com and summarize the DAO page.">
+        <span>Browser Control</span>
+        <strong>Operate the web</strong>
+        <small>Open pages, read, click, type, and stop at approval gates.</small>
+      </button>
+      <button type="button" data-workspace-command="memory" data-prompt="/memory ResonantOS">
+        <span>Living Archive</span>
+        <strong>Search AI Memory</strong>
+        <small>Query the LLM Wiki and save notes to governed intake.</small>
+      </button>
+      <button type="button" data-workspace-command="hermes" data-prompt="/hermes">
+        <span>Hermes</span>
+        <strong>Open coordination workspace</strong>
+        <small>Delegate communication, routine research, and follow-up work.</small>
+      </button>
+      <button type="button" data-workspace-command="opencode" data-prompt="/opencode Inspect the browser-first workspace and return changed files, tests, and risks.">
+        <span>OpenCode</span>
+        <strong>Delegate coding work</strong>
+        <small>Create bounded coding handoffs with artifact return rules.</small>
+      </button>
+      <button type="button" data-workspace-command="settings" data-prompt="">
+        <span>Settings</span>
+        <strong>Provider profiles</strong>
+        <small>Add model credentials through the host vault boundary.</small>
+      </button>
     </div>
   `;
-  hero.querySelectorAll("[data-prompt]").forEach((button) => {
-    button.addEventListener("click", () => {
+  hero.querySelectorAll("[data-workspace-command]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      if (button.dataset.workspaceCommand === "settings") {
+        setActiveWorkspace("settings", { persist: true });
+        renderAll();
+        return;
+      }
       commandInput.value = button.dataset.prompt;
-      commandInput.focus();
+      if (button.dataset.workspaceCommand === "answer") {
+        commandInput.focus();
+        return;
+      }
+      await commandForm.requestSubmit();
     });
   });
   return hero;
@@ -151,23 +270,19 @@ function renderMessages() {
     return;
   }
   if (activeWorkspace === "memory") {
-    renderStatusWorkspace({
-      title: "Living Archive",
-      eyebrow: "Memory system",
-      body: "The Living Archive workspace will expose the LLM Wiki, intake queue, and memory search here. For now it remains available to Augmentor through the governed memory bridge.",
-      endpoint: "/addons/status",
-      addonId: "addon.living-archive"
-    });
+    const initialQuery = pendingWorkspaceAction?.workspace === "memory" ? pendingWorkspaceAction.query : "";
+    pendingWorkspaceAction = null;
+    renderLivingArchiveWorkspace({ container: transcript, bridgeRequest, initialQuery });
     return;
   }
   if (activeWorkspace === "opencode") {
-    renderStatusWorkspace({
-      title: "OpenCode",
-      eyebrow: "Coding add-on",
-      body: "OpenCode will become the coding workspace for delegated engineering tasks. It stays an add-on, not a trusted core agent.",
-      endpoint: "/addons/status",
-      addonId: "addon.opencode"
-    });
+    const initialMission = pendingWorkspaceAction?.workspace === "opencode" ? pendingWorkspaceAction.mission : "";
+    pendingWorkspaceAction = null;
+    renderOpenCodeWorkspace({ container: transcript, bridgeRequest, initialMission });
+    return;
+  }
+  if (activeWorkspace === "settings") {
+    renderSettingsWorkspace({ container: transcript, bridgeRequest });
     return;
   }
   const messages = chatSessionStore.getMessages();
@@ -187,12 +302,81 @@ function renderMessages() {
     header.append(label, time);
     const body = document.createElement("p");
     body.textContent = message.content;
-    article.append(header, body);
+    const actions = document.createElement("div");
+    actions.className = "message-actions";
+    actions.append(
+      messageActionButton("Copy", "⧉", () => void copyMessage(message)),
+      messageActionButton("Fork", "⑂", () => void forkFromMessage(message.id)),
+      messageActionButton("Delete", "⌫", () => void deleteMessage(message.id))
+    );
+    if (message.role === "assistant") {
+      actions.append(messageActionButton("Regenerate", "↻", () => void regenerateFromMessage(message.id)));
+    }
+    article.append(header, body, actions);
     transcript.append(article);
   });
   requestAnimationFrame(() => {
     transcript.scrollTop = transcript.scrollHeight;
   });
+}
+
+function messageActionButton(label, glyph, onClick) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "message-action";
+  button.title = label;
+  button.setAttribute("aria-label", label);
+  button.textContent = glyph;
+  button.addEventListener("click", onClick);
+  return button;
+}
+
+async function copyMessage(message) {
+  const text = String(message?.content ?? "");
+  if (!text) return;
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+  } catch {
+    // Fall through to the extension background fallback.
+  }
+  await chrome.runtime.sendMessage({
+    channel: "resonantos.browser_first",
+    type: "copy_text",
+    text
+  }).catch(() => undefined);
+}
+
+async function forkFromMessage(messageId) {
+  await chatSessionStore.forkFromMessage(messageId);
+  activeWorkspace = "answer";
+  await persistActiveWorkspace();
+  renderAll();
+}
+
+async function deleteMessage(messageId) {
+  await chatSessionStore.deleteMessage(messageId);
+  renderAll();
+}
+
+async function regenerateFromMessage(messageId) {
+  if (busy) return;
+  const userMessage = await chatSessionStore.trimToPreviousUserMessage(messageId);
+  if (!userMessage) return;
+  busy = true;
+  commandInput.disabled = true;
+  renderAll();
+  try {
+    await runChatTurn(userMessage.content);
+  } catch (error) {
+    await addMessage("system", `Regeneration failed: ${error instanceof Error ? error.message : String(error)}`);
+    updateConnectionLine("Failed");
+  } finally {
+    busy = false;
+    commandInput.disabled = false;
+  }
 }
 
 function renderAll() {
@@ -391,8 +575,14 @@ async function runChatTurn(prompt) {
 
 async function runHermesDelegation(prompt) {
   const mission = parseHermesSlashCommand(prompt);
-  if (!mission || mission.length < 8) {
-    await addMessage("system", "Use `/hermes <mission>` to ask Augmentor to create a governed Hermes delegation packet.");
+  if (!mission) {
+    setActiveWorkspace("hermes", { persist: true });
+    renderAll();
+    await addMessage("system", "Opened Hermes workspace. Use `/hermes <mission>` when you want Augmentor to create a governed delegation packet.");
+    return;
+  }
+  if (mission.length < 8) {
+    await addMessage("system", "Use `/hermes <mission>` with a clear mission to create a governed Hermes delegation packet.");
     return;
   }
   updateConnectionLine("Delegating");
@@ -402,6 +592,34 @@ async function runHermesDelegation(prompt) {
   });
   await addMessage("system", `Delegation queued for Hermes: ${result.id}\n${result.path}`);
   updateConnectionLine("Ready");
+}
+
+async function runMemoryCommand(prompt) {
+  const query = parseMemorySlashCommand(prompt);
+  setActiveWorkspace("memory", { persist: true });
+  pendingWorkspaceAction = query ? { workspace: "memory", query } : null;
+  renderAll();
+  await chatSessionStore.addMessage(
+    "system",
+    query
+      ? `Opened Living Archive and searched AI Memory for: ${query}`
+      : "Opened Living Archive workspace. Use `/memory <query>` to search AI Memory directly.",
+    { persist: true }
+  );
+}
+
+async function runOpenCodeCommand(prompt) {
+  const mission = parseOpenCodeSlashCommand(prompt);
+  setActiveWorkspace("opencode", { persist: true });
+  pendingWorkspaceAction = mission ? { workspace: "opencode", mission } : null;
+  renderAll();
+  await chatSessionStore.addMessage(
+    "system",
+    mission
+      ? `Opened OpenCode and created a governed delegation for: ${mission}`
+      : "Opened OpenCode workspace. Use `/opencode <mission>` to create a governed coding handoff.",
+    { persist: true }
+  );
 }
 
 commandForm.addEventListener("submit", async (event) => {
@@ -417,7 +635,11 @@ commandForm.addEventListener("submit", async (event) => {
     const shouldControl = modeSelect.value === "browser" ||
       parseAutonomousBrowserActionIntent(prompt) ||
       parseNaturalBrowserIntent(prompt);
-    if (parseHermesSlashCommand(prompt) !== null) {
+    if (parseMemorySlashCommand(prompt) !== null) {
+      await runMemoryCommand(prompt);
+    } else if (parseOpenCodeSlashCommand(prompt) !== null) {
+      await runOpenCodeCommand(prompt);
+    } else if (parseHermesSlashCommand(prompt) !== null) {
       await runHermesDelegation(prompt);
     } else if (shouldControl) {
       await handoffToBrowserControl(prompt);
@@ -443,7 +665,8 @@ commandInput.addEventListener("keydown", (event) => {
 
 newChatButton.addEventListener("click", async () => {
   activeWorkspace = "answer";
-  await chatSessionStore.createSession();
+  await persistActiveWorkspace();
+  await chatSessionStore.createSession({ workspaceId: "answer" });
   commandInput.value = "";
   renderAll();
   commandInput.focus();
@@ -452,7 +675,7 @@ newChatButton.addEventListener("click", async () => {
 openSidebarButton.addEventListener("click", () => void openSidebar());
 workspaceButtons.forEach((button) => {
   button.addEventListener("click", () => {
-    setActiveWorkspace(button.dataset.workspace);
+    setActiveWorkspace(button.dataset.workspace, { persist: true });
     renderAll();
   });
 });
@@ -471,5 +694,8 @@ fileInput.addEventListener("change", async () => {
 modelSelect.addEventListener("change", () => void chatSessionStore.persist().then(() => updateConnectionLine()));
 thinkingDepthSelect.addEventListener("change", () => void chatSessionStore.persist());
 
-await chatSessionStore.hydrate();
+await Promise.all([
+  chatSessionStore.hydrate(),
+  hydrateActiveWorkspace()
+]);
 renderAll();
