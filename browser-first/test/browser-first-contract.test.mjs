@@ -72,6 +72,7 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(workspace, /main-workspace\.js/);
   assert.match(workspaceScript, /createChatSessionStore/);
   assert.match(workspaceScript, /renderArtifactsWorkspace/);
+  assert.match(workspaceScript, /continueFromArtifact/);
   assert.match(workspaceScript, /renameChatSession/);
   assert.match(workspaceScript, /deleteChatSession/);
   assert.match(workspaceScript, /workspaceLabel/);
@@ -127,6 +128,7 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(workspaceStyles, /answer-workspace/);
   assert.match(workspaceStyles, /artifacts-workspace/);
   assert.match(workspaceStyles, /artifact-preview/);
+  assert.match(workspaceStyles, /artifact-actions/);
   assert.match(workspaceStyles, /module-workspace/);
   assert.match(workspaceStyles, /dashboard-frame-card/);
   assert.match(workspaceStyles, /settings-workspace/);
@@ -140,6 +142,7 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(launcher, /\/providers\/credentials/);
   assert.match(launcher, /\/archive\/intake\/list/);
   assert.match(launcher, /\/archive\/intake\/read/);
+  assert.match(launcher, /\/archive\/review\/request/);
   assert.match(launcher, /executeProviderCredentialSave/);
   assert.match(launcher, /executeOpenCodeStatus/);
   assert.match(launcher, /workspaceLaunch: "not-enabled-in-browser-first-v1"/);

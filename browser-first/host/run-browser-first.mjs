@@ -1102,6 +1102,49 @@ async function executeArchiveIntakeRead(payload) {
   };
 }
 
+async function executeArchiveReviewRequest(payload) {
+  const artifactPath = String(payload.path ?? "").trim();
+  const filePath = safeMemoryRelativePath(artifactPath, "INTAKE");
+  if (!/\.(md|markdown)$/i.test(filePath)) {
+    throw new Error("Archive review requests only support markdown intake artifacts.");
+  }
+  const content = await readFile(filePath, "utf8");
+  const now = new Date();
+  const title = markdownTitle(content, path.basename(filePath, path.extname(filePath)));
+  const reason = String(payload.reason ?? "Review this intake artifact for possible Living Archive promotion.").trim().slice(0, 800);
+  const requestDir = path.join(memoryRoot(), "REVIEW", "requests");
+  await mkdir(requestDir, { recursive: true });
+  const requestFile = `${now.toISOString().replace(/[:.]/g, "-")}-${safeFileSlug(title)}.md`;
+  const requestPath = path.join(requestDir, requestFile);
+  const requestBody = [
+    "---",
+    `source: ${JSON.stringify("resonantos-browser-first")}`,
+    `type: ${JSON.stringify("archive-review-request")}`,
+    `status: ${JSON.stringify("pending")}`,
+    `createdAt: ${JSON.stringify(now.toISOString())}`,
+    `artifactPath: ${JSON.stringify(artifactPath)}`,
+    "---",
+    "",
+    `# Review Request: ${title}`,
+    "",
+    "## Reason",
+    reason,
+    "",
+    "## Source Artifact",
+    artifactPath,
+    "",
+    "## Boundary",
+    "This request asks the Strategist-owned ingest path to evaluate the artifact. It does not promote or mutate trusted AI Memory by itself.",
+    "",
+  ].join("\n");
+  await writeFile(requestPath, requestBody);
+  return {
+    path: path.relative(memoryRoot(), requestPath),
+    sourceArtifactPath: artifactPath,
+    status: "pending",
+  };
+}
+
 async function executeGoalRecord(payload) {
   const mission = String(payload.mission ?? "").trim();
   if (mission.length < 8) {
@@ -1320,6 +1363,7 @@ const bridgeRoutes = [
   { method: "POST", path: "/archive/intake", handler: executeArchiveIntake },
   { method: "POST", path: "/archive/intake/list", handler: executeArchiveIntakeList },
   { method: "POST", path: "/archive/intake/read", handler: executeArchiveIntakeRead },
+  { method: "POST", path: "/archive/review/request", handler: executeArchiveReviewRequest },
   { method: "GET", path: "/addons/status", handler: executeAddonsStatus },
   { method: "GET", path: "/opencode/status", handler: executeOpenCodeStatus },
   { method: "POST", path: "/hermes/dashboard/status", handler: executeHermesDashboardStatus },

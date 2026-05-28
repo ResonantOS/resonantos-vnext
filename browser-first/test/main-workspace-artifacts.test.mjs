@@ -22,6 +22,7 @@ function setupDom() {
 test("artifacts workspace lists and previews archive intake artifacts", async () => {
   const { container, cleanup } = setupDom();
   const calls = [];
+  const continued = [];
   const bridgeRequest = async (route, options = {}) => {
     calls.push([route, options]);
     if (route === "/archive/intake/list") {
@@ -50,11 +51,22 @@ test("artifacts workspace lists and previews archive intake artifacts", async ()
         truncated: false
       };
     }
+    if (route === "/archive/review/request") {
+      return {
+        path: "REVIEW/requests/job-report.md",
+        sourceArtifactPath: options.body.path,
+        status: "pending"
+      };
+    }
     throw new Error(`Unexpected route ${route}`);
   };
 
   try {
-    renderArtifactsWorkspace({ container, bridgeRequest });
+    renderArtifactsWorkspace({
+      container,
+      bridgeRequest,
+      onContinueArtifact: async (artifact) => continued.push(artifact.path)
+    });
     await new Promise((resolve) => setTimeout(resolve, 0));
     await new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -67,6 +79,17 @@ test("artifacts workspace lists and previews archive intake artifacts", async ()
     container.querySelector(".artifact-row").click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(calls.filter(([route]) => route === "/archive/intake/read").length, 2);
+
+    const [copyPath, requestReview, continueFrom] = container.querySelectorAll(".artifact-actions button");
+    assert.equal(copyPath.textContent, "Copy Path");
+    requestReview.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.ok(calls.some(([route, options]) => route === "/archive/review/request" && options.body.path === "INTAKE/browser/job-report.md"));
+    assert.match(container.textContent, /Review request created: REVIEW\/requests\/job-report\.md/);
+
+    continueFrom.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.deepEqual(continued, ["INTAKE/browser/job-report.md"]);
   } finally {
     cleanup();
   }

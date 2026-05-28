@@ -36,7 +36,15 @@ function artifactRow(artifact, onOpen) {
   return row;
 }
 
-function previewArticle(artifact) {
+function actionButton(label, onClick) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = label;
+  button.addEventListener("click", onClick);
+  return button;
+}
+
+function previewArticle(artifact, actions) {
   const article = document.createElement("article");
   article.className = "artifact-preview";
   const heading = document.createElement("div");
@@ -55,7 +63,14 @@ function previewArticle(artifact) {
   heading.append(copy, meta);
   const content = document.createElement("pre");
   content.textContent = artifact.content || "No artifact content returned.";
-  article.append(heading, content);
+  const actionRow = document.createElement("div");
+  actionRow.className = "artifact-actions";
+  actionRow.append(
+    actionButton("Copy Path", () => void actions.copyPath(artifact)),
+    actionButton("Request Review", () => void actions.requestReview(artifact)),
+    actionButton("Continue", () => void actions.continueFrom(artifact))
+  );
+  article.append(heading, actionRow, content);
   if (artifact.truncated) {
     const truncated = document.createElement("p");
     truncated.className = "artifact-warning";
@@ -65,7 +80,7 @@ function previewArticle(artifact) {
   return article;
 }
 
-export function renderArtifactsWorkspace({ container, bridgeRequest }) {
+export function renderArtifactsWorkspace({ container, bridgeRequest, onContinueArtifact }) {
   const section = document.createElement("section");
   section.className = "artifacts-workspace";
   section.setAttribute("aria-label", "Artifacts workspace");
@@ -104,7 +119,39 @@ export function renderArtifactsWorkspace({ container, bridgeRequest }) {
         method: "POST",
         body: { path: artifact.path }
       });
-      preview.append(previewArticle(result));
+      preview.append(previewArticle(result, {
+        copyPath: async (selected) => {
+          try {
+            await navigator.clipboard?.writeText?.(selected.path);
+            setStatus(status, `Copied ${selected.path}.`, "success");
+          } catch {
+            setStatus(status, `Path: ${selected.path}`, "warning");
+          }
+        },
+        requestReview: async (selected) => {
+          setStatus(status, `Creating review request for ${selected.path}…`);
+          try {
+            const review = await bridgeRequest("/archive/review/request", {
+              method: "POST",
+              body: {
+                path: selected.path,
+                reason: "Evaluate this browser artifact for Living Archive ingestion, contradictions, entities, and durable wiki updates."
+              }
+            });
+            setStatus(status, `Review request created: ${review.path}.`, "success");
+          } catch (error) {
+            setStatus(status, error instanceof Error ? error.message : String(error), "error");
+          }
+        },
+        continueFrom: async (selected) => {
+          if (typeof onContinueArtifact !== "function") {
+            setStatus(status, "Continuation is not available in this workspace.", "warning");
+            return;
+          }
+          await onContinueArtifact(selected);
+          setStatus(status, `Sent ${selected.path} to Augmentor sidebar continuation.`, "success");
+        }
+      }));
       setStatus(status, `Previewing ${result.path}.`, "success");
     } catch (error) {
       setStatus(status, error instanceof Error ? error.message : String(error), "error");

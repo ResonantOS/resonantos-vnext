@@ -283,7 +283,11 @@ function renderMessages() {
     return;
   }
   if (activeWorkspace === "artifacts") {
-    renderArtifactsWorkspace({ container: transcript, bridgeRequest });
+    renderArtifactsWorkspace({
+      container: transcript,
+      bridgeRequest,
+      onContinueArtifact: continueFromArtifact
+    });
     return;
   }
   if (activeWorkspace === "opencode") {
@@ -543,6 +547,19 @@ async function openSidebar() {
     channel: "resonantos.browser_first",
     type: "open_side_panel"
   }).catch(() => undefined);
+}
+
+async function continueFromArtifact(artifact) {
+  await chrome.storage.local.set({
+    [STORAGE_KEYS.pendingSidebarPrompt]: {
+      prompt: `/control continue from artifact ${artifact.path}`,
+      createdAt: new Date().toISOString(),
+      artifactPath: artifact.path,
+      artifactTitle: artifact.title ?? ""
+    }
+  });
+  await addMessage("system", `Sent artifact to Augmentor sidebar for continuation: ${artifact.path}`);
+  await openSidebar();
 }
 
 async function handoffToBrowserControl(prompt) {
