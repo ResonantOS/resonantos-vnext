@@ -72,10 +72,10 @@ export function parseReadPageIntent(message) {
     return null;
   }
   return (
-    /\b(read|scan|summari[sz]e|inspect|look at|understand|see|view|access)\b/i.test(normalized) ||
+    /\b(read|scan|summari[sz]e|inspect|look at|check|analyse|analyze|understand|see|view|access)\b/i.test(normalized) ||
     /\b(can you|do you)\s+(see|view|access)\b/i.test(normalized)
   ) &&
-    /\b(this|current|active|the|open)\s+(page|website|webpage|site|tab|browser|window)\b/i.test(normalized)
+    /\b(this|current|active|the|open|loaded)\s+(page|website|webpage|site|tab|browser|window)\b/i.test(normalized)
     ? { action: "read_page" }
     : null;
 }
@@ -131,14 +131,14 @@ export function parseAutonomousBrowserActionIntent(message) {
     return null;
   }
   const hasPlainBrowserTarget = browserTargetPattern.test(normalized) && browserIntentVerbs.test(normalized);
-  const hasWorkAfterNavigation = /\b(find|search|look\s+for|add|put|select|choose|click|compare|buy|shop|book|fill|complete|submit|scroll|read|inspect)\b/i.test(normalized);
+  const hasWorkAfterNavigation = /\b(find|search|look\s+for|add|put|select|choose|click|compare|buy|shop|book|fill|complete|submit|scroll|read|inspect|check|analyse|analyze|summari[sz]e|extract)\b/i.test(normalized);
   if (hasPlainBrowserTarget && !hasWorkAfterNavigation) {
     return null;
   }
   const shoppingIntent = /\b(amazon|amazon\.it|cart|chart|basket|carrello|buy|shop|shopping|product|pringles|nvidia|rtx|5090)\b/i.test(normalized) &&
     /\b(go\s+to|open|find|search|look\s+for|add|put|select|choose|click)\b/i.test(normalized);
-  const browserTaskVerbs = /\b(book|schedule|arrange|reserve|fill|complete|submit|click|press|tap|select|choose|pick|open|find|search|scroll|read|inspect|look at|navigate|go to|visit|add|put)\b/i;
-  const browserObjectHints = /\b(call|meeting|appointment|booking|calendar|form|page|site|website|tab|browser|button|field|slot|time|date|news|internet|web|amazon|shop|shopping|product|cart|chart|basket|carrello)\b/i;
+  const browserTaskVerbs = /\b(book|schedule|arrange|reserve|fill|complete|submit|click|press|tap|select|choose|pick|open|find|search|scroll|read|inspect|check|analyse|analyze|summari[sz]e|extract|look at|navigate|go to|visit|add|put)\b/i;
+  const browserObjectHints = /\b(call|meeting|appointment|booking|calendar|form|page|site|website|webpage|tab|browser|window|button|field|slot|time|date|news|internet|web|amazon|shop|shopping|product|cart|chart|basket|carrello)\b/i;
   if (shoppingIntent) {
     return { goal: normalized };
   }

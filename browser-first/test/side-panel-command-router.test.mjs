@@ -98,6 +98,7 @@ test("side panel command router dispatches natural browser intents before chat",
   await harness.router.respondToCommand('type "resonantos" into the search bar');
   await harness.router.respondToCommand('click "Add to cart"');
   await harness.router.respondToCommand("can you read this page?");
+  await harness.router.respondToCommand("can you check the loaded page?");
   await harness.router.respondToCommand("scroll to the bottom");
   await harness.router.respondToCommand("show form fields");
   await harness.router.respondToCommand("go to resonantos.com/dao");
@@ -108,6 +109,7 @@ test("side panel command router dispatches natural browser intents before chat",
     "control",
     "type",
     "click",
+    "summary",
     "summary",
     "scroll",
     "forms",

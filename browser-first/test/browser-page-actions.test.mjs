@@ -182,8 +182,8 @@ test("browser page actions save current page to archive intake", async () => {
   assert.match(bridgeCall[2].body.content, /Important page text/);
   const reviewCall = harness.events.find((event) => event[0] === "bridge" && event[1] === "/archive/review/request");
   assert.equal(reviewCall[2].body.path, "INTAKE/browser/saved-page.md");
-  assert.ok(harness.events.some((event) => event[0] === "message" && /Saved current page/.test(event[2])));
-  assert.ok(harness.events.some((event) => event[0] === "message" && /Review request created/.test(event[2])));
+  assert.ok(harness.events.some((event) => event[0] === "message" && /Saved this page/.test(event[2])));
+  assert.equal(harness.events.some((event) => event[0] === "message" && /INTAKE\/browser|REVIEW\/requests/.test(event[2])), false);
 });
 
 test("browser page actions save selected text to archive intake", async () => {
@@ -207,4 +207,5 @@ test("browser page actions save selected text to archive intake", async () => {
   assert.match(bridgeCall[2].body.content, /Selected passage/);
   const reviewCall = harness.events.find((event) => event[0] === "bridge" && event[1] === "/archive/review/request");
   assert.equal(reviewCall[2].body.path, "INTAKE/browser/selection.md");
+  assert.equal(harness.events.some((event) => event[0] === "message" && /INTAKE\/browser|REVIEW\/requests/.test(event[2])), false);
 });

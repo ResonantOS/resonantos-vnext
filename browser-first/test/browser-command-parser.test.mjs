@@ -33,6 +33,7 @@ test("browser command parser detects natural navigation without swallowing slash
 
 test("browser command parser extracts page read, click, type, and scroll intents", () => {
   assert.deepEqual(parseReadPageIntent("can you read this page?"), { action: "read_page" });
+  assert.deepEqual(parseReadPageIntent("can you check the loaded page?"), { action: "read_page" });
   assert.deepEqual(parseClickIntent('click "Add to cart"'), { text: "Add to cart" });
   assert.deepEqual(parseTypeIntent('type "pizza stone" into the search bar'), { text: "pizza stone", submit: true });
   assert.deepEqual(parseScrollIntent("scroll to the bottom"), { direction: "bottom" });
@@ -54,6 +55,9 @@ test("browser command parser detects autonomous browser work and search work", (
   });
   assert.deepEqual(parseAutonomousBrowserActionIntent("go to amazon.it and find me a rtx5090"), {
     goal: "go to amazon.it and find me a rtx5090",
+  });
+  assert.deepEqual(parseAutonomousBrowserActionIntent("check the current website and extract the booking details"), {
+    goal: "check the current website and extract the booking details",
   });
   assert.equal(parseAutonomousBrowserActionIntent("go to amazon.it"), null);
   assert.deepEqual(parseNaturalSearchIntent("find latest AI news on the internet"), {

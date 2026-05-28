@@ -377,7 +377,7 @@ export function createBrowserPageActions(deps) {
     });
     await addMessage(
       "system",
-      `Saved current page to Living Archive intake: ${result.path}\nReview request created: ${review.path}\n\nThis remains raw intake data. Trusted AI Memory promotion must happen through review, verification, and promotion.`
+      `Saved this page to Living Archive intake and queued it for review.\n\nIt remains raw source material until the archive review, verification, and promotion pipeline accepts it.`
     );
     setStatus("Page saved to intake");
     setActivity("completed", "Saved page intake", result.path);
@@ -420,7 +420,7 @@ export function createBrowserPageActions(deps) {
     });
     await addMessage(
       "system",
-      `Saved selected text to Living Archive intake: ${result.path}\nReview request created: ${review.path}\n\nThis remains raw intake data until the governed archive pipeline promotes it.`
+      `Saved the selected text to Living Archive intake and queued it for review.\n\nIt remains raw source material until the archive review, verification, and promotion pipeline accepts it.`
     );
     setStatus("Selection saved to intake");
     setActivity("completed", "Saved selection intake", result.path);
