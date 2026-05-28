@@ -8,12 +8,6 @@
   </head>
   <body>
     <main class="chat-shell" aria-label="Augmentor chat">
-      <aside class="chat-rail" aria-label="Augmentor conversations">
-        <div class="rail-brand" aria-label="ResonantOS">R</div>
-        <button id="new-chat" type="button" class="new-chat-button" title="Start a new Augmentor chat">＋ New</button>
-        <div class="rail-section-label">History</div>
-        <ol id="chat-history" class="chat-history" aria-label="Chat history"></ol>
-      </aside>
       <section class="chat-workspace" aria-label="Active Augmentor workspace">
       <section id="transcript" class="transcript" aria-live="polite"></section>
       <section id="context-dock" class="context-dock" aria-label="Browser context and task status" hidden>
@@ -96,9 +90,15 @@
           <button id="attach-file" type="button" class="icon-button" title="Attach file" aria-label="Attach file">＋</button>
           <input id="file-input" type="file" multiple hidden />
           <button id="read-page" type="button" class="icon-button" title="Read current page" aria-label="Read current page">◎</button>
-          <button id="save-intake" type="button" class="toolbar-button" title="Save current page to Living Archive intake">Save Page</button>
-          <button id="save-selection" type="button" class="toolbar-button" title="Save selected page text to Living Archive intake">Save Selection</button>
-          <button id="context-toggle" type="button" class="toolbar-button" title="Show browser context, site permissions, and jobs">Status</button>
+          <button id="save-intake" type="button" class="icon-button" title="Save current page to Living Archive intake" aria-label="Save current page to Living Archive intake">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h11l3 3v13H5z"/><path d="M8 4v6h8V4"/><path d="M8 16h8"/></svg>
+          </button>
+          <button id="save-selection" type="button" class="icon-button" title="Save selected page text to Living Archive intake" aria-label="Save selected page text to Living Archive intake">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v14H5z"/><path d="M8 9h8"/><path d="M8 13h5"/><path d="m15 15 2 2 3-4"/></svg>
+          </button>
+          <button id="context-toggle" type="button" class="icon-button context-usage-button" title="Show context usage and browser status" aria-label="Show context usage and browser status">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 1 16 0"/><path d="M4 12h4"/><path d="M16 12h4"/><path d="M12 4v4"/><path d="M8.5 17.5 12 12l3.5 5.5"/></svg>
+          </button>
           <select id="model-select" class="model-select" aria-label="Connected model">
             <option value="MiniMax-M2.7">MiniMax 2.7</option>
             <option value="MiniMax-M2.7-highspeed">MiniMax 2.7 High Speed</option>
@@ -111,9 +111,16 @@
             <option value="medium">Medium</option>
             <option value="high">High</option>
           </select>
-          <button id="dictate-button" type="button" class="icon-button muted" title="Audio dictate is not available in this browser runtime yet." aria-label="Dictate">mic</button>
-          <span id="context-meter" class="context-meter" title="Estimated browser context captured for this session.">0%</span>
-          <button type="submit" class="send-button" aria-label="Send message">➜</button>
+          <button id="dictate-button" type="button" class="icon-button muted" title="Audio dictate is not available in this browser runtime yet." aria-label="Dictate">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V7a3 3 0 0 0-3-3Z"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>
+          </button>
+          <button id="context-meter" type="button" class="context-meter" title="Estimated browser context captured for this session." aria-label="Context usage 0 percent">
+            <span class="context-meter-track"><span class="context-meter-used"></span><span class="context-meter-threshold compact"></span><span class="context-meter-threshold hard"></span></span>
+            <span class="context-meter-label">0%</span>
+          </button>
+          <button type="submit" class="send-button" aria-label="Send message">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+          </button>
         </div>
         <p id="connection-line" class="connection-line">Connected to MiniMax 2.7 · Ready</p>
       </form>

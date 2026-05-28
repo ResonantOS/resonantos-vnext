@@ -69,9 +69,12 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(workspace, /mode-select/);
   assert.match(workspace, /model-select/);
   assert.match(workspace, /thinking-depth/);
+  assert.match(workspace, /context-meter/);
+  assert.match(workspace, /dictate-button/);
   assert.match(workspace, /Open Sidebar/);
   assert.match(workspace, /main-workspace\.js/);
   assert.match(workspaceScript, /createChatSessionStore/);
+  assert.match(workspaceScript, /createComposerController/);
   assert.match(workspaceScript, /renderArtifactsWorkspace/);
   assert.match(workspaceScript, /continueFromArtifact/);
   assert.match(workspaceScript, /renameChatSession/);
@@ -85,7 +88,7 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(workspaceScript, /augmentorPendingSidebarPrompt/);
   assert.match(workspaceScript, /open_side_panel/);
   assert.match(workspaceScript, /chrome\.tabs\.update/);
-  assert.match(workspaceScript, /commandForm\.requestSubmit\(\)/);
+  assert.match(workspaceScript, /composerController\.bind\(\)/);
   assert.match(workspaceScript, /renderHermesWorkspace/);
   assert.match(workspaceScript, /renderOpenCodeWorkspace/);
   assert.match(workspaceScript, /renderSettingsWorkspace/);
@@ -219,8 +222,8 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   const background = await readText(path.join(extensionRoot, "src", "background.js"));
 
   assert.match(panel, /Message Augmentor/);
-  assert.match(panel, /new-chat/);
-  assert.match(panel, /chat-history/);
+  assert.doesNotMatch(panel, /new-chat/);
+  assert.doesNotMatch(panel, /chat-history/);
   assert.match(panel, /bridge-config\.generated\.js/);
   assert.match(panel, /control-monitor/);
   assert.match(panel, /control-current-action/);
@@ -238,8 +241,8 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.doesNotMatch(panel, /Current page/);
   assert.match(panel, /Connected model/);
   assert.match(panel, /Thinking depth/);
-  assert.match(panel, /Save Page/);
-  assert.match(panel, /Save Selection/);
+  assert.match(panel, /Save current page to Living Archive intake/);
+  assert.match(panel, /Save selected page text to Living Archive intake/);
   assert.match(background, /openPanelOnActionClick/);
   assert.match(background, /openResonantSidePanel/);
   assert.match(background, /open-augmentor-side-panel/);

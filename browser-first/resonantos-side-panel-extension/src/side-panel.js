@@ -143,7 +143,8 @@ const updateContextDockVisibility = () => {
   const hasVisiblePanel = [activityPanel, sitePermissionPanel, taskConsentPanel, jobMonitor, controlMonitor]
     .some((panel) => !panel.hidden);
   contextDock.hidden = !hasVisiblePanel;
-  contextToggleButton.textContent = contextDockExpanded ? "Hide Status" : "Status";
+  contextToggleButton.title = contextDockExpanded ? "Hide context usage and browser status" : "Show context usage and browser status";
+  contextToggleButton.setAttribute("aria-label", contextToggleButton.title);
   contextToggleButton.setAttribute("aria-expanded", contextDockExpanded ? "true" : "false");
   scrollTranscriptToBottom();
 };
@@ -198,6 +199,7 @@ const updateConnectionLine = () => {
 };
 
 const renderChatHistory = () => {
+  if (!chatHistory) return;
   chatHistory.replaceChildren();
   chatSessionStore.getSessions().forEach((session) => {
     const item = document.createElement("li");
@@ -229,7 +231,9 @@ const renderChatHistory = () => {
 const setContextMeter = (snapshot) => {
   const textLength = snapshot?.text?.length ?? 0;
   const roughPercent = Math.min(99, Math.max(0, Math.round(textLength / 900)));
-  contextMeter.textContent = `${roughPercent}%`;
+  contextMeter.style.setProperty("--context-used", `${roughPercent}%`);
+  contextMeter.querySelector(".context-meter-label").textContent = `${roughPercent}%`;
+  contextMeter.setAttribute("aria-label", `Context usage ${roughPercent} percent`);
 };
 
 const sitePermissionStore = createSitePermissionStore({
@@ -838,7 +842,7 @@ chrome.storage?.onChanged?.addListener?.((changes, areaName) => {
   void consumePendingSidebarPrompt();
 });
 
-newChatButton.addEventListener("click", async () => {
+newChatButton?.addEventListener("click", async () => {
   await chatSessionStore.createSession();
   lastSnapshot = null;
   currentControlRun = null;

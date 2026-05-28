@@ -466,6 +466,17 @@ textarea {
   border-radius: 999px;
 }
 
+.icon-button svg,
+.send-button svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
 .icon-button {
   width: 34px;
   height: 34px;
@@ -495,6 +506,62 @@ textarea {
   font-size: 0.76rem;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.context-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  min-width: 86px;
+  height: 34px;
+  border: 1px solid rgba(36, 209, 143, 0.26);
+  border-radius: 999px;
+  background: rgba(36, 209, 143, 0.04);
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 850;
+  padding: 0 8px;
+}
+
+.context-meter-track {
+  position: relative;
+  flex: 1 1 auto;
+  height: 5px;
+  min-width: 40px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(143, 159, 149, 0.18);
+}
+
+.context-meter-used {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--context-used, 0%);
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(36, 209, 143, 0.6), rgba(36, 209, 143, 0.96));
+}
+
+.context-meter-threshold {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 1px;
+  background: rgba(238, 247, 240, 0.35);
+}
+
+.context-meter-threshold.compact {
+  left: 70%;
+}
+
+.context-meter-threshold.hard {
+  left: 90%;
+  background: rgba(255, 183, 77, 0.66);
+}
+
+.context-meter-label {
+  flex: 0 0 auto;
+  min-width: 24px;
 }
 
 .send-button {

@@ -2231,7 +2231,7 @@ if (args.get("bridge-auth-self-test") === "true") {
 
 const url = args.get("url") ?? defaultMainWorkspaceUrl;
 const profileDir = path.resolve(args.get("profile") ?? process.env.RESONANTOS_BROWSER_FIRST_PROFILE ?? defaultProfile);
-const autoOpenSidePanel = args.get("auto-open-side-panel") !== "false";
+const autoOpenSidePanel = args.get("auto-open-side-panel") === "true";
 const bridgePort = Number(args.get("bridge-port") ?? process.env.RESONANTOS_BROWSER_FIRST_BRIDGE_PORT ?? defaultBridgePort);
 const remoteDebuggingPort = args.get("remote-debugging-port") ?? process.env.RESONANTOS_BROWSER_FIRST_REMOTE_DEBUGGING_PORT;
 

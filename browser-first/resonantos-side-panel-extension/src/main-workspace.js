@@ -6,6 +6,7 @@ import {
 } from "./lib/browser-command-parser.js";
 import { createBridgeClient } from "./lib/bridge-client.js";
 import { createChatSessionStore } from "./lib/chat-session-store.js";
+import { createComposerController } from "./lib/composer-controller.js";
 import { renderArtifactsWorkspace } from "./lib/main-workspace-artifacts.js";
 import { renderLivingArchiveWorkspace } from "./lib/main-workspace-memory.js";
 import { renderOpenCodeWorkspace } from "./lib/main-workspace-opencode.js";
@@ -45,6 +46,8 @@ const attachmentStrip = document.querySelector("#attachment-strip");
 const modeSelect = document.querySelector("#mode-select");
 const modelSelect = document.querySelector("#model-select");
 const thinkingDepthSelect = document.querySelector("#thinking-depth");
+const dictateButton = document.querySelector("#dictate-button");
+const contextMeter = document.querySelector("#context-meter");
 const connectionLine = document.querySelector("#connection-line");
 const bridgeRequest = createBridgeClient();
 let busy = false;
@@ -53,6 +56,7 @@ let pendingWorkspaceAction = null;
 const allowedWorkspaces = new Set(["answer", "artifacts", "memory", "hermes", "opencode", "settings"]);
 
 const supportsThinkingDepth = (model) => model.startsWith("gpt-5.");
+const composerController = createComposerController({ commandForm, commandInput, navigator });
 const assistantTextFromResponse = (response) => String(response?.content ?? response?.reply ?? "").trim();
 const parseHermesSlashCommand = (value) => {
   const match = /^\/\s*hermes(?:\s+([\s\S]*))?$/i.exec(String(value ?? "").trim());
@@ -98,6 +102,15 @@ function updateConnectionLine(status = "Ready") {
   const model = MODEL_LABELS[modelSelect.value] ?? modelSelect.value;
   thinkingDepthSelect.hidden = !supportsThinkingDepth(modelSelect.value);
   connectionLine.textContent = `Connected to ${model} · ${status}`;
+}
+
+function updateContextMeter() {
+  const totalChars = chatSessionStore.getMessages()
+    .reduce((total, message) => total + String(message.content ?? "").length, 0);
+  const roughPercent = Math.min(99, Math.max(0, Math.round(totalChars / 900)));
+  contextMeter.style.setProperty("--context-used", `${roughPercent}%`);
+  contextMeter.querySelector(".context-meter-label").textContent = `${roughPercent}%`;
+  contextMeter.setAttribute("aria-label", `Context usage ${roughPercent} percent`);
 }
 
 function renderChatHistory() {
@@ -401,6 +414,7 @@ function renderAll() {
   renderMessages();
   renderAttachments();
   renderChatHistory();
+  updateContextMeter();
   updateConnectionLine();
 }
 
@@ -662,6 +676,7 @@ commandForm.addEventListener("submit", async (event) => {
   try {
     await addMessage("user", prompt);
     commandInput.value = "";
+    composerController.resetUndoStack("");
     const shouldControl = modeSelect.value === "browser" ||
       parseAutonomousBrowserActionIntent(prompt) ||
       parseNaturalBrowserIntent(prompt);
@@ -685,19 +700,14 @@ commandForm.addEventListener("submit", async (event) => {
   }
 });
 
-commandInput.addEventListener("keydown", (event) => {
-  if (event.key !== "Enter" || event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) {
-    return;
-  }
-  event.preventDefault();
-  commandForm.requestSubmit();
-});
+composerController.bind();
 
 newChatButton.addEventListener("click", async () => {
   activeWorkspace = "answer";
   await persistActiveWorkspace();
   await chatSessionStore.createSession({ workspaceId: "answer" });
   commandInput.value = "";
+  composerController.resetUndoStack("");
   renderAll();
   commandInput.focus();
 });
@@ -723,6 +733,9 @@ fileInput.addEventListener("change", async () => {
 });
 modelSelect.addEventListener("change", () => void chatSessionStore.persist().then(() => updateConnectionLine()));
 thinkingDepthSelect.addEventListener("change", () => void chatSessionStore.persist());
+dictateButton.addEventListener("click", () => {
+  void addMessage("system", "Audio dictate is not available in this browser runtime yet.");
+});
 
 await Promise.all([
   chatSessionStore.hydrate(),
