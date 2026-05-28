@@ -83,8 +83,47 @@ class CdpClient {
 }
 
 async function captureScreenshotArtifact(client, filePath) {
+  const captureVisibleViewport = async () => {
+    await client.send("Page.bringToFront").catch(() => undefined);
+    await client.send("Runtime.evaluate", {
+      expression: "new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))",
+      awaitPromise: true,
+      returnByValue: true,
+    }).catch(() => undefined);
+    const metrics = await client.send("Page.getLayoutMetrics").catch(() => ({}));
+    const viewport = metrics.cssLayoutViewport ?? metrics.layoutViewport ?? {};
+    const width = Math.max(320, Math.min(1600, Math.floor(viewport.clientWidth ?? 1280)));
+    const height = Math.max(240, Math.min(1200, Math.floor(viewport.clientHeight ?? 900)));
+    return client.send("Page.captureScreenshot", {
+      captureBeyondViewport: false,
+      format: "png",
+      fromSurface: true,
+      clip: {
+        x: Math.max(0, Math.floor(viewport.pageX ?? 0)),
+        y: Math.max(0, Math.floor(viewport.pageY ?? 0)),
+        width,
+        height,
+        scale: 1,
+      },
+    });
+  };
+
   try {
-    const shot = await client.send("Page.captureScreenshot", { format: "png" });
+    let shot = null;
+    let lastError = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        shot = await captureVisibleViewport();
+        break;
+      } catch (error) {
+        lastError = error;
+        await client.send("Page.stopLoading").catch(() => undefined);
+        await new Promise((resolve) => setTimeout(resolve, 350));
+      }
+    }
+    if (!shot?.data) {
+      throw lastError ?? new Error("CDP Page.captureScreenshot did not return image data.");
+    }
     await writeFile(filePath, Buffer.from(shot.data, "base64"));
     return { ok: true, path: filePath };
   } catch (error) {
