@@ -126,10 +126,11 @@ function createHarness(overrides = {}) {
 }
 
 test("monitor renderers describe site permission modes", () => {
-  assert.equal(sitePermissionDescription("blocked"), "Augmentor cannot read or operate this site.");
-  assert.equal(sitePermissionDescription("read-only"), "Augmentor can read context but cannot click, type, or scroll.");
-  assert.match(sitePermissionDescription("trusted-for-safe-actions"), /Safe actions can run/);
-  assert.match(sitePermissionDescription("ask-before-action"), /asks before risky actions/);
+  assert.match(sitePermissionDescription("blocked"), /Can see\/do now: nothing/);
+  assert.match(sitePermissionDescription("read-only"), /page text, controls, fields, frames, and metadata/);
+  assert.match(sitePermissionDescription("trusted-for-safe-actions"), /safe clicks, typing, scrolling, and search-like submits/);
+  assert.match(sitePermissionDescription("ask-before-action"), /asks before risky clicks/);
+  assert.match(sitePermissionDescription("ask-before-action"), /blocks wallet, login, payment, and credential/);
 });
 
 test("monitor renderers calculate control run progress", () => {
@@ -267,7 +268,8 @@ test("monitor renderers show and hide site permission panel", async () => {
   assert.equal(harness.dom.window.document.querySelector("#site").hidden, false);
   assert.equal(harness.dom.window.document.querySelector("#host").textContent, "example.com");
   assert.equal(harness.dom.window.document.querySelector("#mode").value, "read-only");
-  assert.match(harness.dom.window.document.querySelector("#note").textContent, /cannot click/);
+  assert.match(harness.dom.window.document.querySelector("#note").textContent, /Can see\/do now: page text/);
+  assert.match(harness.dom.window.document.querySelector("#note").textContent, /Cannot click/);
 
   harness.state.contextDockExpanded = false;
   await harness.renderers.renderSitePermissionPanel();

@@ -20,6 +20,7 @@ Intent: keep the browser-first ResonantOS work aligned with the AI-browser capab
 - Task-level consent v1: approve once, trust safe actions by site + task class, expire stale grants, or deny, while keeping wallet/payment/login/signing/credential/public-submit boundaries human-only.
 - Site Permission Controls v2: context dock manager lists stored site permissions and task-class consents across sites, with reset/revoke actions.
 - Site Permission Controls v2 audit trail: site permission changes/resets and task-class consents/revocations record timestamp, source, and reason, and the permission manager surfaces latest audit evidence.
+- Permission/Consent UX v2: the current-site panel states what Augmentor can see/do now for blocked, read-only, ask-before-action, and trusted-safe-action modes.
 - `/capabilities` permission summary for the current page.
 - Browser History / Activity Search v2: `/history <query> | site:example.com | days:7 | tabs` supports date filtering, per-site filtering, readable open-tab synthesis, explicit incognito exclusion, and `/history <query> | intake` export into Living Archive intake with a review request.
 - Browser-first Add-ons workspace lists visible add-ons, availability, trust tier, and governed workspace actions without granting new capabilities.
@@ -49,7 +50,7 @@ Intent: keep the browser-first ResonantOS work aligned with the AI-browser capab
 4. Permission / Consent UX
    - Ask whether Augmentor may operate the browser for each task class.
    - Remember per-task preference only within safe scopes.
-   - Make “what I can see/do now” visible in the control monitor.
+   - Add richer task-class preflight prompts before long autonomous browser runs.
 
 ## Validation Rule
 

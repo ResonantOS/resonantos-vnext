@@ -226,8 +226,9 @@ textarea:disabled {
 
 .site-permission-panel small {
   color: rgba(207, 219, 210, 0.66);
-  display: none;
   font-size: 0.58rem;
+  line-height: 1.25;
+  white-space: normal;
 }
 
 .site-permission-panel select {

@@ -161,6 +161,7 @@ These are the features currently implemented in the browser-first version.
 - User can approve once for eligible public-submit style actions.
 - User can deny an approval request.
 - User can trust safe actions for a site only when the boundary is safe.
+- The current-site context panel states what Augmentor can see and do now for each permission mode.
 - Task-class consent grants and revocations record audit entries with timestamp, source, task class, mode, and reason.
 - The permission manager surfaces the latest task-consent audit evidence next to each stored consent.
 - Hard wallet/payment/login/credential boundaries do not expose an approval bypass.

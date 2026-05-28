@@ -335,6 +335,7 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(monitorRenderers, /onRevokeTaskConsent/);
   assert.match(script, /createMonitorRenderers/);
   assert.match(monitorRenderers, /sitePermissionDescription/);
+  assert.match(monitorRenderers, /Can see\/do now/);
   assert.match(monitorRenderers, /renderSitePermissionPanel/);
   assert.match(monitorRenderers, /renderJobMonitor/);
   assert.match(monitorRenderers, /renderControlMonitor/);

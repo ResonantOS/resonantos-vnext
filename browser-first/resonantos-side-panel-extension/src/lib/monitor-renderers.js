@@ -1,8 +1,8 @@
 export function sitePermissionDescription(mode) {
-  if (mode === "blocked") return "Augmentor cannot read or operate this site.";
-  if (mode === "read-only") return "Augmentor can read context but cannot click, type, or scroll.";
-  if (mode === "trusted-for-safe-actions") return "Safe actions can run; wallet, login, payment, and public submit still require approval.";
-  return "Augmentor asks before risky actions and blocks sensitive actions by default.";
+  if (mode === "blocked") return "Can see/do now: nothing on this site. Reading, clicking, typing, scrolling, wallet, login, payment, credential, and public-submit actions are blocked.";
+  if (mode === "read-only") return "Can see/do now: page text, controls, fields, frames, and metadata. Cannot click, type, scroll, submit, use wallet, login, payment, or credentials.";
+  if (mode === "trusted-for-safe-actions") return "Can see/do now: page context plus safe clicks, typing, scrolling, and search-like submits. Wallet, login, payment, credentials, and public-submit still require approval.";
+  return "Can see/do now: page context. Augmentor asks before risky clicks, typing, scrolling, or submits, and blocks wallet, login, payment, and credential actions by default.";
 }
 
 export function controlRunProgress(run) {
