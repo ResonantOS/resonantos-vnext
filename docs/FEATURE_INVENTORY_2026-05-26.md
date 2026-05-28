@@ -75,6 +75,8 @@ These are the features currently implemented in the browser-first version.
 - The system keeps a controlled-tab binding so Augmentor acts on the intended webpage, not on the side-panel tab.
 - Page context can be attached into chat.
 - Inline selected text can be sent into the side panel.
+- Browser history/activity search supports `/history <query> | site:example.com | days:7 | tabs`.
+- History/activity search can filter by site, limit the date window, synthesize readable open tabs with history matches, and explicitly excludes incognito activity.
 
 ### Agent Control Mode
 

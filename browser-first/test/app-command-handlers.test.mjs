@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   createAppCommandHandlers,
   parseCommandSections,
+  parseHistorySearchCommand,
   sitePermissionModeFromText
 } from "../resonantos-side-panel-extension/src/lib/app-command-handlers.js";
 
@@ -37,7 +38,18 @@ function createHarness(overrides = {}) {
     browserJobStore,
     chrome: {
       history: {
-        search: async () => [{ title: "Example", url: "https://example.com/" }]
+        search: async () => [
+          { title: "Example", url: "https://example.com/" },
+          { title: "Other", url: "https://other.example/" }
+        ]
+      },
+      tabs: {
+        query: async () => [
+          { title: "Example tab", url: "https://example.com/page" },
+          { title: "Private tab", url: "https://example.com/private", incognito: true },
+          { title: "Other tab", url: "https://other.example/page" },
+          { title: "Extension tab", url: "chrome-extension://abc/panel.html" }
+        ]
       }
     },
     finishControlRun: (status) => calls.push(["finish", status]),
@@ -67,6 +79,18 @@ test("app command handlers parse sections and site permission modes", () => {
   assert.equal(sitePermissionModeFromText("normal"), "ask-before-action");
 });
 
+test("app command handlers parse history filters", () => {
+  assert.deepEqual(parseHistorySearchCommand("resonant dao | site:www.resonantos.com/path | days:7 | limit:12 | tabs:yes"), {
+    days: 7,
+    includeTabs: true,
+    maxResults: 12,
+    query: "resonant dao",
+    site: "resonantos.com"
+  });
+  assert.equal(parseHistorySearchCommand("recent tabs").includeTabs, true);
+  assert.equal(parseHistorySearchCommand("recent tabs").query, "");
+});
+
 test("app command handlers create goals and delegations", async () => {
   const harness = createHarness();
 
@@ -94,6 +118,21 @@ test("app command handlers report status, memory, history, capabilities, and sit
   assert.ok(harness.calls.some((call) => call[0] === "message" && /Browser history matches/.test(call[2])));
   assert.ok(harness.calls.some((call) => call[0] === "message" && /What Augmentor can do now/.test(call[2])));
   assert.ok(harness.calls.some((call) => call[0] === "message" && /Assistant permission to trusted-for-safe-actions/.test(call[2])));
+});
+
+test("app command handlers synthesize filtered history and recent readable tabs", async () => {
+  const harness = createHarness();
+
+  await harness.handlers.runHistorySearchCommand("example | site:example.com | days:7 | tabs");
+
+  const message = harness.calls.find((call) => call[0] === "message" && /Recent readable tabs/.test(call[2]))?.[2] ?? "";
+  assert.match(message, /Example tab/);
+  assert.match(message, /Browser history matches for "example"/);
+  assert.match(message, /Filter: site example.com/);
+  assert.match(message, /Window: 7 day/);
+  assert.match(message, /Incognito activity is excluded/);
+  assert.doesNotMatch(message, /Private tab/);
+  assert.doesNotMatch(message, /Other tab/);
 });
 
 test("app command handlers manage browser jobs", async () => {

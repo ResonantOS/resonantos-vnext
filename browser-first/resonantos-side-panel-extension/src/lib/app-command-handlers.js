@@ -2,6 +2,41 @@ import { isTerminalBrowserJobStatus } from "./browser-job-store.js";
 
 export const parseCommandSections = (body) => String(body ?? "").split("|").map((part) => part.trim()).filter(Boolean);
 
+export function parseHistorySearchCommand(body) {
+  const sections = parseCommandSections(body);
+  const first = sections[0] ?? "";
+  const options = {
+    days: 90,
+    includeTabs: /\b(tabs?|recent tabs?|open tabs?)\b/i.test(first),
+    maxResults: 8,
+    query: first.replace(/\b(recent tabs?|open tabs?|tabs?)\b/gi, "").trim(),
+    site: ""
+  };
+  sections.slice(1).forEach((section) => {
+    const [rawKey, ...rest] = section.split(":");
+    const key = rawKey.trim().toLowerCase();
+    const value = rest.join(":").trim();
+    if (key === "site" || key === "host") {
+      options.site = value.replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/.*$/, "");
+      return;
+    }
+    if (key === "days" || key === "since") {
+      const days = Number.parseInt(value, 10);
+      if (Number.isFinite(days) && days > 0 && days <= 3650) options.days = days;
+      return;
+    }
+    if (key === "limit" || key === "max") {
+      const maxResults = Number.parseInt(value, 10);
+      if (Number.isFinite(maxResults) && maxResults > 0 && maxResults <= 25) options.maxResults = maxResults;
+      return;
+    }
+    if (key === "tabs" || key === "recent-tabs") {
+      options.includeTabs = !/^false|no|0$/i.test(value);
+    }
+  });
+  return options;
+}
+
 export function sitePermissionModeFromText(body) {
   const normalized = String(body ?? "").trim();
   if (/\b(blocked|block)\b/i.test(normalized)) return "blocked";
@@ -108,29 +143,56 @@ export function createAppCommandHandlers({
   }
 
   async function runHistorySearchCommand(body) {
-    const query = String(body ?? "").trim();
-    if (!query) {
-      await addMessage("system", "Use `/history <query>` to search local browser history metadata.");
+    const options = parseHistorySearchCommand(body);
+    if (!options.query && !options.includeTabs) {
+      await addMessage("system", "Use `/history <query> | site:example.com | days:7 | tabs` to search local browser history metadata and recent readable tabs.");
       return;
     }
     if (!chrome.history?.search) {
       await addMessage("system", "Browser history search is not available in this runtime.");
       return;
     }
-    setActivity("retrieving", "Searching browser history", query);
-    const results = await chrome.history.search({
-      text: query,
-      maxResults: 8,
-      startTime: Date.now() - 1000 * 60 * 60 * 24 * 90
-    }).catch(() => []);
+    setActivity("retrieving", "Searching browser history", options.query || options.site || "recent tabs");
+    const siteMatches = (url) => {
+      if (!options.site) return true;
+      try {
+        return new URL(url).hostname.replace(/^www\./, "") === options.site;
+      } catch {
+        return false;
+      }
+    };
+    const historyResults = options.query ? await chrome.history.search({
+      text: options.query,
+      maxResults: Math.min(options.maxResults * 3, 75),
+      startTime: Date.now() - 1000 * 60 * 60 * 24 * options.days
+    }).catch(() => []) : [];
+    const results = historyResults.filter((item) => siteMatches(item.url)).slice(0, options.maxResults);
+    const readableTabs = options.includeTabs && chrome.tabs?.query
+      ? (await chrome.tabs.query({ currentWindow: true }).catch(() => []))
+        .filter((tab) => !tab.incognito && /^https?:\/\//i.test(tab.url ?? "") && siteMatches(tab.url))
+        .slice(0, options.maxResults)
+      : [];
+    const lines = [];
+    if (readableTabs.length) {
+      lines.push("Recent readable tabs:");
+      lines.push(...readableTabs.map((tab) => `- ${tab.title || tab.url}\n  ${tab.url}`));
+    }
+    if (results.length) {
+      lines.push(`Browser history matches${options.query ? ` for "${options.query}"` : ""}:`);
+      lines.push(...results.map((item) => `- ${item.title || item.url}\n  ${item.url}`));
+    }
+    if (options.site) {
+      lines.push(`Filter: site ${options.site}`);
+    }
+    lines.push(`Window: ${options.days} day(s). Incognito activity is excluded.`);
     await addMessage(
       "system",
-      results.length
-        ? `Browser history matches for "${query}":\n${results.map((item) => `- ${item.title || item.url}\n  ${item.url}`).join("\n")}`
-        : `No browser history match found for "${query}".`
+      lines.length > 1
+        ? lines.join("\n")
+        : `No browser history or readable tab match found for "${options.query || options.site}".\nWindow: ${options.days} day(s). Incognito activity is excluded.`
     );
     setStatus("Ready");
-    setActivity("completed", "History search complete", `${results.length} matches`);
+    setActivity("completed", "History search complete", `${results.length} history · ${readableTabs.length} tabs`);
   }
 
   async function runCapabilitiesCommand() {
@@ -145,7 +207,7 @@ export function createAppCommandHandlers({
         "- Read visible page text, controls, fields, frames, and page metadata.",
         "- Open/search pages, switch tabs, click visible safe controls, type into editable fields, and scroll.",
         "- Use Inline Assistant on selected text and send selected context into chat.",
-        "- Search local browser history metadata with `/history <query>`.",
+        "- Search local browser history metadata and readable open tabs with `/history <query> | site:example.com | days:7 | tabs`.",
         "- Save page/context artifacts into ResonantOS intake.",
         "",
         "Hard boundaries:",

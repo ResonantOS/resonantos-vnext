@@ -291,6 +291,7 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(chatSessionStore, /hydrate/);
   assert.match(script, /createSidePanelRenderers/);
   assert.match(script, /createAppCommandHandlers/);
+  assert.match(appCommandHandlers, /parseHistorySearchCommand/);
   assert.match(appCommandHandlers, /runGoalCommand/);
   assert.match(appCommandHandlers, /runSitePermissionCommand/);
   assert.match(appCommandHandlers, /runJobsCommand/);
@@ -359,6 +360,8 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(commandParser, /parseAutonomousBrowserActionIntent/);
   assert.match(commandParser, /parseAmazonShoppingTask/);
   assert.match(appCommandHandlers, /runHistorySearchCommand/);
+  assert.match(appCommandHandlers, /Incognito activity is excluded/);
+  assert.match(appCommandHandlers, /chrome\.tabs\.query/);
   assert.match(appCommandHandlers, /runSitePermissionCommand/);
   assert.match(appCommandHandlers, /runCapabilitiesCommand/);
   assert.match(script, /approvalBoundaryForStep/);

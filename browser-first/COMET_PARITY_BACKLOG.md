@@ -19,7 +19,7 @@ Intent: keep the browser-first ResonantOS work aligned with the AI-browser capab
 - Task-level consent v1: approve once, trust safe actions by site + task class, expire stale grants, or deny, while keeping wallet/payment/login/signing/credential/public-submit boundaries human-only.
 - Site Permission Controls v2: context dock manager lists stored site permissions and task-class consents across sites, with reset/revoke actions.
 - `/capabilities` permission summary for the current page.
-- Local browser history metadata search through `/history`.
+- Browser History / Activity Search v2: `/history <query> | site:example.com | days:7 | tabs` supports date filtering, per-site filtering, readable open-tab synthesis, and explicit incognito exclusion.
 - Browser-first Add-ons workspace lists visible add-ons, availability, trust tier, and governed workspace actions without granting new capabilities.
 - Main workspace chat now matches the side-panel chat command behavior for keyboard shortcuts, SVG message actions, model/depth controls, compact context usage, and page/archive handoff icons.
 - Durable Browser Jobs v1: persistent job registry, visible job monitor, `/jobs`, `/pause`, `/resume`, and `/cancel`.
@@ -37,8 +37,7 @@ Intent: keep the browser-first ResonantOS work aligned with the AI-browser capab
    - Add configurable action list and keyboard shortcuts.
 
 2. Browser History / Activity Search v2
-   - Add per-site and incognito exclusion.
-   - Add date filters and recent-tabs/history synthesis.
+   - Add richer activity summaries and optional Living Archive intake export for selected history results.
 
 3. Site Permission Controls v2
    - Add audit timestamps/reasons for approval and denial events.
