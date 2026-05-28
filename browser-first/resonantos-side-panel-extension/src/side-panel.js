@@ -347,6 +347,8 @@ const browserPageActions = createBrowserPageActions({
   bridgeRequest,
   chrome,
   getControlledTabId: () => controlledTabId,
+  getModel: () => modelSelect.value,
+  getThinkingDepth: () => thinkingDepthSelect.value,
   getLastSnapshot: () => lastSnapshot,
   isReadableBrowserTab,
   normalizeBrowserUrl,
@@ -381,6 +383,7 @@ const {
   searchBrowser,
   sendContentAction,
   setPageControlOverlay,
+  summarizeCurrentPageToArchive,
   summarizeSnapshot,
   typeIntoActivePage
 } = browserPageActions;
@@ -467,6 +470,9 @@ const tabContextController = createTabContextController({
 const bindMentionedTab = tabContextController.bindMentionedTab;
 
 const saveIntake = async (target = "page") => {
+  if (/summary|summari[sz]e|synthesis/i.test(String(target))) {
+    return summarizeCurrentPageToArchive();
+  }
   if (/selection|selected/i.test(String(target))) {
     return saveSelectionToArchive();
   }

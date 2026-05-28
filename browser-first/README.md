@@ -66,6 +66,9 @@ The current command surface:
 /browser scroll up
 /browser scroll top
 /browser scroll bottom
+/save page
+/save selection
+/save summary
 ```
 
 Agent Control Mode starts with `/control <goal>` or natural browser-task requests such as `book a call`, `arrange a meeting`, `fill this form`, `find news`, or `use this page`.
@@ -98,9 +101,19 @@ The side panel now includes an Agent Control Monitor:
 
 - current goal and run status
 - planned steps with pending, active, completed, blocked, or failed state
+- expandable action details covering observation, decision, action, result, and safety class
+- completion and blocker summary cards for fast replay
 - approval card for public-submit and other gated actions
 - deny/delegate actions for blocked work
 - Living Archive intake artifact path when a browser-control report is recorded
+
+Browser memory commands remain intake-only:
+
+- `/save page` captures the current page source context into Living Archive intake
+- `/save selection` captures selected page text into Living Archive intake
+- `/save summary` creates a provider-backed page summary intake artifact with source provenance and deterministic fallback
+
+All three memory commands queue review requests. They do not write trusted wiki pages directly.
 
 Allowed next actions are:
 

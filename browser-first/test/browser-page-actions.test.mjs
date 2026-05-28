@@ -47,6 +47,8 @@ function createHarness(overrides = {}) {
     },
     chrome,
     getControlledTabId: () => controlledTabId,
+    getModel: () => overrides.model ?? "MiniMax-M2.7",
+    getThinkingDepth: () => overrides.thinkingDepth ?? "minimal",
     getLastSnapshot: () => lastSnapshot,
     isReadableBrowserTab: (tab) => typeof tab?.url === "string" && /^https?:\/\//i.test(tab.url),
     normalizeBrowserUrl,
@@ -209,4 +211,69 @@ test("browser page actions save selected text to archive intake", async () => {
   const reviewCall = harness.events.find((event) => event[0] === "bridge" && event[1] === "/archive/review/request");
   assert.equal(reviewCall[2].body.path, "INTAKE/browser/selection.md");
   assert.equal(harness.events.some((event) => event[0] === "message" && /INTAKE\/browser|REVIEW\/requests/.test(event[2])), false);
+});
+
+test("browser page actions summarize current page into reviewed archive intake", async () => {
+  const harness = createHarness({
+    lastSnapshot: {
+      title: "Summary Page",
+      url: "https://example.test/summary",
+      text: "This page explains ResonantOS browser-first memory. It keeps source provenance visible.",
+      links: [{ text: "Memory", href: "https://example.test/memory" }],
+      controls: [],
+      fields: []
+    },
+    bridgeRequest: async (route, options) => {
+      if (route === "/augmentor/chat") {
+        assert.equal(options.body.model, "MiniMax-M2.7");
+        assert.match(options.body.pageContext, /Summary Page/);
+        return { reply: "## Summary\nThe page explains browser-first memory.", model: "MiniMax-M2.7" };
+      }
+      if (route === "/archive/intake") return { path: "INTAKE/browser/summary.md", bytes: 120 };
+      return { path: "REVIEW/requests/summary.md", status: "pending" };
+    }
+  });
+
+  const result = await harness.actions.summarizeCurrentPageToArchive();
+
+  assert.equal(result.ok, true);
+  assert.equal(result.path, "INTAKE/browser/summary.md");
+  assert.equal(result.reviewRequestPath, "REVIEW/requests/summary.md");
+  assert.equal(result.fallback, false);
+  const bridgeCall = harness.events.find((event) => event[0] === "bridge" && event[1] === "/archive/intake");
+  assert.equal(bridgeCall[2].body.origin, "browser-page-summary");
+  assert.equal(bridgeCall[2].body.url, "https://example.test/summary");
+  assert.match(bridgeCall[2].body.content, /## AI Summary/);
+  assert.match(bridgeCall[2].body.content, /fallback summary: no/);
+  const reviewCall = harness.events.find((event) => event[0] === "bridge" && event[1] === "/archive/review/request");
+  assert.equal(reviewCall[2].body.path, "INTAKE/browser/summary.md");
+  assert.match(reviewCall[2].body.reason, /Verify this browser page summary/);
+  assert.ok(harness.events.some((event) => event[0] === "message" && /Summarized this page into Living Archive intake/.test(event[2])));
+});
+
+test("browser page actions create deterministic summary intake when provider fails", async () => {
+  const harness = createHarness({
+    lastSnapshot: {
+      title: "Fallback Page",
+      url: "https://example.test/fallback",
+      text: "First fact. Second fact. Third fact.",
+      links: [],
+      controls: [],
+      fields: []
+    },
+    bridgeRequest: async (route) => {
+      if (route === "/augmentor/chat") throw new Error("provider offline");
+      if (route === "/archive/intake") return { path: "INTAKE/browser/fallback.md", bytes: 120 };
+      return { path: "REVIEW/requests/fallback.md", status: "pending" };
+    }
+  });
+
+  const result = await harness.actions.summarizeCurrentPageToArchive();
+
+  assert.equal(result.ok, true);
+  assert.equal(result.fallback, true);
+  const bridgeCall = harness.events.find((event) => event[0] === "bridge" && event[1] === "/archive/intake");
+  assert.match(bridgeCall[2].body.content, /fallback summary: yes/);
+  assert.match(bridgeCall[2].body.content, /Provider summary failed/);
+  assert.match(bridgeCall[2].body.content, /First fact/);
 });

@@ -3,6 +3,8 @@ export function createBrowserPageActions(deps) {
     addMessage,
     bridgeRequest,
     chrome,
+    getModel = () => "MiniMax-M2.7",
+    getThinkingDepth = () => "minimal",
     isReadableBrowserTab,
     normalizeBrowserUrl,
     permissionForUrl,
@@ -356,6 +358,113 @@ export function createBrowserPageActions(deps) {
     ].filter(Boolean).join("\n");
   }
 
+  function deterministicPageSummary(snapshot) {
+    const text = String(snapshot.text ?? "").replace(/\s+/g, " ").trim();
+    const sentences = text.split(/(?<=[.!?])\s+/).filter(Boolean).slice(0, 6);
+    return sentences.length
+      ? sentences.join(" ")
+      : text.split(/\s+/).filter(Boolean).slice(0, 120).join(" ");
+  }
+
+  function pageSummaryIntakeMarkdown(snapshot, summary, { model = "", fallback = false } = {}) {
+    const text = String(snapshot.text ?? "").trim();
+    const links = (snapshot.links ?? [])
+      .slice(0, 16)
+      .map((link) => `- [${link.text || link.href}](${link.href})`)
+      .join("\n");
+    return [
+      `Captured from: ${snapshot.url}`,
+      "",
+      "## AI Summary",
+      summary || "_No summary was generated._",
+      "",
+      "## Provenance",
+      `- title: ${snapshot.title || "Untitled"}`,
+      `- url: ${snapshot.url}`,
+      `- model: ${model || "deterministic-fallback"}`,
+      `- fallback summary: ${fallback ? "yes" : "no"}`,
+      `- visible words captured: ${text.split(/\s+/).filter(Boolean).length}`,
+      "",
+      links ? "## Source Links\n" + links : "",
+      "",
+      "## Source Excerpt",
+      text.slice(0, 12000) || "_No visible text captured._"
+    ].filter(Boolean).join("\n");
+  }
+
+  async function summarizeCurrentPageToArchive() {
+    const response = deps.getLastSnapshot() ? { ok: true, snapshot: deps.getLastSnapshot() } : await readActivePage({ announce: false });
+    const snapshot = response?.snapshot;
+    if (!snapshot) {
+      await addMessage("system", "There is no browser page context to summarize. Open a normal web page and read it first.");
+      setStatus("Summary unavailable");
+      return { ok: false, error: "No browser page context available." };
+    }
+    setActivity("thinking", "Summarising page for Living Archive intake", snapshot.title || snapshot.url);
+    setStatus("Summarising page");
+    let summary = "";
+    let model = "";
+    let fallback = false;
+    try {
+      const result = await bridgeRequest("/augmentor/chat", {
+        method: "POST",
+        body: {
+          model: getModel(),
+          thinkingDepth: getThinkingDepth(),
+          pageContext: pageIntakeMarkdown(snapshot).slice(0, 12000),
+          runtimeContext: "Create a source-grounded Living Archive intake summary. Do not claim trusted wiki promotion. Preserve uncertainty and cite visible source facts only.",
+          messages: [{
+            role: "user",
+            content: [
+              "Summarize this browser page for Living Archive intake.",
+              "Return concise markdown with:",
+              "- What this page is",
+              "- Key facts visible in the page",
+              "- Why it may matter",
+              "- Questions or uncertainties for review",
+              "- Suggested wiki entities/concepts to consider"
+            ].join("\n")
+          }]
+        }
+      });
+      summary = String(result.reply ?? "").trim();
+      model = result.model || getModel();
+    } catch (error) {
+      fallback = true;
+      model = "deterministic-fallback";
+      summary = [
+        "Provider summary failed, so ResonantOS created a deterministic source excerpt for review.",
+        "",
+        deterministicPageSummary(snapshot) || "No readable text was available for deterministic summarisation.",
+        "",
+        `Provider error: ${error instanceof Error ? error.message : String(error)}`
+      ].join("\n");
+    }
+    const result = await bridgeRequest("/archive/intake", {
+      method: "POST",
+      body: {
+        title: `Summary: ${snapshot.title || snapshot.url || "Untitled"}`,
+        url: snapshot.url,
+        origin: "browser-page-summary",
+        content: pageSummaryIntakeMarkdown(snapshot, summary, { model, fallback })
+      }
+    });
+    const review = await bridgeRequest("/archive/review/request", {
+      method: "POST",
+      body: {
+        path: result.path,
+        reason: "Verify this browser page summary against the source excerpt before any Living Archive wiki update is proposed."
+      }
+    });
+    await addMessage(
+      "system",
+      `Summarized this page into Living Archive intake and queued it for review.\n\nThis is a review artifact, not trusted AI Memory yet.`
+    );
+    setStatus("Page summary saved");
+    setActivity("completed", "Saved page summary intake", result.path);
+    return { ok: true, ...result, reviewRequestPath: review.path, fallback };
+  }
+
   async function saveCurrentPageToArchive() {
     const response = deps.getLastSnapshot() ? { ok: true, snapshot: deps.getLastSnapshot() } : await readActivePage({ announce: false });
     const snapshot = response?.snapshot;
@@ -448,6 +557,7 @@ export function createBrowserPageActions(deps) {
     setPageControlOverlay,
     saveCurrentPageToArchive,
     saveSelectionToArchive,
+    summarizeCurrentPageToArchive,
     summarizeSnapshot,
     typeIntoActivePage
   };
