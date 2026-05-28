@@ -22,6 +22,7 @@ function setupDom() {
 test("living archive workspace renders status, search, and intake through bridge routes", async () => {
   const { container, cleanup } = setupDom();
   const calls = [];
+  let reviewStatus = "pending";
   const bridgeRequest = async (route, options = {}) => {
     calls.push([route, options]);
     if (route === "/memory/status") {
@@ -42,10 +43,20 @@ test("living archive workspace renders status, search, and intake through bridge
         root: "Memory/REVIEW/requests",
         requests: [{
           title: "Browser job completed: compare a product",
-          status: "pending",
+          status: reviewStatus,
+          path: "REVIEW/requests/browser-job-completed.md",
           artifactPath: "INTAKE/browser/job-report.md",
           reason: "Evaluate browser artifact for durable wiki updates."
         }]
+      };
+    }
+    if (route === "/archive/review/transition") {
+      reviewStatus = options.body.status;
+      return {
+        path: options.body.path,
+        previousStatus: "pending",
+        status: reviewStatus,
+        updatedAt: "2026-05-28T10:00:00.000Z"
       };
     }
     if (route === "/archive/intake") {
@@ -65,6 +76,15 @@ test("living archive workspace renders status, search, and intake through bridge
     assert.ok(calls.some(([route]) => route === "/archive/review/list"));
     assert.match(container.textContent, /Browser job completed: compare a product/);
     assert.match(container.textContent, /INTAKE\/browser\/job-report\.md/);
+    container.querySelector("[data-review-status='approved']").click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.ok(calls.some(([route, options]) =>
+      route === "/archive/review/transition" &&
+      options.body.path === "REVIEW/requests/browser-job-completed.md" &&
+      options.body.status === "approved"
+    ));
+    assert.match(container.textContent, /approved/i);
 
     const searchInput = container.querySelector("input[type='search']");
     searchInput.value = "resonant";

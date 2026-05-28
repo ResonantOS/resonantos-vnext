@@ -86,6 +86,7 @@ These are the features currently implemented in the browser-first version.
 - The control monitor shows current status and progress.
 - The control monitor persists job state through browser storage.
 - Agent Control reports can be saved into Living Archive intake through the bridge path.
+- Browser artifacts can request Living Archive review, and the browser-first Living Archive workspace now exposes an auditable review queue with `pending`, `in-progress`, `approved`, and `rejected` state transitions.
 
 ### Browser Tools Available To Augmentor
 
@@ -526,7 +527,7 @@ These features exist in the desktop vNext codebase and remain important. Some wi
    - Reason: this directly improves the Comet-level experience the user sees every day.
 
 2. **Browser-First Memory Bridge UX**
-   - Add save page, save selection, save control report, and research trail intake flows.
+   - Add save page, save selection, research trail intake flows, and the first trusted-ingest worker that consumes approved review requests.
    - Reason: this connects the browser product to the LLM Wiki / Living Archive advantage.
 
 3. **Browser-First Add-on Surface**
@@ -544,4 +545,3 @@ These features exist in the desktop vNext codebase and remain important. Some wi
 6. **Browser-First Onboarding And Settings**
    - Add provider, memory, permissions, add-ons, and diagnostics settings inside the browser-first app.
    - Reason: the product needs to be usable without terminal/config knowledge.
-

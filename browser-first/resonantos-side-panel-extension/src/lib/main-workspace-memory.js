@@ -29,7 +29,7 @@ function resultCard(match) {
   return card;
 }
 
-function reviewRequestCard(request) {
+function reviewRequestCard(request, onTransition) {
   const card = document.createElement("article");
   card.className = "memory-review-request";
   const heading = document.createElement("div");
@@ -43,7 +43,23 @@ function reviewRequestCard(request) {
   artifact.textContent = request.artifactPath || request.path || "REVIEW/requests";
   const reason = document.createElement("p");
   reason.textContent = request.reason || "No review reason recorded.";
-  card.append(heading, artifact, reason);
+  const actions = document.createElement("div");
+  actions.className = "memory-review-actions";
+  const makeAction = (label, nextStatus) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = label;
+    button.dataset.reviewStatus = nextStatus;
+    button.disabled = request.status === nextStatus;
+    button.addEventListener("click", () => onTransition(request, nextStatus));
+    return button;
+  };
+  actions.append(
+    makeAction("Start", "in-progress"),
+    makeAction("Approve", "approved"),
+    makeAction("Reject", "rejected")
+  );
+  card.append(heading, artifact, reason, actions);
   return card;
 }
 
@@ -162,7 +178,7 @@ export function renderLivingArchiveWorkspace({ container, bridgeRequest, initial
         setStatus(reviewStatus, "No pending review requests. Browser artifacts can request review from the Artifacts workspace.", "warning");
         return;
       }
-      reviewList.append(...requests.map(reviewRequestCard));
+      reviewList.append(...requests.map((request) => reviewRequestCard(request, transitionReviewRequest)));
       setStatus(reviewStatus, `${requests.length} review request(s) waiting in ${result.root}.`, "success");
     } catch (error) {
       setStatus(reviewStatus, error instanceof Error ? error.message : String(error), "error");
@@ -170,6 +186,33 @@ export function renderLivingArchiveWorkspace({ container, bridgeRequest, initial
       refreshReview.disabled = false;
     }
   };
+
+  const transitionReviewRequest = async (request, status) => {
+    if (!request.path) {
+      setStatus(reviewStatus, "Review request is missing its path.", "error");
+      return;
+    }
+    setStatus(reviewStatus, `Updating review request to ${status}…`);
+    try {
+      const result = await bridgeRequest("/archive/review/transition", {
+        method: "POST",
+        body: {
+          path: request.path,
+          status,
+          note: `Set from Living Archive workspace UI.`
+        }
+      });
+      setStatus(reviewStatus, `Updated ${result.path} to ${result.status}.`, "success");
+      await loadStatus();
+      await loadReviewQueue();
+    } catch (error) {
+      setStatus(reviewStatus, error instanceof Error ? error.message : String(error), "error");
+    }
+  };
+
+  refreshReview.addEventListener("click", () => {
+    void loadReviewQueue();
+  });
 
   searchForm.addEventListener("submit", async (event) => {
     event.preventDefault();

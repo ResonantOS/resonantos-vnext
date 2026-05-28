@@ -1042,6 +1042,21 @@ function frontmatterValue(content, key) {
   }
 }
 
+function writeFrontmatterValue(content, key, value) {
+  const serialized = `${key}: ${JSON.stringify(value)}`;
+  const linePattern = new RegExp(`^${key}:\\s*.+$`, "m");
+  if (linePattern.test(content)) {
+    return content.replace(linePattern, serialized);
+  }
+  if (content.startsWith("---\n")) {
+    const end = content.indexOf("\n---", 4);
+    if (end !== -1) {
+      return `${content.slice(0, end)}\n${serialized}${content.slice(end)}`;
+    }
+  }
+  return ["---", serialized, "---", "", content].join("\n");
+}
+
 function markdownTitle(content, fallback) {
   return frontmatterValue(content, "title") ||
     /^#\s+(.+)$/m.exec(content)?.[1]?.trim() ||
@@ -1167,6 +1182,53 @@ async function executeArchiveReviewList(payload = {}) {
   }));
   requests.sort((left, right) => String(right.modifiedAt).localeCompare(String(left.modifiedAt)));
   return { root: path.relative(userRoot(), requestsRoot), requests: requests.slice(0, limit) };
+}
+
+async function executeArchiveReviewTransition(payload = {}) {
+  const requestPath = String(payload.path ?? "").trim();
+  const nextStatus = String(payload.status ?? "").trim();
+  const allowedStatuses = new Set(["pending", "in-progress", "approved", "rejected"]);
+  if (!allowedStatuses.has(nextStatus)) {
+    throw new Error("Review request status must be pending, in-progress, approved, or rejected.");
+  }
+  const filePath = safeMemoryRelativePath(requestPath, "REVIEW/requests");
+  if (!/\.(md|markdown)$/i.test(filePath)) {
+    throw new Error("Archive review status changes only support markdown review requests.");
+  }
+  const previous = await readFile(filePath, "utf8");
+  if (frontmatterValue(previous, "type") !== "archive-review-request") {
+    throw new Error("Archive review status changes require a review request file.");
+  }
+  const now = new Date().toISOString();
+  const actor = String(payload.actor ?? "resonantos-browser-first").trim().slice(0, 120) || "resonantos-browser-first";
+  const note = String(payload.note ?? "").trim().replace(/\s+/g, " ").slice(0, 800);
+  const previousStatus = frontmatterValue(previous, "status") || "pending";
+  let updated = previous;
+  updated = writeFrontmatterValue(updated, "status", nextStatus);
+  updated = writeFrontmatterValue(updated, "updatedAt", now);
+  updated = writeFrontmatterValue(updated, "updatedBy", actor);
+  if (note) {
+    updated = writeFrontmatterValue(updated, "decisionNote", note);
+  }
+  const eventLines = [
+    "",
+    "## Review Event",
+    `- at: ${now}`,
+    `- actor: ${actor}`,
+    `- from: ${previousStatus}`,
+    `- to: ${nextStatus}`,
+  ];
+  if (note) {
+    eventLines.push(`- note: ${note}`);
+  }
+  updated = `${updated.trimEnd()}\n${eventLines.join("\n")}\n`;
+  await writeFile(filePath, updated);
+  return {
+    path: path.relative(memoryRoot(), filePath),
+    previousStatus,
+    status: nextStatus,
+    updatedAt: now,
+  };
 }
 
 async function executeGoalRecord(payload) {
@@ -1389,6 +1451,7 @@ const bridgeRoutes = [
   { method: "POST", path: "/archive/intake/read", handler: executeArchiveIntakeRead },
   { method: "POST", path: "/archive/review/request", handler: executeArchiveReviewRequest },
   { method: "POST", path: "/archive/review/list", handler: executeArchiveReviewList },
+  { method: "POST", path: "/archive/review/transition", handler: executeArchiveReviewTransition },
   { method: "GET", path: "/addons/status", handler: executeAddonsStatus },
   { method: "GET", path: "/opencode/status", handler: executeOpenCodeStatus },
   { method: "POST", path: "/hermes/dashboard/status", handler: executeHermesDashboardStatus },

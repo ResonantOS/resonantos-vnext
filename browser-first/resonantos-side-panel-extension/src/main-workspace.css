@@ -858,6 +858,26 @@ textarea {
   background: rgba(0, 0, 0, 0.16);
 }
 
+.memory-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.memory-review-actions button {
+  border: 1px solid rgba(36, 209, 143, 0.2);
+  background: rgba(36, 209, 143, 0.09);
+  color: rgba(215, 239, 226, 0.92);
+  font-size: 0.78rem;
+  padding: 8px 10px;
+}
+
+.memory-review-actions button:disabled {
+  cursor: default;
+  opacity: 0.38;
+}
+
 .memory-review-heading {
   display: flex;
   align-items: start;
