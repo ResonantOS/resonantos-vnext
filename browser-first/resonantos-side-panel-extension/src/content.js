@@ -528,12 +528,31 @@ const inlineStyles = `
   #${inlineAssistantId} { position: fixed; display: none; width: min(390px, calc(100vw - 24px)); max-height: min(460px, calc(100vh - 24px)); overflow: auto; border: 1px solid rgba(36,209,143,.28); border-radius: 18px; background: linear-gradient(145deg, rgba(8,20,14,.98), rgba(4,8,7,.98)); color: #effaf2; box-shadow: 0 28px 90px rgba(0,0,0,.42); padding: 12px; }
   #${inlineAssistantId} .ros-inline-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px; }
   #${inlineAssistantId} strong { font: 800 13px/1.2 ui-sans-serif, system-ui; color:#effaf2; }
+  #${inlineAssistantId} kbd { all: unset; border:1px solid rgba(255,255,255,.12); border-radius:5px; color:#85eec3; font: 800 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace; margin-left:5px; padding:2px 4px; }
   #${inlineAssistantId} textarea { all: unset; display:block; box-sizing:border-box; width:100%; min-height:54px; margin: 0 0 9px; border:1px solid rgba(255,255,255,.09); border-radius:12px; background: rgba(255,255,255,.045); color:#effaf2; font: 12px/1.38 ui-sans-serif, system-ui; padding:9px; white-space:pre-wrap; }
   #${inlineAssistantId} button { all: unset; border-radius: 999px; color: #b9cbc0; cursor: pointer; font: 800 11px/1 ui-sans-serif, system-ui; padding: 7px 9px; }
   #${inlineAssistantId} button:hover { background: rgba(255,255,255,.08); color:#fff; }
   #${inlineAssistantId} .ros-inline-actions { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
   #${inlineAssistantId} .ros-inline-result { white-space: pre-wrap; color:#dce9df; font: 12px/1.45 ui-sans-serif, system-ui; background: rgba(255,255,255,.045); border-radius: 12px; padding: 10px; }
 `;
+
+const inlineActionList = [
+  { action: "custom", label: "Ask", shortcut: "A" },
+  { action: "summarize", label: "Summarize", shortcut: "S" },
+  { action: "explain", label: "Explain", shortcut: "E" },
+  { action: "fact-check", label: "Fact-check", shortcut: "F" },
+  { action: "translate", label: "Translate", shortcut: "T" },
+  { action: "rewrite", label: "Rewrite", shortcut: "R" },
+  { action: "send", label: "Send to side panel", shortcut: "P" },
+  { action: "insert", label: "Insert", shortcut: "I" }
+];
+
+const inlineActionByShortcut = (key) =>
+  inlineActionList.find((item) => item.shortcut.toLowerCase() === String(key ?? "").toLowerCase())?.action ?? "";
+
+const renderInlineActions = () => inlineActionList
+  .map((item) => `<button type="button" data-action="${item.action}" title="${item.label} (${item.shortcut})">${item.label}<kbd>${item.shortcut}</kbd></button>`)
+  .join("");
 
 const ensureInlineAssistantUi = () => {
   if (!document.getElementById("resonantos-inline-styles")) {
@@ -563,20 +582,30 @@ const ensureInlineAssistantUi = () => {
       </div>
       <textarea class="ros-inline-prompt" placeholder="Optional custom instruction for the selected text"></textarea>
       <div class="ros-inline-actions">
-        <button type="button" data-action="custom">Ask</button>
-        <button type="button" data-action="summarize">Summarize</button>
-        <button type="button" data-action="explain">Explain</button>
-        <button type="button" data-action="fact-check">Fact-check</button>
-        <button type="button" data-action="translate">Translate</button>
-        <button type="button" data-action="rewrite">Rewrite</button>
-        <button type="button" data-action="send">Send to side panel</button>
-        <button type="button" data-action="insert">Insert</button>
+        ${renderInlineActions()}
       </div>
       <div class="ros-inline-result">Select text, then choose an action.</div>
     `;
-    panel.addEventListener("mousedown", (event) => event.preventDefault());
+    panel.setAttribute("tabindex", "-1");
+    panel.addEventListener("mousedown", (event) => {
+      if (event.target?.classList?.contains("ros-inline-prompt")) return;
+      event.preventDefault();
+    });
+    panel.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        panel.style.display = "none";
+        return;
+      }
+      if (event.metaKey || event.ctrlKey || event.altKey || event.target?.classList?.contains("ros-inline-prompt")) {
+        return;
+      }
+      const action = inlineActionByShortcut(event.key);
+      if (!action) return;
+      event.preventDefault();
+      void runInlineAction(action);
+    });
     panel.addEventListener("click", (event) => {
-      const action = event.target?.dataset?.action;
+      const action = event.target?.closest?.("[data-action]")?.dataset?.action;
       if (!action) return;
       if (action === "close") {
         panel.style.display = "none";
@@ -589,10 +618,51 @@ const ensureInlineAssistantUi = () => {
   return { button, panel };
 };
 
+const editableRootForSelection = () => {
+  const active = document.activeElement;
+  if (active && isEditable(active)) return active;
+  const node = window.getSelection()?.anchorNode;
+  const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+  return element?.closest?.("input, textarea, [contenteditable='true']") ?? null;
+};
+
+const editableSelectionDetails = (element) => {
+  if (!element || !isEditable(element)) return null;
+  if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
+    const start = element.selectionStart ?? 0;
+    const end = element.selectionEnd ?? start;
+    const text = String(element.value ?? "").slice(start, end);
+    if (!text.trim()) return null;
+    return {
+      text: text.trim(),
+      rect: element.getBoundingClientRect(),
+      editable: true,
+      activeRef: ensureControlRef(element),
+      rangeStart: start,
+      rangeEnd: end,
+      rangeKind: "input"
+    };
+  }
+  const selection = window.getSelection();
+  const selectedText = selection?.toString?.() ?? "";
+  if (!selectedText.trim() || !selection.rangeCount) return null;
+  const range = selection.getRangeAt(0);
+  if (!element.contains(range.commonAncestorContainer)) return null;
+  return {
+    text: selectedText.trim(),
+    rect: range.getBoundingClientRect(),
+    editable: true,
+    activeRef: ensureControlRef(element),
+    rangeKind: "contenteditable"
+  };
+};
+
 const currentSelectionDetails = () => {
+  const editableDetails = editableSelectionDetails(editableRootForSelection());
+  if (editableDetails) return editableDetails;
   const selection = window.getSelection();
   const text = selection?.toString?.().trim() ?? "";
-  if (!text) return null;
+  if (!text || !selection.rangeCount) return null;
   const range = selection.getRangeAt(0);
   const rect = range.getBoundingClientRect();
   const active = document.activeElement;
@@ -648,9 +718,13 @@ const showInlinePanel = (initialAction = "summarize") => {
   if (!details) return;
   panel.dataset.selection = details.text;
   panel.dataset.activeRef = details.activeRef;
+  panel.dataset.rangeKind = details.rangeKind ?? "";
+  panel.dataset.rangeStart = Number.isFinite(details.rangeStart) ? String(details.rangeStart) : "";
+  panel.dataset.rangeEnd = Number.isFinite(details.rangeEnd) ? String(details.rangeEnd) : "";
   panel.style.left = button.style.left || "12px";
   panel.style.top = `${Math.min(window.innerHeight - 220, Math.max(8, details.rect.bottom + 12))}px`;
   panel.style.display = "block";
+  panel.focus({ preventScroll: true });
   void runInlineAction(initialAction);
 };
 
@@ -690,7 +764,29 @@ const runInlineAction = async (action) => {
       result.textContent = "Insertion is only available when the selection came from an editable field.";
       return;
     }
-    setNativeValue(active, result.textContent || selection);
+    const replacement = result.textContent || selection;
+    active.focus();
+    if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) {
+      const start = Number.parseInt(panel.dataset.rangeStart || "", 10);
+      const end = Number.parseInt(panel.dataset.rangeEnd || "", 10);
+      const rangeStart = Number.isFinite(start) ? start : active.selectionStart ?? 0;
+      const rangeEnd = Number.isFinite(end) ? end : active.selectionEnd ?? rangeStart;
+      active.setRangeText(replacement, rangeStart, rangeEnd, "end");
+      active.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertReplacementText", data: replacement }));
+      active.dispatchEvent(new Event("change", { bubbles: true }));
+    } else if (active.isContentEditable) {
+      const selectionObject = window.getSelection();
+      if (selectionObject?.rangeCount && active.contains(selectionObject.getRangeAt(0).commonAncestorContainer)) {
+        const range = selectionObject.getRangeAt(0);
+        range.deleteContents();
+        range.insertNode(document.createTextNode(replacement));
+        selectionObject.removeAllRanges();
+        active.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertReplacementText", data: replacement }));
+        active.dispatchEvent(new Event("change", { bubbles: true }));
+      } else {
+        setNativeValue(active, replacement);
+      }
+    }
     result.textContent = "Inserted into the active field.";
     return;
   }
@@ -718,6 +814,17 @@ document.addEventListener("selectionchange", () => {
   window.clearTimeout(globalThis.__resonantosInlineSelectionTimer);
   globalThis.__resonantosInlineSelectionTimer = window.setTimeout(positionInlineButton, 120);
 });
+
+document.addEventListener("select", (event) => {
+  if (!isEditable(event.target)) return;
+  window.clearTimeout(globalThis.__resonantosInlineSelectionTimer);
+  globalThis.__resonantosInlineSelectionTimer = window.setTimeout(positionInlineButton, 120);
+}, true);
+
+document.addEventListener("mouseup", () => {
+  window.clearTimeout(globalThis.__resonantosInlineSelectionTimer);
+  globalThis.__resonantosInlineSelectionTimer = window.setTimeout(positionInlineButton, 120);
+}, true);
 
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {

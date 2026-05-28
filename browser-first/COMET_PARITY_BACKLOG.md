@@ -14,6 +14,7 @@ Intent: keep the browser-first ResonantOS work aligned with the AI-browser capab
 - `@tab` targeting by tab number, title, or URL fragment.
 - Inline Assistant v1 for selected text.
 - Inline Assistant custom prompt input.
+- Inline Assistant v2: editable-field selection capture for inputs, textareas, and contenteditable surfaces; Insert replaces only the selected range; visible keyboard shortcuts are rendered for configured actions.
 - Site permission modes: blocked, read-only, ask-before-action, trusted-for-safe-actions.
 - Visible current-site permission control in the side panel.
 - Task-level consent v1: approve once, trust safe actions by site + task class, expire stale grants, or deny, while keeping wallet/payment/login/signing/credential/public-submit boundaries human-only.
@@ -32,30 +33,26 @@ Intent: keep the browser-first ResonantOS work aligned with the AI-browser capab
 
 ## Remaining Capability Work
 
-1. Inline Assistant v2
-   - Add stronger editable-field insertion flow.
-   - Add configurable action list and keyboard shortcuts.
-
-2. Browser History / Activity Search v2
+1. Browser History / Activity Search v2
    - Add richer activity summaries and optional Living Archive intake export for selected history results.
 
-3. Site Permission Controls v2
+2. Site Permission Controls v2
    - Add audit timestamps/reasons for approval and denial events.
 
-4. Parallel / Durable Browser Jobs
+3. Parallel / Durable Browser Jobs
    - Multiple concurrent browser tasks with separate monitors.
    - Long-running task reports into Living Archive intake.
    - Automatic resume from exact step/history after reload.
 
-5. Email / Calendar Add-ons
+4. Email / Calendar Add-ons
    - Gmail/Calendar-style integrations as add-ons with explicit approval.
    - Draft-only by default; sending/scheduling requires human approval.
 
-6. Secure Autofill Model
+5. Secure Autofill Model
    - Do not implement raw credential/payment autofill until vault, approval, and audit ADRs are complete.
    - Search/query field submission can remain allowed when content-script checks classify it as search-like.
 
-7. Permission / Consent UX
+6. Permission / Consent UX
    - Ask whether Augmentor may operate the browser for each task class.
    - Remember per-task preference only within safe scopes.
    - Make “what I can see/do now” visible in the control monitor.

@@ -493,7 +493,11 @@ test("browser layer can read active tab context without raw privileged access", 
   assert.match(content, /data-resonantos-control-ref/);
   assert.match(content, /resonantos-inline-assistant/);
   assert.match(content, /ros-inline-prompt/);
-  assert.match(content, /data-action="custom"/);
+  assert.match(content, /inlineActionList/);
+  assert.match(content, /inlineActionByShortcut/);
+  assert.match(content, /editableSelectionDetails/);
+  assert.match(content, /setRangeText/);
+  assert.match(content, /insertReplacementText/);
   assert.match(content, /currentSitePermission/);
   assert.match(content, /augmentorInlineDraft/);
   assert.match(content, /ensureControlRef/);

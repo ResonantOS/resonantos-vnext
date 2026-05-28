@@ -269,7 +269,7 @@ const fixtureHtml = `<!doctype html>
     <title>ResonantOS Agent Fixture</title>
     <style>
       body { font-family: sans-serif; min-height: 2400px; padding: 40px; }
-      button, input, [contenteditable] { font-size: 20px; margin: 10px; padding: 12px; }
+      button, input, textarea, [contenteditable] { font-size: 20px; margin: 10px; padding: 12px; }
       #status { position: fixed; top: 20px; right: 20px; background: #0b6; padding: 10px; }
       #doc { border: 2px solid #999; min-height: 80px; }
     </style>
@@ -284,6 +284,7 @@ const fixtureHtml = `<!doctype html>
       <input name="search" aria-label="Search field" placeholder="Search field">
       <button id="submit" type="submit">Submit public form</button>
     </form>
+    <textarea id="inline-editor" aria-label="Inline editable note">prefix teh quick i suffix</textarea>
     <section id="doc" contenteditable="true" aria-label="Draft document">Draft starts here.</section>
     <button id="wallet" type="button">Connect Wallet</button>
     <div id="status">idle</div>
@@ -542,6 +543,26 @@ try {
   assert(inlinePromptPresent, "Inline Assistant custom prompt input is missing.");
   await evaluate(page, `document.querySelector('#resonantos-inline-assistant [data-action="send"]').click()`);
   await waitForPanelText(panel, /Inline Assistant context received\./, "inline send to side panel");
+  const inlineInsertionState = (await evaluate(page, `(() => {
+    const editor = document.querySelector("#inline-editor");
+    editor.focus();
+    const start = editor.value.indexOf("teh quick i");
+    const end = start + "teh quick i".length;
+    editor.setSelectionRange(start, end);
+    editor.dispatchEvent(new Event("select", { bubbles: true }));
+    document.dispatchEvent(new Event("selectionchange"));
+    return true;
+  })()`)).result.value;
+  assert(inlineInsertionState, "Inline editor selection setup failed.");
+  await waitForPageCondition(page, `document.querySelector("#resonantos-inline-button")?.style.display === "block"`, "inline editable selection button");
+  await evaluate(page, `document.querySelector("#resonantos-inline-button").click()`);
+  await evaluate(page, `document.querySelector('#resonantos-inline-assistant [data-action="rewrite"]').click()`);
+  await waitForPageCondition(page, `document.querySelector("#resonantos-inline-assistant .ros-inline-result")?.innerText.includes("the quick I")`, "inline rewrite result");
+  const inlineShortcutLabels = (await evaluate(page, `Array.from(document.querySelectorAll("#resonantos-inline-assistant kbd")).map((node) => node.textContent).join("")`)).result.value;
+  assert(/S/.test(inlineShortcutLabels) && /I/.test(inlineShortcutLabels), `Inline Assistant shortcuts are missing: ${inlineShortcutLabels}`);
+  await evaluate(page, `document.querySelector('#resonantos-inline-assistant [data-action="insert"]').click()`);
+  const inlineEditorValue = (await evaluate(page, `document.querySelector("#inline-editor").value`)).result.value;
+  assert(inlineEditorValue === "prefix the quick I suffix", `Inline Assistant should replace only selected editable text: ${inlineEditorValue}`);
   const dockCollapsedState = (await evaluate(panel, `({
     dockHidden: document.querySelector("#context-dock").hidden,
     siteHidden: document.querySelector("#site-permission-panel").hidden,

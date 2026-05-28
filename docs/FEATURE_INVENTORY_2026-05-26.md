@@ -191,6 +191,9 @@ These are the features currently implemented in the browser-first version.
 - Inline Assistant appears when the user selects text on a permitted webpage.
 - Inline Assistant supports summarize, explain, fact-check, translate, rewrite, custom ask, send to side panel, and insert actions.
 - Inline Assistant custom prompt input exists.
+- Inline Assistant now captures editable selections inside inputs, textareas, and contenteditable surfaces.
+- Inline Assistant Insert replaces only the selected editable range instead of overwriting the entire field.
+- Inline Assistant actions render visible keyboard shortcuts from the configured action list.
 - Inline Assistant can send selected page context to the Augmentor side panel.
 - Inline Assistant is hidden on blocked sites.
 
