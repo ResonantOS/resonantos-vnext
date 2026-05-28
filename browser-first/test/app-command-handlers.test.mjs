@@ -12,6 +12,7 @@ function createHarness(overrides = {}) {
   const calls = [];
   const jobs = overrides.jobs ?? [{ id: "job-a", goal: "Find slot", status: "running" }];
   const browserJobStore = {
+    activateJob: async (id) => calls.push(["activate", id]),
     findJob: (query = "") => query ? jobs.find((job) => job.id.includes(query) || job.goal.toLowerCase().includes(String(query).toLowerCase())) ?? null : jobs[0] ?? null,
     getActiveJobId: () => overrides.activeJobId ?? "job-a",
     getJobs: () => jobs
@@ -60,11 +61,20 @@ function createHarness(overrides = {}) {
     renderJobMonitor: () => calls.push(["renderJobs"]),
     renderSitePermissionPanel: async () => calls.push(["renderSite"]),
     restartBrowserJob: async (job) => calls.push(["restart", job.id, job.goal, job.steps?.length ?? 0]),
+    saveBrowserJobReportToArchive: async (job) => {
+      calls.push(["saveReport", job.id]);
+      return { path: "INTAKE/browser/job-report.md" };
+    },
     setActivity: (...args) => calls.push(["activity", ...args]),
     setSitePermission: async (_url, mode, audit) => ({ audit, key: "example.com", mode }),
     setStatus: (status) => calls.push(["status", status]),
     siteKeyForUrl: () => "example.com",
-    updateBrowserJob: async (id, patch) => calls.push(["updateJob", id, patch])
+    updateBrowserJob: async (id, patch) => {
+      const job = jobs.find((item) => item.id === id);
+      if (job) Object.assign(job, patch);
+      calls.push(["updateJob", id, patch]);
+      return job ?? null;
+    }
   });
   return { calls, handlers };
 }
@@ -162,16 +172,23 @@ test("app command handlers save browser activity searches to archive intake", as
 });
 
 test("app command handlers manage browser jobs", async () => {
-  const harness = createHarness();
+  const harness = createHarness({
+    jobs: [{ id: "job-a", goal: "Find slot", status: "running", steps: [{ type: "read", label: "Read page", state: "completed" }] }]
+  });
 
   await harness.handlers.runJobsCommand();
   await harness.handlers.pauseBrowserJob("job-a");
   await harness.handlers.resumeBrowserJob("job-a");
+  await harness.handlers.reportBrowserJob("job-a");
   await harness.handlers.cancelBrowserJob("job-a");
 
   assert.ok(harness.calls.some((call) => call[0] === "message" && /Browser jobs/.test(call[2])));
   assert.ok(harness.calls.some((call) => call[0] === "finish" && call[1] === "paused"));
   assert.ok(harness.calls.some((call) => call[0] === "updateJob" && call[2].status === "paused"));
+  assert.ok(harness.calls.some((call) => call[0] === "activate" && call[1] === "job-a"));
+  assert.ok(harness.calls.some((call) => call[0] === "restart" && call[1] === "job-a" && call[3] === 1));
+  assert.ok(harness.calls.some((call) => call[0] === "saveReport" && call[1] === "job-a"));
+  assert.ok(harness.calls.some((call) => call[0] === "message" && /Saved browser job report/.test(call[2])));
   assert.ok(harness.calls.some((call) => call[0] === "updateJob" && call[2].status === "cancelled"));
 });
 

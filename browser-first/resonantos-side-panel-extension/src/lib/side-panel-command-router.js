@@ -30,6 +30,7 @@ export function createSidePanelCommandRouter(handlers) {
       if (name === "pause") return handlers.pauseBrowserJob(body);
       if (name === "resume") return handlers.resumeBrowserJob(body);
       if (name === "continue") return handlers.continueBrowserJob(body);
+      if (name === "report") return handlers.reportBrowserJob(body);
       if (name === "cancel") return handlers.cancelBrowserJob(body);
       if (name === "browser") return handlers.runBrowserCommand(body);
       if (name === "control") return handlers.runControlCommand(body);

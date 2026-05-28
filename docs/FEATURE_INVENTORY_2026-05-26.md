@@ -169,10 +169,14 @@ These are the features currently implemented in the browser-first version.
 ### Browser Job Monitor
 
 - Browser jobs are durable in extension storage.
+- The active browser job id is durable in extension storage.
+- Interrupted running/approval jobs are recovered as paused after browser host or side-panel reload, with instructions to resume from persisted step history.
 - The side panel shows job count and recent jobs.
 - `/jobs` lists browser jobs.
 - `/pause <job>` pauses a job.
-- `/resume <job>` queues a job for restart.
+- `/resume <job>` queues and immediately restarts a paused/queued/failed job from persisted step history.
+- `/continue <job>` starts a continuation from persisted step history for any non-running job.
+- `/report <job>` writes a durable Browser Job Report into Living Archive intake.
 - `/cancel <job>` cancels a job.
 - Job monitor can collapse/expand.
 - Completed, blocked, approval, paused, cancelled, and running states are represented.
@@ -245,7 +249,7 @@ These are the next capability areas planned for the browser-first app.
 - Refine the control monitor with richer action timing, elapsed duration, and confidence/uncertainty markers.
 - Add visible blockers with recommended next human action.
 - Add better progress semantics for multi-step tasks.
-- Add replayable run reports so a completed control task can be inspected later.
+- Improve replayable run reports with richer timing and confidence evidence.
 - Add clearer distinction between reading, deciding, acting, verifying, blocked, and waiting.
 
 ### Agent Control Browser Capability

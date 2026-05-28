@@ -86,6 +86,7 @@ const STORAGE_KEYS = {
   taskConsents: "augmentorTaskConsents",
   taskConsentAudit: "augmentorTaskConsentAudit",
   browserJobs: "augmentorBrowserJobs",
+  activeBrowserJob: "augmentorActiveBrowserJob",
   jobMonitorCollapsed: "augmentorJobMonitorCollapsed",
   contextDockExpanded: "augmentorContextDockExpanded"
 };
@@ -249,7 +250,18 @@ const renderJobMonitor = () => {
 
 const loadBrowserJobs = async () => {
   await browserJobStore.hydrate();
+  const recovered = await browserJobStore.recoverInterruptedJobs({
+    from: ["running", "approval"],
+    to: "paused",
+    reason: "Recovered after browser host reload. Use /resume <job> to continue from persisted step history."
+  });
   renderJobMonitor();
+  if (recovered.length) {
+    await addMessage(
+      "system",
+      `Recovered ${recovered.length} interrupted browser job${recovered.length === 1 ? "" : "s"} after reload. Use /resume <job> to continue from persisted step history.`
+    );
+  }
 };
 
 const createBrowserJob = async ({ goal, planner = "observe-act-verify-loop", summary = "" }) => {
@@ -741,6 +753,7 @@ const {
   runHistorySearchCommand,
   runJobsCommand,
   runMemorySearchCommand,
+  reportBrowserJob,
   runSitePermissionCommand,
   runStatusCommand
 } = createAppCommandHandlers({
@@ -755,6 +768,7 @@ const {
   renderJobMonitor,
   renderSitePermissionPanel,
   restartBrowserJob: (job) => runControlCommand(job.goal, { resumedFromJob: job }),
+  saveBrowserJobReportToArchive,
   setActivity,
   setSitePermission,
   setStatus,
@@ -794,6 +808,7 @@ const commandRouter = createSidePanelCommandRouter({
   runHistorySearchCommand,
   runJobsCommand: showBrowserJobsCommand,
   runMemorySearchCommand,
+  reportBrowserJob,
   runSitePermissionCommand,
   runStatusCommand,
   saveIntake,

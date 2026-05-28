@@ -389,9 +389,13 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(appCommandHandlers, /pauseBrowserJob/);
   assert.match(appCommandHandlers, /resumeBrowserJob/);
   assert.match(appCommandHandlers, /continueBrowserJob/);
+  assert.match(appCommandHandlers, /reportBrowserJob/);
   assert.match(appCommandHandlers, /cancelBrowserJob/);
+  assert.match(commandRouter, /reportBrowserJob/);
   assert.match(commandRouter, /continueBrowserJob/);
   assert.match(script, /augmentorBrowserJobs/);
+  assert.match(script, /augmentorActiveBrowserJob/);
+  assert.match(script, /recoverInterruptedJobs/);
   assert.match(script, /renderSitePermissionPanel/);
   assert.match(script, /sitePermissionMode\.addEventListener/);
   assert.match(tabContextController, /resolveTabMention/);

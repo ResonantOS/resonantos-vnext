@@ -94,6 +94,7 @@ export function createAppCommandHandlers({
   renderJobMonitor,
   renderSitePermissionPanel,
   restartBrowserJob,
+  saveBrowserJobReportToArchive,
   setActivity,
   setSitePermission,
   setStatus,
@@ -323,12 +324,23 @@ export function createAppCommandHandlers({
       await addMessage("system", "No browser job is available to resume.");
       return;
     }
-    if (job.status !== "paused") {
-      await addMessage("system", `Browser job ${job.id} is ${job.status}; only paused jobs can resume in v1.`);
+    if (!["paused", "queued", "failed"].includes(job.status)) {
+      await addMessage("system", `Browser job ${job.id} is ${job.status}; only paused, queued, or failed jobs can resume.`);
       return;
     }
+    await browserJobStore.activateJob?.(job.id);
     await updateBrowserJob(job.id, { status: "queued" });
-    await addMessage("system", `Queued browser job ${job.id} for manual resume: ${job.goal}\nRun /control ${job.goal} to restart it from the current page state.`);
+    await addMessage(
+      "system",
+      [
+        `Queued browser job ${job.id} for exact resume: ${job.goal}`,
+        `Persisted steps loaded: ${Array.isArray(job.steps) ? job.steps.length : 0}`,
+        "Resuming now from the current page state while preserving the previous step history."
+      ].join("\n")
+    );
+    if (typeof restartBrowserJob === "function") {
+      await restartBrowserJob(job);
+    }
   }
 
   async function continueBrowserJob(body = "") {
@@ -355,6 +367,28 @@ export function createAppCommandHandlers({
     await restartBrowserJob(job);
   }
 
+  async function reportBrowserJob(body = "") {
+    const job = browserJobStore.findJob(body);
+    if (!job) {
+      await addMessage("system", "No browser job is available to report.");
+      return;
+    }
+    if (typeof saveBrowserJobReportToArchive !== "function") {
+      await addMessage("system", `Browser job ${job.id} report is unavailable in this runtime.`);
+      return;
+    }
+    const result = await saveBrowserJobReportToArchive(job);
+    if (result?.error) {
+      await addMessage("system", `Browser job report failed: ${result.error}`);
+      return;
+    }
+    const artifact = { type: "archive-intake", path: result.path };
+    await updateBrowserJob(job.id, {
+      artifacts: [...(job.artifacts ?? []), artifact]
+    });
+    await addMessage("system", `Saved browser job report to Living Archive intake: ${result.path}`);
+  }
+
   async function cancelBrowserJob(body = "") {
     const job = browserJobStore.findJob(body);
     const currentControlRun = getCurrentControlRun();
@@ -374,6 +408,7 @@ export function createAppCommandHandlers({
     continueBrowserJob,
     pauseBrowserJob,
     resumeBrowserJob,
+    reportBrowserJob,
     runCapabilitiesCommand,
     runDelegateCommand,
     runGoalCommand,

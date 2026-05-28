@@ -81,6 +81,7 @@ export function createBrowserJobStore({
   async function persist() {
     compact();
     await storage?.set?.({
+      [storageKeys.activeBrowserJob]: activeJobId,
       [storageKeys.browserJobs]: jobs,
       [storageKeys.jobMonitorCollapsed]: monitorCollapsed
     }).catch(() => undefined);
@@ -90,6 +91,7 @@ export function createBrowserJobStore({
   async function hydrate() {
     const stored = await storage?.get?.([
       storageKeys.browserJobs,
+      storageKeys.activeBrowserJob,
       storageKeys.jobMonitorCollapsed
     ]).catch(() => ({}));
     jobs = Array.isArray(stored?.[storageKeys.browserJobs])
@@ -99,6 +101,10 @@ export function createBrowserJobStore({
       ? stored[storageKeys.jobMonitorCollapsed]
       : true;
     compact();
+    const storedActiveJobId = String(stored?.[storageKeys.activeBrowserJob] ?? "");
+    activeJobId = jobs.some((job) => job.id === storedActiveJobId)
+      ? storedActiveJobId
+      : jobs.find((job) => isActiveBrowserJobStatus(job.status))?.id ?? null;
     return snapshot();
   }
 
@@ -169,6 +175,39 @@ export function createBrowserJobStore({
     return updated;
   }
 
+  async function activateJob(jobId) {
+    const job = jobs.find((item) => item.id === jobId) ?? null;
+    activeJobId = job?.id ?? null;
+    await persist();
+    return job;
+  }
+
+  async function recoverInterruptedJobs({ from = ["running"], to = "paused", reason = "Recovered after browser host reload" } = {}) {
+    const interruptedStatuses = new Set(from);
+    let recovered = [];
+    jobs = jobs.map((job) => {
+      if (!interruptedStatuses.has(job.status)) return job;
+      const recoveredJob = normalizeBrowserJob({
+        ...job,
+        status: to,
+        lastError: reason,
+        updatedAt: now()
+      }, { now });
+      recovered = [...recovered, recoveredJob];
+      return recoveredJob;
+    });
+    if (activeJobId && !jobs.some((job) => job.id === activeJobId && isActiveBrowserJobStatus(job.status))) {
+      activeJobId = recovered[0]?.id ?? jobs.find((job) => isActiveBrowserJobStatus(job.status))?.id ?? null;
+    }
+    if (!activeJobId && recovered.length) {
+      activeJobId = recovered[0].id;
+    }
+    if (recovered.length) {
+      await persist();
+    }
+    return recovered;
+  }
+
   async function setMonitorCollapsed(collapsed) {
     monitorCollapsed = Boolean(collapsed);
     await persist();
@@ -180,6 +219,7 @@ export function createBrowserJobStore({
   }
 
   return {
+    activateJob,
     createJob,
     currentJob,
     findJob,
@@ -188,6 +228,7 @@ export function createBrowserJobStore({
     getMonitorCollapsed,
     hydrate,
     persist,
+    recoverInterruptedJobs,
     setMonitorCollapsed,
     snapshot,
     toggleMonitorCollapsed,

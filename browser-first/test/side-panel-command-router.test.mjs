@@ -28,6 +28,7 @@ function createHarness() {
     runHistorySearchCommand: handler("history"),
     runJobsCommand: handler("jobs"),
     runMemorySearchCommand: handler("memory"),
+    reportBrowserJob: handler("report"),
     runSitePermissionCommand: handler("site"),
     runStatusCommand: handler("status"),
     saveIntake: handler("save"),
@@ -79,6 +80,7 @@ test("side panel command router dispatches browser state slash commands", async 
   await harness.router.respondToCommand("/pause job-a");
   await harness.router.respondToCommand("/resume job-a");
   await harness.router.respondToCommand("/continue job-a");
+  await harness.router.respondToCommand("/report job-a");
   await harness.router.respondToCommand("/cancel job-a");
 
   assert.deepEqual(harness.calls.map((call) => call[0]), [
@@ -90,6 +92,7 @@ test("side panel command router dispatches browser state slash commands", async 
     "bind", "pause",
     "bind", "resume",
     "bind", "continue",
+    "bind", "report",
     "bind", "cancel"
   ]);
 });
