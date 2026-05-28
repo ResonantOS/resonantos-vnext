@@ -1476,6 +1476,9 @@ async function executeArchivePromotionList(payload = {}) {
       promotedPage: frontmatterValue(content, "promotedPage") || frontmatterValue(content, "proposedPage") || "",
       promotedAt: frontmatterValue(content, "promotedAt") || details.mtime.toISOString(),
       backupPath: frontmatterValue(content, "backupPath") || "",
+      rollbackStatus: frontmatterValue(content, "rollbackStatus") || "",
+      restoredAt: frontmatterValue(content, "restoredAt") || "",
+      restoreBackupPath: frontmatterValue(content, "restoreBackupPath") || "",
       artifactPath: frontmatterValue(content, "artifactPath") || "",
       requestPath: frontmatterValue(content, "requestPath") || "",
       modifiedAt: details.mtime.toISOString(),
@@ -1487,6 +1490,59 @@ async function executeArchivePromotionList(payload = {}) {
   return {
     root: path.relative(userRoot(), artifactsRoot),
     promotions: promotions.slice(0, limit),
+  };
+}
+
+async function executeArchivePromotionRestore(payload = {}) {
+  const artifactPath = String(payload.path ?? "").trim();
+  const artifactFile = safeMemoryRelativePath(artifactPath, "REVIEW/artifacts");
+  if (!/\.(md|markdown)$/i.test(artifactFile)) {
+    throw new Error("Archive promotion restore only supports markdown review artifacts.");
+  }
+  const artifactContent = await readFile(artifactFile, "utf8");
+  if (frontmatterValue(artifactContent, "type") !== "archive-draft-wiki-update") {
+    throw new Error("Archive promotion restore requires a draft wiki-update artifact.");
+  }
+  if (frontmatterValue(artifactContent, "promotionStatus") !== "promoted") {
+    throw new Error("Only promoted archive artifacts can be restored.");
+  }
+  const promotedPage = frontmatterValue(artifactContent, "promotedPage") || frontmatterValue(artifactContent, "proposedPage");
+  const backupPath = frontmatterValue(artifactContent, "backupPath");
+  if (!backupPath) {
+    throw new Error("This promotion has no backup to restore.");
+  }
+  const pageFile = safeMemoryRelativePath(promotedPage, "AI_MEMORY/wiki");
+  const backupFile = safeMemoryRelativePath(backupPath, "AI_MEMORY/backups/promotions");
+  if (!existsSync(backupFile)) {
+    throw new Error("Recorded promotion backup was not found.");
+  }
+  const now = new Date().toISOString();
+  let restoreBackupPath = "";
+  if (existsSync(pageFile)) {
+    const restoreBackupDir = path.join(memoryRoot(), "AI_MEMORY", "backups", "restores", now.replace(/[:.]/g, "-"));
+    await mkdir(restoreBackupDir, { recursive: true });
+    const restoreBackupFile = path.join(restoreBackupDir, path.basename(pageFile));
+    await copyFile(pageFile, restoreBackupFile);
+    restoreBackupPath = path.relative(memoryRoot(), restoreBackupFile);
+  }
+  await mkdir(path.dirname(pageFile), { recursive: true });
+  await copyFile(backupFile, pageFile);
+  let updatedArtifact = artifactContent;
+  updatedArtifact = writeFrontmatterValue(updatedArtifact, "rollbackStatus", "restored");
+  updatedArtifact = writeFrontmatterValue(updatedArtifact, "restoredAt", now);
+  updatedArtifact = writeFrontmatterValue(updatedArtifact, "restoreBackupPath", restoreBackupPath);
+  updatedArtifact = `${updatedArtifact.trimEnd()}\n\n## Restore Event\n- at: ${now}\n- actor: resonantos-browser-first\n- page: ${promotedPage}\n- restored-from: ${backupPath}\n${restoreBackupPath ? `- previous-current-backup: ${restoreBackupPath}\n` : ""}`;
+  await writeFile(artifactFile, updatedArtifact);
+  const logPath = path.join(memoryRoot(), "AI_MEMORY", "wiki", "log.md");
+  await mkdir(path.dirname(logPath), { recursive: true });
+  await appendFile(logPath, `## [${now}] trusted_wiki_restore | ${path.basename(promotedPage)}\n- page: ${promotedPage}\n- restored from: ${backupPath}\n- review artifact: ${artifactPath}\n${restoreBackupPath ? `- previous current backup: ${restoreBackupPath}\n` : ""}\n`);
+  return {
+    path: artifactPath,
+    status: "restored",
+    promotedPage,
+    backupPath,
+    restoredAt: now,
+    restoreBackupPath,
   };
 }
 
@@ -1715,6 +1771,7 @@ const bridgeRoutes = [
   { method: "POST", path: "/archive/review/artifact/read", handler: executeArchiveReviewArtifactRead },
   { method: "POST", path: "/archive/review/artifact/promote", handler: executeArchiveReviewArtifactPromote },
   { method: "POST", path: "/archive/review/promotions/list", handler: executeArchivePromotionList },
+  { method: "POST", path: "/archive/review/promotions/restore", handler: executeArchivePromotionRestore },
   { method: "GET", path: "/addons/status", handler: executeAddonsStatus },
   { method: "GET", path: "/opencode/status", handler: executeOpenCodeStatus },
   { method: "POST", path: "/hermes/dashboard/status", handler: executeHermesDashboardStatus },

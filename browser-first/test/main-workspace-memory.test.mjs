@@ -25,6 +25,7 @@ test("living archive workspace renders status, search, and intake through bridge
   let reviewStatus = "pending";
   let draftArtifactPath = "";
   let promoted = false;
+  let restored = false;
   const bridgeRequest = async (route, options = {}) => {
     calls.push([route, options]);
     if (route === "/memory/status") {
@@ -101,8 +102,21 @@ test("living archive workspace renders status, search, and intake through bridge
           path: "REVIEW/artifacts/browser/browser-job-completed-draft.md",
           promotedPage: "AI_MEMORY/wiki/browser-job-completed.md",
           promotedAt: "2026-05-28T11:00:00.000Z",
-          backupPath: "AI_MEMORY/backups/promotions/2026-05-28/browser-job-completed.md"
+          backupPath: "AI_MEMORY/backups/promotions/2026-05-28/browser-job-completed.md",
+          rollbackStatus: restored ? "restored" : "",
+          restoredAt: restored ? "2026-05-28T11:30:00.000Z" : ""
         }] : []
+      };
+    }
+    if (route === "/archive/review/promotions/restore") {
+      restored = true;
+      return {
+        path: options.body.path,
+        status: "restored",
+        promotedPage: "AI_MEMORY/wiki/browser-job-completed.md",
+        backupPath: "AI_MEMORY/backups/promotions/2026-05-28/browser-job-completed.md",
+        restoredAt: "2026-05-28T11:30:00.000Z",
+        restoreBackupPath: "AI_MEMORY/backups/restores/2026-05-28/browser-job-completed.md"
       };
     }
     if (route === "/archive/intake") {
@@ -164,6 +178,16 @@ test("living archive workspace renders status, search, and intake through bridge
     assert.match(container.textContent, /Promoted AI_MEMORY\/wiki\/browser-job-completed\.md/);
     assert.match(container.textContent, /Promotion History/);
     assert.match(container.textContent, /AI_MEMORY\/backups\/promotions\/2026-05-28\/browser-job-completed\.md/);
+    Array.from(container.querySelectorAll(".memory-promotion-card button"))
+      .find((button) => button.textContent === "Restore Backup")
+      .click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.ok(calls.some(([route, options]) =>
+      route === "/archive/review/promotions/restore" &&
+      options.body.path === "REVIEW/artifacts/browser/browser-job-completed-draft.md"
+    ));
+    assert.match(container.textContent, /Restored AI_MEMORY\/wiki\/browser-job-completed\.md from AI_MEMORY\/backups\/promotions\/2026-05-28\/browser-job-completed\.md/);
 
     const searchInput = container.querySelector("input[type='search']");
     searchInput.value = "resonant";
@@ -200,6 +224,9 @@ test("living archive workspace can run an initial routed search", async () => {
     }
     if (route === "/archive/review/promotions/list") {
       return { root: "Memory/REVIEW/artifacts", promotions: [] };
+    }
+    if (route === "/archive/review/promotions/restore") {
+      return { status: "restored" };
     }
     throw new Error(`Unexpected route ${route}`);
   };

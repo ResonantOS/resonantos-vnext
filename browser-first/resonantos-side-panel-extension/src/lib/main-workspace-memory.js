@@ -78,7 +78,7 @@ function reviewRequestCard(request, onTransition, onDraft, onPreviewDraft) {
   return card;
 }
 
-function promotionCard(entry) {
+function promotionCard(entry, onRestore) {
   const card = document.createElement("article");
   card.className = "memory-promotion-card";
   const heading = document.createElement("div");
@@ -100,6 +100,22 @@ function promotionCard(entry) {
     backup.textContent = `backup: ${entry.backupPath}`;
     card.append(backup);
   }
+  if (entry.rollbackStatus === "restored") {
+    const restored = document.createElement("p");
+    restored.textContent = entry.restoredAt
+      ? `Restored from backup ${entry.restoredAt}.`
+      : "Restored from backup.";
+    card.append(restored);
+  }
+  const actions = document.createElement("div");
+  actions.className = "memory-review-actions";
+  const restoreButton = document.createElement("button");
+  restoreButton.type = "button";
+  restoreButton.textContent = entry.rollbackStatus === "restored" ? "Restored" : "Restore Backup";
+  restoreButton.disabled = !entry.backupPath || entry.rollbackStatus === "restored";
+  restoreButton.addEventListener("click", () => onRestore(entry));
+  actions.append(restoreButton);
+  card.append(actions);
   return card;
 }
 
@@ -260,12 +276,35 @@ export function renderLivingArchiveWorkspace({ container, bridgeRequest, initial
         setStatus(promotionStatus, "No promoted wiki updates yet.", "warning");
         return;
       }
-      promotionList.append(...promotions.map(promotionCard));
+      promotionList.append(...promotions.map((entry) => promotionCard(entry, restorePromotionBackup)));
       setStatus(promotionStatus, `${promotions.length} promoted wiki update(s) in ${result.root}.`, "success");
     } catch (error) {
       setStatus(promotionStatus, error instanceof Error ? error.message : String(error), "error");
     } finally {
       refreshPromotions.disabled = false;
+    }
+  };
+
+  const restorePromotionBackup = async (entry) => {
+    if (!entry.path) {
+      setStatus(promotionStatus, "Promotion entry is missing its review artifact path.", "error");
+      return;
+    }
+    if (!entry.backupPath) {
+      setStatus(promotionStatus, "This promotion has no backup to restore.", "warning");
+      return;
+    }
+    setStatus(promotionStatus, `Restoring ${entry.promotedPage || "wiki page"} from backup…`);
+    try {
+      const result = await bridgeRequest("/archive/review/promotions/restore", {
+        method: "POST",
+        body: { path: entry.path }
+      });
+      await loadStatus();
+      await loadPromotionHistory();
+      setStatus(promotionStatus, `Restored ${result.promotedPage} from ${result.backupPath}.`, "success");
+    } catch (error) {
+      setStatus(promotionStatus, error instanceof Error ? error.message : String(error), "error");
     }
   };
 

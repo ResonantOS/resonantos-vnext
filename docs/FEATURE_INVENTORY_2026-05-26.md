@@ -92,6 +92,7 @@ These are the features currently implemented in the browser-first version.
 - Browser-first draft artifacts can now be explicitly promoted into `AI_MEMORY/wiki` through a scoped host action that requires an approved source review request, backs up overwritten wiki pages, marks the artifact as promoted, and appends to `index.md` / `log.md`.
 - Browser-first promotion now uses section-aware markdown merge: matching `##` sections are updated, unmatched existing sections are preserved, new sections are appended, and superseded sections are retained for provenance.
 - The browser-first Living Archive workspace now shows promotion history from promoted review artifacts, including the promoted wiki page and backup path when a page was overwritten.
+- Promotion history can restore a promoted wiki page from its recorded backup through a scoped host action; the restore operation backs up the current page first and appends a restore event to the wiki log.
 
 ### Browser Tools Available To Augmentor
 
