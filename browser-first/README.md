@@ -158,3 +158,47 @@ The live test proves:
 - document-like contenteditable typing
 - public form submit remains blocked at the approval boundary
 - wallet-style work stops at the approval boundary
+
+---
+
+## Dynamic Addon System (Option F)
+
+Add-ons are self-contained folders in `browser-first/addons/` with an `addon.json` manifest. The addon discovery engine (`addon-discovery.mjs`) scans the directory on startup and auto-registers everything it finds. No code changes needed. Drop a folder, it exists.
+
+### Addon Security
+
+The discovery engine validates every manifest before registration:
+- Path traversal prevention (`../../` in entry fields blocked)
+- Trust tier allowlist (unknown values rejected)
+- Symlink escape detection (`realpath` + root check)
+- Manifest size limit (64KB max)
+- HTML injection blocked in all string fields
+- ID collision detection (first-seen wins)
+- Circular dependency detection (DFS cycle check)
+- Empty boundary rejection
+
+### Building Your Own Addon
+
+See `browser-first/addons/ADDON-SPEC.md` for the complete developer guide.
+
+Quick start:
+```
+browser-first/addons/my-addon/
+  addon.json     # Manifest (required)
+  my-addon.html  # UI (optional)
+  my-addon.js    # Logic (optional)
+```
+
+Minimal `addon.json`:
+```json
+{
+  "id": "addon.my-addon",
+  "name": "My Addon",
+  "version": "1.0.0",
+  "description": "What it does",
+  "mode": "utility",
+  "trust": "host-mediated",
+  "boundary": "What it can and cannot do."
+}
+```
+
