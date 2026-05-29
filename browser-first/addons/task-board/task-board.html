@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' blob:; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; connect-src http://127.0.0.1:47773; img-src 'self' data: blob: https:; frame-src https:; font-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com;" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Task Board — ResonantOS</title>
+  <link rel="stylesheet" href="task-board.css">
+</head>
+<body>
+
+<div class="app-shell">
+
+  <!-- ── Header ─────────────────────────────────────── -->
+  <header class="app-header">
+    <div class="header-logo">
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect x="3"  y="3"  width="10" height="10" rx="2" stroke="#14F195" stroke-width="1.5" opacity="0.8"/>
+        <rect x="15" y="3"  width="10" height="10" rx="2" stroke="#9945FF" stroke-width="1.5" opacity="0.8"/>
+        <rect x="3"  y="15" width="10" height="10" rx="2" stroke="#9945FF" stroke-width="1.5" opacity="0.5"/>
+        <rect x="15" y="15" width="10" height="10" rx="2" stroke="#14F195" stroke-width="1.5" opacity="0.5"/>
+        <line x1="5"  y1="7"  x2="11" y2="7"  stroke="#14F195" stroke-width="1.2"/>
+        <line x1="17" y1="7"  x2="23" y2="7"  stroke="#9945FF" stroke-width="1.2"/>
+        <line x1="5"  y1="19" x2="9"  y2="19" stroke="#9945FF" stroke-width="1.2"/>
+      </svg>
+      <div>
+        <div class="header-title">Task Board</div>
+        <div class="header-subtitle">Kanban — drag cards between columns</div>
+      </div>
+    </div>
+    <div class="header-spacer"></div>
+    <div class="header-task-count" id="task-count" aria-live="polite">— tasks</div>
+  </header>
+
+  <!-- ── Board ──────────────────────────────────────── -->
+  <main class="board-container" id="board" role="main" aria-label="Kanban task board">
+
+    <section class="kanban-col" id="col-ready" data-col="ready" aria-label="Ready column"
+             aria-dropeffect="move">
+      <div class="col-stripe ready" aria-hidden="true"></div>
+      <div class="col-header">
+        <span class="col-name ready">Ready</span>
+        <span class="col-badge" id="badge-ready">0</span>
+      </div>
+      <div class="col-body" id="body-ready" role="list" aria-label="Ready tasks"></div>
+    </section>
+
+    <section class="kanban-col" id="col-inprog" data-col="inprog" aria-label="In Progress column"
+             aria-dropeffect="move">
+      <div class="col-stripe inprog" aria-hidden="true"></div>
+      <div class="col-header">
+        <span class="col-name inprog">In Progress</span>
+        <span class="col-badge" id="badge-inprog">0</span>
+      </div>
+      <div class="col-body" id="body-inprog" role="list" aria-label="In Progress tasks"></div>
+    </section>
+
+    <section class="kanban-col" id="col-blocked" data-col="blocked" aria-label="Blocked column"
+             aria-dropeffect="move">
+      <div class="col-stripe blocked" aria-hidden="true"></div>
+      <div class="col-header">
+        <span class="col-name blocked">Blocked</span>
+        <span class="col-badge" id="badge-blocked">0</span>
+      </div>
+      <div class="col-body" id="body-blocked" role="list" aria-label="Blocked tasks"></div>
+    </section>
+
+    <section class="kanban-col" id="col-done" data-col="done" aria-label="Done column"
+             aria-dropeffect="move">
+      <div class="col-stripe done" aria-hidden="true"></div>
+      <div class="col-header">
+        <span class="col-name done">Done</span>
+        <span class="col-badge" id="badge-done">0</span>
+      </div>
+      <div class="col-body" id="body-done" role="list" aria-label="Done tasks"></div>
+    </section>
+
+  </main>
+
+  <!-- ── Footer ─────────────────────────────────────── -->
+  <footer class="app-footer">
+    <span>Drag cards to move between columns</span>
+    <div class="footer-right">
+      <span class="footer-pill">v1.0.0</span>
+      <span class="footer-pill">Mock Data</span>
+      <span style="color:var(--text-dim)">addon.task-board · ResonantOS</span>
+    </div>
+  </footer>
+
+</div>
+
+<script type="module" src="task-board.js"></script>
+</body>
+</html>

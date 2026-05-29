@@ -1,0 +1,16 @@
+{
+  "id": "addon.task-board",
+  "name": "Task Board",
+  "version": "1.0.0",
+  "description": "Kanban board for tracking tasks across READY, IN PROGRESS, BLOCKED, and DONE columns with drag-and-drop support",
+  "author": "Tom Pennington",
+  "mode": "utility",
+  "trust": "host-mediated",
+  "entry": "task-board.html",
+  "contentScripts": [],
+  "commands": ["/tasks", "/kanban", "/board"],
+  "messageChannel": "resonantos.task-board",
+  "capabilities": ["task-read", "task-write"],
+  "requires": [],
+  "boundary": "Task management interface only. No external network access. All data sourced from host-mediated bridge."
+}

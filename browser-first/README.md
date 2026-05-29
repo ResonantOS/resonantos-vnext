@@ -158,3 +158,37 @@ The live test proves:
 - document-like contenteditable typing
 - public form submit remains blocked at the approval boundary
 - wallet-style work stops at the approval boundary
+
+---
+
+## Task Board Addon
+
+**ID:** `addon.task-board` | **Mode:** `utility` | **Trust:** `host-mediated`
+
+Kanban board for tracking tasks across four columns with drag-and-drop support:
+
+| Column | Description |
+|--------|-------------|
+| READY | Tasks queued for work |
+| IN PROGRESS | Active tasks |
+| BLOCKED | Waiting for dependency |
+| DONE | Completed tasks |
+
+**Commands:** `/tasks`, `/kanban`, `/board`
+
+**Boundary:** Task management interface only. No external network access. All data sourced from host-mediated bridge.
+
+![Task Board Screenshot](docs/screenshots/task-board.png)
+
+### Addon Structure
+
+```
+browser-first/addons/task-board/
+  addon.json        # Manifest
+  task-board.html   # Kanban UI
+  task-board.css    # Board styles
+  task-board.js     # Drag-and-drop + task logic
+browser-first/docs/screenshots/
+  task-board.png    # Screenshot
+```
+
