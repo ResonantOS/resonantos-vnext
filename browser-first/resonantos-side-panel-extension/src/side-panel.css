@@ -448,8 +448,22 @@ textarea:disabled {
   font-size: 0.58rem;
 }
 
-.job-list .job-preflight {
+.job-list .job-preflight,
+.job-list .job-focused {
   color: rgba(36, 209, 143, 0.72);
+}
+
+.job-list .job-focused {
+  font-weight: 900;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.job-list li[data-active="true"] {
+  border-color: rgba(36, 209, 143, 0.28);
+  background:
+    linear-gradient(135deg, rgba(36, 209, 143, 0.08), rgba(255, 255, 255, 0.035)),
+    rgba(255, 255, 255, 0.04);
 }
 
 .job-list code {

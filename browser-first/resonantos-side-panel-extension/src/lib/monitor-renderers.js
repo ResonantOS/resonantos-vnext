@@ -115,6 +115,7 @@ export function createMonitorRenderers({
   controlStepLabel,
   elements,
   getBrowserJobs,
+  getActiveBrowserJobId = () => null,
   getContextDockExpanded,
   getCurrentControlRun,
   getJobMonitorCollapsed,
@@ -125,6 +126,7 @@ export function createMonitorRenderers({
   getTaskConsents,
   isReadableBrowserTab,
   onContinueBrowserJob,
+  onActivateBrowserJob,
   onResetSitePermission,
   onSaveBrowserJobReport,
   onRevokeTaskConsent,
@@ -416,6 +418,7 @@ export function createMonitorRenderers({
 
   function renderJobMonitor() {
     const browserJobs = getBrowserJobs();
+    const activeJobId = getActiveBrowserJobId();
     const jobMonitorCollapsed = getJobMonitorCollapsed();
     jobMonitor.hidden = !getContextDockExpanded() || browserJobs.length === 0;
     if (jobMonitor.hidden) {
@@ -423,7 +426,8 @@ export function createMonitorRenderers({
       return;
     }
     const activeCount = browserJobs.filter((job) => ["queued", "running", "paused", "approval"].includes(job.status)).length;
-    jobMonitorTitle.textContent = `${activeCount} active · ${browserJobs.length} total`;
+    const focusedJob = activeJobId ? browserJobs.find((job) => job.id === activeJobId) : null;
+    jobMonitorTitle.textContent = `${activeCount} active · ${browserJobs.length} total${focusedJob ? ` · focused ${focusedJob.id}` : ""}`;
     jobMonitorToggle.textContent = jobMonitorCollapsed ? "Show" : "Hide";
     jobList.hidden = jobMonitorCollapsed;
     jobList.replaceChildren();
@@ -434,6 +438,7 @@ export function createMonitorRenderers({
     browserJobs.slice(0, 8).forEach((job) => {
       const item = document.createElement("li");
       item.dataset.status = job.status;
+      item.dataset.active = job.id === activeJobId ? "true" : "false";
       const details = document.createElement("div");
       const title = document.createElement("strong");
       title.textContent = job.goal;
@@ -442,6 +447,12 @@ export function createMonitorRenderers({
       const id = document.createElement("code");
       id.textContent = job.id;
       details.append(title, meta);
+      if (job.id === activeJobId) {
+        const focused = document.createElement("small");
+        focused.className = "job-focused";
+        focused.textContent = "Focused browser job";
+        details.append(focused);
+      }
       if (job.preflightDecision) {
         const preflight = document.createElement("small");
         preflight.className = "job-preflight";
@@ -454,6 +465,14 @@ export function createMonitorRenderers({
       state.textContent = job.status;
       const actions = document.createElement("div");
       actions.className = "job-actions";
+      if (job.id !== activeJobId && typeof onActivateBrowserJob === "function") {
+        const focusButton = document.createElement("button");
+        focusButton.type = "button";
+        focusButton.textContent = "Focus";
+        focusButton.title = `Focus ${job.goal}`;
+        focusButton.addEventListener("click", () => onActivateBrowserJob(job));
+        actions.append(focusButton);
+      }
       const canContinue = ["queued", "paused", "completed", "blocked", "failed", "cancelled", "denied"].includes(job.status);
       if (canContinue && typeof onContinueBrowserJob === "function") {
         const continueButton = document.createElement("button");

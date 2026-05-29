@@ -210,16 +210,22 @@ test("app command handlers save browser activity searches to archive intake", as
 
 test("app command handlers manage browser jobs", async () => {
   const harness = createHarness({
-    jobs: [{ id: "job-a", goal: "Find slot", status: "running", steps: [{ type: "read", label: "Read page", state: "completed" }] }]
+    jobs: [
+      { id: "job-a", goal: "Find slot", status: "running", steps: [{ type: "read", label: "Read page", state: "completed" }] },
+      { id: "job-b", goal: "Research DAO", status: "paused", steps: [{ type: "read", label: "Read DAO", state: "completed" }] }
+    ]
   });
 
   await harness.handlers.runJobsCommand();
+  await harness.handlers.runJobsCommand("focus job-b");
   await harness.handlers.pauseBrowserJob("job-a");
   await harness.handlers.resumeBrowserJob("job-a");
   await harness.handlers.reportBrowserJob("job-a");
   await harness.handlers.cancelBrowserJob("job-a");
 
   assert.ok(harness.calls.some((call) => call[0] === "message" && /Browser jobs/.test(call[2])));
+  assert.ok(harness.calls.some((call) => call[0] === "activate" && call[1] === "job-b"));
+  assert.ok(harness.calls.some((call) => call[0] === "message" && /Focused browser job job-b/.test(call[2])));
   assert.ok(harness.calls.some((call) => call[0] === "finish" && call[1] === "paused"));
   assert.ok(harness.calls.some((call) => call[0] === "updateJob" && call[2].status === "paused"));
   assert.ok(harness.calls.some((call) => call[0] === "activate" && call[1] === "job-a"));

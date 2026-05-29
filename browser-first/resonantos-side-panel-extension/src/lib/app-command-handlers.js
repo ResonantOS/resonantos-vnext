@@ -331,7 +331,20 @@ export function createAppCommandHandlers({
   }
 
   async function runJobsCommand(body = "") {
-    const filter = String(body ?? "").trim().toLowerCase();
+    const rawFilter = String(body ?? "").trim();
+    const focusMatch = /^(?:focus|active|select)\s+(.+)$/i.exec(rawFilter);
+    if (focusMatch) {
+      const job = browserJobStore.findJob(focusMatch[1]);
+      if (!job) {
+        await addMessage("system", `No browser job matches "${focusMatch[1]}".`);
+        return;
+      }
+      await browserJobStore.activateJob?.(job.id);
+      renderJobMonitor();
+      await addMessage("system", `Focused browser job ${job.id}: ${job.goal}`);
+      return;
+    }
+    const filter = rawFilter.toLowerCase();
     const visible = browserJobStore.getJobs()
       .filter((job) => !filter || job.status === filter || job.goal.toLowerCase().includes(filter) || job.id.toLowerCase().includes(filter))
       .slice(0, 12);

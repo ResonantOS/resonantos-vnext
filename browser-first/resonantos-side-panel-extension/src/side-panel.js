@@ -453,6 +453,7 @@ monitorRenderers = createMonitorRenderers({
     taskConsentPanel,
     taskConsentTitle
   },
+  getActiveBrowserJobId: () => browserJobStore.getActiveJobId(),
   getBrowserJobs: () => browserJobStore.getJobs(),
   getContextDockExpanded: () => contextDockExpanded,
   getCurrentControlRun: () => currentControlRun,
@@ -465,6 +466,11 @@ monitorRenderers = createMonitorRenderers({
   isReadableBrowserTab,
   onContinueBrowserJob: (job) => {
     void continueBrowserJob(job.id);
+  },
+  onActivateBrowserJob: async (job) => {
+    await browserJobStore.activateJob(job.id);
+    renderJobMonitor();
+    await addMessage("system", `Focused browser job ${job.id}: ${job.goal}`);
   },
   onSaveBrowserJobReport: async (job) => {
     const result = await saveBrowserJobReportToArchive(job);

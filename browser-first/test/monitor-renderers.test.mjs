@@ -55,6 +55,7 @@ function createHarness(overrides = {}) {
   const calls = [];
   const state = {
     browserJobs: overrides.browserJobs ?? [],
+    activeJobId: overrides.activeJobId ?? "job-a",
     contextDockExpanded: overrides.contextDockExpanded ?? true,
     currentControlRun: overrides.currentControlRun ?? null,
     jobMonitorCollapsed: overrides.jobMonitorCollapsed ?? true,
@@ -99,6 +100,7 @@ function createHarness(overrides = {}) {
       taskConsentTitle: dom.window.document.querySelector("#consents-title")
     },
     getBrowserJobs: () => state.browserJobs,
+    getActiveBrowserJobId: () => state.activeJobId,
     getContextDockExpanded: () => state.contextDockExpanded,
     getCurrentControlRun: () => state.currentControlRun,
     getJobMonitorCollapsed: () => state.jobMonitorCollapsed,
@@ -109,6 +111,10 @@ function createHarness(overrides = {}) {
     getTaskConsents: async () => overrides.taskConsents ?? {},
     isReadableBrowserTab: (tab) => /^https?:\/\//i.test(tab?.url ?? ""),
     onContinueBrowserJob: (job) => state.continued.push(job.id),
+    onActivateBrowserJob: (job) => {
+      state.activeJobId = job.id;
+      state.focused = [...(state.focused ?? []), job.id];
+    },
     onSaveBrowserJobReport: (job) => state.reported.push(job.id),
     onResetSitePermission: (siteKey) => state.resetSites.push(siteKey),
     onRevokeTaskConsent: (consent) => state.revoked.push(consent.taskClass),
@@ -244,12 +250,12 @@ test("monitor renderers render collapsed and expanded browser jobs", () => {
       steps: [{ state: "completed", label: "Read page" }, { state: "blocked", label: "Click Submit" }]
     }
   ];
-  const harness = createHarness({ browserJobs, jobMonitorCollapsed: true });
+  const harness = createHarness({ browserJobs, jobMonitorCollapsed: true, activeJobId: "job-a" });
 
   harness.renderers.renderJobMonitor();
 
   assert.equal(harness.dom.window.document.querySelector("#jobs").hidden, false);
-  assert.equal(harness.dom.window.document.querySelector("#jobs-title").textContent, "1 active · 2 total");
+  assert.equal(harness.dom.window.document.querySelector("#jobs-title").textContent, "1 active · 2 total · focused job-a");
   assert.equal(harness.dom.window.document.querySelector("#jobs-toggle").textContent, "Show");
   assert.equal(harness.dom.window.document.querySelector("#jobs-list").hidden, true);
 
@@ -259,11 +265,15 @@ test("monitor renderers render collapsed and expanded browser jobs", () => {
   assert.equal(harness.dom.window.document.querySelector("#jobs-toggle").textContent, "Hide");
   assert.equal(harness.dom.window.document.querySelector("#jobs-list").hidden, false);
   assert.deepEqual([...harness.dom.window.document.querySelectorAll("#jobs-list > li")].map((item) => item.dataset.status), ["running", "completed"]);
+  assert.deepEqual([...harness.dom.window.document.querySelectorAll("#jobs-list > li")].map((item) => item.dataset.active), ["true", "false"]);
+  assert.match(harness.dom.window.document.querySelector("#jobs-list").textContent, /Focused browser job/);
   assert.match(harness.dom.window.document.querySelector("#jobs-list").textContent, /Preflight: trusted safe actions · booking · example\.com/);
   assert.match(harness.dom.window.document.querySelector("#jobs-list").textContent, /done · Read page/);
   harness.dom.window.document.querySelectorAll(".job-actions button")[1].click();
-  assert.deepEqual(harness.state.continued, ["job-b"]);
+  assert.deepEqual(harness.state.focused, ["job-b"]);
   harness.dom.window.document.querySelectorAll(".job-actions button")[2].click();
+  assert.deepEqual(harness.state.continued, ["job-b"]);
+  harness.dom.window.document.querySelectorAll(".job-actions button")[3].click();
   assert.deepEqual(harness.state.reported, ["job-b"]);
 });
 

@@ -33,6 +33,7 @@ Intent: keep the browser-first ResonantOS work aligned with the AI-browser capab
 - Email/Calendar Add-ons v1: `/email` and `/calendar` create host-mediated draft-only packets from both chat surfaces. Sending email and scheduling events remain human-approval gated and are not automated from chat.
 - Durable Browser Jobs v2: persistent job registry, persisted active job id, interrupted-job recovery after reload, visible job monitor, `/jobs`, `/pause`, `/resume`, `/continue`, `/report`, and `/cancel`. Resume/continue restart from persisted step history and job reports can be written to Living Archive intake.
 - Durable Browser Jobs v2.1: resume/continue reuses the same durable job id, preserves prior step history/artifacts in the monitor, and appends new browser-control steps instead of creating continuation jobs.
+- Parallel Browser Jobs v1: the monitor can show multiple durable jobs at once, mark the focused browser job, switch focus with `/jobs focus <job>`, and keep per-job Continue/Report controls without merging their traces.
 - Browser page summaries can be generated into Living Archive intake with source provenance, review queueing, and a deterministic fallback when the provider is unavailable.
 - Multi-tab browser research trails can be captured into one Living Archive intake bundle with per-page provenance and review queueing.
 - Agent Control visual overlay v1: persistent Matrix-style green perimeter, in-page action toast, and highlighted clicked/typed targets for the full control session.
@@ -43,7 +44,7 @@ Intent: keep the browser-first ResonantOS work aligned with the AI-browser capab
 ## Remaining Capability Work
 
 1. Parallel / Durable Browser Jobs
-   - Multiple concurrent browser tasks with separate monitors.
+   - Multiple concurrently running browser-control loops remain blocked until per-tab/page locking is implemented.
 
 2. Email / Calendar Provider Connectors
    - Provider-specific Gmail/Calendar connectors, approval UI, and audit trail.
