@@ -77,6 +77,8 @@ Context SDK     (highlights,     (clicks, types,
 | Resonant Context SDK | **Awareness** | AI observes silently | Tom |
 
 ### Blackboard — Visual Display Surface
+
+![Blackboard](docs/screenshots/blackboard.png)
 Augmentor's canvas. A full-tab workspace where the AI renders things visually instead of just text.
 
 **7 rendering modes:**
@@ -101,6 +103,8 @@ Augmentor's canvas. A full-tab workspace where the AI renders things visually in
 Files: `addons/blackboard/blackboard.html`, `blackboard.css`, `blackboard.js`
 
 ### Fleet & Compute — Mission Control Dashboard
+
+![Fleet & Compute](docs/screenshots/fleet-compute.png)
 Unified monitoring for your entire infrastructure. Three tabbed views:
 
 **Fleet Tab — Live Operations:**
