@@ -1,0 +1,16 @@
+{
+  "id": "addon.protocol-store",
+  "name": "Protocol Store",
+  "version": "1.0.0",
+  "description": "ResonantOS protocol marketplace — browse, install, and manage agent protocols and workflows",
+  "author": "Tom Pennington",
+  "mode": "delegation-addon",
+  "trust": "explicit grants required",
+  "entry": "protocol-store.html",
+  "contentScripts": [],
+  "commands": ["/protocols", "/install-protocol"],
+  "messageChannel": "resonantos.protocol-store",
+  "capabilities": ["protocol-browse", "protocol-install", "workflow-management"],
+  "requires": [],
+  "boundary": "Protocol management only. Installation requires explicit user approval. No automatic execution of installed protocols."
+}

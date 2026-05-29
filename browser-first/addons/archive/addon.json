@@ -1,0 +1,16 @@
+{
+  "id": "addon.archive",
+  "name": "Living Archive",
+  "version": "1.0.0",
+  "description": "Memory system — browse, search, and export the living archive of AI interactions",
+  "author": "Tom Pennington",
+  "mode": "memory-system",
+  "trust": "host-mediated",
+  "entry": "archive-tab.html",
+  "contentScripts": [],
+  "commands": ["/archive", "/memory", "/recall"],
+  "messageChannel": "resonantos.archive",
+  "capabilities": ["browse", "search", "export", "memory-read"],
+  "requires": [],
+  "boundary": "Read-only archive access. Writes to archive are host-mediated. No direct filesystem access from extension."
+}

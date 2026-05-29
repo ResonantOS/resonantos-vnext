@@ -158,3 +158,95 @@ The live test proves:
 - document-like contenteditable typing
 - public form submit remains blocked at the approval boundary
 - wallet-style work stops at the approval boundary
+
+---
+
+## Install & Run
+
+### Prerequisites
+
+| Requirement | Version | Check |
+|-------------|---------|-------|
+| Node.js | 22 or higher | `node --version` |
+| npm | Included with Node | `npm --version` |
+| Chrome, Brave, or Edge | Latest | Any Chromium-based browser |
+
+### Quick Start (5 minutes)
+
+```bash
+# Clone and install
+git clone https://github.com/ResonantOS/resonantos-vnext.git
+cd resonantos-vnext
+npm ci
+
+# Start the bridge server
+node browser-first/host/run-browser-first.mjs
+
+# Load the extension:
+# 1. Go to chrome://extensions
+# 2. Enable Developer Mode
+# 3. Click "Load unpacked"
+# 4. Select: browser-first/resonantos-side-panel-extension/
+```
+
+### Cross-Platform Installers
+
+```bash
+# macOS/Linux (automated)
+bash browser-first/install.sh
+
+# Windows PowerShell
+powershell -ExecutionPolicy Bypass -File browser-first/install.ps1
+
+# Windows cmd
+browser-first\install.bat
+```
+
+### Configure AI Providers
+
+Open Settings in the workspace rail and enter at least one API key:
+
+| Provider | Model | Key Format | Free Tier |
+|----------|-------|-----------|-----------|
+| **Groq** | Llama 3.3 70B | `gsk_...` | Yes (rate limited) |
+| OpenAI | GPT-5.5, GPT-4o | `sk-proj-...` | No |
+| Anthropic | Claude Sonnet 4, Opus 4 | `sk-ant-...` | No |
+| xAI | Grok 4 | `xai-...` | No |
+| DeepSeek | DeepSeek V3, R1 | `sk-...` | Yes |
+| Google | Gemini 2.5 Pro/Flash | `AIza...` | Yes (rate limited) |
+
+### Verify Installation
+
+1. Bridge server shows: `ResonantOS browser-first bridge listening on http://127.0.0.1:47773`
+2. Extension icon appears in toolbar
+3. Click icon → side panel opens → type "hello" → get AI response
+
+### Uninstall
+
+```bash
+# macOS — remove native messaging host
+rm ~/Library/Application\ Support/Google/Chrome/NativeMessagingHosts/com.resonantos.bridge.json
+
+# Windows
+powershell -ExecutionPolicy Bypass -File browser-first/uninstall.ps1
+```
+
+Then remove the extension from `chrome://extensions`.
+
+## Bridge Server Modules
+
+| Module | Purpose |
+|--------|---------|
+| `provider-router.mjs` | Routes AI requests to Groq/OpenAI/Anthropic/xAI/DeepSeek/Google |
+| `living-archive.mjs` | Page storage and retrieval |
+| `system-prompts.mjs` | Bridge-side system prompt management |
+| `update-check.mjs` | Extension update detection |
+
+### Platform Addon Manifests
+
+| Addon | ID | Mode | Trust |
+|-------|----|------|-------|
+| Archive | `addon.archive` | `memory-system` | `host-mediated` |
+| Awareness | `addon.awareness` | `page-observer` | `page-observer` |
+| Protocol Store | `addon.protocol-store` | `utility` | `host-mediated` |
+
