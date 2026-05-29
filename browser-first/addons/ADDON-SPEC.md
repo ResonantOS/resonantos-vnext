@@ -148,7 +148,7 @@ node --test browser-first/test/*.test.mjs
 grep -ri "electron" browser-first/addons/
 
 # Must be ZERO  
-grep -r "rpa_RPH\|gsk_j9O\|sk-ant\|sk-proj" browser-first/addons/
+grep -r "rpa_[A-Z]\|gsk_[a-z]\|sk-ant\|sk-proj" browser-first/addons/
 
 # Must be ZERO
 find browser-first/addons/ -name "bridge-config.generated.js"
