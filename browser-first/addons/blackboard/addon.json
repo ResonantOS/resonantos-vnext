@@ -4,6 +4,9 @@
   "version": "1.0.0",
   "description": "Visual display surface — canvas, documents, tables, embeds, slideshows",
   "author": "Tom Pennington",
+  "credits": {
+    "design-system": "Michel — Atomic Design tokens, typography (Inter + Poppins), component hierarchy, WCAG accessibility standards"
+  },
   "mode": "visual-surface",
   "trust": "host-mediated",
   "entry": "blackboard.html",
