@@ -1,160 +1,224 @@
-# ResonantOS Browser-First Prototype
+# ResonantOS Browser-First Extension
 
 Intent citation: `docs/architecture/ADR-037-browser-first-chromium-resonantos.md`
 
-This directory is the new product path for ResonantOS as a browser-first app.
+ResonantOS is an AI-powered browser extension that lives inside your Chromium-family browser (Chrome, Brave, Edge). Not a Tauri desktop app. Not an Electron sidecar. Not an external browser controlled by CDP. The browser IS the product.
 
-The target is not:
+## What You Get
 
-- a Tauri dashboard with a webview
-- an Electron sidecar
-- an external Chrome/Brave process controlled by CDP
-- a screenshot browser
+### Core Experience (Manolo's Architecture)
+- **Augmentor** — AI chat assistant in the browser side panel. Reads your current page, answers questions, takes actions
+- **Agent Control** — tell the AI to click, type, scroll, and navigate for you. Visual overlay shows what the AI is doing in real-time (green borders, action bubbles, phase toasts, stop button)
+- **Main Workspace** — new-tab page with workspace rail: Answer, Artifacts, Add-ons, Living Archive, Hermes, OpenCode, Settings
+- **Living Archive** — save, search, and recall anything you've browsed
+- **Hermes** — delegation workspace for complex tasks
+- **OpenCode** — governed coding handoffs
+- **Add-on Registry** — discoverable add-on catalog with trust boundaries
 
-The target is a Chromium-family browser where ResonantOS lives inside browser chrome.
+### Extension Tabs (Tom's Additions)
+- **Protocol Store** — browse and install AI protocols (full-tab)
+- **Shield** — security audit trail showing what the AI blocked or approved (full-tab)
+- **R-Awareness** — see how much context the AI has about your current page (full-tab)
+- **Wallet Adapter** — Phantom/Solana wallet detection and public key read
 
-## Current Slice
+### Three-Layer Interaction System
+The browser AI operates across three modes of engagement:
 
-The first implemented slice is a Chromium extension-style ResonantOS side panel:
+| Layer | Mode | Who Acts | Files |
+|-------|------|----------|-------|
+| Agent Control Overlay | **Autonomous** | AI acts, human watches | `content.js` (Manolo) |
+| Resonator | **Guidance** | AI shows, human acts | `resonator.js` (Tom) |
+| Resonant Context SDK | **Awareness** | AI observes silently | `resonant-context.js` + `context-plugins.js` (Tom) |
 
-- `resonantos-side-panel-extension/manifest.json`
-- `src/background.js`
-- `src/content.js`
-- `src/side-panel.html`
-- `src/side-panel.js`
-- `src/side-panel.css`
+**Resonant Context SDK** silently tracks what the user sees (viewport sections, dwell time, scroll depth, form state, overlays) and feeds that context to the AI. Domain-specific plugins for Jupiter DEX, Amazon, Google, GitHub, and more.
 
-This is intentionally small. It proves the product direction: ResonantOS functionality must be packaged as a browser-contained layer that can later be bundled into a Chromium shell.
+**Resonator** provides visual guidance without taking control: highlights, arrows, spotlights, numbered step badges. The AI points at things on the page.
 
-## Non-Negotiable Gates
+**Agent Control Overlay** (Manolo's) handles full autonomous operation: the AI clicks, types, scrolls, and navigates while showing the user what it's doing.
 
-Before this becomes the default app:
+### Dynamic Addon System (Option F)
+Add-ons are self-contained folders in `browser-first/addons/` with an `addon.json` manifest. The addon discovery engine auto-registers them on startup. No code changes, no registry edits, no merge conflicts.
 
-- Phantom must install/open in the same browser profile.
-- A local dApp fixture must detect Phantom provider injection.
-- Wallet connect/sign flows must require human approval.
-- Augmentor must control the active tab only through typed mediated tools.
-- No page, add-on, or assistant can get raw wallet/signing power.
+See `browser-first/addons/ADDON-SPEC.md` for the full spec.
 
-## Browser Control Layer v3
+**Registered Addons:**
 
-Augmentor stays in the side panel. Browser actions target the active webpage tab through content-script messages:
+| Addon | Mode | Description |
+|-------|------|-------------|
+| **Blackboard** | visual-surface | Canvas, documents, tables, web embeds, slideshows. Michel's Atomic Design. |
+| **Fleet & Compute** | utility | Mission control dashboard: fleet monitoring, cloud infrastructure, compute fabric governance |
+| **Resonant Context** | awareness-engine | Viewport observer, dwell tracking, domain-specific plugins |
+| **Resonator** | visual-guide | Highlights, arrows, spotlights, step badges |
+| **Shield** | security-monitor | Security audit log viewer |
+| **Archive** | memory-system | Living Archive browser |
+| **Awareness** | page-observer | R-Awareness context viewer |
+| **Protocol Store** | utility | Protocol/tool browser |
+| **Wallet Adapter** | utility | Phantom wallet detection |
 
-- read page context
-- click visible non-submit page controls by text
-- type into focused or normal editable fields
-- submit search-like fields only
-- scroll the active webpage
-- inspect forms and loose editable fields
+## Directory Structure
 
-Approval-gated actions are blocked until a dedicated approval flow exists:
-
-- wallet connect/sign/network switch
-- credential autofill
-- public form submit
-- payment, purchase, publish, share, or destructive document actions
-
-The current command surface:
-
-```text
-/control <browser goal>
-/browser read
-/browser forms
-/browser click "Visible text"
-/browser type "Text to type"
-/browser scroll down
-/browser scroll up
-/browser scroll top
-/browser scroll bottom
-/save page
-/save selection
-/save summary
-/save trail <title>
-/trail <title>
+```
+browser-first/
+  addons/                          # Option F addon system
+    ADDON-SPEC.md                  # Developer spec for building addons
+    blackboard/                    # Visual display surface (Michel's Atomic Design)
+      addon.json
+      blackboard.html/css/js
+    fleet-compute/                 # Mission control dashboard
+      addon.json
+      fleet-compute.html/css/js
+    resonant-context/              # Viewport awareness engine
+      addon.json
+    resonator/                     # Visual guide layer
+      addon.json
+    shield/                        # Security monitor
+      addon.json
+    archive/                       # Living Archive browser
+      addon.json
+    awareness/                     # R-Awareness viewer
+      addon.json
+    protocol-store/                # Protocol browser
+      addon.json
+    wallet-adapter/                # Phantom wallet adapter
+      addon.json
+  host/                            # Bridge server modules
+    run-browser-first.mjs          # Main bridge server
+    bridge-server.mjs              # HTTP bridge
+    addon-discovery.mjs            # Dynamic addon scanner
+    provider-router.mjs            # Multi-provider API routing
+    audit-trail.mjs                # Security event logging
+    living-archive.mjs             # Page archival service
+    system-prompts.mjs             # Centralized prompt management
+    update-check.mjs               # Version checking
+  resonantos-side-panel-extension/ # Chrome extension source
+    manifest.json
+    src/
+      background.js                # Service worker
+      content.js                   # Page injection (Agent Control overlay)
+      side-panel.html/js/css       # Augmentor chat panel
+      main-workspace.html/js/css   # New-tab workspace
+      resonant-context.js          # Viewport observer SDK
+      resonator.js                 # Visual guide layer
+      context-plugins.js           # Domain-specific configs
+      wallet-adapter.js            # Phantom wallet adapter
+      protocol-store.html/js       # Protocol browser (full-tab)
+      shield-tab.html/js           # Security audit (full-tab)
+      archive-tab.html/js          # Living Archive (full-tab)
+      awareness-tab.html/js        # R-Awareness viewer (full-tab)
+      blackboard.html/js/css       # Visual canvas (full-tab, in addons/)
+      lib/                         # Modular source (Manolo's extractors)
+        agent-control-planner.js
+        agent-control-runner.js
+        browser-command-parser.js
+        browser-job-store.js
+        chat-session-store.js
+        side-panel-command-router.js
+        ... (20+ modules)
+  native-messaging/                # Chrome native messaging host
+    com.resonantos.bridge.json
+    install-native-host.sh
+    resonantos-bridge-host
+  test/                            # Test suite
+    *.test.mjs                     # 233+ tests, Node.js test runner
+  install.sh                       # macOS/Linux installer
+  install.ps1                      # Windows PowerShell installer
+  install.bat                      # Windows batch installer
+  uninstall.ps1                    # Windows uninstaller
+  package-extension.sh             # Build distribution zip
+  TESTING.md                       # Install & test guide
+  webstore/                        # Chrome Web Store submission
+    LISTING.md
+    PRIVACY-POLICY.md
+    PUBLISH-CHECKLIST.md
+    REVIEW-NOTES.md
+    assets/REQUIRED-ASSETS.md
 ```
 
-Agent Control Mode starts with `/control <goal>` or natural browser-task requests such as `book a call`, `arrange a meeting`, `fill this form`, `find news`, or `use this page`.
+## Install & Run
 
-V3 is an adaptive observe-decide-act-verify loop:
-
-1. observe the active controlled tab, including readable frames
-2. ask the configured LLM for exactly one strict JSON next action
-3. validate that action against the host safety boundary
-4. execute only the typed mediated browser tool
-5. observe the page again before choosing the next action
-6. continue until the observed page state proves completion, the task blocks, or approval is required
-
-The LLM is only a next-action controller. It cannot execute browser actions directly. The host validates every proposed action, rejects unsupported actions, caps the loop at twelve actions, and falls back to the deterministic parser when the next-action route is unavailable.
-
-The side panel keeps a stable controlled-tab binding. This prevents the assistant from accidentally acting on the side-panel tab instead of the webpage being controlled.
-
-Page observations now expose stable `ref` identifiers for visible controls and editable fields. The model should prefer refs over text labels when it decides to click or type, because refs avoid ambiguity on pages with repeated labels, icon buttons, and embedded frames.
-
-Observations also include a compact list of readable open tabs. This gives Augmentor browser-session awareness without granting uncontrolled tab mutation. Acting across tabs will require explicit mediated tab tools.
-
-V3 now includes mediated tab tools:
-
-- `tabs` lists readable open tabs
-- `switch_tab` changes the controlled tab to a specific observed tab id
-
-This keeps tab work inside the same permissioned control loop instead of giving the model raw browser automation access.
-
-The side panel now includes an Agent Control Monitor:
-
-- current goal and run status
-- planned steps with pending, active, completed, blocked, or failed state
-- expandable action details covering observation, decision, action, result, and safety class
-- completion and blocker summary cards for fast replay
-- approval card for public-submit and other gated actions
-- deny/delegate actions for blocked work
-- Living Archive intake artifact path when a browser-control report is recorded
-
-Browser memory commands remain intake-only:
-
-- `/save page` captures the current page source context into Living Archive intake
-- `/save selection` captures selected page text into Living Archive intake
-- `/save summary` creates a provider-backed page summary intake artifact with source provenance and deterministic fallback
-- `/save trail <title>` or `/trail <title>` captures readable open web tabs as one multi-page research trail intake bundle
-
-All browser memory commands queue review requests. They do not write trusted wiki pages directly.
-
-Allowed next actions are:
-
-- `read`
-- `open`
-- `search`
-- `forms`
-- `tabs`
-- `switch_tab`
-- `click` by visible text or observed `ref`
-- `type` by field label or observed `ref`
-- `scroll`
-- `wait`
-
-The native Browser host also accepts `--remote-debugging-port=<port>` for deterministic local testing. This is a test/control-plane hook, not a user-facing permission escalation.
-
-Structured page edits, such as Google Sheet row/cell changes, must resolve to a precise target before execution. The assistant may read the page and ask for a cell, visible control, or focused field, but it must not guess canvas/document coordinates.
-
-## Run Contract Tests
+### Quick Start (5 minutes)
 
 ```bash
-node --test browser-first/test/*.test.mjs
+# Clone the repo
+git clone https://github.com/ResonantOS/resonantos-vnext.git
+cd resonantos-vnext
+
+# Install dependencies
+npm ci
+
+# Start the bridge server
+node browser-first/host/run-browser-first.mjs
+
+# Load the extension in Chrome/Brave:
+# 1. Go to chrome://extensions
+# 2. Enable Developer Mode
+# 3. Click "Load unpacked"
+# 4. Select: browser-first/resonantos-side-panel-extension/
 ```
 
-## Run Live Browser Control Test
-
-This launches the real browser-first CEF host with a local fixture and verifies browser behavior through CDP:
+### Cross-Platform Installers
 
 ```bash
-npm run test:browser-first-live
+# macOS/Linux
+bash browser-first/install.sh
+
+# Windows (PowerShell)
+powershell -ExecutionPolicy Bypass -File browser-first/install.ps1
+
+# Windows (cmd)
+browser-first\install.bat
 ```
 
-The live test proves:
+See `browser-first/TESTING.md` for detailed instructions.
 
-- natural browser-task phrasing routes into Agent Control Mode
-- iframe context is visible to the controller
-- a differently worded booking request can click a visible iframe appointment slot
-- safe page read, ref-targeted click, ref-targeted type, and scroll
-- document-like contenteditable typing
-- public form submit remains blocked at the approval boundary
-- wallet-style work stops at the approval boundary
+## Testing
+
+```bash
+# Run all tests (233+)
+npm run test:browser-first
+
+# Run addon discovery tests only
+node --test browser-first/test/addon-discovery.test.mjs
+
+# Validate manifest
+python3 -m json.tool browser-first/resonantos-side-panel-extension/manifest.json
+```
+
+## CI
+
+GitHub Actions workflow at `.github/workflows/browser-first-ci.yml`:
+- Node 22+
+- Manifest validation
+- Syntax check all extension JS
+- Full test suite (233+ tests)
+
+## Building Addons
+
+See `browser-first/addons/ADDON-SPEC.md` for the complete developer guide.
+
+Quick version:
+1. Create a folder in `browser-first/addons/your-addon/`
+2. Write `addon.json` with required fields (id, name, version, description, mode, trust, boundary)
+3. Add your HTML/CSS/JS files
+4. The addon discovery engine finds it automatically
+
+## Security
+
+- All API keys and credentials stay on the host behind the bridge server
+- Extension never makes direct network calls to fleet machines or cloud APIs
+- Bridge token authentication for all routes
+- Content Security Policy on all HTML pages
+- `detectInjection()` with NFKC normalization and zero-width char stripping
+- Sender validation on all `chrome.runtime.onMessage` handlers
+- Addon manifests validated for path traversal, trust claims, and injection
+
+## Credits
+
+- **Manolo Remiddi** — Architecture, Agent Control overlay, workspace system, Compute Fabric (ADR-032), modular source extraction
+- **Tom Pennington** — Resonant Context SDK, Resonator, addon system (Option F), Fleet & Compute dashboard, security hardening, install scripts, CI
+- **Michel** — Atomic Design system (tokens, typography, component hierarchy, WCAG accessibility)
+- **Analog 6** — AVD implementation partner
+
+## License
+
+See repository root.

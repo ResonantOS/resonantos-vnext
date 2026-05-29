@@ -1,4 +1,4 @@
-# ResonantOS Browser Extension — Install Guide
+# ResonantOS Browser Extension — Install & Test Guide
 
 > **Time to first run: ~5 minutes**
 > **Skill level: Basic — if you can install a Chrome extension, you can do this**
@@ -7,199 +7,280 @@
 
 ## What Is This?
 
-ResonantOS is an AI-powered browser extension that lives in your Chrome/Brave/Edge sidebar. Think of it as an AI copilot that can see what you're looking at and help you navigate the web.
+ResonantOS is an AI-powered browser extension that lives in your Chrome/Brave/Edge sidebar. An AI copilot that can see what you're looking at, understand your context, guide you through tasks, and take actions on your behalf.
 
 **What you get:**
-- **Augmentor** — AI chat assistant that can read your current page and answer questions about it
-- **Agent Control** — tell the AI to click, type, scroll, and navigate pages for you (with safety gates)
+- **Augmentor** — AI chat assistant that reads your current page and answers questions about it
+- **Agent Control** — tell the AI to click, type, scroll, and navigate pages for you (with safety gates and visual feedback)
+- **Resonant Context** — the AI silently understands what you're looking at (viewport tracking, dwell time, form state)
+- **Resonator** — the AI highlights elements, draws arrows, shows step badges to guide you
 - **Protocol Store** — browse and install AI protocols (opens as its own tab)
 - **Shield** — security audit trail showing what the AI blocked or approved (opens as its own tab)
 - **Living Archive** — save and search anything you've browsed (opens as its own tab)
 - **R-Awareness** — see how much context the AI has about your current page (opens as its own tab)
 - **Blackboard** — visual display canvas for diagrams, tables, documents, presentations (opens as its own tab)
-- **Voice dictation** — speak your questions
-
-Your API keys never leave your computer. The extension talks to a local bridge server running on your machine.
-
----
-
-## What You Need
-
-| Requirement | Version | How to Check |
-|-------------|---------|-------------|
-| **Node.js** | **22 or newer** | Run `node -v` in Terminal |
-| **Chrome, Brave, or Edge** | Any recent version | Must support side panels |
-| **Git** | Any | Run `git --version` in Terminal |
-| **API key** | At least one | See "Supported Providers" below |
-
-**Don't have Node.js?** Download it from https://nodejs.org (pick the LTS version).
-
-**Need a free API key?** [Groq](https://console.groq.com) gives free keys with generous limits — sign up takes 30 seconds.
+- **Fleet & Compute** — mission control dashboard for monitoring your fleet machines, cloud infrastructure, and compute governance
+- **Wallet Adapter** — Phantom/Solana wallet detection
+- **Voice dictation** — speak your questions (when supported by browser)
 
 ---
 
-## Step 1: Get the Code
+## Prerequisites
 
-Open Terminal (Mac) or Command Prompt (Windows) and run:
+| Requirement | Version | Check |
+|-------------|---------|-------|
+| Node.js | 22 or higher | `node --version` |
+| npm | Included with Node | `npm --version` |
+| Chrome, Brave, or Edge | Latest | Any Chromium-based browser |
+| Git | Any | `git --version` |
+
+---
+
+## Quick Install (macOS / Linux)
 
 ```bash
+# 1. Clone the repository
 git clone https://github.com/ResonantOS/resonantos-vnext.git
 cd resonantos-vnext
-git checkout tom/browser-first-merged
-```
 
----
+# 2. Install dependencies
+npm ci
 
-## Step 2: Start the Bridge Server
+# 3. Run the automated installer
+bash browser-first/install.sh
 
-The bridge is a lightweight local server that handles AI calls. It has zero npm dependencies — just Node.js.
-
-```bash
+# 4. Start the bridge server
 node browser-first/host/run-browser-first.mjs
 ```
 
-You should see output confirming the bridge is running on port 47773.
+The installer will:
+- Verify Node.js version
+- Install the native messaging host for Chrome bridge communication
+- Set up the LaunchAgent (macOS) or systemd service (Linux) for auto-start
+- Print a success message with next steps
 
-> **Leave this terminal window open.** The bridge needs to keep running while you use the extension.
+## Quick Install (Windows)
+
+```powershell
+# PowerShell (run as Administrator)
+powershell -ExecutionPolicy Bypass -File browser-first\install.ps1
+```
+
+Or use the batch file:
+```cmd
+browser-first\install.bat
+```
+
+## Manual Install (Any OS)
+
+```bash
+# 1. Clone and install
+git clone https://github.com/ResonantOS/resonantos-vnext.git
+cd resonantos-vnext
+npm ci
+
+# 2. Start the bridge server
+node browser-first/host/run-browser-first.mjs
+
+# 3. Load the extension manually:
+#    a. Open Chrome/Brave/Edge
+#    b. Navigate to chrome://extensions (or brave://extensions)
+#    c. Enable "Developer mode" (top right toggle)
+#    d. Click "Load unpacked"
+#    e. Select the folder: browser-first/resonantos-side-panel-extension/
+#    f. The ResonantOS icon appears in your toolbar
+```
 
 ---
 
-## Step 3: Load the Extension in Your Browser
+## Configure AI Providers
 
-1. Open **Chrome** or **Brave**
-2. Type `chrome://extensions/` in the address bar and press Enter
-3. Turn on **Developer mode** (toggle switch in the top right corner)
-4. Click the **"Load unpacked"** button
-5. Navigate to where you cloned the repo and select this folder:
-   ```
-   resonantos-vnext/browser-first/resonantos-side-panel-extension/
-   ```
-6. You'll see a **ResonantOS** card appear on the extensions page
-7. The **◈** icon appears in your browser toolbar
+The extension needs at least one AI provider to chat. Open the Settings workspace (click Settings in the workspace rail) and enter an API key:
 
----
+| Provider | Model | Key Format | Free Tier |
+|----------|-------|-----------|-----------|
+| **Groq** | Llama 3.3 70B | `gsk_...` | Yes (rate limited) |
+| OpenAI | GPT-5.5, GPT-4o | `sk-proj-...` | No |
+| Anthropic | Claude Sonnet 4, Opus 4 | `sk-ant-...` | No |
+| xAI | Grok 4 | `xai-...` | No |
+| DeepSeek | DeepSeek V3, R1 | `sk-...` | Yes ($0.28/M tokens) |
+| Google | Gemini 2.5 Pro/Flash | `AIza...` | Yes (rate limited) |
 
-## Step 4: Open ResonantOS
-
-- Click the **◈ ResonantOS icon** in your toolbar, OR
-- Press **Alt+Shift+A** (keyboard shortcut)
-
-The side panel opens on the right side of your browser.
+**Recommended for testing:** Groq (free, fast, no credit card needed).
 
 ---
 
-## Step 5: Add Your API Key
+## Verify Installation
 
-1. Click the **⚙ gear icon** in the side panel header
-2. Enter an API key:
-   - **OpenAI** → paste your `sk-proj-...` key
-   - **MiniMax** → paste your `eyJ...` key
-3. Click **"Save Keys"**
-4. The status line should show "Connected to [model] · Ready"
+### 1. Check the bridge server
+The bridge server should show:
+```
+ResonantOS browser-first bridge listening on http://127.0.0.1:47773
+```
 
-> **More providers** (Anthropic, Groq, DeepSeek, xAI) can be added via the bridge API. Additional provider fields are coming in a future UI update.
+### 2. Check the extension
+- Click the ResonantOS icon in your toolbar
+- The side panel should open with the Augmentor chat
+- Type "hello" — if you've configured a provider, you should get a response
+
+### 3. Test Agent Control
+- Navigate to any webpage
+- In the Augmentor chat, type: "Read this page and summarize it"
+- The AI should read the page context and respond
+
+### 4. Test Resonant Context
+- Navigate to a supported domain (e.g., jup.ag, amazon.com, google.com)
+- Ask: "What am I looking at?"
+- The AI should describe what's visible on the page with specific section awareness
 
 ---
 
-## Step 6: Try It Out
+## Run Tests
 
-### Chat with Augmentor
-Type a message in the "Message Augmentor" box and press Enter (or click ➜).
+```bash
+# Run the full test suite (233+ tests)
+npm run test:browser-first
 
-### Read a Page
-Navigate to any website, then click the **◎** button in the composer toolbar (or just ask "What am I looking at?"). Augmentor reads the page and responds.
-
-### Agent Control
-Type `/control` followed by a task, like:
+# Expected output:
+# tests 233
+# pass 233
+# fail 0
+# duration_ms ~4000
 ```
-/control Search Google for "best hiking trails near me" and read the top result
-```
-The AI plans steps, shows you what it's doing with a green overlay, and asks for approval before sensitive actions.
 
-### Open Feature Tabs
-Click any of the 4 buttons at the bottom of the side panel:
-- **◈ Protocol Store** — AI protocol marketplace
-- **◈ Shield** — security audit trail
-- **◈ Archive** — search and save pages
-- **◈ R-Awareness** — context awareness metrics
+### Test by module:
 
-### Blackboard
-Ask Augmentor to show something visually:
+```bash
+# Addon discovery tests (38 tests)
+node --test browser-first/test/addon-discovery.test.mjs
+
+# Contract tests (verifies extension structure)
+node --test browser-first/test/browser-first-contract.test.mjs
+
+# Individual module tests
+node --test browser-first/test/wallet-adapter.test.mjs
+node --test browser-first/test/protocol-store.test.mjs
+node --test browser-first/test/shield-tab.test.mjs
+node --test browser-first/test/archive-tab.test.mjs
+node --test browser-first/test/awareness-tab.test.mjs
 ```
-/draw a diagram of how photosynthesis works
+
+---
+
+## Addon System
+
+ResonantOS uses a dynamic addon discovery system. Addons are self-contained folders in `browser-first/addons/` with an `addon.json` manifest.
+
+### Currently Registered Addons (9)
+
+| Addon | ID | Mode | Description |
+|-------|----|------|-------------|
+| Blackboard | `addon.blackboard` | visual-surface | Canvas, documents, tables, embeds, slideshows |
+| Fleet & Compute | `addon.fleet-compute` | utility | Fleet monitoring, cloud control, compute governance |
+| Resonant Context | `addon.resonant-context` | awareness-engine | Viewport tracking, dwell time, domain plugins |
+| Resonator | `addon.resonator` | visual-guide | Highlights, arrows, spotlights, step badges |
+| Shield | `addon.shield` | security-monitor | Security audit log |
+| Archive | `addon.archive` | memory-system | Living Archive browser |
+| Awareness | `addon.awareness` | page-observer | R-Awareness context viewer |
+| Protocol Store | `addon.protocol-store` | utility | Protocol/tool browser |
+| Wallet Adapter | `addon.wallet-adapter` | utility | Phantom wallet detection |
+
+### Building Your Own Addon
+
+See `browser-first/addons/ADDON-SPEC.md` for the complete developer guide.
+
+Minimal addon:
 ```
-The Blackboard opens as its own tab.
+browser-first/addons/my-addon/
+  addon.json     # Manifest (required)
+  my-addon.html  # UI (optional)
+  my-addon.js    # Logic (optional)
+```
+
+Minimal `addon.json`:
+```json
+{
+  "id": "addon.my-addon",
+  "name": "My Addon",
+  "version": "1.0.0",
+  "description": "What it does",
+  "mode": "utility",
+  "trust": "host-mediated",
+  "boundary": "What it can and cannot do."
+}
+```
+
+Drop the folder in `browser-first/addons/`, restart the extension, and it appears in the Add-ons workspace.
+
+---
+
+## Uninstall
+
+### macOS/Linux
+```bash
+# Remove native messaging host
+rm ~/Library/Application\ Support/Google/Chrome/NativeMessagingHosts/com.resonantos.bridge.json
+# Or for Brave:
+rm ~/Library/Application\ Support/BraveSoftware/Brave-Browser/NativeMessagingHosts/com.resonantos.bridge.json
+```
+
+### Windows
+```powershell
+powershell -ExecutionPolicy Bypass -File browser-first\uninstall.ps1
+```
+
+Then remove the extension from `chrome://extensions`.
 
 ---
 
 ## Troubleshooting
 
-| Problem | Fix |
-|---------|-----|
-| Side panel won't open | Try right-clicking the ◈ icon → "Open side panel" |
-| "Bridge offline" banner | Make sure `node run-browser-first.mjs` is still running in Terminal |
-| No AI response | Click ⚙, check that you saved a valid API key |
-| Extension doesn't appear | Make sure you selected `resonantos-side-panel-extension/` folder, not `browser-first/` |
-| Can't find the icon | Click the puzzle piece 🧩 in the toolbar → pin ResonantOS |
+### Bridge server won't start
+- Check Node.js version: `node --version` (must be 22+)
+- Check port 47773 is not in use: `lsof -i :47773`
+- Try: `npx kill-port 47773` then restart
+
+### Extension not loading
+- Ensure "Developer mode" is enabled in `chrome://extensions`
+- Check the extension isn't showing errors (red icon)
+- Click "Errors" on the extension card for details
+
+### No AI response
+- Check that at least one provider API key is configured in Settings
+- Check the bridge server is running (look for "Bridge Connected" indicator)
+- Check browser console for errors (F12 → Console)
+
+### Agent Control not working
+- The page must be a regular HTTP/HTTPS page (not `chrome://` or extension pages)
+- Some sites block content script injection (banking sites, etc.)
+- Check Shield tab for any blocked actions
 
 ---
 
-## Supported AI Providers
-
-| Provider | Models | Key Format | Free? |
-|----------|--------|-----------|-------|
-| OpenAI | GPT-5.5, GPT-4o | `sk-proj-...` | No |
-| Anthropic | Claude Sonnet 4, Opus 4 | `sk-ant-...` | No |
-| Groq | Llama 3.3 70B, Llama 4 Scout | `gsk_...` | **Yes** ✅ |
-| DeepSeek | Chat, Reasoner | `sk-...` | Cheap |
-| xAI | Grok-3, Grok-4 | `xai-...` | No |
-| MiniMax | MiniMax 2.7 | `eyJ...` | No |
-
----
-
-## Project Structure
+## Architecture
 
 ```
-resonantos-vnext/
-└── browser-first/
-    ├── resonantos-side-panel-extension/   ← LOAD THIS IN CHROME
-    │   ├── manifest.json
-    │   ├── icon16/48/128.png
-    │   └── src/
-    │       ├── side-panel.html/js/css     ← Main sidebar (Augmentor chat)
-    │       ├── background.js              ← Service worker
-    │       ├── content.js                 ← Page interaction
-    │       ├── lib/                       ← 22 modular engine files
-    │       ├── protocol-store.html/js     ← Protocol marketplace (tab)
-    │       ├── shield-tab.html/js         ← Security audit (tab)
-    │       ├── archive-tab.html/js        ← Living Archive (tab)
-    │       ├── awareness-tab.html/js      ← Context metrics (tab)
-    │       ├── blackboard.html/js/css     ← Visual canvas (tab)
-    │       ├── wallet-adapter.js          ← Wallet integration
-    │       ├── resonant-context.js        ← Context awareness SDK
-    │       ├── context-plugins.js         ← Domain-specific plugins
-    │       └── resonator.js               ← Visual guide overlay
-    │
-    ├── host/                              ← BRIDGE SERVER
-    │   ├── run-browser-first.mjs          ← Start this with Node
-    │   └── bridge-server.mjs              ← Auth layer
-    │
-    └── TESTING.md                         ← This file
+User's Browser (Chrome/Brave/Edge)
+  ├── Extension (side panel + content scripts)
+  │   ├── Augmentor Chat (side-panel.js)
+  │   ├── Agent Control Overlay (content.js)
+  │   ├── Resonant Context SDK (resonant-context.js)
+  │   ├── Resonator Visual Guide (resonator.js)
+  │   └── Full-tab panels (Shield, Archive, Awareness, Protocol Store, Blackboard)
+  │
+  └── Bridge Server (Node.js, port 47773)
+      ├── Provider Router (Groq, OpenAI, Anthropic, xAI, DeepSeek, Google)
+      ├── Addon Discovery (scans addons/ directory)
+      ├── Living Archive (page storage + retrieval)
+      ├── Audit Trail (security event logging)
+      └── Fleet/Cloud/Compute status endpoints
 ```
 
 ---
 
-## Reporting Bugs
+## Credits
 
-When reporting an issue, include:
-1. **Browser + version** (e.g., Brave 1.75)
-2. **OS** (macOS, Windows, Linux)
-3. **What you did** (steps to reproduce)
-4. **What happened** vs. what you expected
-5. **Terminal output** (copy any errors from the bridge server window)
-6. **Browser console** (press F12 → Console tab while side panel is open)
-7. **Screenshot** if it's a visual issue
-
----
-
-*Last updated: May 26, 2026*
+- **Manolo Remiddi** — Architecture, Agent Control overlay, workspace system, Compute Fabric (ADR-032)
+- **Tom Pennington** — Resonant Context SDK, Resonator, addon system, Fleet & Compute dashboard, security hardening, install scripts, CI
+- **Michel** — Atomic Design system (tokens, typography, component hierarchy, WCAG accessibility)
+- **Analog 6** — AVD implementation partner
