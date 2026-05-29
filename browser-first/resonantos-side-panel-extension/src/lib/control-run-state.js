@@ -25,8 +25,8 @@ export function createControlRunState({
       planner: plan.source,
       summary: plan.summary,
       status: "running",
-      steps: plan.steps.map((step) => createStepRecord(step)),
-      artifacts: [],
+      steps: plan.steps.map((step) => createStepRecord(step, step.state ?? "pending", step.note ?? "", step.details ?? {})),
+      artifacts: Array.isArray(plan.artifacts) ? plan.artifacts : [],
       startedAt: new Date().toISOString(),
       completedAt: null
     };

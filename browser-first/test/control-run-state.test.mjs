@@ -55,6 +55,26 @@ test("control run state starts a run with active job id and overlay", () => {
   assert.ok(harness.events.some((event) => event[0] === "overlay" && event[1] === true && /find booking/.test(event[2]) && event[3] === "working"));
 });
 
+test("control run state preserves resumed job steps and artifacts", () => {
+  const harness = createHarness({ activeJobId: "job-resume" });
+
+  const run = harness.state.startControlRun({
+    goal: "resume booking",
+    plan: {
+      source: "planner",
+      summary: "continue same durable job",
+      artifacts: [{ type: "archive-intake", path: "/old.md" }],
+      steps: [{ type: "read", label: "Read page", state: "completed", note: "already read" }]
+    }
+  });
+
+  assert.equal(run.id, "job-resume");
+  assert.equal(run.steps[0].state, "completed");
+  assert.equal(run.steps[0].note, "already read");
+  assert.deepEqual(run.artifacts, [{ type: "archive-intake", path: "/old.md" }]);
+});
+
+
 test("control run state appends and updates steps immutably", () => {
   const harness = createHarness({
     currentControlRun: {

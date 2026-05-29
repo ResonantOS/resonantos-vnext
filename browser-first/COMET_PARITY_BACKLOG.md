@@ -31,6 +31,7 @@ Intent: keep the browser-first ResonantOS work aligned with the AI-browser capab
 - Main workspace chat now matches the side-panel chat command behavior for keyboard shortcuts, SVG message actions, model/depth controls, shared ring-style context usage, and page/archive/status/mic icon controls. The new-tab main workspace opens first; the side-panel chat stays closed until explicitly opened or a browser-control handoff needs it.
 - Chat composer parity hardening: both main and side-panel chat inputs support select-all, copy, cut, paste, undo, Enter-to-send, and Shift+Enter newline through the shared composer controller, with native clipboard fallback when extension clipboard APIs are unavailable.
 - Durable Browser Jobs v2: persistent job registry, persisted active job id, interrupted-job recovery after reload, visible job monitor, `/jobs`, `/pause`, `/resume`, `/continue`, `/report`, and `/cancel`. Resume/continue restart from persisted step history and job reports can be written to Living Archive intake.
+- Durable Browser Jobs v2.1: resume/continue reuses the same durable job id, preserves prior step history/artifacts in the monitor, and appends new browser-control steps instead of creating continuation jobs.
 - Browser page summaries can be generated into Living Archive intake with source provenance, review queueing, and a deterministic fallback when the provider is unavailable.
 - Multi-tab browser research trails can be captured into one Living Archive intake bundle with per-page provenance and review queueing.
 - Agent Control visual overlay v1: persistent Matrix-style green perimeter, in-page action toast, and highlighted clicked/typed targets for the full control session.
@@ -42,7 +43,6 @@ Intent: keep the browser-first ResonantOS work aligned with the AI-browser capab
 
 1. Parallel / Durable Browser Jobs
    - Multiple concurrent browser tasks with separate monitors.
-   - Full same-job continuation instead of continuation jobs.
 
 2. Email / Calendar Add-ons
    - Gmail/Calendar-style integrations as add-ons with explicit approval.

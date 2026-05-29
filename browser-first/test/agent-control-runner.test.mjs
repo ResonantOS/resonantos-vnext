@@ -40,8 +40,8 @@ function createHarness(overrides = {}) {
     },
     approvalBoundaryForStep: overrides.approvalBoundaryForStep ?? ((_step, reason = "") => /safe/i.test(reason) ? "safe" : /submit/i.test(reason) ? "public-submit" : "safe"),
     controlStepLabel,
-    createBrowserJob: async ({ goal, planner, summary }) => {
-      activeJobId = "job-created";
+    createBrowserJob: async ({ existingJob, goal, planner, summary }) => {
+      activeJobId = existingJob?.id ?? "job-created";
       controlRun = { ...controlRun, id: activeJobId, goal, planner, summary, steps: [], artifacts: [] };
       return { id: activeJobId, goal, planner, summary };
     },
@@ -79,7 +79,14 @@ function createHarness(overrides = {}) {
     setStatus: (status) => events.push(["status", status]),
     sleep: async () => undefined,
     startControlRun: ({ goal, plan }) => {
-      controlRun = { ...controlRun, goal, planner: plan.source, summary: plan.summary, steps: [] };
+      controlRun = {
+        ...controlRun,
+        goal,
+        planner: plan.source,
+        summary: plan.summary,
+        artifacts: Array.isArray(plan.artifacts) ? plan.artifacts : [],
+        steps: Array.isArray(plan.steps) ? plan.steps : []
+      };
       events.push(["start", goal]);
     },
     taskConsentForStep: async () => taskConsents.shift() ?? null,
@@ -166,12 +173,19 @@ test("agent control runner continues a previous job with seeded planner history"
     resumedFromJob: {
       id: "job-old",
       goal: "find a booking slot",
+      artifacts: [{ type: "archive-intake", path: "/old-report.md" }],
       steps: [{ type: "read", label: "Read booking page", state: "completed", note: "read page" }]
     }
   });
 
   assert.match(harness.getControlRun().summary, /Continuation of job-old/);
-  assert.ok(harness.events.some((event) => event[0] === "message" && /Previous job: job-old/.test(event[2])));
+  assert.equal(harness.getControlRun().id, "job-old");
+  assert.deepEqual(harness.getControlRun().steps.map((step) => step.state), ["completed"]);
+  assert.deepEqual(harness.getControlRun().artifacts, [
+    { type: "archive-intake", path: "/old-report.md" },
+    { type: "archive-intake", path: "/archive/completed.md" }
+  ]);
+  assert.ok(harness.events.some((event) => event[0] === "message" && /Resumed same durable job: job-old/.test(event[2])));
   assert.equal(harness.nextActionRequests[0].history.length, 1);
   assert.equal(harness.nextActionRequests[0].history[0].action.label, "Read booking page");
 });

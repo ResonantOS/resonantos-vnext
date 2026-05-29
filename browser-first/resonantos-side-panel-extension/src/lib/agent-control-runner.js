@@ -235,6 +235,7 @@ export function createAgentControlRunner(deps) {
     setStatus("Taking control");
     setActivity("tool-running", "Agent Control Mode", goal);
     const job = await createBrowserJob({
+      existingJob: resumedFromJob,
       goal,
       planner: "observe-act-verify-loop",
       summary: `${continuationPrefix}Adaptive browser-agent loop. The host observes the page, asks for one safe next action, executes it, then verifies before continuing.`
@@ -244,7 +245,8 @@ export function createAgentControlRunner(deps) {
       plan: {
         source: "observe-act-verify-loop",
         summary: `${continuationPrefix}Adaptive browser-agent loop. The host observes the page, asks for one safe next action, executes it, then verifies before continuing.`,
-        steps: []
+        steps: Array.isArray(resumedFromJob?.steps) ? resumedFromJob.steps : [],
+        artifacts: Array.isArray(resumedFromJob?.artifacts) ? resumedFromJob.artifacts : []
       }
     });
     await addMessage(
@@ -252,7 +254,7 @@ export function createAgentControlRunner(deps) {
       [
         resumedFromJob ? "Agent Control Mode continued." : "Agent Control Mode started.",
         `Job: ${job.id}`,
-        ...(resumedFromJob ? [`Previous job: ${resumedFromJob.id}`, `Previous steps loaded: ${seededHistory.length}`] : []),
+        ...(resumedFromJob ? [`Resumed same durable job: ${resumedFromJob.id}`, `Previous steps loaded: ${seededHistory.length}`] : []),
         `Goal: ${goal}`,
         "Mode: observe -> decide -> act -> verify.",
         "",

@@ -361,7 +361,7 @@ export function createAppCommandHandlers({
       "system",
       [
         `Continuing browser job ${job.id}: ${job.goal}`,
-        "Previous steps remain in the job monitor. The new run starts from the current page state and keeps the same approval boundaries."
+        "Previous steps remain in the same durable job. The new run starts from the current page state and keeps the same approval boundaries."
       ].join("\n")
     );
     await restartBrowserJob(job);

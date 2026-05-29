@@ -290,7 +290,18 @@ const loadBrowserJobs = async () => {
   }
 };
 
-const createBrowserJob = async ({ goal, planner = "observe-act-verify-loop", summary = "" }) => {
+const createBrowserJob = async ({ existingJob = null, goal, planner = "observe-act-verify-loop", summary = "" }) => {
+  if (existingJob?.id) {
+    await browserJobStore.activateJob(existingJob.id);
+    const updated = await browserJobStore.updateJob(existingJob.id, {
+      status: "running",
+      planner,
+      summary,
+      preflightDecision: consumeNextControlPreflightDecision() ?? existingJob.preflightDecision ?? null
+    });
+    renderJobMonitor();
+    return updated ?? existingJob;
+  }
   const job = await browserJobStore.createJob({
     goal,
     planner,
