@@ -158,3 +158,35 @@ The live test proves:
 - document-like contenteditable typing
 - public form submit remains blocked at the approval boundary
 - wallet-style work stops at the approval boundary
+
+---
+
+## Canvas / System Map Addon
+
+**ID:** `addon.canvas` | **Mode:** `visual-surface` | **Trust:** `host-mediated`
+
+Interactive node graph for visualizing fleet topology and protocol connections:
+
+- **Draggable nodes** — move machines and services around the canvas
+- **Zoomable** — zoom in for detail, out for overview
+- **Pannable** — navigate large topologies
+- **Live topology** — reflects current fleet state via host-mediated bridge
+
+**Commands:** `/canvas`, `/map`, `/topology`
+
+**Boundary:** Visual display only. No page modification. No wallet interaction. No direct network access.
+
+![Canvas Screenshot](docs/screenshots/canvas.png)
+
+### Addon Structure
+
+```
+browser-first/addons/canvas/
+  addon.json    # Manifest
+  canvas.html   # Node graph UI
+  canvas.css    # Graph styles
+  canvas.js     # Drag/zoom/pan + topology logic
+browser-first/docs/screenshots/
+  canvas.png    # Screenshot
+```
+
