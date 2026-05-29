@@ -158,3 +158,39 @@ The live test proves:
 - document-like contenteditable typing
 - public form submit remains blocked at the approval boundary
 - wallet-style work stops at the approval boundary
+
+---
+
+## Blackboard Addon
+
+**ID:** `addon.blackboard` | **Mode:** `visual-surface` | **Trust:** `host-mediated`
+
+Resonant Blackboard is a visual display surface for the ResonantOS side panel. It provides 7 render modes for structured AI output:
+
+| Mode | Command | Description |
+|------|---------|-------------|
+| Canvas | `/blackboard` | Free-form drawing surface |
+| Document | `/doc` | Structured text document |
+| Table | `/table` | Interactive data table |
+| Embed | — | External content embed |
+| Slideshow | `/present` | Presentation mode |
+| Draw | `/draw` | Vector drawing |
+
+**Boundary:** Visual display only. No page modification, no network access, no wallet interaction.
+
+**Design System:** Michel — Atomic Design tokens, Inter + Poppins typography, WCAG accessibility.
+
+![Blackboard Screenshot](docs/screenshots/blackboard.png)
+
+### Addon Structure
+
+```
+browser-first/addons/blackboard/
+  addon.json        # Manifest
+  blackboard.html   # UI entry point
+  blackboard.css    # Atomic Design styles
+  blackboard.js     # Canvas/doc/table/embed/present logic
+browser-first/docs/screenshots/
+  blackboard.png    # Screenshot
+```
+

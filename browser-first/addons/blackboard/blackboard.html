@@ -1,0 +1,49 @@
+<!--
+  Resonant Blackboard — ResonantOS Visual Display Surface
+  Design System: Michel's Atomic Design (tokens, typography, component hierarchy)
+  Implementation: Tom Pennington / Analog 6
+  Credit: Michel — design tokens, Inter + Poppins typography, atom/molecule patterns, WCAG accessibility
+-->
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src http://127.0.0.1:47773; img-src 'self' data: blob: https:; frame-src https:;" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Resonant Blackboard</title>
+  <link rel="stylesheet" href="./blackboard.css" />
+</head>
+<body>
+  <div id="blackboard-toolbar">
+    <span class="bb-title">◈ Resonant Blackboard</span>
+    <div class="bb-mode-tabs">
+      <button data-mode="canvas" class="active">Canvas</button>
+      <button data-mode="document">Document</button>
+      <button data-mode="table">Table</button>
+      <button data-mode="embed">Web</button>
+      <button data-mode="present">Present</button>
+    </div>
+    <div class="bb-toolbar-actions">
+      <button id="bb-export" class="bb-action-btn" title="Export / copy content">Export</button>
+      <button id="bb-send-to-augmentor" class="bb-action-btn bb-send-btn" title="Send current blackboard content to Augmentor">Send to Augmentor ◈</button>
+      <button id="bb-clear" class="bb-action-btn" title="Clear blackboard">Clear</button>
+    </div>
+  </div>
+  <div id="blackboard-surface">
+    <div id="bb-welcome" class="bb-welcome">
+      <div class="bb-welcome-icon">◈</div>
+      <h2>Resonant Blackboard</h2>
+      <p>Augmentor's visual display surface. Type a command in the side panel to display content here.</p>
+      <div class="bb-welcome-commands">
+        <code>/blackboard</code> — open / focus<br>
+        <code>/draw</code> — canvas diagram<br>
+        <code>/table</code> — data table<br>
+        <code>/doc</code> — markdown document<br>
+        <code>/show &lt;url&gt;</code> — embed webpage<br>
+        <code>/present</code> — slideshow
+      </div>
+    </div>
+  </div>
+  <script type="module" src="./blackboard.js"></script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+{
+  "id": "addon.blackboard",
+  "name": "Resonant Blackboard",
+  "version": "1.0.0",
+  "description": "Visual display surface — canvas, documents, tables, embeds, slideshows",
+  "author": "Tom Pennington",
+  "credits": {
+    "design-system": "Michel — Atomic Design tokens, typography (Inter + Poppins), component hierarchy, WCAG accessibility standards"
+  },
+  "mode": "visual-surface",
+  "trust": "host-mediated",
+  "entry": "blackboard.html",
+  "contentScripts": [],
+  "commands": ["/blackboard", "/draw", "/table", "/doc", "/present"],
+  "messageChannel": "resonantos.blackboard",
+  "capabilities": ["canvas", "document", "table", "embed", "present"],
+  "requires": [],
+  "boundary": "Visual display only. No page modification, no network access, no wallet interaction."
+}
