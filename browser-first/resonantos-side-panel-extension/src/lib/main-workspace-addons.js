@@ -7,6 +7,10 @@ function addonTone(addon) {
 }
 
 function addonBoundary(addon) {
+  if (addon.boundary) return addon.boundary;
+  if (/draft-only/i.test(addon.mode ?? "")) {
+    return "Draft-only add-ons can prepare communication or scheduling packets. Sending and scheduling remain human-approval gated.";
+  }
   if (addon.mode === "memory-system") {
     return "Memory add-ons are accessed through scoped host APIs. Direct trusted wiki writes remain blocked.";
   }

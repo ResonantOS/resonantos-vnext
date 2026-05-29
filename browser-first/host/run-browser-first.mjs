@@ -2029,6 +2029,52 @@ async function executeDelegationRecord(payload) {
   return { id, target, mission, path: path.relative(userRoot(), taskPath), status: "queued" };
 }
 
+async function executeAddonDraftRecord(payload) {
+  const target = String(payload.target ?? "").trim().toLowerCase();
+  if (!["email", "calendar"].includes(target)) {
+    throw new Error("Draft target must be email or calendar.");
+  }
+  const intent = String(payload.intent ?? payload.subject ?? payload.title ?? "").trim();
+  const body = String(payload.body ?? payload.details ?? payload.mission ?? "").trim();
+  if (intent.length < 3 || body.length < 8) {
+    throw new Error("Draft requires a concrete intent and body.");
+  }
+  const draftDir = path.join(browserFirstRoot(), "AddOnDrafts", target);
+  await mkdir(draftDir, { recursive: true });
+  const id = `${target}-draft-${Date.now()}`;
+  const draftPath = path.join(draftDir, `${id}-${safeFileSlug(intent)}.md`);
+  const content = [
+    `# ${target === "email" ? "Email" : "Calendar"} Draft`,
+    "",
+    `- id: ${id}`,
+    `- createdAt: ${new Date().toISOString()}`,
+    `- target: ${target}`,
+    "- status: draft-only",
+    "- approvalRequired: true",
+    "- source: ResonantOS Browser Layer",
+    "",
+    "## Intent",
+    intent,
+    "",
+    "## Draft Body",
+    body,
+    "",
+    "## Boundary",
+    target === "email"
+      ? "This is a draft packet only. ResonantOS does not send email from this route; sending requires a separate human approval flow in the email add-on."
+      : "This is a draft packet only. ResonantOS does not schedule calendar events from this route; scheduling requires a separate human approval flow in the calendar add-on.",
+    "",
+  ].join("\n");
+  await writeFile(draftPath, content);
+  return {
+    approvalRequired: true,
+    id,
+    path: path.relative(userRoot(), draftPath),
+    status: "draft-created",
+    target,
+  };
+}
+
 async function executeAddonsStatus() {
   return {
     addons: [
@@ -2052,6 +2098,22 @@ async function executeAddonsStatus() {
         available: existsSync(memoryRoot()),
         mode: "memory-system",
         trust: "host-mediated memory provider",
+      },
+      {
+        id: "addon.email",
+        name: "Email",
+        available: true,
+        mode: "draft-only-communication-addon",
+        trust: "host-mediated draft provider",
+        boundary: "Draft packets only. Sending email requires explicit human approval inside the email add-on.",
+      },
+      {
+        id: "addon.calendar",
+        name: "Calendar",
+        available: true,
+        mode: "draft-only-scheduling-addon",
+        trust: "host-mediated draft provider",
+        boundary: "Draft packets only. Scheduling events requires explicit human approval inside the calendar add-on.",
       },
     ],
   };
@@ -2212,6 +2274,7 @@ const bridgeRoutes = [
   { method: "POST", path: "/hermes/dashboard/start", handler: executeHermesDashboardStart },
   { method: "POST", path: "/hermes/dashboard/stop", handler: executeHermesDashboardStop },
   { method: "POST", path: "/web/news", handler: executeNewsSearch },
+  { method: "POST", path: "/addons/draft", handler: executeAddonDraftRecord },
   { method: "POST", path: "/addons/delegate", handler: executeDelegationRecord },
   { method: "POST", path: "/goals", handler: executeGoalRecord },
 ];

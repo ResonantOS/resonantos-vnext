@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   createAppCommandHandlers,
+  parseDraftAddonCommand,
   parseCommandSections,
   parseHistorySearchCommand,
   sitePermissionModeFromText
@@ -20,6 +21,7 @@ function createHarness(overrides = {}) {
   const bridgeResponses = {
     "/goals": { id: "goal-a", mission: "Build" },
     "/addons/delegate": { id: "delegation-a", target: "opencode", path: "/tmp/task" },
+    "/addons/draft": { id: "email-draft-a", target: "email", path: "AddOnDrafts/email/email-draft-a.md", status: "draft-created", approvalRequired: true },
     "/status": {
       providers: { "shared-minimax": true, "shared-openai": false },
       memory: { wiki: { pages: 3 }, intake: { artifacts: 2 }, review: { requests: 1, artifacts: 1 } },
@@ -91,6 +93,20 @@ test("app command handlers parse sections and site permission modes", () => {
   assert.equal(sitePermissionModeFromText("normal"), "ask-before-action");
 });
 
+test("app command handlers parse draft-only email and calendar commands", () => {
+  assert.deepEqual(parseDraftAddonCommand("email", "Follow up with Alex | subject: Project update | body: The browser work is ready."), {
+    target: "email",
+    intent: "Project update",
+    body: "The browser work is ready."
+  });
+  assert.deepEqual(parseDraftAddonCommand("calendar", "Book planning call | title: Planning | details: Tuesday 10:00 with the team"), {
+    target: "calendar",
+    intent: "Planning",
+    body: "Tuesday 10:00 with the team"
+  });
+  assert.equal(parseDraftAddonCommand("wallet", "no"), null);
+});
+
 test("app command handlers parse history filters", () => {
   assert.deepEqual(parseHistorySearchCommand("resonant dao | site:www.resonantos.com/path | days:7 | limit:12 | tabs:yes"), {
     days: 7,
@@ -117,6 +133,27 @@ test("app command handlers create goals and delegations", async () => {
   assert.ok(harness.calls.some((call) => call[0] === "bridge" && call[1] === "/addons/delegate" && call[2].target === "opencode"));
   assert.ok(harness.calls.some((call) => call[0] === "bridge" && call[1] === "/addons/delegate" && call[2].target === "hermes"));
   assert.ok(harness.calls.some((call) => call[0] === "message" && /Goal workspace recorded/.test(call[2])));
+});
+
+test("app command handlers create draft-only communication packets", async () => {
+  const harness = createHarness({
+    bridgeResponses: {
+      "/addons/draft": { id: "calendar-draft-a", target: "calendar", path: "AddOnDrafts/calendar/calendar-draft-a.md", status: "draft-created", approvalRequired: true }
+    }
+  });
+
+  await harness.handlers.runDraftAddonCommand("calendar", "Planning call | body: Hold Tuesday 10:00 for ResonantOS review.");
+
+  assert.ok(harness.calls.some((call) =>
+    call[0] === "bridge" &&
+    call[1] === "/addons/draft" &&
+    call[2].target === "calendar" &&
+    call[2].intent === "Planning call"
+  ));
+  assert.ok(harness.calls.some((call) => call[0] === "message" && /Scheduling calendar events is not automated from chat/.test(call[2])));
+
+  await harness.handlers.runDraftAddonCommand("email", "");
+  assert.ok(harness.calls.some((call) => call[0] === "message" && /Sending remains human-approval gated/.test(call[2])));
 });
 
 test("app command handlers report status, memory, history, capabilities, and site permissions", async () => {

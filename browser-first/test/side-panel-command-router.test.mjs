@@ -26,6 +26,7 @@ function createHarness() {
     runChatTurn: handler("chat"),
     runControlCommand: handler("control"),
     runDelegateCommand: handler("delegate"),
+    runDraftAddonCommand: handler("draft"),
     runGoalCommand: handler("goal"),
     runHistorySearchCommand: handler("history"),
     runJobsCommand: handler("jobs"),
@@ -50,6 +51,8 @@ test("side panel command router dispatches slash commands", async () => {
   await harness.router.respondToCommand("/status");
   await harness.router.respondToCommand("/browser open resonantos.com");
   await harness.router.respondToCommand("/control find a booking");
+  await harness.router.respondToCommand("/email Follow up | body: Draft the email");
+  await harness.router.respondToCommand("/calendar Planning | body: Draft the event");
   await harness.router.respondToCommand("/save selection");
   await harness.router.respondToCommand("/trail dao research");
 
@@ -64,6 +67,10 @@ test("side panel command router dispatches slash commands", async () => {
     ["browser", "open resonantos.com"],
     ["bind", "/control find a booking"],
     ["control", "find a booking"],
+    ["bind", "/email Follow up | body: Draft the email"],
+    ["draft", "email", "Follow up | body: Draft the email"],
+    ["bind", "/calendar Planning | body: Draft the event"],
+    ["draft", "calendar", "Planning | body: Draft the event"],
     ["bind", "/save selection"],
     ["save", "selection"],
     ["bind", "/trail dao research"],

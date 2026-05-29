@@ -20,6 +20,8 @@ export function createSidePanelCommandRouter(handlers) {
       const body = (slash[2] ?? "").trim();
       if (name === "goal") return handlers.runGoalCommand(body);
       if (name === "hermes") return handlers.runDelegateCommand(`hermes ${body}`);
+      if (name === "email") return handlers.runDraftAddonCommand("email", body);
+      if (name === "calendar") return handlers.runDraftAddonCommand("calendar", body);
       if (name === "delegate") return handlers.runDelegateCommand(body);
       if (name === "status") return handlers.runStatusCommand();
       if (name === "site") return handlers.runSitePermissionCommand(body);

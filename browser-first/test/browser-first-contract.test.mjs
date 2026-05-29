@@ -57,6 +57,8 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   const archiveMerge = await readText(path.join(browserFirstRoot, "host", "archive-merge.mjs"));
   const background = await readText(path.join(extensionRoot, "src", "background.js"));
   const sidePanel = await readText(path.join(extensionRoot, "src", "side-panel.js"));
+  const commandRouter = await readText(path.join(extensionRoot, "src", "lib", "side-panel-command-router.js"));
+  const appCommandHandlers = await readText(path.join(extensionRoot, "src", "lib", "app-command-handlers.js"));
 
   assert.equal(manifest.chrome_url_overrides.newtab, "src/main-workspace.html");
   assert.match(workspace, /ResonantOS main workspace/);
@@ -106,12 +108,20 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(workspaceScript, /\/hermes\/dashboard\/start/);
   assert.match(workspaceScript, /\/hermes\/dashboard\/stop/);
   assert.match(workspaceScript, /\/addons\/delegate/);
+  assert.match(commandRouter, /name === "email"/);
+  assert.match(commandRouter, /name === "calendar"/);
+  assert.match(appCommandHandlers, /parseDraftAddonCommand/);
+  assert.match(appCommandHandlers, /\/addons\/draft/);
   assert.match(workspaceScript, /target: "hermes"/);
   assert.match(workspaceScript, /parseHermesSlashCommand/);
   assert.match(workspaceScript, /parseMemorySlashCommand/);
   assert.match(workspaceScript, /parseOpenCodeSlashCommand/);
+  assert.match(workspaceScript, /parseDraftAddonCommand/);
+  assert.match(workspaceScript, /parseDraftSlashCommand/);
   assert.match(workspaceScript, /runMemoryCommand/);
   assert.match(workspaceScript, /runOpenCodeCommand/);
+  assert.match(workspaceScript, /runDraftAddonCommand/);
+  assert.match(workspaceScript, /\/addons\/draft/);
   assert.match(workspaceScript, /pendingWorkspaceAction/);
   assert.match(workspaceScript, /AI browser workspace/);
   assert.match(workspaceScript, /data-workspace-command="browser"/);

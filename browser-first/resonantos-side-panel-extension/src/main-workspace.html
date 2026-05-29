@@ -37,7 +37,7 @@
         <form id="command-form" class="main-composer" aria-label="Ask Augmentor">
           <textarea id="command-input" rows="2" placeholder="Ask Augmentor anything"></textarea>
           <div id="attachment-strip" class="attachment-strip" hidden></div>
-          <div class="composer-row">
+          <div class="composer-toolbar">
             <button id="attach-file" type="button" class="icon-button" title="Attach file" aria-label="Attach file">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
             </button>
@@ -52,7 +52,7 @@
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v14H5z"/><path d="M8 9h8"/><path d="M8 13h5"/><path d="m15 15 2 2 3-4"/></svg>
             </button>
             <button id="context-toggle" type="button" class="icon-button context-usage-button" title="Open browser context status in sidebar" aria-label="Open browser context status in sidebar">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16"/><path d="M4 12h10"/><path d="M4 18h7"/><path d="M18 14v6"/><path d="m15 17 3 3 3-3"/></svg>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 1 16 0"/><path d="M4 12h4"/><path d="M16 12h4"/><path d="M12 4v4"/><path d="M8.5 17.5 12 12l3.5 5.5"/></svg>
             </button>
             <select id="model-select" class="model-select" aria-label="Connected model">
               <option value="MiniMax-M2.7">MiniMax 2.7</option>
@@ -72,9 +72,9 @@
             <button id="context-meter" type="button" class="context-meter" title="Estimated conversation context captured for this session." aria-label="Context usage 0 percent">
               <span class="context-meter-label">0%</span>
             </button>
-            <span id="connection-line" class="connection-line" title="Connected to MiniMax 2.7 · Ready" aria-label="Connected to MiniMax 2.7 · Ready">
+            <button id="connection-line" type="button" class="connection-line" title="Connected to MiniMax 2.7 · Ready" aria-label="Connected to MiniMax 2.7 · Ready">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h4l2-7 4 14 2-7h4"/></svg>
-            </span>
+            </button>
             <button type="submit" class="send-button" aria-label="Send">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
             </button>

@@ -30,6 +30,7 @@ Intent: keep the browser-first ResonantOS work aligned with the AI-browser capab
 - Browser-first Add-ons workspace lists visible add-ons, availability, trust tier, and governed workspace actions without granting new capabilities.
 - Main workspace chat now matches the side-panel chat command behavior for keyboard shortcuts, SVG message actions, model/depth controls, shared ring-style context usage, and page/archive/status/mic icon controls. The new-tab main workspace opens first; the side-panel chat stays closed until explicitly opened or a browser-control handoff needs it.
 - Chat composer parity hardening: both main and side-panel chat inputs support select-all, copy, cut, paste, undo, Enter-to-send, and Shift+Enter newline through the shared composer controller, with native clipboard fallback when extension clipboard APIs are unavailable.
+- Email/Calendar Add-ons v1: `/email` and `/calendar` create host-mediated draft-only packets from both chat surfaces. Sending email and scheduling events remain human-approval gated and are not automated from chat.
 - Durable Browser Jobs v2: persistent job registry, persisted active job id, interrupted-job recovery after reload, visible job monitor, `/jobs`, `/pause`, `/resume`, `/continue`, `/report`, and `/cancel`. Resume/continue restart from persisted step history and job reports can be written to Living Archive intake.
 - Durable Browser Jobs v2.1: resume/continue reuses the same durable job id, preserves prior step history/artifacts in the monitor, and appends new browser-control steps instead of creating continuation jobs.
 - Browser page summaries can be generated into Living Archive intake with source provenance, review queueing, and a deterministic fallback when the provider is unavailable.
@@ -44,9 +45,9 @@ Intent: keep the browser-first ResonantOS work aligned with the AI-browser capab
 1. Parallel / Durable Browser Jobs
    - Multiple concurrent browser tasks with separate monitors.
 
-2. Email / Calendar Add-ons
-   - Gmail/Calendar-style integrations as add-ons with explicit approval.
-   - Draft-only by default; sending/scheduling requires human approval.
+2. Email / Calendar Provider Connectors
+   - Provider-specific Gmail/Calendar connectors, approval UI, and audit trail.
+   - Draft-only remains the default; sending/scheduling still requires human approval.
 
 3. Secure Autofill Model
    - Do not implement raw credential/payment autofill until vault, approval, and audit ADRs are complete.

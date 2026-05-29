@@ -17,7 +17,9 @@ test("add-ons workspace renders registry status and governed open actions", asyn
       addons: [
         { id: "addon.hermes", name: "Hermes", available: true, mode: "delegation-addon", trust: "add-on agent" },
         { id: "addon.opencode", name: "OpenCode", available: false, mode: "coding-addon", trust: "add-on agent" },
-        { id: "addon.living-archive", name: "Living Archive", available: true, mode: "memory-system", trust: "host-mediated memory provider" }
+        { id: "addon.living-archive", name: "Living Archive", available: true, mode: "memory-system", trust: "host-mediated memory provider" },
+        { id: "addon.email", name: "Email", available: true, mode: "draft-only-communication-addon", trust: "host-mediated draft provider" },
+        { id: "addon.calendar", name: "Calendar", available: true, mode: "draft-only-scheduling-addon", trust: "host-mediated draft provider" }
       ]
     };
   };
@@ -31,12 +33,15 @@ test("add-ons workspace renders registry status and governed open actions", asyn
 
   assert.deepEqual(calls, ["/addons/status"]);
   assert.match(container.textContent, /Replaceable capabilities, explicit trust/);
-  assert.match(container.textContent, /3 add-ons visible/);
+  assert.match(container.textContent, /5 add-ons visible/);
   assert.match(container.textContent, /Hermes/);
   assert.match(container.textContent, /OpenCode/);
   assert.match(container.textContent, /Living Archive/);
+  assert.match(container.textContent, /Email/);
+  assert.match(container.textContent, /Calendar/);
   assert.match(container.textContent, /not trusted core agents/i);
   assert.match(container.textContent, /Direct trusted wiki writes remain blocked/);
+  assert.match(container.textContent, /Sending and scheduling remain human-approval gated/);
   const buttons = [...container.querySelectorAll(".addon-card-actions button")];
   assert.equal(buttons.length, 3);
   assert.equal(buttons.find((button) => /OpenCode/.test(button.textContent)).disabled, true);

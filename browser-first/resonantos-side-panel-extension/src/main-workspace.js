@@ -1,4 +1,7 @@
 import {
+  parseDraftAddonCommand,
+} from "./lib/app-command-handlers.js";
+import {
   normalizeBrowserUrl,
   parseAmazonShoppingTask,
   parseAutonomousBrowserActionIntent,
@@ -72,6 +75,10 @@ const parseMemorySlashCommand = (value) => {
 const parseOpenCodeSlashCommand = (value) => {
   const match = /^\/\s*(?:opencode|open\s+code)(?:\s+([\s\S]*))?$/i.exec(String(value ?? "").trim());
   return match ? (match[1] ?? "").trim() : null;
+};
+const parseDraftSlashCommand = (value) => {
+  const match = /^\/\s*(email|calendar)(?:\s+([\s\S]*))?$/i.exec(String(value ?? "").trim());
+  return match ? { target: match[1].toLowerCase(), body: (match[2] ?? "").trim() } : null;
 };
 const providerMessagesFromHistory = (messages, limit = 18) => messages
   .filter((message) => ["user", "assistant"].includes(message.role))
@@ -273,6 +280,7 @@ function renderMessages() {
   messages.forEach((message) => {
     const article = document.createElement("article");
     article.className = `message ${message.role}`;
+    article.dataset.messageId = message.id;
     const header = document.createElement("div");
     header.className = "message-header";
     const label = document.createElement("strong");
@@ -324,6 +332,7 @@ async function copyMessage(message) {
   try {
     if (navigator.clipboard?.writeText) {
       await navigator.clipboard.writeText(text);
+      flashCopied(message.id);
       return;
     }
   } catch {
@@ -334,6 +343,17 @@ async function copyMessage(message) {
     type: "copy_text",
     text
   }).catch(() => undefined);
+  flashCopied(message.id);
+}
+
+function flashCopied(messageId) {
+  const escapedId = window.CSS?.escape ? window.CSS.escape(messageId) : String(messageId).replace(/["\\]/g, "\\$&");
+  const button = transcript.querySelector(`[data-message-id="${escapedId}"] .message-action[data-action="copy"]`);
+  if (!button) return;
+  button.innerHTML = ACTION_ICONS.check;
+  window.setTimeout(() => {
+    button.innerHTML = ACTION_ICONS.copy;
+  }, 1400);
 }
 
 function editMessage(messageId) {
@@ -676,6 +696,30 @@ async function runOpenCodeCommand(prompt) {
   );
 }
 
+async function runDraftAddonCommand(prompt) {
+  const command = parseDraftSlashCommand(prompt);
+  if (!command) return false;
+  const draft = parseDraftAddonCommand(command.target, command.body);
+  if (!draft) {
+    await addMessage(
+      "system",
+      `Use \`/${command.target} <intent> | body: <draft text>\`. ${command.target === "email" ? "Sending" : "Scheduling"} remains human-approval gated.`
+    );
+    return true;
+  }
+  updateConnectionLine("Drafting");
+  const result = await bridgeRequest("/addons/draft", {
+    method: "POST",
+    body: draft
+  });
+  await addMessage(
+    "system",
+    `${draft.target === "email" ? "Email" : "Calendar"} draft created: ${result.id}\n${result.path}\n${draft.target === "email" ? "Sending email" : "Scheduling calendar events"} is not automated from chat. Review and approve through the add-on approval flow.`
+  );
+  updateConnectionLine("Ready");
+  return true;
+}
+
 commandForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (busy) return;
@@ -695,6 +739,8 @@ commandForm.addEventListener("submit", async (event) => {
       await runOpenCodeCommand(prompt);
     } else if (parseHermesSlashCommand(prompt) !== null) {
       await runHermesDelegation(prompt);
+    } else if (await runDraftAddonCommand(prompt)) {
+      // Draft-only communication/scheduling packets are handled locally.
     } else if (shouldControl) {
       await handoffToBrowserControl(prompt);
     } else {

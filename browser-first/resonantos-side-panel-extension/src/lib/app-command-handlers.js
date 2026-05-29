@@ -82,6 +82,24 @@ export function sitePermissionModeFromText(body) {
   return "ask-before-action";
 }
 
+export function parseDraftAddonCommand(target, body) {
+  const text = String(body ?? "").trim();
+  if (!["email", "calendar"].includes(target) || !text) return null;
+  const sections = parseCommandSections(text);
+  const first = sections[0] ?? "";
+  const keyed = Object.fromEntries(sections.slice(1).map((section) => {
+    const [rawKey, ...rest] = section.split(":");
+    return [rawKey.trim().toLowerCase(), rest.join(":").trim()];
+  }).filter(([key, value]) => key && value));
+  const intent = keyed.subject || keyed.title || keyed.intent || first;
+  const draftBody = keyed.body || keyed.details || keyed.message || sections.slice(1).filter((section) => !/^[a-z-]+\s*:/i.test(section)).join("\n") || first;
+  return {
+    body: draftBody,
+    intent,
+    target
+  };
+}
+
 export function createAppCommandHandlers({
   activeTab,
   addMessage,
@@ -130,6 +148,27 @@ export function createAppCommandHandlers({
       body: { target, mission }
     });
     await addMessage("system", `Delegation queued for ${result.target}: ${result.id}\n${result.path}`);
+  }
+
+  async function runDraftAddonCommand(target, body) {
+    const draft = parseDraftAddonCommand(target, body);
+    if (!draft || draft.intent.length < 3 || draft.body.length < 8) {
+      await addMessage("system", `Use \`/${target} <intent> | body: <draft text>\`. ${target === "email" ? "Sending" : "Scheduling"} remains human-approval gated.`);
+      return;
+    }
+    setActivity("tool-running", `Creating ${target} draft packet`, draft.intent);
+    const result = await bridgeRequest("/addons/draft", {
+      method: "POST",
+      body: draft
+    });
+    await addMessage(
+      "system",
+      [
+        `${target === "email" ? "Email" : "Calendar"} draft created: ${result.id}`,
+        result.path,
+        `${target === "email" ? "Sending email" : "Scheduling calendar events"} is not automated from chat. Review and approve inside the ${target} add-on before any external action.`
+      ].join("\n")
+    );
   }
 
   async function runStatusCommand() {
@@ -407,6 +446,7 @@ export function createAppCommandHandlers({
     cancelBrowserJob,
     continueBrowserJob,
     pauseBrowserJob,
+    runDraftAddonCommand,
     resumeBrowserJob,
     reportBrowserJob,
     runCapabilitiesCommand,
