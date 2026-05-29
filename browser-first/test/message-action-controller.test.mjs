@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { JSDOM } from "jsdom";
 
 import {
   createMessageActionController,
@@ -69,6 +70,42 @@ function createHarness(overrides = {}) {
   return { commandInput, controller, events, fileInput, getAttachments: () => attachments };
 }
 
+function createCopyFallbackHarness() {
+  const dom = new JSDOM("<main></main>");
+  const events = [];
+  const commandInput = dom.window.document.createElement("textarea");
+  dom.window.document.body.append(commandInput);
+  dom.window.document.execCommand = (command) => {
+    const scratch = [...dom.window.document.querySelectorAll("textarea")].at(-1);
+    events.push(["execCommand", command, scratch?.value]);
+    return true;
+  };
+  const controller = createMessageActionController({
+    addMessage: async () => undefined,
+    bridgeRequest: async () => ({}),
+    chatSessionStore: {
+      findMessage: () => ({ id: "a1", role: "assistant", content: "fallback copy", createdAt: "2026-05-26T10:01:00.000Z" })
+    },
+    commandInput,
+    composerController: { resetUndoStack: () => undefined },
+    fileInput: null,
+    flashCopied: (id) => events.push(["flash", id]),
+    getLastSnapshot: () => null,
+    getRespondToCommand: () => async () => undefined,
+    navigator: {
+      clipboard: {
+        writeText: async () => {
+          throw new Error("clipboard unavailable");
+        }
+      }
+    },
+    renderAttachments: () => undefined,
+    renderMessages: () => undefined,
+    setStatus: (status) => events.push(["status", status])
+  });
+  return { controller, events };
+}
+
 test("message action controller detects text-like files", () => {
   assert.equal(fileLooksTextLike({ name: "notes.md", type: "" }), true);
   assert.equal(fileLooksTextLike({ name: "data.bin", type: "application/octet-stream" }), false);
@@ -89,6 +126,16 @@ test("message action controller copies, forks, deletes, and edits messages", asy
   assert.ok(harness.events.some((event) => event[0] === "delete" && event[1] === "a1"));
   assert.equal(harness.commandInput.value, "hello");
   assert.equal(harness.commandInput.focused, true);
+});
+
+test("message action controller falls back to native copy when clipboard API fails", async () => {
+  const harness = createCopyFallbackHarness();
+
+  await harness.controller.copyMessage("a1");
+
+  assert.ok(harness.events.some((event) => event[0] === "execCommand" && event[1] === "copy" && event[2] === "fallback copy"));
+  assert.ok(harness.events.some((event) => event[0] === "flash" && event[1] === "a1"));
+  assert.ok(harness.events.some((event) => event[0] === "status" && event[1] === "Copied"));
 });
 
 test("message action controller saves messages to archive and reports stats", async () => {

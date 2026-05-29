@@ -1,6 +1,7 @@
 export function createComposerController({ commandForm, commandInput, navigator }) {
   let undoStack = [""];
   let undoApplying = false;
+  const ownerDocument = commandInput.ownerDocument ?? globalThis.document;
 
   function resetUndoStack(value = commandInput.value) {
     undoStack = [String(value ?? "")];
@@ -33,6 +34,20 @@ export function createComposerController({ commandForm, commandInput, navigator 
       await navigator.clipboard.writeText(value);
       return true;
     }
+    if (ownerDocument?.execCommand) {
+      const { start, end } = selection();
+      const previousActiveElement = ownerDocument.activeElement;
+      commandInput.focus();
+      if (start === end) {
+        commandInput.select();
+      }
+      const copied = ownerDocument.execCommand("copy");
+      commandInput.setSelectionRange(start, end);
+      if (previousActiveElement?.focus && previousActiveElement !== commandInput) {
+        previousActiveElement.focus();
+      }
+      return copied;
+    }
     return false;
   }
 
@@ -59,6 +74,9 @@ export function createComposerController({ commandForm, commandInput, navigator 
   async function handleClipboardShortcut(event) {
     const shortcutKey = event.key.toLowerCase();
     if (!(event.metaKey || event.ctrlKey) || event.altKey || !["x", "c", "v"].includes(shortcutKey)) {
+      return false;
+    }
+    if (shortcutKey === "v" && !navigator.clipboard?.readText) {
       return false;
     }
     event.preventDefault();
@@ -95,6 +113,9 @@ export function createComposerController({ commandForm, commandInput, navigator 
       return;
     }
     if ((event.metaKey || event.ctrlKey) && !event.altKey && ["x", "c", "v"].includes(shortcutKey)) {
+      if (shortcutKey === "v" && !navigator.clipboard?.readText) {
+        return;
+      }
       void handleClipboardShortcut(event);
       return;
     }

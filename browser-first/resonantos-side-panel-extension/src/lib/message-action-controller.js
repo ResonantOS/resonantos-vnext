@@ -26,7 +26,23 @@ export function createMessageActionController({
   async function copyMessage(id) {
     const message = chatSessionStore.findMessage(id);
     if (!message) return;
-    await navigator.clipboard?.writeText?.(message.content).catch(() => undefined);
+    const copied = await navigator.clipboard?.writeText?.(message.content).then(() => true).catch(() => false);
+    if (!copied) {
+      const ownerDocument = commandInput?.ownerDocument ?? globalThis.document;
+      const previousActiveElement = ownerDocument?.activeElement;
+      const scratch = ownerDocument?.createElement?.("textarea");
+      if (scratch) {
+        scratch.value = message.content;
+        scratch.setAttribute("readonly", "");
+        scratch.style.position = "fixed";
+        scratch.style.opacity = "0";
+        ownerDocument.body.append(scratch);
+        scratch.select();
+        ownerDocument.execCommand?.("copy");
+        scratch.remove();
+        previousActiveElement?.focus?.();
+      }
+    }
     flashCopied(id);
     setStatus("Copied");
   }
