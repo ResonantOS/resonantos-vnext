@@ -128,6 +128,9 @@ Auto-refresh: 5s (default), 10s, 30s, or Off. Dark mission-control theme.
 Files: `addons/fleet-compute/fleet-compute.html`, `fleet-compute.css`, `fleet-compute.js`
 
 ### Task Board — Kanban Work Tracker
+
+![Task Board](docs/screenshots/task-board.png)
+
 Visual kanban board for tracking tasks across your project. Four columns with drag-and-drop:
 
 - **READY** — tasks queued for work, sorted by priority
@@ -142,6 +145,9 @@ Commands: `/tasks`, `/kanban`, `/board`
 Files: `addons/task-board/task-board.html`, `task-board.css`, `task-board.js`
 
 ### Canvas / System Map — Interactive Topology
+
+![Canvas / System Map](docs/screenshots/canvas.png)
+
 Full interactive node graph rendered on HTML5 Canvas. Visualizes fleet topology, protocol connections, and service architecture at a glance.
 
 - **Machine nodes** (hexagons) — all fleet machines with IP addresses and status colors
@@ -156,6 +162,9 @@ Commands: `/canvas`, `/map`, `/topology`
 Files: `addons/canvas/canvas.html`, `canvas.css`, `canvas.js`
 
 ### Open Items — Work Item Dashboard
+
+![Open Items](docs/screenshots/open-items.png)
+
 At-a-glance view of everything pending, blocked, or recently completed. Three sections:
 
 - **🔴 Needs Attention** — items requiring immediate action (red left border)
@@ -169,6 +178,9 @@ Commands: `/open-items`, `/pending`, `/blocked`
 Files: `addons/open-items/open-items.html`, `open-items.css`, `open-items.js`
 
 ### Gradient Performance — Training Metrics
+
+![Gradient Performance](docs/screenshots/gradient-perf.png)
+
 Training metrics and fleet performance dashboard with three tabbed views:
 
 **Training Tab:**
