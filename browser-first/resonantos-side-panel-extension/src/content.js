@@ -392,13 +392,20 @@ const clickControlRef = (ref, { userApproved = false } = {}) => {
 
 const editableCandidates = () => [
   document.activeElement,
-  document.querySelector("textarea[name='q']"),
-  document.querySelector("input[name='q']"),
-  document.querySelector("input[type='search']"),
-  document.querySelector("textarea"),
-  document.querySelector("input[type='text']"),
-  document.querySelector("input:not([type]), input[type='email'], input[type='url'], input[type='tel'], input[type='number']"),
-  document.querySelector("[contenteditable='true']")
+  ...document.querySelectorAll([
+    "textarea[name='q']",
+    "input[name='q']",
+    "input[type='search']",
+    "textarea",
+    "input[type='text']",
+    "input:not([type])",
+    "input[type='email']",
+    "input[type='url']",
+    "input[type='tel']",
+    "input[type='number']",
+    "input[type='password']",
+    "[contenteditable='true']"
+  ].join(", "))
 ].filter(Boolean);
 
 const isEditable = (element) =>
@@ -423,10 +430,79 @@ const editableLabel = (element) => [
   element.getAttribute("aria-label"),
   element.getAttribute("placeholder"),
   element.getAttribute("title"),
+  element.getAttribute("autocomplete"),
   element.getAttribute("name"),
   element.id,
   element.textContent
 ].filter(Boolean).join(" ").toLowerCase();
+
+const cssEscape = (value) => window.CSS?.escape?.(String(value ?? "")) ?? String(value ?? "").replace(/["\\]/g, "\\$&");
+
+const relatedLabelText = (element) => {
+  const labels = [];
+  if (element.id) {
+    document.querySelectorAll(`label[for="${cssEscape(element.id)}"]`).forEach((label) => {
+      labels.push(label.textContent);
+    });
+  }
+  element.closest?.("label") && labels.push(element.closest("label").textContent);
+  return labels.filter(Boolean).join(" ").toLowerCase();
+};
+
+const classifyEditableField = (element) => {
+  const tagName = element?.tagName?.toLowerCase?.() ?? "";
+  const type = element instanceof HTMLInputElement ? String(element.getAttribute("type") || "text").toLowerCase() : "";
+  const form = element?.closest?.("form");
+  const haystack = [
+    type,
+    tagName,
+    element?.getAttribute?.("name"),
+    element?.getAttribute?.("id"),
+    element?.getAttribute?.("role"),
+    element?.getAttribute?.("aria-label"),
+    element?.getAttribute?.("placeholder"),
+    element?.getAttribute?.("title"),
+    element?.getAttribute?.("autocomplete"),
+    relatedLabelText(element),
+    form?.getAttribute?.("role"),
+    form?.getAttribute?.("aria-label"),
+    form?.getAttribute?.("id"),
+    form?.getAttribute?.("name"),
+    form?.getAttribute?.("action")
+  ].filter(Boolean).join(" ").toLowerCase();
+
+  if (
+    type === "password" ||
+    /\b(password|passcode|passphrase|credential|secret|seed|private\s*key|otp|2fa|mfa|one[-\s]?time|verification\s*code|authenticator)\b/.test(haystack)
+  ) {
+    return { kind: "credential", safeToType: false, safeToSubmit: false, reason: "Credential fields are human-only until the secure vault approval model exists." };
+  }
+  if (/\b(card|credit|debit|cc-|cvc|cvv|iban|routing|account\s*number|expiry|expiration|billing|payment|checkout|wallet|phantom)\b/.test(haystack)) {
+    return { kind: "payment", safeToType: false, safeToSubmit: false, reason: "Payment and wallet fields are human-only." };
+  }
+  if (/\b(login|signin|sign[-\s]?in|username|user\s*name|account\s*email)\b/.test(haystack)) {
+    return { kind: "login", safeToType: false, safeToSubmit: false, reason: "Login fields are human-only." };
+  }
+  if (
+    ["email", "tel"].includes(type) ||
+    /\b(email|e-mail|phone|telephone|mobile|address|street|postcode|postal|zip|city|country|first\s*name|last\s*name|full\s*name|surname|guest\s*name)\b/.test(haystack)
+  ) {
+    return { kind: "personal-contact", safeToType: false, safeToSubmit: false, reason: "Personal contact fields require a human-controlled autofill flow." };
+  }
+  if (
+    type === "search" ||
+    element?.getAttribute?.("role") === "searchbox" ||
+    form?.getAttribute?.("role") === "search" ||
+    /\b(search|query|find|filter|lookup)\b/.test(haystack) ||
+    /\bq\b/.test(haystack)
+  ) {
+    return { kind: "search-query", safeToType: true, safeToSubmit: true, reason: "Search/query fields may be typed and submitted by Agent Control." };
+  }
+  if (element instanceof HTMLTextAreaElement || element?.isContentEditable) {
+    return { kind: "document-edit", safeToType: true, safeToSubmit: false, reason: "Document-like fields may be edited but not submitted automatically." };
+  }
+  return { kind: "generic-text", safeToType: true, safeToSubmit: false, reason: "Generic text fields may be edited but not submitted automatically." };
+};
 
 const findEditableTarget = (field, ref = "") => {
   const refTarget = elementByControlRef(ref);
@@ -442,15 +518,7 @@ const findEditableTarget = (field, ref = "") => {
 };
 
 const isSearchLikeEditable = (element) => {
-  const haystack = [
-    element.getAttribute("type"),
-    element.getAttribute("name"),
-    element.getAttribute("role"),
-    element.getAttribute("aria-label"),
-    element.getAttribute("placeholder"),
-    element.id
-  ].join(" ").toLowerCase();
-  return /\b(search|query|q|find)\b/.test(haystack);
+  return classifyEditableField(element).safeToSubmit;
 };
 
 const setNativeValue = (element, value) => {
@@ -474,17 +542,29 @@ const typeIntoPage = ({ text, field = "", ref = "", submit = false, userApproved
   if (!element) {
     return { ok: false, error: "No editable field was found on this page." };
   }
+  const fieldSafety = classifyEditableField(element);
+  if (!fieldSafety.safeToType) {
+    pulseControlOverlay({ state: "blocked", label: fieldSafety.reason, phase: "blocked", target: element });
+    return {
+      ok: false,
+      approvalRequired: true,
+      deniedToAutomation: true,
+      fieldSafety,
+      error: fieldSafety.reason
+    };
+  }
   pulseControlOverlay({ state: "active", label: `Typing into ${field || visibleText(element) || element.getAttribute("aria-label") || "field"}`, phase: "typing", target: element });
   element.scrollIntoView({ block: "center", inline: "center", behavior: "auto" });
   element.focus();
   setNativeValue(element, value);
   if (submit) {
-    if (!isSearchLikeEditable(element) && !userApproved) {
+    if (!fieldSafety.safeToSubmit) {
       pulseControlOverlay({ state: "blocked", label: "Approval required to submit this field", phase: "blocked", target: element });
       return {
         ok: false,
         approvalRequired: true,
         deniedToAutomation: true,
+        fieldSafety,
         error: "Submitting a non-search field requires human approval."
       };
     }
@@ -499,6 +579,7 @@ const typeIntoPage = ({ text, field = "", ref = "", submit = false, userApproved
     typedText: value,
     submitted: Boolean(submit),
     tagName: element.tagName.toLowerCase(),
+    fieldSafety,
     fieldName: element.getAttribute("name") || element.getAttribute("aria-label") || element.getAttribute("placeholder") || element.id || ""
   };
 };

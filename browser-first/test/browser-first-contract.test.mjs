@@ -569,6 +569,13 @@ test("browser layer can read active tab context without raw privileged access", 
   assert.match(content, /augmentorInlineDraft/);
   assert.match(content, /ensureControlRef/);
   assert.match(content, /clickControlRef/);
+  assert.match(content, /classifyEditableField/);
+  assert.match(content, /search-query/);
+  assert.match(content, /document-edit/);
+  assert.match(content, /personal-contact/);
+  assert.match(content, /Credential fields are human-only/);
+  assert.match(content, /Payment and wallet fields are human-only/);
+  assert.match(content, /safeToSubmit/);
   assert.match(content, /fields: Array\.from/);
   assert.match(content, /viewport/);
   assert.match(content, /approvalRequired/);

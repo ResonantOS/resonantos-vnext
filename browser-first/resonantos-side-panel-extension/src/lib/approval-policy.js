@@ -1,5 +1,5 @@
 const restrictedPlannerText = /\b(seed|private key|password|passphrase|wallet|phantom|sign|signature|approve|buy|sell|swap|stake|unstake|bridge|mint|claim|pay|payment|checkout|login|delete|remove|destroy|credential|2fa|otp|transfer)\b/i;
-const hardApprovalBoundaryText = /\b(seed|private key|password|passphrase|wallet|phantom|sign|signature|approve|buy|sell|swap|stake|unstake|bridge|mint|claim|pay|payment|checkout|login|delete|remove|destroy|credential|2fa|otp|transfer)\b/i;
+const hardApprovalBoundaryText = /\b(seed|private key|password|passphrase|wallet|phantom|sign|signature|approve|buy|sell|swap|stake|unstake|bridge|mint|claim|pay|payment|checkout|login|delete|remove|destroy|credential|2fa|otp|transfer|card|cvc|cvv|iban|billing|autofill|personal contact|human-controlled autofill)\b/i;
 const publicSubmitBoundaryText = /\b(submit|publish|post|share|send|save|confirm)\b/i;
 
 export function approvalBoundaryForStep(step, reason = "") {
@@ -11,7 +11,7 @@ export function approvalBoundaryForStep(step, reason = "") {
     step?.query
   ].filter(Boolean).join(" ").toLowerCase();
   const reasonHaystack = String(reason ?? "").toLowerCase();
-  if (hardApprovalBoundaryText.test(stepHaystack) || /\b(seed|private key|password|passphrase|wallet|phantom|sign|signature|buy|sell|swap|stake|unstake|bridge|mint|claim|pay|payment|checkout|login|delete|remove|destroy|credential|2fa|otp|transfer)\b/i.test(reasonHaystack)) {
+  if (hardApprovalBoundaryText.test(stepHaystack) || hardApprovalBoundaryText.test(reasonHaystack)) {
     return "hard";
   }
   const haystack = [stepHaystack, reasonHaystack].filter(Boolean).join(" ");

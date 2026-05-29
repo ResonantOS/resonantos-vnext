@@ -95,6 +95,7 @@ These are the features currently implemented in the browser-first version.
 - The control monitor shows current status and progress.
 - The control monitor persists job state through browser storage.
 - Agent Control reports can be saved into Living Archive intake through the bridge path.
+- Agent Control now classifies editable fields before typing: search/query submits and non-sensitive document/generic edits are allowed, while credential, login, payment, wallet, personal-contact, and non-search submit automation is blocked before any value is written.
 - The Augmentor sidebar can save the current browser page or selected page text directly into Living Archive intake and immediately create a governed review request; these captures remain raw intake artifacts and still require review, verification, and promotion before becoming trusted AI Memory.
 - The main workspace exposes matching icon affordances for page read, page save, selection save, and browser status by handing those operations to the governed side-panel/browser-control surface.
 - The Augmentor sidebar can summarize the current browser page into a source-grounded Living Archive intake artifact through the selected provider, with a deterministic source-excerpt fallback when the provider is unavailable.
@@ -264,7 +265,7 @@ These are the next capability areas planned for the browser-first app.
 
 - Improve page observation quality for complex modern web apps.
 - Improve element targeting when the page has repeated labels.
-- Add stronger form-field mapping.
+- Add stronger form-field mapping beyond the current secure autofill guard.
 - Add better editable document handling.
 - Add page-state verification after actions.
 - Add more robust tab-aware workflows.

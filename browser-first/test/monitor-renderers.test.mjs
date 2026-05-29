@@ -134,9 +134,9 @@ function createHarness(overrides = {}) {
 test("monitor renderers describe site permission modes", () => {
   assert.match(sitePermissionDescription("blocked"), /Can see\/do now: nothing/);
   assert.match(sitePermissionDescription("read-only"), /page text, controls, fields, frames, and metadata/);
-  assert.match(sitePermissionDescription("trusted-for-safe-actions"), /safe clicks, typing, scrolling, and search-like submits/);
+  assert.match(sitePermissionDescription("trusted-for-safe-actions"), /safe clicks, non-sensitive typing, scrolling, and search-like submits/);
   assert.match(sitePermissionDescription("ask-before-action"), /asks before risky clicks/);
-  assert.match(sitePermissionDescription("ask-before-action"), /blocks wallet, login, payment, and credential/);
+  assert.match(sitePermissionDescription("ask-before-action"), /blocks wallet, login, payment, credential, and personal autofill/);
 });
 
 test("monitor renderers calculate control run progress", () => {

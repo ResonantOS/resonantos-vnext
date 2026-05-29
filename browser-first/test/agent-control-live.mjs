@@ -282,6 +282,9 @@ const fixtureHtml = `<!doctype html>
     <button id="cart">Add to Cart</button>
     <form id="public">
       <input name="search" aria-label="Search field" placeholder="Search field">
+      <input type="email" name="email" aria-label="Email address" placeholder="Email address">
+      <input type="password" name="password" aria-label="Password" placeholder="Password">
+      <input type="text" name="card" aria-label="Card number" placeholder="Card number" autocomplete="cc-number">
       <button id="submit" type="submit">Submit public form</button>
     </form>
     <textarea id="inline-editor" aria-label="Inline editable note">prefix teh quick i suffix</textarea>
@@ -811,6 +814,42 @@ try {
 
   await evaluate(panel, `(() => { globalThis.__resonantosNextActionOverride = async () => ({
     source: "test-next-action",
+    thought: "Attempt contact autofill; content boundary must block automation.",
+    status: "continue",
+    action: { type: "type", text: "person@example.com", field: "Email address", submit: false },
+    approvalReason: null,
+    doneSummary: null
+  }); return true; })()`);
+  await submitControlCommand(panel, `/control fill the email address`);
+  await waitForPanelText(panel, /Personal contact fields require a human-controlled autofill flow|Agent Control Mode blocked/i, "contact autofill boundary");
+  const contactBlockedState = (await evaluate(page, `({
+    email: document.querySelector("input[name='email']").value,
+    password: document.querySelector("input[name='password']").value,
+    card: document.querySelector("input[name='card']").value
+  })`)).result.value;
+  assert(contactBlockedState.email === "", `Contact autofill should be blocked before typing: ${JSON.stringify(contactBlockedState)}`);
+  await waitForComposerReady(panel, "contact autofill boundary");
+
+  await evaluate(panel, `(() => { globalThis.__resonantosNextActionOverride = async () => ({
+    source: "test-next-action",
+    thought: "Attempt payment autofill; content boundary must block automation.",
+    status: "continue",
+    action: { type: "type", text: "4111111111111111", field: "Card number", submit: false },
+    approvalReason: null,
+    doneSummary: null
+  }); return true; })()`);
+  await submitControlCommand(panel, `/control fill the card number`);
+  await waitForPanelText(panel, /Payment and wallet fields are human-only|Agent Control Mode blocked/i, "payment autofill boundary");
+  const paymentBlockedState = (await evaluate(page, `({
+    email: document.querySelector("input[name='email']").value,
+    password: document.querySelector("input[name='password']").value,
+    card: document.querySelector("input[name='card']").value
+  })`)).result.value;
+  assert(paymentBlockedState.card === "", `Payment autofill should be blocked before typing: ${JSON.stringify(paymentBlockedState)}`);
+  await waitForComposerReady(panel, "payment autofill boundary");
+
+  await evaluate(panel, `(() => { globalThis.__resonantosNextActionOverride = async () => ({
+    source: "test-next-action",
     thought: "Attempt unsafe submit; content script must block this.",
     status: "continue",
     action: { type: "click", text: "Submit public form" },
@@ -819,7 +858,7 @@ try {
   }); return true; })()`);
   await submitControlCommand(panel, `/control click "Submit public form"`);
   await waitForPanelText(panel, /Agent Control Mode blocked at action|submit\/public action|requires human approval/i, "approval boundary");
-  await waitForPageCondition(panel, `!document.querySelector("#approval-card").hidden`, "public-submit approval card");
+  await waitForPageCondition(panel, `!document.querySelector("#approval-card").hidden && /Public-submit boundary|Submit public form/i.test(document.querySelector("#approval-card").innerText)`, "public-submit approval card");
   const blockedState = (await evaluate(page, `({ submitted: window.__submitted, status: document.querySelector("#status").textContent })`)).result.value;
   assert(!blockedState.submitted, `Approval gate failed before approval: ${JSON.stringify(blockedState)}`);
   const publicSubmitApprovalState = (await evaluate(panel, `({

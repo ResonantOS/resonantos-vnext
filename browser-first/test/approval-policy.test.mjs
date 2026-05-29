@@ -12,6 +12,8 @@ import {
 test("approval policy classifies hard wallet, credential, and signing boundaries", () => {
   assert.equal(approvalBoundaryForStep({ type: "click", text: "Connect Wallet" }), "hard");
   assert.equal(approvalBoundaryForStep({ type: "type", field: "Password", text: "secret" }), "hard");
+  assert.equal(approvalBoundaryForStep({ type: "type", field: "Email address", text: "person@example.com" }, "Personal contact fields require a human-controlled autofill flow."), "hard");
+  assert.equal(approvalBoundaryForStep({ type: "type", field: "Card number", text: "4111111111111111" }, "Payment and wallet fields are human-only."), "hard");
   assert.equal(approvalBoundaryForStep({ type: "click", text: "Submit public form" }), "public-submit");
   assert.equal(approvalBoundaryForStep({ type: "click", text: "Submit" }, "Clicking Submit requires human approval."), "public-submit");
   assert.equal(approvalBoundaryForStep({ type: "click", text: "Details" }, "Safe action requires human approval."), "safe");

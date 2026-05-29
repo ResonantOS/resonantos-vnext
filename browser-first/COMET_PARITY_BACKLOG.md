@@ -39,6 +39,7 @@ Intent: keep the browser-first ResonantOS work aligned with the AI-browser capab
 - Multi-tab browser research trails can be captured into one Living Archive intake bundle with per-page provenance and review queueing.
 - Agent Control visual overlay v1: persistent Matrix-style green perimeter, in-page action toast, and highlighted clicked/typed targets for the full control session.
 - Agent Control UX vNext baseline: structured per-action observation/decision/action/result/safety details, completion/blocker summary cards, and persisted replay details in durable browser jobs.
+- Secure Autofill Guard v1: content-script field classification permits search/query submits and non-sensitive document/generic typing, while blocking credential, login, payment, wallet, personal-contact, and non-search submit automation before any value is written.
 - Shopping/search/cart-style flows with safety stops.
 - Wallet, payment, login, credential, and public submit boundaries.
 
@@ -52,8 +53,8 @@ Intent: keep the browser-first ResonantOS work aligned with the AI-browser capab
    - Draft-only remains the default; sending/scheduling still requires human approval.
 
 3. Secure Autofill Model
-   - Do not implement raw credential/payment autofill until vault, approval, and audit ADRs are complete.
-   - Search/query field submission can remain allowed when content-script checks classify it as search-like.
+   - Vault-backed credential/payment/contact autofill remains blocked until vault, approval, and audit ADRs are complete.
+   - Search/query field submission is allowed only when content-script checks classify the target as search-like.
 
 ## Validation Rule
 
