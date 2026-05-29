@@ -158,3 +158,36 @@ The live test proves:
 - document-like contenteditable typing
 - public form submit remains blocked at the approval boundary
 - wallet-style work stops at the approval boundary
+
+---
+
+## Open Items Addon
+
+**ID:** `addon.open-items` | **Mode:** `utility` | **Trust:** `host-mediated`
+
+Dashboard showing pending and blocked work items across three sections:
+
+| Section | Description |
+|---------|-------------|
+| Needs Attention | Blocked or overdue items requiring action |
+| Pending | In-flight work items |
+| Recently Completed | Closed items for reference |
+
+**Commands:** `/open-items`, `/pending`, `/blocked`
+
+**Boundary:** Read-only work item display. No external network access. Data sourced from host-mediated bridge.
+
+![Open Items Screenshot](docs/screenshots/open-items.png)
+
+### Addon Structure
+
+```
+browser-first/addons/open-items/
+  addon.json        # Manifest
+  open-items.html   # Dashboard UI
+  open-items.css    # Status panel styles
+  open-items.js     # Work item display logic
+browser-first/docs/screenshots/
+  open-items.png    # Screenshot
+```
+

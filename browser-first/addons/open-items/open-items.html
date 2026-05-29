@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' blob:; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; connect-src http://127.0.0.1:47773; img-src 'self' data: blob: https:; frame-src https:; font-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com;" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Open Items — ResonantOS</title>
+  <link rel="stylesheet" href="open-items.css">
+</head>
+<body>
+
+<div class="app-shell">
+
+  <!-- ── Header ─────────────────────────────────────── -->
+  <header class="app-header">
+    <div class="header-logo">
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect x="3" y="6"  width="22" height="5" rx="2" fill="none" stroke="#ef4444" stroke-width="1.5" opacity="0.8"/>
+        <rect x="3" y="13" width="22" height="5" rx="2" fill="none" stroke="#f59e0b" stroke-width="1.5" opacity="0.7"/>
+        <rect x="3" y="20" width="22" height="5" rx="2" fill="none" stroke="#22c55e" stroke-width="1.5" opacity="0.6"/>
+        <line x1="8"  y1="8.5"  x2="20" y2="8.5"  stroke="#ef4444" stroke-width="1.2" opacity="0.7"/>
+        <line x1="8"  y1="15.5" x2="16" y2="15.5" stroke="#f59e0b" stroke-width="1.2" opacity="0.6"/>
+        <line x1="8"  y1="22.5" x2="18" y2="22.5" stroke="#22c55e" stroke-width="1.2" opacity="0.5"/>
+      </svg>
+      <div>
+        <div class="header-title">Open Items</div>
+        <div class="header-subtitle">Pending, blocked, and recently completed work</div>
+      </div>
+    </div>
+
+    <div class="header-spacer"></div>
+
+    <!-- Filter Bar -->
+    <div class="filter-bar" role="group" aria-label="Filter by priority">
+      <span class="filter-label">Filter:</span>
+      <button class="filter-btn active" data-filter="all"  type="button" aria-pressed="true">All</button>
+      <button class="filter-btn"        data-filter="p0"   type="button" aria-pressed="false">P0</button>
+      <button class="filter-btn"        data-filter="p1"   type="button" aria-pressed="false">P1</button>
+      <button class="filter-btn"        data-filter="p2"   type="button" aria-pressed="false">P2</button>
+      <button class="filter-btn"        data-filter="p3"   type="button" aria-pressed="false">P3</button>
+    </div>
+  </header>
+
+  <!-- ── Main ───────────────────────────────────────── -->
+  <main class="app-main" role="main">
+
+    <!-- 🔴 Needs Attention -->
+    <section class="items-section" aria-label="Needs Attention items">
+      <div class="section-header">
+        <span class="section-icon" aria-hidden="true">🔴</span>
+        <h2 class="section-title">Needs Attention</h2>
+        <span class="section-badge urgent" id="badge-urgent">0</span>
+      </div>
+      <div class="item-list" id="list-urgent" role="list"></div>
+    </section>
+
+    <!-- ⏳ Pending -->
+    <section class="items-section" aria-label="Pending items">
+      <div class="section-header">
+        <span class="section-icon" aria-hidden="true">⏳</span>
+        <h2 class="section-title">Pending</h2>
+        <span class="section-badge pending" id="badge-pending">0</span>
+      </div>
+      <div class="item-list" id="list-pending" role="list"></div>
+    </section>
+
+    <!-- ✅ Recently Completed -->
+    <section class="items-section" aria-label="Recently Completed items">
+      <div class="section-header">
+        <span class="section-icon" aria-hidden="true">✅</span>
+        <h2 class="section-title">Recently Completed</h2>
+        <span class="section-badge done" id="badge-done">0</span>
+      </div>
+      <div class="item-list" id="list-done" role="list"></div>
+    </section>
+
+  </main>
+
+  <!-- ── Footer ─────────────────────────────────────── -->
+  <footer class="app-footer">
+    <span>Updated <span id="last-updated">—</span></span>
+    <div class="footer-right">
+      <span class="footer-pill">v1.0.0</span>
+      <span class="footer-pill">Mock Data</span>
+      <span style="color:var(--text-dim)">addon.open-items · ResonantOS</span>
+    </div>
+  </footer>
+
+</div>
+
+<script type="module" src="open-items.js"></script>
+</body>
+</html>
