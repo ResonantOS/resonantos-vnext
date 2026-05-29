@@ -158,3 +158,35 @@ The live test proves:
 - document-like contenteditable typing
 - public form submit remains blocked at the approval boundary
 - wallet-style work stops at the approval boundary
+
+---
+
+## Resonant Context SDK
+
+The Resonant Context SDK (`resonant-context.js`) is an ambient awareness engine that runs in the extension background:
+
+- **Viewport tracking** — monitors what the user is reading in real time
+- **Dwell time analysis** — weights content by reading engagement
+- **Domain plugins** — per-domain awareness rules via `context-plugins.js`
+- **Context broadcast** — surfaces active context to the bridge for AI awareness
+
+The SDK is passive and page-observer trusted — it reads but never writes to pages.
+
+## Resonator Visual Guide
+
+The Resonator (`resonator.js`) is a visual overlay system for guided AI workflows:
+
+- **Highlights** — marks relevant page elements
+- **Arrows** — directional flow indicators
+- **Spotlights** — focus attention on specific areas
+- **Step badges** — numbered step indicators for multi-step tasks
+
+Resonator runs in `visual-guide` mode with `page-overlay` trust — it renders overlays but cannot submit forms or mutate page data.
+
+### Addon Manifests
+
+| Addon | ID | Mode | Trust |
+|-------|----|------|-------|
+| Resonant Context | `addon.resonant-context` | `awareness-engine` | `page-observer` |
+| Resonator | `addon.resonator` | `visual-guide` | `page-overlay` |
+
