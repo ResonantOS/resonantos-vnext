@@ -459,12 +459,13 @@ describe("discoverAddons()", () => {
 
   // ── Real addons/ directory ─────────────────────────────────────────────────
 
-  it("discovers all 8 real addons from browser-first/addons/", async () => {
+  it("discovers all real addons from browser-first/addons/", async () => {
     // Uses the real addons directory (no override)
     const addons = await discoverAddons();
 
     const expectedIds = [
       "addon.blackboard",
+      "addon.fleet-compute",
       "addon.resonant-context",
       "addon.resonator",
       "addon.shield",
