@@ -1,0 +1,16 @@
+{
+  "id": "addon.canvas",
+  "name": "Canvas / System Map",
+  "version": "1.0.0",
+  "description": "Interactive node graph showing fleet topology and protocol connections — draggable, zoomable, pannable",
+  "author": "Tom Pennington",
+  "mode": "visual-surface",
+  "trust": "host-mediated",
+  "entry": "canvas.html",
+  "contentScripts": [],
+  "commands": ["/canvas", "/map", "/topology"],
+  "messageChannel": "resonantos.canvas",
+  "capabilities": ["canvas", "topology-read"],
+  "requires": [],
+  "boundary": "Visual display only. No page modification. No wallet interaction. No direct network access."
+}

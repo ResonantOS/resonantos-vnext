@@ -473,6 +473,10 @@ describe("discoverAddons()", () => {
       "addon.awareness",
       "addon.protocol-store",
       "addon.wallet-adapter",
+      "addon.task-board",
+      "addon.canvas",
+      "addon.open-items",
+      "addon.gradient-perf",
     ];
 
     assert.equal(addons.length, expectedIds.length,

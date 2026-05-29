@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' blob:; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; connect-src http://127.0.0.1:47773; img-src 'self' data: blob: https:; frame-src https:; font-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com;" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Canvas / System Map — ResonantOS</title>
+  <link rel="stylesheet" href="canvas.css">
+</head>
+<body>
+
+<div class="app-shell">
+
+  <!-- ── Header ─────────────────────────────────────── -->
+  <header class="app-header">
+    <div class="header-logo">
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <circle cx="14" cy="14" r="3"   fill="#9945FF"/>
+        <circle cx="6"  cy="8"  r="2.5" fill="#14F195" opacity="0.8"/>
+        <circle cx="22" cy="8"  r="2.5" fill="#14F195" opacity="0.8"/>
+        <circle cx="6"  cy="20" r="2.5" fill="#14F195" opacity="0.6"/>
+        <circle cx="22" cy="20" r="2.5" fill="#14F195" opacity="0.6"/>
+        <circle cx="14" cy="4"  r="2"   fill="#60d9ff" opacity="0.7"/>
+        <line x1="14" y1="11" x2="6"  y2="8"  stroke="#14F195" stroke-width="1" opacity="0.5"/>
+        <line x1="14" y1="11" x2="22" y2="8"  stroke="#14F195" stroke-width="1" opacity="0.5"/>
+        <line x1="14" y1="17" x2="6"  y2="20" stroke="#14F195" stroke-width="1" opacity="0.4"/>
+        <line x1="14" y1="17" x2="22" y2="20" stroke="#14F195" stroke-width="1" opacity="0.4"/>
+        <line x1="14" y1="11" x2="14" y2="6"  stroke="#60d9ff" stroke-width="1" opacity="0.6"/>
+      </svg>
+      <div>
+        <div class="header-title">System Map</div>
+        <div class="header-subtitle">Fleet topology &amp; protocol connections</div>
+      </div>
+    </div>
+
+    <div class="header-spacer"></div>
+
+    <div class="legend" role="list" aria-label="Node type legend">
+      <div class="legend-item" role="listitem">
+        <div class="legend-shape-hex" aria-hidden="true"></div>
+        <span>Machine</span>
+      </div>
+      <div class="legend-item" role="listitem">
+        <div class="legend-shape-circle" aria-hidden="true"></div>
+        <span>Protocol</span>
+      </div>
+      <div class="legend-item" role="listitem">
+        <div class="legend-shape-square" aria-hidden="true"></div>
+        <span>Service</span>
+      </div>
+    </div>
+
+    <div class="search-box" role="search">
+      <svg class="search-icon" width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <circle cx="6" cy="6" r="4.5" stroke="currentColor" stroke-width="1.3"/>
+        <line x1="9.5" y1="9.5" x2="13" y2="13" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+      </svg>
+      <input
+        type="search"
+        class="search-input"
+        id="search-input"
+        placeholder="Search nodes…"
+        aria-label="Search nodes in topology map"
+        autocomplete="off"
+      >
+    </div>
+  </header>
+
+  <!-- ── Canvas ─────────────────────────────────────── -->
+  <main class="canvas-wrapper" role="main">
+    <canvas id="topology-canvas" aria-label="Interactive fleet topology graph. Use scroll to zoom, drag to pan."></canvas>
+
+    <!-- Tooltip -->
+    <div class="node-tooltip" id="node-tooltip" role="tooltip" aria-live="polite">
+      <div class="tooltip-title" id="tooltip-title"></div>
+      <div id="tooltip-rows"></div>
+    </div>
+
+    <!-- Zoom controls -->
+    <div class="zoom-controls" role="group" aria-label="Zoom controls">
+      <button class="zoom-btn" id="zoom-in"  type="button" aria-label="Zoom in">+</button>
+      <button class="zoom-btn" id="zoom-out" type="button" aria-label="Zoom out">−</button>
+      <button class="zoom-btn" id="zoom-fit" type="button" aria-label="Reset zoom" title="Reset zoom/pan" style="font-size:12px">⊡</button>
+    </div>
+
+    <!-- Mini-map -->
+    <div class="minimap-wrapper" aria-label="Minimap overview" role="img">
+      <canvas id="minimap-canvas"></canvas>
+    </div>
+  </main>
+
+  <!-- ── Footer ─────────────────────────────────────── -->
+  <footer class="app-footer">
+    <span>Scroll to zoom · Drag background to pan · Drag nodes to move</span>
+    <div class="footer-right">
+      <span class="zoom-level" id="zoom-level">100%</span>
+      <span class="footer-pill">v1.0.0</span>
+      <span class="footer-pill">Mock Data</span>
+      <span style="color:var(--text-dim)">addon.canvas · ResonantOS</span>
+    </div>
+  </footer>
+
+</div>
+
+<script type="module" src="canvas.js"></script>
+</body>
+</html>

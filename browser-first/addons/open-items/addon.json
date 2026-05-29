@@ -1,0 +1,16 @@
+{
+  "id": "addon.open-items",
+  "name": "Open Items",
+  "version": "1.0.0",
+  "description": "Dashboard showing pending and blocked work items — needs attention, pending, and recently completed sections",
+  "author": "Tom Pennington",
+  "mode": "utility",
+  "trust": "host-mediated",
+  "entry": "open-items.html",
+  "contentScripts": [],
+  "commands": ["/open-items", "/pending", "/blocked"],
+  "messageChannel": "resonantos.open-items",
+  "capabilities": ["task-read"],
+  "requires": [],
+  "boundary": "Read-only work item display. No external network access. Data sourced from host-mediated bridge."
+}

@@ -127,6 +127,71 @@ Auto-refresh: 5s (default), 10s, 30s, or Off. Dark mission-control theme.
 
 Files: `addons/fleet-compute/fleet-compute.html`, `fleet-compute.css`, `fleet-compute.js`
 
+### Task Board — Kanban Work Tracker
+Visual kanban board for tracking tasks across your project. Four columns with drag-and-drop:
+
+- **READY** — tasks queued for work, sorted by priority
+- **IN PROGRESS** — actively being worked on
+- **BLOCKED** — stuck on a dependency or decision
+- **DONE** — completed tasks with drop-here placeholder
+
+Each task card shows: priority badge (P0/P1/P2/P3 color-coded), title, description, assignee tag, and an expandable detail panel with next action, current state, and blocker notes. Cards are draggable between columns via HTML5 drag-and-drop. Keyboard accessible with `tabindex` and Enter/Space expansion.
+
+Commands: `/tasks`, `/kanban`, `/board`
+
+Files: `addons/task-board/task-board.html`, `task-board.css`, `task-board.js`
+
+### Canvas / System Map — Interactive Topology
+Full interactive node graph rendered on HTML5 Canvas. Visualizes fleet topology, protocol connections, and service architecture at a glance.
+
+- **Machine nodes** (hexagons) — all fleet machines with IP addresses and status colors
+- **Protocol nodes** (circles) — Sonny, Mantis, Oracle, Linus, Xavier
+- **Service nodes** (squares) — Dashboard, Gateway, DevPortal, TernaryMon
+- **Edges** — animated dashed connections between related nodes
+
+Interaction: drag nodes to rearrange, scroll to zoom, click+drag background to pan, search bar highlights matching nodes. Minimap in the corner shows overview. Legend distinguishes node types by shape and color.
+
+Commands: `/canvas`, `/map`, `/topology`
+
+Files: `addons/canvas/canvas.html`, `canvas.css`, `canvas.js`
+
+### Open Items — Work Item Dashboard
+At-a-glance view of everything pending, blocked, or recently completed. Three sections:
+
+- **🔴 Needs Attention** — items requiring immediate action (red left border)
+- **⏳ Pending** — work in progress or queued (color-coded by priority)
+- **✅ Recently Completed** — finished items with strikethrough styling
+
+Each item shows: priority badge, title, description, age (days since created), and source provenance tag (HEARTBEAT.md, TOOLS.md, memory logs, github). Filter bar lets you narrow by priority level (All / P0 / P1 / P2 / P3) with count badges on each section header.
+
+Commands: `/open-items`, `/pending`, `/blocked`
+
+Files: `addons/open-items/open-items.html`, `open-items.css`, `open-items.js`
+
+### Gradient Performance — Training Metrics
+Training metrics and fleet performance dashboard with three tabbed views:
+
+**Training Tab:**
+- Active and completed training runs with progress bars
+- Loss sparkline charts (vertical bars showing loss decrease over checkpoints)
+- Machine assignment, learning rate, loss trajectory per run
+- ETA and step counter with percentage
+
+**Benchmarks Tab:**
+- Comparative bar chart of model scores (Grok-4, Fleet v3, GPT-4o, Claude 3.5, Fleet v2)
+- "Ours" rows highlighted with teal glow and border
+- Proportional bar visualization with color coding
+
+**Fleet Speed Tab:**
+- Horizontal bar chart showing tokens/second per fleet machine
+- Sorted descending, color-coded: teal ≥10 t/s, yellow 5-10, red <5
+
+Auto-refresh: 15s, 30s, or Off.
+
+Commands: `/gradient`, `/perf`, `/benchmark`
+
+Files: `addons/gradient-perf/gradient-perf.html`, `gradient-perf.css`, `gradient-perf.js`
+
 ### Protocol Store — AI Protocol Browser
 Browse and install AI protocols. Opens as a full browser tab from the side panel.
 
@@ -168,12 +233,16 @@ The new-tab page with a workspace rail for navigating between views:
 
 Add-ons are self-contained folders in `browser-first/addons/` with an `addon.json` manifest. The addon discovery engine (`addon-discovery.mjs`) scans the directory on startup and auto-registers everything it finds. No code changes needed. Drop a folder, it exists.
 
-### Registered Addons (9)
+### Registered Addons (13)
 
 | Addon | ID | Mode | Trust | Description |
 |-------|----|------|-------|-------------|
 | Blackboard | `addon.blackboard` | visual-surface | host-mediated | Canvas, documents, tables, embeds, slideshows |
 | Fleet & Compute | `addon.fleet-compute` | utility | host-mediated | Fleet monitoring, cloud control, compute governance |
+| Task Board | `addon.task-board` | utility | host-mediated | Kanban board — drag cards between Ready/In Progress/Blocked/Done |
+| Canvas / System Map | `addon.canvas` | visual-surface | host-mediated | Interactive node graph — fleet topology, protocols, services |
+| Open Items | `addon.open-items` | utility | host-mediated | Pending/blocked work items with priority filters and provenance |
+| Gradient Performance | `addon.gradient-perf` | utility | host-mediated | Training metrics, benchmark scores, fleet token generation speeds |
 | Resonant Context | `addon.resonant-context` | awareness-engine | page-observer | Viewport tracking, dwell time, domain plugins |
 | Resonator | `addon.resonator` | visual-guide | page-overlay | Highlights, arrows, spotlights, step badges |
 | Shield | `addon.shield` | security-monitor | host-mediated | Security audit log |
@@ -245,6 +314,14 @@ browser-first/
       addon.json, blackboard.html/css/js
     fleet-compute/                 # Mission control dashboard
       addon.json, fleet-compute.html/css/js
+    task-board/                    # Kanban work tracker
+      addon.json, task-board.html/css/js
+    canvas/                        # Interactive topology map
+      addon.json, canvas.html/css/js
+    open-items/                    # Work item dashboard
+      addon.json, open-items.html/css/js
+    gradient-perf/                 # Training metrics & benchmarks
+      addon.json, gradient-perf.html/css/js
     resonant-context/              # Viewport awareness engine
       addon.json
     resonator/                     # Visual guide layer
@@ -316,7 +393,7 @@ browser-first/
     com.resonantos.bridge.json     # Native messaging manifest
     install-native-host.sh         # Host installer
     resonantos-bridge-host         # Host binary wrapper
-  test/                            # Test suite (233+ tests)
+  test/                            # Test suite (259+ tests)
     addon-discovery.test.mjs       # 38 tests — discovery, validation, security
     browser-first-contract.test.mjs # Extension structure contract tests
     wallet-adapter.test.mjs        # Wallet adapter tests
@@ -409,12 +486,12 @@ Open Settings in the workspace rail and enter at least one API key:
 ## Testing
 
 ```bash
-# Run full test suite (233+ tests)
+# Run full test suite (259+ tests)
 npm run test:browser-first
 
 # Expected:
-# tests 233
-# pass 233
+# tests 259
+# pass 259
 # fail 0
 
 # Addon discovery tests (38 tests)
@@ -424,6 +501,12 @@ node --test browser-first/test/addon-discovery.test.mjs
 node --test browser-first/test/wallet-adapter.test.mjs
 node --test browser-first/test/protocol-store.test.mjs
 node --test browser-first/test/shield-tab.test.mjs
+
+# New addon tests (39 tests)
+node --test browser-first/test/task-board-tab.test.mjs
+node --test browser-first/test/canvas-tab.test.mjs
+node --test browser-first/test/open-items-tab.test.mjs
+node --test browser-first/test/gradient-perf-tab.test.mjs
 ```
 
 ### CI
