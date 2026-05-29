@@ -114,6 +114,7 @@ let controlledTabId = null;
 let contextDockExpanded = false;
 let messageActions = null;
 let monitorRenderers = null;
+let nextControlPreflightDecision = null;
 
 const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
 const composerController = createComposerController({ commandForm, commandInput, navigator });
@@ -293,7 +294,8 @@ const createBrowserJob = async ({ goal, planner = "observe-act-verify-loop", sum
   const job = await browserJobStore.createJob({
     goal,
     planner,
-    summary
+    summary,
+    preflightDecision: consumeNextControlPreflightDecision()
   });
   renderJobMonitor();
   return job;
@@ -675,6 +677,38 @@ const hydrateControlPreflight = async () => {
   renderControlPreflightCard();
 };
 
+const setNextControlPreflightDecision = (decision) => {
+  nextControlPreflightDecision = decision ? {
+    id: decision.id ?? "",
+    goal: decision.goal ?? "",
+    siteKey: decision.siteKey ?? "unknown-site",
+    taskClass: decision.taskClass ?? "general",
+    mode: decision.mode ?? "not-required",
+    permissionMode: decision.permissionMode ?? "",
+    decidedAt: decision.decidedAt ?? new Date().toISOString(),
+    source: decision.source ?? "control-preflight",
+    reason: decision.reason ?? ""
+  } : null;
+};
+
+const consumeNextControlPreflightDecision = () => {
+  const decision = nextControlPreflightDecision;
+  nextControlPreflightDecision = null;
+  return decision;
+};
+
+const preflightDecisionFromPreflight = (preflight, { mode, reason }) => ({
+  id: preflight.id,
+  goal: preflight.goal,
+  siteKey: preflight.siteKey,
+  taskClass: preflight.taskClass,
+  mode,
+  permissionMode: preflight.mode,
+  decidedAt: new Date().toISOString(),
+  source: "control-preflight",
+  reason
+});
+
 const runControlCommand = async (goal, options = {}) => {
   const tab = await activeTab();
   const mode = tab?.url ? await permissionForUrl(tab.url) : "ask-before-action";
@@ -687,6 +721,19 @@ const runControlCommand = async (goal, options = {}) => {
     siteKey: siteKeyForUrl(tab?.url),
     goal
   });
+  if (options.resumedFromJob) {
+    setNextControlPreflightDecision({
+      ...(options.resumedFromJob.preflightDecision ?? {}),
+      id: options.resumedFromJob.preflightDecision?.id ?? options.resumedFromJob.id,
+      goal,
+      siteKey: options.resumedFromJob.preflightDecision?.siteKey ?? siteKeyForUrl(tab?.url),
+      taskClass: options.resumedFromJob.preflightDecision?.taskClass ?? existingConsent?.taskClass ?? "general",
+      mode: "resumed",
+      permissionMode: mode,
+      source: "browser-job-store",
+      reason: `Resumed from browser job ${options.resumedFromJob.id}.`
+    });
+  }
   if (shouldRequireControlPreflight({
     goal,
     mode,
@@ -708,6 +755,19 @@ const runControlCommand = async (goal, options = {}) => {
     setActivity("approval", "Agent Control preflight required", pendingControlPreflight.taskClass);
     return null;
   }
+  if (!options.resumedFromJob && existingConsent?.mode === "allow-safe" && !options.preflightApproved) {
+    setNextControlPreflightDecision({
+      id: existingConsent.id ?? `${existingConsent.siteKey}::${existingConsent.taskClass}`,
+      goal,
+      siteKey: existingConsent.siteKey,
+      taskClass: existingConsent.taskClass,
+      mode: "skipped-by-consent",
+      permissionMode: mode,
+      decidedAt: new Date().toISOString(),
+      source: existingConsent.source || "task-consent-store",
+      reason: existingConsent.reason || "Stored safe task-class consent allowed preflight skip."
+    });
+  }
   await clearControlPreflight();
   return startControlCommand(goal, options);
 };
@@ -725,6 +785,10 @@ const approveControlPreflight = async (body) => {
     await addMessage("system", "No matching Agent Control preflight is waiting. Start a browser-control task first, or use the exact preflight id.");
     return;
   }
+  setNextControlPreflightDecision(preflightDecisionFromPreflight(preflight, {
+    mode: "approved-once",
+    reason: "Human approved Agent Control preflight once."
+  }));
   await clearControlPreflight();
   await addMessage("system", `Approved Agent Control preflight for ${preflight.taskClass} on ${preflight.siteKey}. Starting governed browser control now.`);
   setStatus("Taking control");
@@ -755,6 +819,10 @@ const trustControlPreflightForSafeActions = async (body) => {
     reason: `Trusted from Agent Control preflight: ${preflight.goal}`,
     source: "control-preflight"
   });
+  setNextControlPreflightDecision(preflightDecisionFromPreflight(preflight, {
+    mode: "trusted-safe-actions",
+    reason: `Human trusted safe ${preflight.taskClass} actions for ${preflight.siteKey}.`
+  }));
   await clearControlPreflight();
   await renderTaskConsentPanel();
   await renderPermissionManager();

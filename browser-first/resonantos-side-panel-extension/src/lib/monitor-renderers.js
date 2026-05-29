@@ -49,6 +49,23 @@ function auditLabel(entry) {
   return `${entry.action} · ${date} · ${entry.source || "unknown"} · ${entry.reason || "no reason recorded"}`;
 }
 
+function preflightDecisionLabel(decision) {
+  if (!decision) return "";
+  const modeLabels = {
+    "approved-once": "approved once",
+    "trusted-safe-actions": "trusted safe actions",
+    "skipped-by-consent": "used stored consent",
+    resumed: "resumed previous job",
+    "not-required": "not required"
+  };
+  return [
+    `Preflight: ${modeLabels[decision.mode] ?? decision.mode}`,
+    decision.taskClass,
+    decision.siteKey,
+    decision.reason
+  ].filter(Boolean).join(" · ");
+}
+
 export function controlRunSummary(run) {
   const progress = controlRunProgress(run);
   const terminal = ["completed", "blocked", "failed", "denied", "cancelled"].includes(run?.status);
@@ -424,7 +441,14 @@ export function createMonitorRenderers({
       meta.textContent = `${job.updatedAt.replace("T", " ").slice(0, 16)} · ${job.planner}`;
       const id = document.createElement("code");
       id.textContent = job.id;
-      details.append(title, meta, id);
+      details.append(title, meta);
+      if (job.preflightDecision) {
+        const preflight = document.createElement("small");
+        preflight.className = "job-preflight";
+        preflight.textContent = preflightDecisionLabel(job.preflightDecision);
+        details.append(preflight);
+      }
+      details.append(id);
       const state = document.createElement("span");
       state.className = "job-state";
       state.textContent = job.status;

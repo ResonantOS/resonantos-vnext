@@ -5,7 +5,8 @@ import {
   createBrowserJobStore,
   isActiveBrowserJobStatus,
   isTerminalBrowserJobStatus,
-  normalizeBrowserJob
+  normalizeBrowserJob,
+  normalizePreflightDecision
 } from "../resonantos-side-panel-extension/src/lib/browser-job-store.js";
 
 function createHarness(initial = {}) {
@@ -58,6 +59,17 @@ test("browser job store normalizes job shape and status classes", () => {
       },
       updatedAt: "2026-05-26T10:00:00.000Z"
     }],
+    preflightDecision: {
+      id: "control-abc",
+      goal: "book a call",
+      siteKey: "example.com",
+      taskClass: "booking",
+      mode: "trusted-safe-actions",
+      permissionMode: "ask-before-action",
+      decidedAt: "2026-05-26T09:59:00.000Z",
+      source: "control-preflight",
+      reason: "Human trusted safe actions."
+    },
     lastError: "e"
   }, { now: () => "2026-05-26T10:00:00.000Z" });
 
@@ -82,9 +94,45 @@ test("browser job store normalizes job shape and status classes", () => {
     },
     updatedAt: "2026-05-26T10:00:00.000Z"
   }]);
+  assert.deepEqual(job.preflightDecision, {
+    id: "control-abc",
+    goal: "book a call",
+    siteKey: "example.com",
+    taskClass: "booking",
+    mode: "trusted-safe-actions",
+    permissionMode: "ask-before-action",
+    decidedAt: "2026-05-26T09:59:00.000Z",
+    source: "control-preflight",
+    reason: "Human trusted safe actions."
+  });
   assert.equal(isActiveBrowserJobStatus("running"), true);
   assert.equal(isTerminalBrowserJobStatus("cancelled"), true);
   assert.equal(isTerminalBrowserJobStatus("paused"), false);
+});
+
+test("browser job store normalizes preflight decisions conservatively", () => {
+  assert.equal(normalizePreflightDecision(null), null);
+  assert.deepEqual(normalizePreflightDecision({
+    id: "x".repeat(200),
+    goal: "g".repeat(400),
+    siteKey: "s".repeat(200),
+    taskClass: "t".repeat(120),
+    mode: "unsafe",
+    permissionMode: "trusted-for-safe-actions",
+    decidedAt: "2026-05-26T09:59:00.000Z",
+    source: "human",
+    reason: "r".repeat(400)
+  }), {
+    id: "x".repeat(120),
+    goal: "g".repeat(300),
+    siteKey: "s".repeat(120),
+    taskClass: "t".repeat(80),
+    mode: "not-required",
+    permissionMode: "trusted-for-safe-actions",
+    decidedAt: "2026-05-26T09:59:00.000Z",
+    source: "human",
+    reason: "r".repeat(240)
+  });
 });
 
 test("browser job store hydrates, compacts, and persists browser jobs", async () => {
@@ -115,7 +163,22 @@ test("browser job store hydrates, compacts, and persists browser jobs", async ()
 test("browser job store creates active jobs and finds by active, id, or goal", async () => {
   const harness = createHarness();
 
-  const job = await harness.store.createJob({ goal: "Find a booking slot", planner: "loop", summary: "summary" });
+  const job = await harness.store.createJob({
+    goal: "Find a booking slot",
+    planner: "loop",
+    summary: "summary",
+    preflightDecision: {
+      id: "control-1",
+      goal: "Find a booking slot",
+      siteKey: "example.com",
+      taskClass: "booking",
+      mode: "approved-once",
+      permissionMode: "ask-before-action",
+      decidedAt: "2026-05-26T09:59:00.000Z",
+      source: "control-preflight",
+      reason: "Approved once."
+    }
+  });
 
   assert.equal(job.id, "job-1");
   assert.equal(harness.store.getActiveJobId(), "job-1");
@@ -123,6 +186,8 @@ test("browser job store creates active jobs and finds by active, id, or goal", a
   assert.equal(harness.store.findJob().id, "job-1");
   assert.equal(harness.store.findJob("booking").id, "job-1");
   assert.equal(harness.writes.at(-1).jobs[0].status, "running");
+  assert.equal(harness.writes.at(-1).jobs[0].preflightDecision.mode, "approved-once");
+  assert.equal(harness.writes.at(-1).jobs[0].preflightDecision.taskClass, "booking");
   assert.equal(harness.writes.at(-1).active, "job-1");
 });
 

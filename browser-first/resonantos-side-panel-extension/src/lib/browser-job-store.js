@@ -4,6 +4,13 @@ const VALID_JOB_STATUSES = [...ACTIVE_JOB_STATUSES, ...TERMINAL_JOB_STATUSES];
 
 const defaultNow = () => new Date().toISOString();
 const defaultId = () => `job-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+const VALID_PREFLIGHT_DECISION_MODES = [
+  "approved-once",
+  "trusted-safe-actions",
+  "skipped-by-consent",
+  "resumed",
+  "not-required"
+];
 
 function normalizeStepDetails(details) {
   if (!details || typeof details !== "object") return {};
@@ -19,6 +26,21 @@ function normalizeStepDetails(details) {
     action: details.action ? String(details.action).slice(0, 120) : null,
     result: details.result ? String(details.result).slice(0, 500) : null,
     safetyClass: details.safetyClass ? String(details.safetyClass).slice(0, 80) : null
+  };
+}
+
+export function normalizePreflightDecision(decision) {
+  if (!decision || typeof decision !== "object") return null;
+  return {
+    id: decision.id ? String(decision.id).slice(0, 120) : "",
+    goal: String(decision.goal ?? "").slice(0, 300),
+    siteKey: String(decision.siteKey ?? "unknown-site").slice(0, 120),
+    taskClass: String(decision.taskClass ?? "general").slice(0, 80),
+    mode: VALID_PREFLIGHT_DECISION_MODES.includes(decision.mode) ? decision.mode : "not-required",
+    permissionMode: String(decision.permissionMode ?? "").slice(0, 80),
+    decidedAt: decision.decidedAt ? String(decision.decidedAt).slice(0, 40) : "",
+    source: String(decision.source ?? "control-preflight").slice(0, 80),
+    reason: String(decision.reason ?? "").slice(0, 240)
   };
 }
 
@@ -44,6 +66,7 @@ export function normalizeBrowserJob(job, { now = defaultNow } = {}) {
     summary: String(job?.summary ?? "").slice(0, 700),
     artifacts: Array.isArray(job?.artifacts) ? job.artifacts.slice(0, 20) : [],
     lastError: job?.lastError ? String(job.lastError).slice(0, 700) : null,
+    preflightDecision: normalizePreflightDecision(job?.preflightDecision),
     steps
   };
 }
@@ -142,12 +165,13 @@ export function createBrowserJobStore({
     ) ?? null;
   }
 
-  async function createJob({ goal, planner = "observe-act-verify-loop", summary = "" }) {
+  async function createJob({ goal, planner = "observe-act-verify-loop", summary = "", preflightDecision = null }) {
     const job = normalizeBrowserJob({
       id: createId(),
       goal,
       planner,
       summary,
+      preflightDecision,
       status: "running",
       createdAt: now(),
       updatedAt: now()

@@ -235,6 +235,12 @@ test("monitor renderers render collapsed and expanded browser jobs", () => {
       status: "completed",
       updatedAt: "2026-05-26T09:00:00.000Z",
       planner: "loop",
+      preflightDecision: {
+        mode: "trusted-safe-actions",
+        taskClass: "booking",
+        siteKey: "example.com",
+        reason: "Human trusted safe booking actions."
+      },
       steps: [{ state: "completed", label: "Read page" }, { state: "blocked", label: "Click Submit" }]
     }
   ];
@@ -253,6 +259,7 @@ test("monitor renderers render collapsed and expanded browser jobs", () => {
   assert.equal(harness.dom.window.document.querySelector("#jobs-toggle").textContent, "Hide");
   assert.equal(harness.dom.window.document.querySelector("#jobs-list").hidden, false);
   assert.deepEqual([...harness.dom.window.document.querySelectorAll("#jobs-list > li")].map((item) => item.dataset.status), ["running", "completed"]);
+  assert.match(harness.dom.window.document.querySelector("#jobs-list").textContent, /Preflight: trusted safe actions · booking · example\.com/);
   assert.match(harness.dom.window.document.querySelector("#jobs-list").textContent, /done · Read page/);
   harness.dom.window.document.querySelectorAll(".job-actions button")[1].click();
   assert.deepEqual(harness.state.continued, ["job-b"]);

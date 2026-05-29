@@ -448,6 +448,10 @@ textarea:disabled {
   font-size: 0.58rem;
 }
 
+.job-list .job-preflight {
+  color: rgba(36, 209, 143, 0.72);
+}
+
 .job-list code {
   color: rgba(36, 209, 143, 0.88);
   font: 800 0.58rem/1 ui-monospace, SFMono-Regular, Menlo, monospace;

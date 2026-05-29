@@ -425,6 +425,9 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(script, /renderControlPreflightCard/);
   assert.match(script, /approveControlPreflight/);
   assert.match(script, /trustControlPreflightForSafeActions/);
+  assert.match(script, /setNextControlPreflightDecision/);
+  assert.match(script, /consumeNextControlPreflightDecision/);
+  assert.match(script, /preflightDecisionFromPreflight/);
   assert.match(script, /source: "control-preflight"/);
   assert.match(script, /denyControlPreflight/);
   assert.match(commandRouter, /approve-control/);
@@ -462,6 +465,8 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(controlReportingService, /buildControlReport/);
   assert.match(controlReportingService, /saveControlReportToArchive/);
   assert.match(controlReportingService, /saveBrowserJobReportToArchive/);
+  assert.match(controlReportingService, /Preflight Decision/);
+  assert.match(monitorRenderers, /job-preflight/);
   assert.match(monitorRenderers, /onSaveBrowserJobReport/);
   assert.match(controlReportingService, /delegateControlIssue/);
   assert.match(controlReportingService, /Browser Agent Control Report/);

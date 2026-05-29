@@ -24,6 +24,7 @@ Intent: keep the browser-first ResonantOS work aligned with the AI-browser capab
 - Permission/Consent UX v3: long autonomous Agent Control tasks require a task-class preflight before Augmentor starts operating the page; `/approve-control <id>` starts the governed run, `/deny-control <id>` cancels it, stored safe task-class consent can skip the preflight, and hard wallet/payment/login/credential/signing/public-submit boundaries remain separately enforced.
 - Permission/Consent UX v3.1: the preflight also appears as a context-dock approval card with clickable Approve and Deny buttons, so users do not have to type the slash commands.
 - Permission/Consent UX v3.2: the preflight card can also trust safe actions for the current site + task class through the existing task-consent store, then start the governed control run while preserving hard boundaries.
+- Permission/Consent UX v3.3: browser jobs persist the preflight decision that allowed the run to start, and both job monitor replay plus saved job reports show approve-once, trusted-safe-actions, skipped-by-consent, or resumed provenance.
 - `/capabilities` permission summary for the current page.
 - Browser History / Activity Search v2: `/history <query> | site:example.com | days:7 | tabs` supports date filtering, per-site filtering, readable open-tab synthesis, explicit incognito exclusion, and `/history <query> | intake` export into Living Archive intake with a review request.
 - Browser-first Add-ons workspace lists visible add-ons, availability, trust tier, and governed workspace actions without granting new capabilities.
@@ -50,9 +51,6 @@ Intent: keep the browser-first ResonantOS work aligned with the AI-browser capab
 3. Secure Autofill Model
    - Do not implement raw credential/payment autofill until vault, approval, and audit ADRs are complete.
    - Search/query field submission can remain allowed when content-script checks classify it as search-like.
-
-4. Permission / Consent UX
-   - Add a preflight audit view that shows which preflight approval/trust decision started each browser job.
 
 ## Validation Rule
 

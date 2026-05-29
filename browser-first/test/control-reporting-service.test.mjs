@@ -91,6 +91,15 @@ test("control reporting service builds and saves durable browser job reports", a
     createdAt: "2026-05-26T09:00:00.000Z",
     updatedAt: "2026-05-26T09:02:00.000Z",
     summary: "Observed and compared",
+    preflightDecision: {
+      mode: "skipped-by-consent",
+      siteKey: "example.com",
+      taskClass: "shopping",
+      permissionMode: "trusted-for-safe-actions",
+      source: "task-consent-store",
+      decidedAt: "2026-05-26T08:59:00.000Z",
+      reason: "Stored safe task-class consent allowed preflight skip."
+    },
     steps: [
       { label: "Read page", state: "completed", note: "read product page" },
       { label: "Click details", state: "completed", note: "clicked details" }
@@ -101,6 +110,9 @@ test("control reporting service builds and saves durable browser job reports", a
   const report = harness.service.buildBrowserJobReport(job);
   assert.match(report, /# Browser Job Report/);
   assert.match(report, /compare a product/);
+  assert.match(report, /## Preflight Decision/);
+  assert.match(report, /mode: skipped-by-consent/);
+  assert.match(report, /taskClass: shopping/);
   assert.match(report, /Read page — completed — read product page/);
   assert.match(report, /archive-intake: \/archive\/existing\.md/);
 

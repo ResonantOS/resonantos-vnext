@@ -55,6 +55,7 @@ export function createControlReportingService({
     if (!job) return "";
     const steps = Array.isArray(job.steps) ? job.steps : [];
     const artifacts = Array.isArray(job.artifacts) ? job.artifacts : [];
+    const preflight = job.preflightDecision;
     return [
       "# Browser Job Report",
       "",
@@ -69,6 +70,19 @@ export function createControlReportingService({
       "",
       "## Summary",
       job.summary || "No summary recorded.",
+      "",
+      "## Preflight Decision",
+      ...(preflight
+        ? [
+          `- mode: ${preflight.mode}`,
+          `- site: ${preflight.siteKey}`,
+          `- taskClass: ${preflight.taskClass}`,
+          `- permissionMode: ${preflight.permissionMode || "unknown"}`,
+          `- source: ${preflight.source}`,
+          `- decidedAt: ${preflight.decidedAt || "unknown"}`,
+          `- reason: ${preflight.reason || "none recorded"}`
+        ]
+        : ["No preflight decision was recorded for this job."]),
       "",
       "## Steps",
       ...(steps.length

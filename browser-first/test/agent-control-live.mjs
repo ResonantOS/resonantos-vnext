@@ -661,6 +661,9 @@ try {
   }))()`)).result.value;
   assert(firstJobState.monitorVisible, "Browser job monitor is not visible after a control task.");
   assert(firstJobState.stored.some((job) => job.goal === "book a call now"), `Browser job did not persist: ${JSON.stringify(firstJobState)}`);
+  const bookingJob = firstJobState.stored.find((job) => job.goal === "book a call now");
+  assert(bookingJob?.preflightDecision?.mode === "trusted-safe-actions", `Browser job did not persist preflight mode: ${JSON.stringify(bookingJob)}`);
+  assert(bookingJob?.preflightDecision?.taskClass === "booking", `Browser job did not persist preflight task class: ${JSON.stringify(bookingJob)}`);
   const trustedTaskConsent = (await evaluate(panel, `(async () => (await chrome.storage.local.get("augmentorTaskConsents")).augmentorTaskConsents ?? {})()`)).result.value;
   assert(Object.values(trustedTaskConsent).some((consent) => consent.siteKey === "127.0.0.1" && consent.taskClass === "booking" && consent.source === "control-preflight"), `Preflight trust did not persist scoped consent: ${JSON.stringify(trustedTaskConsent)}`);
   await submitControlCommand(panel, `/jobs`);
