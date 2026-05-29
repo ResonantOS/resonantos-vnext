@@ -763,7 +763,8 @@ textarea {
   gap: 12px;
 }
 
-.addon-card {
+.addon-card,
+.addon-draft-card {
   display: grid;
   align-content: start;
   gap: 10px;
@@ -778,6 +779,50 @@ textarea {
 
 .addon-card[data-tone="warning"] {
   border-color: rgba(255, 214, 138, 0.2);
+}
+
+.addon-draft-review {
+  display: grid;
+  gap: 12px;
+}
+
+.addon-draft-review-header {
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(36, 209, 143, 0.14);
+  border-radius: 22px;
+  background: rgba(17, 22, 19, 0.56);
+  padding: 16px;
+}
+
+.addon-draft-review-header h2,
+.addon-draft-review-header p {
+  margin: 0;
+}
+
+.addon-draft-review-header h2 {
+  color: rgba(247, 255, 249, 0.96);
+  font-size: 1.35rem;
+  letter-spacing: -0.04em;
+}
+
+.addon-draft-review-header p {
+  max-width: 720px;
+  color: rgba(214, 229, 219, 0.72);
+}
+
+.addon-draft-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.addon-draft-card[data-status="approved-for-manual-send"] {
+  border-color: rgba(36, 209, 143, 0.28);
+}
+
+.addon-draft-card[data-status="rejected"] {
+  border-color: rgba(255, 154, 138, 0.22);
 }
 
 .addon-card-header {
@@ -808,13 +853,16 @@ textarea {
 }
 
 .addon-card p,
-.addon-card small {
+.addon-card small,
+.addon-draft-card p,
+.addon-draft-card small {
   margin: 0;
   color: rgba(214, 229, 219, 0.68);
   line-height: 1.45;
 }
 
-.addon-card p {
+.addon-card p,
+.addon-draft-card p {
   font-weight: 800;
 }
 

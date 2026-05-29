@@ -2075,6 +2075,101 @@ async function executeAddonDraftRecord(payload) {
   };
 }
 
+function draftRoot() {
+  return path.join(browserFirstRoot(), "AddOnDrafts");
+}
+
+function resolveDraftPath(relativePath) {
+  const resolved = path.resolve(userRoot(), String(relativePath ?? ""));
+  const root = path.resolve(draftRoot());
+  if (!resolved.startsWith(`${root}${path.sep}`) || !resolved.endsWith(".md")) {
+    throw new Error("Draft path must point to a draft packet inside BrowserFirst/AddOnDrafts.");
+  }
+  return resolved;
+}
+
+function fieldFromMarkdown(content, field) {
+  const match = new RegExp(`^- ${field}:\\s*(.+)$`, "mi").exec(content);
+  return match ? match[1].trim() : "";
+}
+
+function sectionFromMarkdown(content, heading) {
+  const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = new RegExp(`## ${escaped}\\n([\\s\\S]*?)(?=\\n## |$)`, "i").exec(content);
+  return match ? match[1].trim() : "";
+}
+
+function draftSummaryFromMarkdown(filePath, content, details) {
+  return {
+    id: fieldFromMarkdown(content, "id") || path.basename(filePath, ".md"),
+    target: fieldFromMarkdown(content, "target") || path.basename(path.dirname(filePath)),
+    status: fieldFromMarkdown(content, "status") || "draft-only",
+    approvalRequired: /- approvalRequired:\s*true/i.test(content),
+    path: path.relative(userRoot(), filePath),
+    intent: sectionFromMarkdown(content, "Intent").slice(0, 220),
+    updatedAt: details?.mtime?.toISOString?.() ?? "",
+  };
+}
+
+async function executeAddonDraftList(payload) {
+  const limit = Math.min(40, Math.max(1, Number(payload.limit ?? 20)));
+  const target = String(payload.target ?? "").trim().toLowerCase();
+  const roots = ["email", "calendar"]
+    .filter((candidate) => !target || candidate === target)
+    .map((candidate) => path.join(draftRoot(), candidate));
+  const files = [];
+  for (const root of roots) {
+    files.push(...await listFilesRecursive(root, (filePath) => filePath.endsWith(".md"), limit));
+  }
+  const drafts = [];
+  for (const filePath of files) {
+    const [details, content] = await Promise.all([
+      stat(filePath).catch(() => null),
+      readFile(filePath, "utf8").catch(() => ""),
+    ]);
+    if (!details || !content) continue;
+    drafts.push(draftSummaryFromMarkdown(filePath, content, details));
+  }
+  drafts.sort((left, right) => String(right.updatedAt).localeCompare(String(left.updatedAt)));
+  return { root: path.relative(userRoot(), draftRoot()), drafts: drafts.slice(0, limit) };
+}
+
+async function executeAddonDraftRead(payload) {
+  const filePath = resolveDraftPath(payload.path);
+  const [details, content] = await Promise.all([stat(filePath), readFile(filePath, "utf8")]);
+  return {
+    ...draftSummaryFromMarkdown(filePath, content, details),
+    content,
+  };
+}
+
+async function executeAddonDraftTransition(payload) {
+  const status = String(payload.status ?? "").trim().toLowerCase();
+  if (!["approved-for-manual-send", "rejected", "draft-only"].includes(status)) {
+    throw new Error("Draft status must be approved-for-manual-send, rejected, or draft-only.");
+  }
+  const filePath = resolveDraftPath(payload.path);
+  const previous = await readFile(filePath, "utf8");
+  const previousStatus = fieldFromMarkdown(previous, "status") || "draft-only";
+  const reason = String(payload.reason ?? "Manual review from ResonantOS Add-ons workspace.").trim().slice(0, 240);
+  const reviewer = String(payload.reviewer ?? "human").trim().slice(0, 80) || "human";
+  const next = previous.replace(/^- status:\s*.+$/mi, `- status: ${status}`);
+  const audit = [
+    "",
+    "## Audit",
+    `- reviewedAt: ${new Date().toISOString()}`,
+    `- reviewer: ${reviewer}`,
+    `- previousStatus: ${previousStatus}`,
+    `- newStatus: ${status}`,
+    `- reason: ${reason}`,
+    "- boundary: This review state does not send email or schedule calendar events.",
+    "",
+  ].join("\n");
+  await writeFile(filePath, `${next.trimEnd()}\n${audit}`);
+  const details = await stat(filePath);
+  return draftSummaryFromMarkdown(filePath, await readFile(filePath, "utf8"), details);
+}
+
 async function executeAddonsStatus() {
   return {
     addons: [
@@ -2275,6 +2370,9 @@ const bridgeRoutes = [
   { method: "POST", path: "/hermes/dashboard/stop", handler: executeHermesDashboardStop },
   { method: "POST", path: "/web/news", handler: executeNewsSearch },
   { method: "POST", path: "/addons/draft", handler: executeAddonDraftRecord },
+  { method: "POST", path: "/addons/draft/list", handler: executeAddonDraftList },
+  { method: "POST", path: "/addons/draft/read", handler: executeAddonDraftRead },
+  { method: "POST", path: "/addons/draft/transition", handler: executeAddonDraftTransition },
   { method: "POST", path: "/addons/delegate", handler: executeDelegationRecord },
   { method: "POST", path: "/goals", handler: executeGoalRecord },
 ];

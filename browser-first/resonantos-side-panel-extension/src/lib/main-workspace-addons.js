@@ -63,6 +63,43 @@ function createAddonCard(addon, onOpenWorkspace) {
   return card;
 }
 
+function createDraftReviewCard(draft, onTransition) {
+  const card = document.createElement("article");
+  card.className = "addon-draft-card";
+  card.dataset.status = draft.status || "draft-only";
+
+  const header = document.createElement("div");
+  header.className = "addon-card-header";
+  const title = document.createElement("strong");
+  title.textContent = draft.intent || draft.id || "Untitled draft";
+  const status = document.createElement("span");
+  status.textContent = draft.status || "draft-only";
+  header.append(title, status);
+
+  const meta = document.createElement("p");
+  meta.textContent = `${draft.target || "draft"} · ${draft.path || "no path"}`;
+
+  const boundary = document.createElement("small");
+  boundary.textContent = "Review only. Approving marks this draft ready for manual send/schedule; ResonantOS does not execute the external action here.";
+
+  const actions = document.createElement("div");
+  actions.className = "addon-card-actions";
+  const approve = document.createElement("button");
+  approve.type = "button";
+  approve.textContent = "Approve for Manual Action";
+  approve.disabled = draft.status === "approved-for-manual-send";
+  approve.addEventListener("click", () => onTransition?.(draft, "approved-for-manual-send"));
+  const reject = document.createElement("button");
+  reject.type = "button";
+  reject.textContent = "Reject";
+  reject.disabled = draft.status === "rejected";
+  reject.addEventListener("click", () => onTransition?.(draft, "rejected"));
+  actions.append(approve, reject);
+
+  card.append(header, meta, boundary, actions);
+  return card;
+}
+
 export function renderAddOnsWorkspace({ container, bridgeRequest, onOpenWorkspace }) {
   const section = document.createElement("section");
   section.className = "addons-workspace";
@@ -83,8 +120,54 @@ export function renderAddOnsWorkspace({ container, bridgeRequest, onOpenWorkspac
   const grid = document.createElement("div");
   grid.className = "addons-grid";
 
-  section.append(header, status, grid);
+  const draftReview = document.createElement("section");
+  draftReview.className = "addon-draft-review";
+  const draftHeader = document.createElement("div");
+  draftHeader.className = "addon-draft-review-header";
+  draftHeader.innerHTML = `
+    <div>
+      <span class="hero-kicker">Draft approval</span>
+      <h2>Email and calendar packets</h2>
+      <p>Draft-only add-ons can prepare communication or scheduling packets. Human review can approve them for manual action, but provider sending/scheduling is still not automated here.</p>
+    </div>
+  `;
+  const draftStatus = document.createElement("p");
+  draftStatus.className = "addons-status";
+  draftStatus.textContent = "Loading draft packets...";
+  const draftList = document.createElement("div");
+  draftList.className = "addon-draft-list";
+  draftReview.append(draftHeader, draftStatus, draftList);
+
+  section.append(header, status, grid, draftReview);
   container.replaceChildren(section);
+
+  const loadDrafts = async () => {
+    try {
+      const result = await bridgeRequest("/addons/draft/list", { method: "POST", body: { limit: 8 } });
+      const drafts = Array.isArray(result.drafts) ? result.drafts : [];
+      draftList.replaceChildren();
+      drafts.forEach((draft) => draftList.append(createDraftReviewCard(draft, async (selected, nextStatus) => {
+        draftStatus.textContent = `Updating ${selected.id}...`;
+        draftStatus.dataset.tone = "";
+        await bridgeRequest("/addons/draft/transition", {
+          method: "POST",
+          body: {
+            path: selected.path,
+            status: nextStatus,
+            reason: `Human reviewed ${selected.target} draft from Add-ons workspace.`
+          }
+        });
+        await loadDrafts();
+      })));
+      draftStatus.textContent = drafts.length
+        ? `${drafts.length} draft packet${drafts.length === 1 ? "" : "s"} waiting or reviewed. External send/schedule remains blocked here.`
+        : "No email or calendar draft packets yet. Use /email or /calendar from chat to create one.";
+      draftStatus.dataset.tone = drafts.length ? "success" : "warning";
+    } catch (error) {
+      draftStatus.textContent = `Draft review unavailable: ${error instanceof Error ? error.message : String(error)}`;
+      draftStatus.dataset.tone = "error";
+    }
+  };
 
   void (async () => {
     try {
@@ -101,6 +184,7 @@ export function renderAddOnsWorkspace({ container, bridgeRequest, onOpenWorkspac
       status.dataset.tone = "error";
     }
   })();
+  void loadDrafts();
 
   return section;
 }

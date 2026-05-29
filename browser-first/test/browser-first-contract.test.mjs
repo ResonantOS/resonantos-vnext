@@ -153,6 +153,8 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(workspaceStyles, /artifacts-workspace/);
   assert.match(workspaceStyles, /addons-workspace/);
   assert.match(workspaceStyles, /addon-card/);
+  assert.match(workspaceStyles, /addon-draft-review/);
+  assert.match(workspaceStyles, /addon-draft-card/);
   assert.match(workspaceStyles, /artifact-preview/);
   assert.match(workspaceStyles, /artifact-actions/);
   assert.match(workspaceStyles, /module-workspace/);
@@ -169,6 +171,10 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(launcher, /\/hermes\/dashboard\/status/);
   assert.match(launcher, /\/hermes\/dashboard\/start/);
   assert.match(launcher, /\/hermes\/dashboard\/stop/);
+  assert.match(launcher, /executeAddonDraftList/);
+  assert.match(launcher, /executeAddonDraftTransition/);
+  assert.match(launcher, /\/addons\/draft\/list/);
+  assert.match(launcher, /\/addons\/draft\/transition/);
   assert.match(launcher, /\/opencode\/status/);
   assert.match(launcher, /\/providers\/status/);
   assert.match(launcher, /\/providers\/credentials/);
