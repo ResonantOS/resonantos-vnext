@@ -1137,13 +1137,14 @@ textarea::placeholder {
 .connection-line {
   display: inline-grid;
   place-items: center;
-  justify-self: start;
-  width: 30px;
-  height: 30px;
-  margin: 7px 8px 0;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  border: 0;
   border-radius: 999px;
   background: transparent;
   color: rgba(143, 159, 149, 0.74);
+  padding: 0;
 }
 
 .connection-line svg {
@@ -1204,14 +1205,4 @@ textarea::placeholder {
   .chat-shell {
     grid-template-columns: 1fr;
   }
-
-  .chat-rail {
-    grid-template-columns: auto minmax(0, 1fr);
-    grid-template-rows: auto auto;
-  }
-
-  .rail-section-label {
-    display: none;
-  }
-
 }

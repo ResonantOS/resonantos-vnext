@@ -356,7 +356,11 @@ async function browserTargets() {
 async function evaluate(client, expression) {
   const result = await client.send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
   if (result.exceptionDetails) {
-    throw new Error(result.exceptionDetails.text ?? "CDP evaluation failed.");
+    throw new Error(
+      result.exceptionDetails.exception?.description
+        ?? result.exceptionDetails.text
+        ?? "CDP evaluation failed."
+    );
   }
   return result;
 }
@@ -493,62 +497,57 @@ try {
   })`);
 
   await evaluate(panel, `chrome.storage.local.clear(); document.querySelector("#transcript").replaceChildren();`);
-  const shortcutState = (await evaluate(panel, `(async () => {
+  const shortcutState = (await evaluate(panel, `(() => {
     const input = document.querySelector("#command-input");
     const form = document.querySelector("#command-form");
     const originalRequestSubmit = form.requestSubmit.bind(form);
-    let clipboardText = "";
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: {
-        writeText: async (text) => { clipboardText = String(text); },
-        readText: async () => clipboardText,
-      },
-    });
     input.value = "first line";
     let submitted = false;
     form.requestSubmit = () => { submitted = true; };
+    input.focus();
     input.setSelectionRange(0, 0);
-    input.dispatchEvent(new KeyboardEvent("keydown", { key: "a", metaKey: true, bubbles: true, cancelable: true }));
+    const metaA = new KeyboardEvent("keydown", { key: "a", metaKey: true, bubbles: true, cancelable: true });
+    input.dispatchEvent(metaA);
     const afterMetaA = {
+      defaultPrevented: metaA.defaultPrevented,
       submitted,
       selectionStart: input.selectionStart,
       selectionEnd: input.selectionEnd,
       value: input.value,
     };
-    input.setSelectionRange(input.value.length, input.value.length);
-    input.dispatchEvent(new KeyboardEvent("keydown", { key: "c", metaKey: true, bubbles: true, cancelable: true }));
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    const afterMetaC = { submitted, clipboardText, value: input.value };
-    input.setSelectionRange(0, 5);
-    input.dispatchEvent(new KeyboardEvent("keydown", { key: "x", metaKey: true, bubbles: true, cancelable: true }));
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    const afterMetaX = { submitted, clipboardText, value: input.value };
-    input.setSelectionRange(0, 0);
-    input.dispatchEvent(new KeyboardEvent("keydown", { key: "v", metaKey: true, bubbles: true, cancelable: true }));
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    const afterMetaV = { submitted, clipboardText, value: input.value };
+
+    const clipboardChecks = {};
+    for (const key of ["c", "x", "v"]) {
+      input.value = "first line";
+      input.setSelectionRange(0, key === "c" ? input.value.length : 5);
+      const event = new KeyboardEvent("keydown", { key, metaKey: true, bubbles: true, cancelable: true });
+      input.dispatchEvent(event);
+      clipboardChecks[key] = { defaultPrevented: event.defaultPrevented, submitted, value: input.value };
+    }
+
     input.value = "undo baseline";
     input.dispatchEvent(new Event("input", { bubbles: true }));
     input.value = "undo baseline plus";
     input.dispatchEvent(new Event("input", { bubbles: true }));
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "z", metaKey: true, bubbles: true, cancelable: true }));
     const afterMetaZ = { submitted, value: input.value };
+
+    input.value = "enter test";
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", shiftKey: true, bubbles: true, cancelable: true }));
     const afterShiftEnter = { submitted, value: input.value };
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true, cancelable: true }));
     const afterMetaEnter = { submitted, value: input.value };
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
     form.requestSubmit = originalRequestSubmit;
-    return { afterMetaA, afterMetaC, afterMetaX, afterMetaV, afterMetaZ, afterShiftEnter, afterMetaEnter, submitted };
+    return { afterMetaA, clipboardChecks, afterMetaZ, afterShiftEnter, afterMetaEnter, submitted };
   })()`)).result.value;
+  assert(shortcutState.afterMetaA.defaultPrevented, `Command+A should be handled by the composer: ${JSON.stringify(shortcutState)}`);
   assert(shortcutState.afterMetaA.selectionStart === 0, `Command+A should select from start: ${JSON.stringify(shortcutState)}`);
   assert(shortcutState.afterMetaA.selectionEnd === shortcutState.afterMetaA.value.length, `Command+A should select full composer text: ${JSON.stringify(shortcutState)}`);
   assert(!shortcutState.afterMetaA.submitted, `Command+A should not submit: ${JSON.stringify(shortcutState)}`);
-  assert(shortcutState.afterMetaC.clipboardText === "first line", `Command+C should copy composer text: ${JSON.stringify(shortcutState)}`);
-  assert(shortcutState.afterMetaX.clipboardText === "first", `Command+X should cut selected composer text: ${JSON.stringify(shortcutState)}`);
-  assert(shortcutState.afterMetaX.value === " line", `Command+X should remove selected composer text: ${JSON.stringify(shortcutState)}`);
-  assert(shortcutState.afterMetaV.value === "first line", `Command+V should paste at the composer cursor: ${JSON.stringify(shortcutState)}`);
+  assert(!shortcutState.clipboardChecks.c.defaultPrevented, `Command+C must remain native browser copy: ${JSON.stringify(shortcutState)}`);
+  assert(!shortcutState.clipboardChecks.x.defaultPrevented, `Command+X must remain native browser cut: ${JSON.stringify(shortcutState)}`);
+  assert(!shortcutState.clipboardChecks.v.defaultPrevented, `Command+V must remain native browser paste: ${JSON.stringify(shortcutState)}`);
   assert(shortcutState.afterMetaZ.value === "undo baseline", `Command+Z should undo the last composer edit: ${JSON.stringify(shortcutState)}`);
   assert(!shortcutState.afterShiftEnter.submitted, `Shift+Enter should not submit: ${JSON.stringify(shortcutState)}`);
   assert(!shortcutState.afterMetaEnter.submitted, `Command-modified Enter should not submit: ${JSON.stringify(shortcutState)}`);
