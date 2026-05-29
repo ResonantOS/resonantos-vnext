@@ -32,17 +32,17 @@ const COLORS = {
 
 const NODES = [
   // Machines (hexagon)
-  { id: 'm-mac',     type: 'machine',  label: 'M4 Mac Mini',   ip: '192.168.6.20',  status: 'online',  x: 420, y: 220, role: 'Orchestrator' },
-  { id: 'm-hal',     type: 'machine',  label: 'HAL 9000',      ip: '192.168.6.143', status: 'online',  x: 220, y: 160, role: 'Inference' },
-  { id: 'm-og',      type: 'machine',  label: 'The OG',        ip: '192.168.7.233', status: 'online',  x: 140, y: 300, role: 'Evaluation' },
-  { id: 'm-guardian',type: 'machine',  label: 'Guardian',      ip: '192.168.4.88',  status: 'online',  x: 220, y: 440, role: 'Inference' },
-  { id: 'm-sniper',  type: 'machine',  label: 'Sniper',        ip: '192.168.5.160', status: 'online',  x: 420, y: 520, role: 'Inference' },
-  { id: 'm-r730',    type: 'machine',  label: 'Blade R730',    ip: '192.168.1.239', status: 'online',  x: 640, y: 440, role: 'Ternary Training' },
-  { id: 'm-r720',    type: 'machine',  label: 'Blade 2 R720',  ip: '192.168.1.240', status: 'pending', x: 740, y: 320, role: 'Staging' },
+  { id: 'm-mac',     type: 'machine',  label: 'M4 Mac Mini',   ip: '10.0.1.1',  status: 'online',  x: 420, y: 220, role: 'Orchestrator' },
+  { id: 'm-hal',     type: 'machine',  label: 'HAL 9000',      ip: '10.0.1.2', status: 'online',  x: 220, y: 160, role: 'Inference' },
+  { id: 'm-og',      type: 'machine',  label: 'The OG',        ip: '10.0.1.3', status: 'online',  x: 140, y: 300, role: 'Evaluation' },
+  { id: 'm-guardian',type: 'machine',  label: 'Guardian',      ip: '10.0.1.4',  status: 'online',  x: 220, y: 440, role: 'Inference' },
+  { id: 'm-sniper',  type: 'machine',  label: 'Sniper',        ip: '10.0.1.5', status: 'online',  x: 420, y: 520, role: 'Inference' },
+  { id: 'm-r730',    type: 'machine',  label: 'Blade R730',    ip: '10.0.1.6', status: 'online',  x: 640, y: 440, role: 'Ternary Training' },
+  { id: 'm-r720',    type: 'machine',  label: 'Blade 2 R720',  ip: '10.0.1.7', status: 'pending', x: 740, y: 320, role: 'Staging' },
   { id: 'm-r620',    type: 'machine',  label: 'Blade 3 R620',  ip: null,            status: 'offline', x: 740, y: 180, role: 'Utility' },
-  { id: 'm-pe2950',  type: 'machine',  label: 'Blade 4 PE2950',ip: '192.168.7.191', status: 'online',  x: 640, y: 140, role: 'Ternary Utility' },
-  { id: 'm-pasus',   type: 'machine',  label: 'P-ASUS',        ip: '192.168.6.116', status: 'online',  x: 320, y: 100, role: 'UI Node' },
-  { id: 'm-xbox',    type: 'machine',  label: 'Xbox Series X', ip: '192.168.5.19',  status: 'online',  x: 540, y: 60,  role: 'Dev Mode' },
+  { id: 'm-pe2950',  type: 'machine',  label: 'Blade 4 PE2950',ip: '10.0.1.8', status: 'online',  x: 640, y: 140, role: 'Ternary Utility' },
+  { id: 'm-pasus',   type: 'machine',  label: 'P-ASUS',        ip: '10.0.1.9', status: 'online',  x: 320, y: 100, role: 'UI Node' },
+  { id: 'm-xbox',    type: 'machine',  label: 'Xbox Series X', ip: '10.0.1.10',  status: 'online',  x: 540, y: 60,  role: 'Dev Mode' },
 
   // Protocols (circle)
   { id: 'p-sonny',   type: 'protocol', label: 'Sonny',    port: '8090', x: 420, y: 340, desc: 'Agent Comms v2' },

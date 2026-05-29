@@ -10,7 +10,7 @@ const MOCK_FLEET = [
   {
     id: 'm4-mini',
     name: 'M4 Mac Mini',
-    ip: '192.168.6.20',
+    ip: '10.0.1.1',
     status: 'online',
     kind: 'orchestrator',
     trust: 'verified',
@@ -27,7 +27,7 @@ const MOCK_FLEET = [
   {
     id: 'hal9000',
     name: 'HAL 9000',
-    ip: '192.168.6.143',
+    ip: '10.0.1.2',
     status: 'online',
     kind: 'model-host',
     trust: 'verified',
@@ -44,7 +44,7 @@ const MOCK_FLEET = [
   {
     id: 'the-og',
     name: 'The OG GT70',
-    ip: '192.168.7.233',
+    ip: '10.0.1.3',
     status: 'online',
     kind: 'model-host',
     trust: 'verified',
@@ -61,7 +61,7 @@ const MOCK_FLEET = [
   {
     id: 'guardian',
     name: 'Guardian',
-    ip: '192.168.4.88',
+    ip: '10.0.1.4',
     status: 'online',
     kind: 'model-host',
     trust: 'verified',
@@ -78,7 +78,7 @@ const MOCK_FLEET = [
   {
     id: 'sniper',
     name: 'Sniper',
-    ip: '192.168.5.160',
+    ip: '10.0.1.5',
     status: 'offline',
     kind: 'model-host',
     trust: 'none',
@@ -95,7 +95,7 @@ const MOCK_FLEET = [
   {
     id: 'blade-r730',
     name: 'Blade R730',
-    ip: '192.168.1.239',
+    ip: '10.0.1.6',
     status: 'online',
     kind: 'training',
     trust: 'verified',
@@ -112,7 +112,7 @@ const MOCK_FLEET = [
   {
     id: 'blade4',
     name: 'Blade 4 PE2950',
-    ip: '192.168.7.191',
+    ip: '10.0.1.8',
     status: 'online',
     kind: 'utility',
     trust: 'host',
@@ -146,7 +146,7 @@ const MOCK_FLEET = [
   {
     id: 'p-asus',
     name: 'P-ASUS',
-    ip: '192.168.6.116',
+    ip: '10.0.1.9',
     status: 'offline',
     kind: 'utility',
     trust: 'none',
@@ -607,14 +607,14 @@ function renderFabric() {
       <div class="warning-icon">⚠️</div>
       <div class="warning-body">
         <div class="warning-title">Sniper — Offline 2h+</div>
-        <div class="warning-desc">Node at 192.168.5.160 has not responded to probes for over 2 hours. Trust status degraded to Unverified. Needs Ubuntu install to restore service.</div>
+        <div class="warning-desc">Node at 10.0.1.5 has not responded to probes for over 2 hours. Trust status degraded to Unverified. Needs Ubuntu install to restore service.</div>
       </div>
     </div>
     <div class="warning-item">
       <div class="warning-icon">⚠️</div>
       <div class="warning-body">
         <div class="warning-title">P-ASUS — Unverified Trust</div>
-        <div class="warning-desc">Machine at 192.168.6.116 is enrolled but has no trust anchor established. Limited to utility-only roles until SSH key verification completes.</div>
+        <div class="warning-desc">Machine at 10.0.1.9 is enrolled but has no trust anchor established. Limited to utility-only roles until SSH key verification completes.</div>
       </div>
     </div>
   `;

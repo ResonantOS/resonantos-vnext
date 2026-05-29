@@ -24,7 +24,7 @@ const ITEMS = [
     section: 'urgent',
     priority: 'p1',
     title: 'Blade R730 IP conflict',
-    status: 'Previous docs used wrong IP 192.168.6.200 — corrected to 192.168.1.239 but scripts need updating',
+    status: 'Previous docs used wrong IP 10.0.1.99 — corrected to 10.0.1.6 but scripts need updating',
     age: 7,
     source: 'TOOLS.md',
   },
