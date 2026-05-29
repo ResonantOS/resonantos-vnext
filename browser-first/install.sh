@@ -272,7 +272,6 @@ $(for arg in $BRIDGE_ARGS; do echo "    <string>${arg}</string>"; done)
     <string>${HOME}</string>
     <key>RESONANTOS_ALPHA_KEY</key>
     <string>YOUR_GROQ_API_KEY</string>
-    <string>wxh8kojxcius0e</string>
   </dict>
 
   <key>ThrottleInterval</key>
