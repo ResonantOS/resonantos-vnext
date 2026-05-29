@@ -1,0 +1,16 @@
+{
+  "id": "addon.wallet-adapter",
+  "name": "Wallet Adapter",
+  "version": "1.0.0",
+  "description": "Solana wallet integration — connect, sign, and manage wallet interactions with explicit user consent",
+  "author": "Tom Pennington",
+  "mode": "utility",
+  "trust": "explicit grants required",
+  "entry": null,
+  "contentScripts": ["wallet-adapter.js"],
+  "commands": ["/wallet", "/connect-wallet"],
+  "messageChannel": "resonantos.wallet",
+  "capabilities": ["wallet-connect", "sign-transaction", "account-display"],
+  "requires": [],
+  "boundary": "Wallet interactions require explicit user consent per transaction. No automatic signing. No private key access. Bridge-mediated only."
+}

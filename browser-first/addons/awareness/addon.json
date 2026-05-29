@@ -1,0 +1,16 @@
+{
+  "id": "addon.awareness",
+  "name": "Awareness",
+  "version": "1.0.0",
+  "description": "Page awareness tab — displays live context analysis, active observations, and awareness engine status",
+  "author": "Tom Pennington",
+  "mode": "awareness-engine",
+  "trust": "page-observer",
+  "entry": "awareness-tab.html",
+  "contentScripts": [],
+  "commands": ["/awareness", "/context"],
+  "messageChannel": "resonantos.awareness",
+  "capabilities": ["context-display", "observation-log", "awareness-status"],
+  "requires": ["addon.resonant-context"],
+  "boundary": "Display of awareness data only. Observation is read-only. No page modification."
+}
