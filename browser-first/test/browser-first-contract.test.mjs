@@ -77,12 +77,19 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(workspace, /context-toggle/);
   assert.match(workspace, /context-meter/);
   assert.match(workspace, /dictate-button/);
+  for (const id of ["save-intake", "save-selection", "context-toggle", "dictate-button", "connection-line"]) {
+    const button = workspace.match(new RegExp(`<button id="${id}"[\\s\\S]*?<\\/button>`))?.[0] ?? "";
+    assert.match(button, /<svg /);
+    assert.doesNotMatch(button.replace(/aria-label="[^"]*"/g, "").replace(/title="[^"]*"/g, ""), />\s*(Save|Status|Mic|Ready)\s*</i);
+  }
   assert.doesNotMatch(workspace, /mode-select/);
   assert.doesNotMatch(workspace, /Open Sidebar/);
   assert.doesNotMatch(workspace, /id="open-sidebar"/);
   assert.match(workspace, /main-workspace\.js/);
   assert.match(workspaceScript, /createChatSessionStore/);
   assert.match(workspaceScript, /createComposerController/);
+  assert.match(workspaceScript, /fileLooksTextLike/);
+  assert.match(workspaceScript, /removeAttachment/);
   assert.match(workspaceScript, /renderArtifactsWorkspace/);
   assert.match(workspaceScript, /renderAddOnsWorkspace/);
   assert.match(workspaceScript, /continueFromArtifact/);
@@ -281,6 +288,11 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(panel, /Thinking depth/);
   assert.match(panel, /Save current page to Living Archive intake/);
   assert.match(panel, /Save selected page text to Living Archive intake/);
+  for (const id of ["save-intake", "save-selection", "context-toggle", "dictate-button", "connection-line"]) {
+    const button = panel.match(new RegExp(`<button id="${id}"[\\s\\S]*?<\\/button>`))?.[0] ?? "";
+    assert.match(button, /<svg /);
+    assert.doesNotMatch(button.replace(/aria-label="[^"]*"/g, "").replace(/title="[^"]*"/g, ""), />\s*(Save|Status|Mic|Ready)\s*</i);
+  }
   assert.match(background, /openPanelOnActionClick/);
   assert.match(background, /openResonantSidePanel/);
   assert.match(background, /open-augmentor-side-panel/);
@@ -385,8 +397,18 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(appCommandHandlers, /\/goals/);
   assert.match(commandParser, /parseNaturalBrowserIntent/);
   assert.match(script, /createBrowserJobStore/);
+  assert.match(script, /prepareBrowserJobPageLock/);
+  assert.match(script, /conflictingActiveJobForLock/);
+  assert.match(script, /TERMINAL_CONTROL_RUN_STATUSES/);
+  assert.match(script, /conflict && currentControlRun && conflict\.id === currentControlRun\.id/);
+  assert.match(script, /conflict\?\.status === "approval"/);
+  assert.match(script, /pendingApproval = null/);
   assert.match(browserJobStore, /normalizeBrowserJob/);
+  assert.match(browserJobStore, /normalizePageLock/);
   assert.match(browserJobStore, /createBrowserJobStore/);
+  assert.match(browserJobStore, /LOCK_HOLDING_JOB_STATUSES/);
+  assert.match(browserJobStore, /conflictingActiveJobForLock/);
+  assert.match(browserJobStore, /Browser target is already controlled/);
   assert.match(browserJobStore, /toggleMonitorCollapsed/);
   assert.match(browserJobStore, /findJob/);
   assert.match(browserJobStore, /steps/);
@@ -504,6 +526,8 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(pageActions, /bing\.com\/news\/search/);
   assert.match(pageActions, /\/web\/news/);
   assert.match(script, /turnBusy/);
+  assert.match(script, /runBusyUiAction/);
+  assert.match(script, /controlPreflightTrustButton\.addEventListener\("click", \(\) => void runBusyUiAction/);
   assert.match(script, /setActivity/);
   assert.match(pageActions, /openBrowserUrl/);
   assert.match(pageActions, /chrome\.tabs\.update/);
@@ -611,6 +635,7 @@ test("browser-first host is a runnable app path, not documentation-only scaffold
   assert.match(launcher, /pinned_extensions/);
   assert.match(launcher, /cdpdmmalhmokbfcfgogoepnjplaakgnl/);
   assert.match(launcher, /auto-open-side-panel/);
+  assert.doesNotMatch(installer, /--auto-open-side-panel=true/);
   assert.match(launcher, /remote-debugging-port/);
   assert.match(launcher, /resonantos-remote-debugging-port/);
   assert.match(launcher, /createBridgeToken/);

@@ -8,11 +8,15 @@ function createHarness(overrides = {}) {
   let activeJobId = overrides.activeJobId ?? "job-a";
   let currentControlRun = overrides.currentControlRun ?? null;
   let pendingApproval = { step: { type: "click", text: "Submit" } };
+  let nowValue = overrides.nowMs ?? 1_000;
+  const timers = [];
   const state = createControlRunState({
     browserJobStore: {
       getActiveJobId: () => activeJobId
     },
     getCurrentControlRun: () => currentControlRun,
+    minimumOverlayMs: overrides.minimumOverlayMs,
+    nowMs: () => nowValue,
     renderControlMonitor: () => events.push(["render"]),
     setCurrentControlRun: (run) => {
       currentControlRun = run;
@@ -23,14 +27,26 @@ function createHarness(overrides = {}) {
       pendingApproval = approval;
       events.push(["pending", approval]);
     },
+    setTimeoutFn: (callback, delay) => {
+      timers.push({ callback, delay });
+      return timers.length;
+    },
     updateBrowserJob: async (id, patch) => events.push(["job", id, patch])
   });
   return {
     events,
     getCurrentControlRun: () => currentControlRun,
     getPendingApproval: () => pendingApproval,
+    runTimers: () => {
+      const pending = timers.splice(0);
+      pending.forEach((timer) => timer.callback());
+      return pending;
+    },
     setActiveJobId: (id) => {
       activeJobId = id;
+    },
+    setNowMs: (value) => {
+      nowValue = value;
     },
     state
   };
@@ -118,6 +134,7 @@ test("control run state updates artifacts without finishing", () => {
 
 test("control run state finishes run, clears overlay, and syncs browser job", async () => {
   const harness = createHarness({
+    minimumOverlayMs: 0,
     currentControlRun: {
       id: "job-a",
       planner: "planner",
@@ -140,4 +157,44 @@ test("control run state finishes run, clears overlay, and syncs browser job", as
     event[2].status === "completed" &&
     event[2].planner === "planner"
   ));
+});
+
+test("control run state keeps short runs visibly active before clearing overlay", async () => {
+  const harness = createHarness({ minimumOverlayMs: 900, nowMs: 1_000 });
+
+  harness.state.startControlRun({
+    goal: "quick read",
+    plan: {
+      source: "planner",
+      summary: "short task",
+      steps: [{ type: "read" }]
+    }
+  });
+  harness.setNowMs(1_100);
+  harness.state.finishControlRun("completed");
+
+  assert.equal(harness.events.filter((event) => event[0] === "overlay" && event[1] === false).length, 0);
+  const timers = harness.runTimers();
+  assert.equal(timers[0].delay, 800);
+  assert.ok(harness.events.some((event) => event[0] === "overlay" && event[1] === false && event[3] === "returning"));
+});
+
+test("control run state does not let an old delayed overlay release hide a newer run", async () => {
+  const harness = createHarness({ minimumOverlayMs: 900, nowMs: 1_000 });
+
+  harness.state.startControlRun({
+    goal: "first task",
+    plan: { source: "planner", summary: "first", steps: [] }
+  });
+  harness.setNowMs(1_100);
+  harness.state.finishControlRun("completed");
+  harness.setActiveJobId("job-b");
+  harness.state.startControlRun({
+    goal: "second task",
+    plan: { source: "planner", summary: "second", steps: [] }
+  });
+  harness.runTimers();
+
+  assert.equal(harness.events.filter((event) => event[0] === "overlay" && event[1] === false).length, 0);
+  assert.ok(harness.events.some((event) => event[0] === "overlay" && event[1] === true && /second task/.test(event[2])));
 });

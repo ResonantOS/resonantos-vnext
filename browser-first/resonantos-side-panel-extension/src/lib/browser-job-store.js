@@ -1,5 +1,6 @@
 const TERMINAL_JOB_STATUSES = ["completed", "blocked", "denied", "cancelled", "failed"];
 const ACTIVE_JOB_STATUSES = ["queued", "running", "paused", "approval"];
+const LOCK_HOLDING_JOB_STATUSES = ["queued", "running", "approval"];
 const VALID_JOB_STATUSES = [...ACTIVE_JOB_STATUSES, ...TERMINAL_JOB_STATUSES];
 
 const defaultNow = () => new Date().toISOString();
@@ -44,7 +45,25 @@ export function normalizePreflightDecision(decision) {
   };
 }
 
+export function normalizePageLock(lock, { now = defaultNow } = {}) {
+  if (!lock || typeof lock !== "object") return null;
+  const tabId = Number(lock.tabId);
+  const hasTabId = Number.isInteger(tabId) && tabId >= 0;
+  const url = String(lock.url ?? "").slice(0, 240);
+  const siteKey = String(lock.siteKey ?? "").slice(0, 120);
+  if (!hasTabId && !url && !siteKey) return null;
+  return {
+    type: lock.type === "page" ? "page" : "tab",
+    tabId: hasTabId ? tabId : null,
+    url,
+    siteKey: siteKey || "unknown-site",
+    acquiredAt: lock.acquiredAt ? String(lock.acquiredAt).slice(0, 40) : now(),
+    reason: String(lock.reason ?? "Agent Control owns this browser target.").slice(0, 180)
+  };
+}
+
 export function normalizeBrowserJob(job, { now = defaultNow } = {}) {
+  const status = VALID_JOB_STATUSES.includes(job?.status) ? job.status : "queued";
   const steps = Array.isArray(job?.steps)
     ? job.steps.slice(0, 30).map((step) => ({
       type: String(step?.type ?? "step").slice(0, 80),
@@ -58,7 +77,7 @@ export function normalizeBrowserJob(job, { now = defaultNow } = {}) {
   return {
     id: String(job?.id ?? `job-${Date.now()}`),
     goal: String(job?.goal ?? "Browser job").slice(0, 300),
-    status: VALID_JOB_STATUSES.includes(job?.status) ? job.status : "queued",
+    status,
     createdAt: job?.createdAt ?? now(),
     updatedAt: job?.updatedAt ?? now(),
     completedAt: job?.completedAt ?? null,
@@ -67,6 +86,7 @@ export function normalizeBrowserJob(job, { now = defaultNow } = {}) {
     artifacts: Array.isArray(job?.artifacts) ? job.artifacts.slice(0, 20) : [],
     lastError: job?.lastError ? String(job.lastError).slice(0, 700) : null,
     preflightDecision: normalizePreflightDecision(job?.preflightDecision),
+    pageLock: LOCK_HOLDING_JOB_STATUSES.includes(status) ? normalizePageLock(job?.pageLock, { now }) : null,
     steps
   };
 }
@@ -77,6 +97,10 @@ export function isTerminalBrowserJobStatus(status) {
 
 export function isActiveBrowserJobStatus(status) {
   return ACTIVE_JOB_STATUSES.includes(status);
+}
+
+export function isLockHoldingBrowserJobStatus(status) {
+  return LOCK_HOLDING_JOB_STATUSES.includes(status);
 }
 
 export function createBrowserJobStore({
@@ -155,6 +179,18 @@ export function createBrowserJobStore({
     return jobs.find((job) => job.id === activeJobId) ?? null;
   }
 
+  function conflictingActiveJobForLock(lock, { excludingJobId = "" } = {}) {
+    const normalizedLock = normalizePageLock(lock, { now });
+    if (!normalizedLock) return null;
+    return jobs.find((job) => {
+      if (job.id === excludingJobId) return false;
+      if (!isLockHoldingBrowserJobStatus(job.status) || !job.pageLock) return false;
+      if (normalizedLock.tabId !== null && job.pageLock.tabId === normalizedLock.tabId) return true;
+      if (normalizedLock.siteKey && normalizedLock.siteKey !== "unknown-site" && job.pageLock.siteKey === normalizedLock.siteKey) return true;
+      return Boolean(normalizedLock.url && job.pageLock.url === normalizedLock.url);
+    }) ?? null;
+  }
+
   function findJob(idOrGoal = "") {
     const needle = String(idOrGoal ?? "").trim().toLowerCase();
     if (!needle) return currentJob() ?? jobs[0] ?? null;
@@ -165,13 +201,19 @@ export function createBrowserJobStore({
     ) ?? null;
   }
 
-  async function createJob({ goal, planner = "observe-act-verify-loop", summary = "", preflightDecision = null }) {
+  async function createJob({ goal, planner = "observe-act-verify-loop", summary = "", preflightDecision = null, pageLock = null }) {
+    const normalizedLock = normalizePageLock(pageLock, { now });
+    const conflict = conflictingActiveJobForLock(normalizedLock);
+    if (conflict) {
+      throw new Error(`Browser target is already controlled by ${conflict.id}: ${conflict.goal}`);
+    }
     const job = normalizeBrowserJob({
       id: createId(),
       goal,
       planner,
       summary,
       preflightDecision,
+      pageLock: normalizedLock,
       status: "running",
       createdAt: now(),
       updatedAt: now()
@@ -184,12 +226,25 @@ export function createBrowserJobStore({
 
   async function updateJob(jobId, patch) {
     if (!jobId) return null;
+    const normalizedPatchLock = Object.prototype.hasOwnProperty.call(patch, "pageLock")
+      ? normalizePageLock(patch.pageLock, { now })
+      : undefined;
+    if (normalizedPatchLock) {
+      const conflict = conflictingActiveJobForLock(normalizedPatchLock, { excludingJobId: jobId });
+      if (conflict) {
+        throw new Error(`Browser target is already controlled by ${conflict.id}: ${conflict.goal}`);
+      }
+    }
     let updated = null;
     jobs = jobs.map((job) => {
       if (job.id !== jobId) return job;
+      const status = patch.status ?? job.status;
       updated = normalizeBrowserJob({
         ...job,
         ...patch,
+        pageLock: normalizedPatchLock !== undefined
+          ? normalizedPatchLock
+          : isLockHoldingBrowserJobStatus(status) ? job.pageLock : null,
         updatedAt: now(),
         completedAt: patch.completedAt ?? (isTerminalBrowserJobStatus(patch.status) ? now() : job.completedAt)
       }, { now });
@@ -244,6 +299,7 @@ export function createBrowserJobStore({
 
   return {
     activateJob,
+    conflictingActiveJobForLock,
     createJob,
     currentJob,
     findJob,

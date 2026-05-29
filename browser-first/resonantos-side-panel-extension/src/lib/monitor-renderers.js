@@ -459,6 +459,12 @@ export function createMonitorRenderers({
         preflight.textContent = preflightDecisionLabel(job.preflightDecision);
         details.append(preflight);
       }
+      if (job.pageLock) {
+        const lock = document.createElement("small");
+        lock.className = "job-page-lock";
+        lock.textContent = `Lock: ${job.pageLock.siteKey}${job.pageLock.tabId !== null ? ` · tab ${job.pageLock.tabId}` : ""}`;
+        details.append(lock);
+      }
       details.append(id);
       const state = document.createElement("span");
       state.className = "job-state";

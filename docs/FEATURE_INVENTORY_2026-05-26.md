@@ -189,6 +189,11 @@ These are the features currently implemented in the browser-first version.
 - `/cancel <job>` cancels a job.
 - Job monitor can collapse/expand.
 - Completed, blocked, approval, paused, cancelled, and running states are represented.
+- Running, queued, and approval browser jobs hold explicit tab/site page locks.
+- Agent Control start/resume is blocked when another active job already owns the same page target.
+- Paused and terminal browser jobs release their page locks.
+- A new explicit Agent Control request on the same page cancels an unresolved approval-paused job before starting, so the user is not trapped behind an old approval card.
+- Expanded job monitor rows show the locked site/tab so the human can see why a conflicting control request is blocked.
 
 ### Agent Control Visual Feedback
 
@@ -258,6 +263,7 @@ These are the next capability areas planned for the browser-first app.
 - Refine the control monitor with richer action timing, elapsed duration, and confidence/uncertainty markers.
 - Add visible blockers with recommended next human action.
 - Add better progress semantics for multi-step tasks.
+- Add a true parallel job scheduler for non-conflicting page-locked jobs; current page-locking prevents same-page races but the side panel still runs one active control loop at a time.
 - Improve replayable run reports with richer timing and confidence evidence.
 - Add clearer distinction between reading, deciding, acting, verifying, blocked, and waiting.
 

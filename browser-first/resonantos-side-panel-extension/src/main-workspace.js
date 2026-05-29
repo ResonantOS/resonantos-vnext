@@ -15,6 +15,7 @@ import { renderArtifactsWorkspace } from "./lib/main-workspace-artifacts.js";
 import { renderLivingArchiveWorkspace } from "./lib/main-workspace-memory.js";
 import { renderOpenCodeWorkspace } from "./lib/main-workspace-opencode.js";
 import { renderSettingsWorkspace } from "./lib/main-workspace-settings.js";
+import { fileLooksTextLike } from "./lib/message-action-controller.js";
 import { ACTION_ICONS, markdownToSafeHtml } from "./lib/side-panel-renderers.js";
 
 const STORAGE_KEYS = {
@@ -157,7 +158,19 @@ function renderAttachments() {
   attachments.forEach((attachment) => {
     const chip = document.createElement("span");
     chip.className = "attachment-chip";
-    chip.textContent = attachment.name;
+    const label = document.createElement("strong");
+    label.textContent = attachment.name;
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.textContent = "x";
+    remove.title = `Remove ${attachment.name}`;
+    remove.setAttribute("aria-label", `Remove ${attachment.name}`);
+    remove.addEventListener("click", async () => {
+      await chatSessionStore.removeAttachment(attachment.id);
+      renderAttachments();
+      updateConnectionLine("Attachment removed");
+    });
+    chip.append(label, remove);
     attachmentStrip.append(chip);
   });
 }
@@ -787,12 +800,21 @@ workspaceButtons.forEach((button) => {
 });
 attachFileButton.addEventListener("click", () => fileInput.click());
 fileInput.addEventListener("change", async () => {
-  const attachments = Array.from(fileInput.files ?? []).map((file) => ({
-    id: `${Date.now()}-${file.name}`,
-    name: file.name,
-    type: file.type,
-    size: file.size
-  }));
+  const attachments = [];
+  for (const [index, file] of Array.from(fileInput.files ?? []).entries()) {
+    let content = "";
+    if (fileLooksTextLike(file) && file.size <= 64 * 1024) {
+      content = (await file.text()).slice(0, 12000);
+    }
+    attachments.push({
+      id: `${file.name}-${file.size}-${Date.now()}-${index}`,
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      summary: `${Math.round(file.size / 1024)} KB${content ? " · embedded text" : " · metadata only"}`,
+      content
+    });
+  }
   await chatSessionStore.addAttachments(attachments);
   renderAll();
   fileInput.value = "";

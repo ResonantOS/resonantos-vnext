@@ -651,7 +651,12 @@ try {
     doneSummary: history.length ? "Iframe booking context was observed." : null
   }); return true; })()`);
   await submitControlCommand(panel, `book a call now`, { preflightAction: "trust" });
-  await waitForPageCondition(page, `document.querySelector("#resonantos-control-overlay")?.dataset.session === "active"`, "persistent control overlay session start");
+  try {
+    await waitForPageCondition(page, `document.querySelector("#resonantos-control-overlay")?.dataset.session === "active"`, "persistent control overlay session start");
+  } catch (error) {
+    const panelText = (await evaluate(panel, "document.body.innerText")).result.value;
+    throw new Error(`${error instanceof Error ? error.message : String(error)}\nPanel text:\n${panelText}`);
+  }
   const iframePanelText = await waitForPanelText(panel, /Booking calendar frame|Iframe booking context was not visible/, "iframe context read");
   assert(!/Iframe booking context was not visible/.test(iframePanelText), "Agent planner could not see iframe booking context.");
   await waitForComposerReady(panel, "iframe context read");
@@ -809,7 +814,8 @@ try {
     if (documentState.doc === "ResonantOS wrote this draft.") break;
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
-  assert(documentState.doc === "ResonantOS wrote this draft.", `Document-like typing failed: ${JSON.stringify(documentState)}`);
+  const documentPanelText = (await evaluate(panel, "document.body.innerText")).result.value;
+  assert(documentState.doc === "ResonantOS wrote this draft.", `Document-like typing failed: ${JSON.stringify(documentState)}\nPanel:\n${documentPanelText}`);
   await waitForComposerReady(panel, "document typing");
 
   await evaluate(panel, `(() => { globalThis.__resonantosNextActionOverride = async () => ({

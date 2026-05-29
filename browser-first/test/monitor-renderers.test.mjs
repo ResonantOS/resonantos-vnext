@@ -234,7 +234,14 @@ test("monitor renderers render control steps, artifacts, and approval boundaries
 
 test("monitor renderers render collapsed and expanded browser jobs", () => {
   const browserJobs = [
-    { id: "job-a", goal: "A task", status: "running", updatedAt: "2026-05-26T10:00:00.000Z", planner: "loop" },
+    {
+      id: "job-a",
+      goal: "A task",
+      status: "running",
+      updatedAt: "2026-05-26T10:00:00.000Z",
+      planner: "loop",
+      pageLock: { tabId: 12, siteKey: "example.com", url: "https://example.com/", acquiredAt: "2026-05-26T10:00:00.000Z" }
+    },
     {
       id: "job-b",
       goal: "B task",
@@ -267,6 +274,7 @@ test("monitor renderers render collapsed and expanded browser jobs", () => {
   assert.deepEqual([...harness.dom.window.document.querySelectorAll("#jobs-list > li")].map((item) => item.dataset.status), ["running", "completed"]);
   assert.deepEqual([...harness.dom.window.document.querySelectorAll("#jobs-list > li")].map((item) => item.dataset.active), ["true", "false"]);
   assert.match(harness.dom.window.document.querySelector("#jobs-list").textContent, /Focused browser job/);
+  assert.match(harness.dom.window.document.querySelector("#jobs-list").textContent, /Lock: example\.com · tab 12/);
   assert.match(harness.dom.window.document.querySelector("#jobs-list").textContent, /Preflight: trusted safe actions · booking · example\.com/);
   assert.match(harness.dom.window.document.querySelector("#jobs-list").textContent, /done · Read page/);
   harness.dom.window.document.querySelectorAll(".job-actions button")[1].click();

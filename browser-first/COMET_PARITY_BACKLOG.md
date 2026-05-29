@@ -35,6 +35,7 @@ Intent: keep the browser-first ResonantOS work aligned with the AI-browser capab
 - Durable Browser Jobs v2: persistent job registry, persisted active job id, interrupted-job recovery after reload, visible job monitor, `/jobs`, `/pause`, `/resume`, `/continue`, `/report`, and `/cancel`. Resume/continue restart from persisted step history and job reports can be written to Living Archive intake.
 - Durable Browser Jobs v2.1: resume/continue reuses the same durable job id, preserves prior step history/artifacts in the monitor, and appends new browser-control steps instead of creating continuation jobs.
 - Parallel Browser Jobs v1: the monitor can show multiple durable jobs at once, mark the focused browser job, switch focus with `/jobs focus <job>`, and keep per-job Continue/Report controls without merging their traces.
+- Parallel Browser Jobs v1.1: running/queued/approval jobs hold explicit tab/site page locks, conflicting Agent Control starts/resumes are blocked before action, paused/terminal jobs release locks, unresolved approval-paused jobs are cancelled when the user starts a new explicit control task on the same page, and the job monitor shows the locked site/tab.
 - Browser page summaries can be generated into Living Archive intake with source provenance, review queueing, and a deterministic fallback when the provider is unavailable.
 - Multi-tab browser research trails can be captured into one Living Archive intake bundle with per-page provenance and review queueing.
 - Agent Control visual overlay v1: persistent Matrix-style green perimeter, in-page action toast, and highlighted clicked/typed targets for the full control session.
@@ -46,7 +47,7 @@ Intent: keep the browser-first ResonantOS work aligned with the AI-browser capab
 ## Remaining Capability Work
 
 1. Parallel / Durable Browser Jobs
-   - Multiple concurrently running browser-control loops remain blocked until per-tab/page locking is implemented.
+   - True simultaneous background control loops still require a scheduler that can run more than one non-conflicting page-locked job at the same time. Current v1.1 prevents same-page races and preserves multiple durable job records, but the side panel still has one active control runner.
 
 2. Email / Calendar Provider Connectors
    - Provider-specific Gmail/Calendar connectors.

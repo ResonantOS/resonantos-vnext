@@ -4,8 +4,10 @@ import test from "node:test";
 import {
   createBrowserJobStore,
   isActiveBrowserJobStatus,
+  isLockHoldingBrowserJobStatus,
   isTerminalBrowserJobStatus,
   normalizeBrowserJob,
+  normalizePageLock,
   normalizePreflightDecision
 } from "../resonantos-side-panel-extension/src/lib/browser-job-store.js";
 
@@ -70,6 +72,14 @@ test("browser job store normalizes job shape and status classes", () => {
       source: "control-preflight",
       reason: "Human trusted safe actions."
     },
+    pageLock: {
+      type: "tab",
+      tabId: 12,
+      url: "https://example.com/booking",
+      siteKey: "example.com",
+      acquiredAt: "2026-05-26T09:59:30.000Z",
+      reason: "Agent Control goal"
+    },
     lastError: "e"
   }, { now: () => "2026-05-26T10:00:00.000Z" });
 
@@ -105,9 +115,39 @@ test("browser job store normalizes job shape and status classes", () => {
     source: "control-preflight",
     reason: "Human trusted safe actions."
   });
+  assert.deepEqual(job.pageLock, {
+    type: "tab",
+    tabId: 12,
+    url: "https://example.com/booking",
+    siteKey: "example.com",
+    acquiredAt: "2026-05-26T09:59:30.000Z",
+    reason: "Agent Control goal"
+  });
   assert.equal(isActiveBrowserJobStatus("running"), true);
+  assert.equal(isLockHoldingBrowserJobStatus("running"), true);
+  assert.equal(isLockHoldingBrowserJobStatus("paused"), false);
   assert.equal(isTerminalBrowserJobStatus("cancelled"), true);
   assert.equal(isTerminalBrowserJobStatus("paused"), false);
+});
+
+test("browser job store normalizes page locks conservatively", () => {
+  assert.equal(normalizePageLock(null), null);
+  assert.equal(normalizePageLock({}), null);
+  assert.deepEqual(normalizePageLock({
+    type: "page",
+    tabId: "42",
+    url: "https://example.com/path",
+    siteKey: "example.com",
+    acquiredAt: "2026-05-26T09:59:30.000Z",
+    reason: "r".repeat(240)
+  }, { now: () => "2026-05-26T10:00:00.000Z" }), {
+    type: "page",
+    tabId: 42,
+    url: "https://example.com/path",
+    siteKey: "example.com",
+    acquiredAt: "2026-05-26T09:59:30.000Z",
+    reason: "r".repeat(180)
+  });
 });
 
 test("browser job store normalizes preflight decisions conservatively", () => {
@@ -167,6 +207,12 @@ test("browser job store creates active jobs and finds by active, id, or goal", a
     goal: "Find a booking slot",
     planner: "loop",
     summary: "summary",
+    pageLock: {
+      tabId: 7,
+      url: "https://example.com/booking",
+      siteKey: "example.com",
+      reason: "booking task"
+    },
     preflightDecision: {
       id: "control-1",
       goal: "Find a booking slot",
@@ -186,9 +232,64 @@ test("browser job store creates active jobs and finds by active, id, or goal", a
   assert.equal(harness.store.findJob().id, "job-1");
   assert.equal(harness.store.findJob("booking").id, "job-1");
   assert.equal(harness.writes.at(-1).jobs[0].status, "running");
+  assert.equal(harness.writes.at(-1).jobs[0].pageLock.tabId, 7);
+  assert.equal(harness.writes.at(-1).jobs[0].pageLock.siteKey, "example.com");
   assert.equal(harness.writes.at(-1).jobs[0].preflightDecision.mode, "approved-once");
   assert.equal(harness.writes.at(-1).jobs[0].preflightDecision.taskClass, "booking");
   assert.equal(harness.writes.at(-1).active, "job-1");
+});
+
+test("browser job store blocks conflicting active page locks and releases them when paused or terminal", async () => {
+  const harness = createHarness();
+
+  const first = await harness.store.createJob({
+    goal: "Book a call",
+    pageLock: {
+      tabId: 7,
+      url: "https://example.com/booking",
+      siteKey: "example.com",
+      reason: "first task"
+    }
+  });
+
+  assert.equal(harness.store.conflictingActiveJobForLock({
+    tabId: 7,
+    url: "https://example.com/other",
+    siteKey: "other.example"
+  })?.id, first.id);
+  assert.equal(harness.store.conflictingActiveJobForLock({
+    tabId: 8,
+    url: "https://example.com/booking",
+    siteKey: "example.com"
+  })?.id, first.id);
+
+  await assert.rejects(
+    () => harness.store.createJob({
+      goal: "Second same tab",
+      pageLock: {
+        tabId: 7,
+        url: "https://example.com/booking",
+        siteKey: "example.com"
+      }
+    }),
+    /already controlled by job-1/
+  );
+
+  await harness.store.updateJob(first.id, { status: "paused" });
+  assert.equal(harness.store.findJob(first.id).pageLock, null);
+
+  const second = await harness.store.createJob({
+    goal: "Second after pause",
+    pageLock: {
+      tabId: 7,
+      url: "https://example.com/booking",
+      siteKey: "example.com"
+    }
+  });
+  assert.equal(second.id, "job-2");
+
+  await harness.store.updateJob(second.id, { status: "completed" });
+  assert.equal(harness.store.findJob(second.id).pageLock, null);
 });
 
 test("browser job store updates terminal completion and monitor collapsed state", async () => {

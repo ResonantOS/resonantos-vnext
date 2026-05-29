@@ -1,12 +1,18 @@
 export function createControlRunState({
   browserJobStore,
   getCurrentControlRun,
+  minimumOverlayMs = 900,
+  nowMs = () => Date.now(),
   renderControlMonitor,
   setCurrentControlRun,
   setPageControlOverlay,
   setPendingApproval,
+  setTimeoutFn = globalThis.setTimeout?.bind(globalThis),
   updateBrowserJob
 }) {
+  let overlayGeneration = 0;
+  let overlayStartedAtMs = 0;
+
   const createStepRecord = (step, state = "pending", note = "", details = {}) => ({
     ...step,
     state,
@@ -30,6 +36,8 @@ export function createControlRunState({
       startedAt: new Date().toISOString(),
       completedAt: null
     };
+    overlayGeneration += 1;
+    overlayStartedAtMs = nowMs();
     setCurrentControlRun(run);
     setPendingApproval(null);
     renderControlMonitor();
@@ -74,8 +82,19 @@ export function createControlRunState({
       artifacts: artifact ? [...currentControlRun.artifacts, artifact] : currentControlRun.artifacts
     };
     setCurrentControlRun(completedRun);
+    const finishGeneration = overlayGeneration;
+    const elapsedMs = Math.max(0, nowMs() - overlayStartedAtMs);
+    const remainingMs = Math.max(0, minimumOverlayMs - elapsedMs);
+    const releaseOverlay = () => {
+      if (finishGeneration !== overlayGeneration) return;
+      void setPageControlOverlay(false, "", "returning");
+    };
     renderControlMonitor();
-    void setPageControlOverlay(false, "", "returning");
+    if (remainingMs > 0 && typeof setTimeoutFn === "function") {
+      setTimeoutFn(releaseOverlay, remainingMs);
+    } else {
+      releaseOverlay();
+    }
     void updateBrowserJob(completedRun.id, {
       status,
       artifacts: completedRun.artifacts,

@@ -449,11 +449,13 @@ textarea:disabled {
 }
 
 .job-list .job-preflight,
-.job-list .job-focused {
+.job-list .job-focused,
+.job-list .job-page-lock {
   color: rgba(36, 209, 143, 0.72);
 }
 
-.job-list .job-focused {
+.job-list .job-focused,
+.job-list .job-page-lock {
   font-weight: 900;
   letter-spacing: 0.03em;
   text-transform: uppercase;

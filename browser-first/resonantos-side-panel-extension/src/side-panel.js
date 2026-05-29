@@ -220,6 +220,19 @@ const setTurnBusy = (busy) => {
   commandForm.querySelector(".send-button").disabled = busy;
 };
 
+const runBusyUiAction = async (action) => {
+  if (turnBusy) return;
+  setTurnBusy(true);
+  try {
+    await action();
+  } finally {
+    setTurnBusy(false);
+    if (statusLabel === "Ready") {
+      clearActivitySoon();
+    }
+  }
+};
+
 const renderControlMonitor = () => {
   monitorRenderers.renderControlMonitor();
 };
@@ -291,12 +304,14 @@ const loadBrowserJobs = async () => {
 };
 
 const createBrowserJob = async ({ existingJob = null, goal, planner = "observe-act-verify-loop", summary = "" }) => {
+  const pageLock = await prepareBrowserJobPageLock({ goal, existingJob });
   if (existingJob?.id) {
     await browserJobStore.activateJob(existingJob.id);
     const updated = await browserJobStore.updateJob(existingJob.id, {
       status: "running",
       planner,
       summary,
+      pageLock,
       preflightDecision: consumeNextControlPreflightDecision() ?? existingJob.preflightDecision ?? null
     });
     renderJobMonitor();
@@ -306,6 +321,7 @@ const createBrowserJob = async ({ existingJob = null, goal, planner = "observe-a
     goal,
     planner,
     summary,
+    pageLock,
     preflightDecision: consumeNextControlPreflightDecision()
   });
   renderJobMonitor();
@@ -726,6 +742,66 @@ const preflightDecisionFromPreflight = (preflight, { mode, reason }) => ({
   reason
 });
 
+const pageLockForTab = (tab, reason = "Agent Control run") => ({
+  type: "tab",
+  tabId: tab?.id ?? null,
+  url: tab?.url ?? "",
+  siteKey: siteKeyForUrl(tab?.url),
+  acquiredAt: new Date().toISOString(),
+  reason
+});
+
+const TERMINAL_CONTROL_RUN_STATUSES = new Set(["completed", "blocked", "denied", "cancelled", "failed"]);
+
+const prepareBrowserJobPageLock = async ({ goal, existingJob = null } = {}) => {
+  const tab = await activeTab();
+  const pageLock = pageLockForTab(tab, existingJob?.id
+    ? `Resumed Agent Control job ${existingJob.id}`
+    : `Agent Control goal: ${String(goal ?? "").slice(0, 120)}`);
+  let conflict = browserJobStore.conflictingActiveJobForLock(pageLock, {
+    excludingJobId: existingJob?.id ?? ""
+  });
+  if (conflict && currentControlRun && conflict.id === currentControlRun.id && TERMINAL_CONTROL_RUN_STATUSES.has(currentControlRun.status)) {
+    await updateBrowserJob(conflict.id, {
+      status: currentControlRun.status,
+      pageLock: null,
+      artifacts: currentControlRun.artifacts,
+      summary: currentControlRun.summary,
+      planner: currentControlRun.planner,
+      steps: currentControlRun.steps
+    });
+    conflict = browserJobStore.conflictingActiveJobForLock(pageLock, {
+      excludingJobId: existingJob?.id ?? ""
+    });
+  }
+  if (conflict?.status === "approval") {
+    if (currentControlRun?.id === conflict.id) {
+      pendingApproval = null;
+      currentControlRun = {
+        ...currentControlRun,
+        status: "cancelled",
+        completedAt: new Date().toISOString()
+      };
+      renderControlMonitor();
+    }
+    await updateBrowserJob(conflict.id, {
+      status: "cancelled",
+      pageLock: null,
+      artifacts: currentControlRun?.id === conflict.id ? currentControlRun.artifacts : conflict.artifacts,
+      summary: currentControlRun?.id === conflict.id ? currentControlRun.summary : conflict.summary,
+      planner: currentControlRun?.id === conflict.id ? currentControlRun.planner : conflict.planner,
+      steps: currentControlRun?.id === conflict.id ? currentControlRun.steps : conflict.steps
+    });
+    conflict = browserJobStore.conflictingActiveJobForLock(pageLock, {
+      excludingJobId: existingJob?.id ?? ""
+    });
+  }
+  if (conflict) {
+    throw new Error(`Cannot start Agent Control on ${pageLock.siteKey}: ${conflict.id} is already ${conflict.status} on this browser target. Focus, pause, cancel, or finish that job first.`);
+  }
+  return pageLock;
+};
+
 const runControlCommand = async (goal, options = {}) => {
   const tab = await activeTab();
   const mode = tab?.url ? await permissionForUrl(tab.url) : "ask-before-action";
@@ -786,7 +862,16 @@ const runControlCommand = async (goal, options = {}) => {
     });
   }
   await clearControlPreflight();
-  return startControlCommand(goal, options);
+  try {
+    return await startControlCommand(goal, options);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("Agent Control could not start.", error);
+    await addMessage("system", `Agent Control could not start.\n${message}`);
+    setStatus("Control blocked");
+    setActivity("failed", "Control could not start", message);
+    return null;
+  }
 };
 
 const resolvePreflightFromCommand = (body) => {
@@ -809,7 +894,7 @@ const approveControlPreflight = async (body) => {
   await clearControlPreflight();
   await addMessage("system", `Approved Agent Control preflight for ${preflight.taskClass} on ${preflight.siteKey}. Starting governed browser control now.`);
   setStatus("Taking control");
-  await startControlCommand(preflight.goal, { preflightApproved: true });
+  await runControlCommand(preflight.goal, { preflightApproved: true });
 };
 
 const denyControlPreflight = async (body) => {
@@ -845,7 +930,7 @@ const trustControlPreflightForSafeActions = async (body) => {
   await renderPermissionManager();
   await addMessage("system", `Trusted safe ${consent.taskClass} actions on ${consent.siteKey} and starting governed browser control now. Hard wallet, login, payment, credential, signing, transfer, destructive, and public-submit boundaries remain human-gated.`);
   setStatus("Taking control");
-  await startControlCommand(preflight.goal, { preflightApproved: true });
+  await runControlCommand(preflight.goal, { preflightApproved: true });
 };
 
 const approvePendingControlStep = async () => {
@@ -1104,13 +1189,13 @@ contextToggleButton.addEventListener("click", () => {
   void renderSitePermissionPanel();
   renderJobMonitor();
 });
-approvalApproveButton.addEventListener("click", () => void approvePendingControlStep());
-approvalTrustSiteButton.addEventListener("click", () => void trustCurrentTaskForSafeActions());
+approvalApproveButton.addEventListener("click", () => void runBusyUiAction(approvePendingControlStep));
+approvalTrustSiteButton.addEventListener("click", () => void runBusyUiAction(trustCurrentTaskForSafeActions));
 approvalDenyButton.addEventListener("click", () => void denyPendingControlStep());
-approvalDelegateButton.addEventListener("click", () => void delegateControlIssue());
-controlPreflightApproveButton.addEventListener("click", () => void approveControlPreflight(pendingControlPreflight?.id ?? ""));
-controlPreflightTrustButton.addEventListener("click", () => void trustControlPreflightForSafeActions(pendingControlPreflight?.id ?? ""));
-controlPreflightDenyButton.addEventListener("click", () => void denyControlPreflight(pendingControlPreflight?.id ?? ""));
+approvalDelegateButton.addEventListener("click", () => void runBusyUiAction(delegateControlIssue));
+controlPreflightApproveButton.addEventListener("click", () => void runBusyUiAction(() => approveControlPreflight(pendingControlPreflight?.id ?? "")));
+controlPreflightTrustButton.addEventListener("click", () => void runBusyUiAction(() => trustControlPreflightForSafeActions(pendingControlPreflight?.id ?? "")));
+controlPreflightDenyButton.addEventListener("click", () => void runBusyUiAction(() => denyControlPreflight(pendingControlPreflight?.id ?? "")));
 jobMonitorToggle.addEventListener("click", async () => {
   await browserJobStore.toggleMonitorCollapsed();
   renderJobMonitor();
