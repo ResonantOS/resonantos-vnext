@@ -1,0 +1,16 @@
+{
+  "id": "addon.shield",
+  "name": "Shield",
+  "version": "1.0.0",
+  "description": "Security monitor — permission change auditing, site permission store, threat detection",
+  "author": "Tom Pennington",
+  "mode": "security-monitor",
+  "trust": "host-mediated",
+  "entry": "shield-tab.html",
+  "contentScripts": [],
+  "commands": ["/shield", "/permissions"],
+  "messageChannel": "resonantos.shield",
+  "capabilities": ["permission-audit", "threat-detection", "site-permissions"],
+  "requires": [],
+  "boundary": "Security monitoring only. No page modification, no network writes. Audit log is host-mediated."
+}

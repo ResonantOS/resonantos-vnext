@@ -158,3 +158,54 @@ The live test proves:
 - document-like contenteditable typing
 - public form submit remains blocked at the approval boundary
 - wallet-style work stops at the approval boundary
+
+---
+
+## Security
+
+All security enforcement runs host-side behind the bridge server:
+
+- All API keys and credentials stay on the host behind the bridge server
+- Extension never makes direct network calls to fleet machines or cloud APIs
+- Bridge token authentication on all routes
+- Content Security Policy on all HTML pages
+- `detectInjection()` with NFKC normalization and zero-width character stripping
+- Sender validation on all `chrome.runtime.onMessage` handlers
+- Addon manifests validated for path traversal, trust claims, symlink escape, injection
+- 9 penetration test vulnerabilities found and fixed (4 Critical, 5 High)
+
+### Shield Tab
+
+The Shield tab (`shield-tab.html` / `shield-tab.js`) provides a live security audit log UI:
+- Displays security events from the bridge audit trail
+- Filters by severity (critical, high, medium, low)
+- Exportable event log
+
+### Audit Trail
+
+`host/audit-trail.mjs` logs all security-relevant bridge events:
+- Manifest validation failures
+- Path traversal attempts
+- Trust escalation attempts
+- Token auth failures
+
+### Wallet Adapter
+
+`wallet-adapter.js` handles Phantom wallet detection and approval gating:
+- Detects injected Phantom provider
+- All wallet operations (connect, sign, switch network) require human approval
+- Never grants raw wallet/signing power to addons or assistants
+
+### Addon Manifests
+
+| Addon | ID | Mode | Trust |
+|-------|----|------|-------|
+| Shield | `addon.shield` | `security-monitor` | `host-mediated` |
+| Wallet Adapter | `addon.wallet-adapter` | `utility` | `host-mediated` |
+
+### CI
+
+GitHub Actions at `.github/workflows/browser-first-ci.yml`:
+- Node 22+, manifest validation, syntax check, full test suite
+- Triggers on push/PR to `browser-first-preview`
+
