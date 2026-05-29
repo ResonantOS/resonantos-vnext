@@ -158,3 +158,33 @@ The live test proves:
 - document-like contenteditable typing
 - public form submit remains blocked at the approval boundary
 - wallet-style work stops at the approval boundary
+
+---
+
+## Fleet & Compute Addon
+
+**ID:** `addon.fleet-compute` | **Mode:** `utility` | **Trust:** `host-mediated`
+
+Fleet & Compute is a mission control dashboard for infrastructure monitoring and cloud governance:
+
+- **Fleet monitoring** — real-time status of all fleet machines
+- **Cloud control** — cloud resource management via host-mediated APIs
+- **Compute governance** — CPU/memory/GPU utilization tracking
+- **Alert system** — threshold-based alerts for resource exhaustion
+
+**Boundary:** Host-mediated access to fleet APIs only. No direct network calls from the extension. All infrastructure credentials stay on the bridge server.
+
+![Fleet & Compute Screenshot](docs/screenshots/fleet-compute.png)
+
+### Addon Structure
+
+```
+browser-first/addons/fleet-compute/
+  addon.json           # Manifest
+  fleet-compute.html   # Dashboard UI
+  fleet-compute.css    # Mission control styles
+  fleet-compute.js     # Fleet API + monitoring logic
+browser-first/docs/screenshots/
+  fleet-compute.png    # Screenshot
+```
+

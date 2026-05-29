@@ -1,0 +1,16 @@
+{
+  "id": "addon.fleet-compute",
+  "name": "Fleet & Compute",
+  "version": "1.0.0",
+  "description": "Unified fleet monitoring, cloud control, and compute fabric management",
+  "author": "Tom Pennington",
+  "mode": "utility",
+  "trust": "host-mediated",
+  "entry": "fleet-compute.html",
+  "contentScripts": [],
+  "commands": ["/fleet", "/compute", "/nodes", "/cloud"],
+  "messageChannel": "resonantos.fleet-compute",
+  "capabilities": ["node-status", "fleet-ping", "cloud-status", "compute-fabric-read"],
+  "requires": [],
+  "boundary": "Read-only monitoring. All API keys and SSH credentials stay on host. No direct network access from browser."
+}

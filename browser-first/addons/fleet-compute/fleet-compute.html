@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fleet &amp; Compute — ResonantOS</title>
+  <link rel="stylesheet" href="fleet-compute.css">
+</head>
+<body>
+
+<div class="app-shell">
+
+  <!-- ── Header ─────────────────────────────────────────────────── -->
+  <header class="app-header">
+    <div class="header-logo">
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <!-- Hexagonal node cluster icon -->
+        <polygon points="14,2 24,8 24,20 14,26 4,20 4,8" fill="none" stroke="#14F195" stroke-width="1.5" opacity="0.7"/>
+        <circle cx="14" cy="8"  r="2.5" fill="#14F195"/>
+        <circle cx="20" cy="17" r="2.5" fill="#9945FF"/>
+        <circle cx="8"  cy="17" r="2.5" fill="#14F195"/>
+        <circle cx="14" cy="14" r="3"   fill="none" stroke="#9945FF" stroke-width="1.2"/>
+        <line x1="14" y1="8"  x2="14" y2="11" stroke="#14F195" stroke-width="1" opacity="0.6"/>
+        <line x1="14" y1="17" x2="20" y2="17" stroke="#9945FF" stroke-width="1" opacity="0.6"/>
+        <line x1="14" y1="17" x2="8"  y2="17" stroke="#14F195" stroke-width="1" opacity="0.6"/>
+      </svg>
+      <div>
+        <div class="header-title">Fleet &amp; Compute</div>
+        <div class="header-subtitle">ResonantOS Mission Control</div>
+      </div>
+    </div>
+
+    <div class="header-spacer"></div>
+
+    <div class="header-status">
+      <div class="status-dot"></div>
+      <span>Bridge Connected</span>
+      <span style="color:var(--border-bright)">·</span>
+      <span style="font-family:var(--font-mono);font-size:11px;color:var(--text-dim)">10.0.1.1:18789</span>
+    </div>
+  </header>
+
+  <!-- ── Tab Navigation ─────────────────────────────────────────── -->
+  <nav class="tab-nav" role="tablist">
+    <button class="tab-btn active" data-tab="fleet" role="tab" aria-selected="true" aria-controls="panel-fleet">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect x="1" y="1" width="5" height="5" rx="1" fill="currentColor" opacity="0.8"/>
+        <rect x="8" y="1" width="5" height="5" rx="1" fill="currentColor" opacity="0.8"/>
+        <rect x="1" y="8" width="5" height="5" rx="1" fill="currentColor" opacity="0.5"/>
+        <rect x="8" y="8" width="5" height="5" rx="1" fill="currentColor" opacity="0.5"/>
+      </svg>
+      Fleet
+      <span class="tab-badge" id="fleet-badge">9</span>
+    </button>
+
+    <button class="tab-btn" data-tab="cloud" role="tab" aria-selected="false" aria-controls="panel-cloud">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M11 9.5H3a2.5 2.5 0 1 1 .5-4.95A3.5 3.5 0 1 1 11 9.5Z" fill="currentColor" opacity="0.8"/>
+      </svg>
+      Cloud
+      <span class="tab-badge" data-tab="cloud">—</span>
+    </button>
+
+    <button class="tab-btn" data-tab="fabric" role="tab" aria-selected="false" aria-controls="panel-fabric">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <circle cx="7" cy="7"  r="2" fill="currentColor"/>
+        <circle cx="2" cy="3"  r="1.5" fill="currentColor" opacity="0.7"/>
+        <circle cx="12" cy="3" r="1.5" fill="currentColor" opacity="0.7"/>
+        <circle cx="2" cy="11" r="1.5" fill="currentColor" opacity="0.7"/>
+        <circle cx="12" cy="11" r="1.5" fill="currentColor" opacity="0.7"/>
+        <line x1="7" y1="5" x2="2"  y2="3"  stroke="currentColor" stroke-width="1" opacity="0.5"/>
+        <line x1="7" y1="5" x2="12" y2="3"  stroke="currentColor" stroke-width="1" opacity="0.5"/>
+        <line x1="7" y1="9" x2="2"  y2="11" stroke="currentColor" stroke-width="1" opacity="0.5"/>
+        <line x1="7" y1="9" x2="12" y2="11" stroke="currentColor" stroke-width="1" opacity="0.5"/>
+      </svg>
+      Compute Fabric
+      <span class="tab-badge" data-tab="fabric">—</span>
+    </button>
+  </nav>
+
+  <!-- ── Main Content ───────────────────────────────────────────── -->
+  <main class="app-main">
+
+    <!-- ══════════════════════════════════════════════════════════
+         TAB: FLEET
+         ══════════════════════════════════════════════════════════ -->
+    <div id="panel-fleet" class="tab-panel active" role="tabpanel">
+
+      <!-- Summary Tiles -->
+      <div id="fleet-summary" class="summary-row"></div>
+
+      <!-- Engine Status -->
+      <div class="section-header">
+        <div class="section-title">ResonantOS Engines</div>
+        <div class="section-meta">Core services &amp; agents</div>
+      </div>
+      <div class="engine-table" style="margin-bottom:28px">
+        <table>
+          <thead>
+            <tr>
+              <th>Engine</th>
+              <th>Role</th>
+              <th>Status</th>
+              <th>Process</th>
+            </tr>
+          </thead>
+          <tbody id="engine-table-body"></tbody>
+        </table>
+      </div>
+
+      <!-- Node Cards -->
+      <div class="section-header">
+        <div class="section-title">Fleet Nodes</div>
+        <div class="section-meta">All registered machines</div>
+      </div>
+      <div id="nodes-grid" class="nodes-grid"></div>
+
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════
+         TAB: CLOUD
+         ══════════════════════════════════════════════════════════ -->
+    <div id="panel-cloud" class="tab-panel" role="tabpanel">
+
+      <!-- Summary Tiles -->
+      <div id="cloud-summary" class="summary-row"></div>
+
+      <!-- Hetzner Resource Bars -->
+      <div class="section-header">
+        <div class="section-title">Hetzner Cloud Server</div>
+        <div class="section-meta">Live resource usage</div>
+      </div>
+      <div id="hetzner-resources" class="resource-section"></div>
+
+      <div class="two-col">
+        <!-- Services -->
+        <div>
+          <div class="section-header">
+            <div class="section-title">Services</div>
+            <div class="section-meta">Process status</div>
+          </div>
+          <div id="services-grid" class="services-grid" style="grid-template-columns:1fr 1fr;margin-bottom:0"></div>
+        </div>
+
+        <!-- Domains & SSL -->
+        <div>
+          <div class="section-header">
+            <div class="section-title">Domains &amp; SSL</div>
+            <div class="section-meta">Certificate health</div>
+          </div>
+          <div id="domains-grid" class="domains-grid" style="grid-template-columns:1fr;margin-bottom:0"></div>
+        </div>
+      </div>
+
+      <div class="section-divider"></div>
+
+      <!-- RunPod + CI/CD -->
+      <div class="section-header">
+        <div class="section-title">External Cloud</div>
+        <div class="section-meta">RunPod &amp; CI/CD</div>
+      </div>
+      <div id="cloud-mini-cards" class="cloud-mini-grid"></div>
+
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════
+         TAB: COMPUTE FABRIC
+         ══════════════════════════════════════════════════════════ -->
+    <div id="panel-fabric" class="tab-panel" role="tabpanel">
+
+      <!-- Summary Tiles -->
+      <div id="fabric-summary" class="summary-row"></div>
+
+      <!-- Two-column: node list + policy panels -->
+      <div class="fabric-layout">
+
+        <!-- Left: Node Enrollment/Trust List -->
+        <div>
+          <div class="section-header">
+            <div class="section-title">Node Enrollment</div>
+            <div class="section-meta">Trust &amp; validation state</div>
+          </div>
+          <div id="fabric-nodes" class="fabric-node-list"></div>
+        </div>
+
+        <!-- Right: Policy Panels -->
+        <div>
+          <div class="section-header">
+            <div class="section-title">Active Policies</div>
+            <div class="section-meta">Enforcement rules</div>
+          </div>
+          <div id="policy-panels" class="policy-stack"></div>
+        </div>
+
+      </div>
+
+      <!-- Validation Warnings -->
+      <div class="section-header" style="margin-top:8px">
+        <div class="section-title">Validation Warnings</div>
+        <div class="section-meta">Needs attention</div>
+      </div>
+      <div id="fabric-warnings" class="warnings-list"></div>
+
+    </div>
+
+  </main>
+
+  <!-- ── Footer ─────────────────────────────────────────────────── -->
+  <footer class="app-footer">
+    <div class="footer-left">
+      <div class="footer-updated">
+        Updated <span id="last-updated-time">—</span>
+        &nbsp;·&nbsp;
+        <span id="last-updated-ago" style="color:var(--text-dim)">—</span>
+      </div>
+
+      <div class="refresh-selector">
+        <span class="refresh-label">Auto-refresh:</span>
+        <div class="refresh-btns">
+          <button class="refresh-btn" data-interval="5">5s</button>
+          <button class="refresh-btn" data-interval="10">10s</button>
+          <button class="refresh-btn active" data-interval="30">30s</button>
+          <button class="refresh-btn" data-interval="0">Off</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-right">
+      <span class="footer-pill">v1.0.0</span>
+      <span class="footer-pill">Mock Data</span>
+      <span style="color:var(--text-dim)">addon.fleet-compute · ResonantOS</span>
+    </div>
+  </footer>
+
+</div>
+
+<script type="module" src="fleet-compute.js"></script>
+</body>
+</html>
