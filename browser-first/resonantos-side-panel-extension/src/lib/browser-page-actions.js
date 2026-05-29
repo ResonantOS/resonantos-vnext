@@ -1,3 +1,5 @@
+import { normalizeWalletProviderState, walletStateMarkdown, walletStateSummary } from "./wallet-state.js";
+
 export function createBrowserPageActions(deps) {
   const {
     addMessage,
@@ -327,6 +329,71 @@ export function createBrowserPageActions(deps) {
     return response;
   }
 
+  async function detectWalletState({ announce = true } = {}) {
+    const tab = await activeTab();
+    if (!tab?.id || !isReadableBrowserTab(tab)) {
+      const error = "No normal web page is active for wallet detection.";
+      if (announce) await addMessage("system", error);
+      return { ok: false, error };
+    }
+    const siteMode = await permissionForUrl(tab.url);
+    if (siteMode === "blocked") {
+      const error = `Assistant is blocked on ${siteKeyForUrl(tab.url)}.`;
+      if (announce) await addMessage("system", error);
+      return { ok: false, error };
+    }
+    setActivity("retrieving", "Checking wallet provider", tab.title || tab.url);
+    setStatus("Checking wallet");
+    const probeResults = await (chrome.scripting?.executeScript?.({
+      target: { tabId: tab.id },
+      world: "MAIN",
+      func: () => {
+        const preview = (value) => {
+          const text = String(value ?? "");
+          return text.length > 12 ? `${text.slice(0, 4)}...${text.slice(-4)}` : text;
+        };
+        const solana = globalThis.phantom?.solana || globalThis.solana || null;
+        const ethereum = globalThis.phantom?.ethereum || (globalThis.ethereum?.isPhantom ? globalThis.ethereum : null);
+        return {
+          phantomEthereum: {
+            detected: Boolean(ethereum),
+            isConnected: Boolean(ethereum?.isConnected?.()),
+            isPhantom: Boolean(ethereum?.isPhantom),
+            publicKeyPreview: preview(Array.isArray(ethereum?.selectedAddress) ? ethereum.selectedAddress[0] : ethereum?.selectedAddress)
+          },
+          phantomSolana: {
+            detected: Boolean(solana),
+            isConnected: Boolean(solana?.isConnected),
+            isPhantom: Boolean(solana?.isPhantom),
+            publicKeyPreview: preview(solana?.publicKey?.toString?.())
+          },
+          source: "main-world-probe"
+        };
+      }
+    }).catch(() => []) ?? Promise.resolve([]));
+    const [probe] = probeResults;
+    let state = normalizeWalletProviderState(probe?.result ?? {}, tab);
+    if (!probe?.result) {
+      const response = await sendContentAction({
+        channel: "resonantos.browser_first.content",
+        type: "read_page"
+      });
+      state = normalizeWalletProviderState({
+        phantomSolana: {
+          detected: Boolean(response?.snapshot?.walletProviders?.phantomSolana),
+          isPhantom: Boolean(response?.snapshot?.walletProviders?.phantomSolana)
+        },
+        source: "isolated-content-fallback"
+      }, tab);
+    }
+    setStatus("Ready");
+    setActivity("completed", "Wallet provider checked", state.detected ? "provider detected" : "none detected");
+    if (announce) {
+      await addMessage("system", walletStateMarkdown(state));
+    }
+    return { ok: true, state };
+  }
+
   async function summarizeSnapshot() {
     const response = deps.getLastSnapshot() ? { ok: true, snapshot: deps.getLastSnapshot() } : await readActivePage({ announce: false });
     const snapshot = response?.snapshot;
@@ -350,6 +417,154 @@ export function createBrowserPageActions(deps) {
       ].join("\n")
     );
     return { ok: true, snapshot };
+  }
+
+  async function prepareDaoWorkflowGuidance(goal = "") {
+    const response = deps.getLastSnapshot() ? { ok: true, snapshot: deps.getLastSnapshot() } : await readActivePage({ announce: false });
+    const snapshot = response?.snapshot;
+    if (!snapshot) {
+      await addMessage("system", "I cannot prepare a DAO workflow yet. Open the DAO page first, then run `/dao <what you want to do>`.");
+      return { ok: false, error: "No readable DAO page context available." };
+    }
+    const targetTerms = /\b(wallet|connect|sign|vote|proposal|delegate|governance|submit|confirm|transaction|dao|token|stake|unstake|claim)\b/i;
+    const visibleControls = (snapshot.controls ?? [])
+      .filter((control) => targetTerms.test([control.text, control.ariaLabel, control.role, control.tagName].filter(Boolean).join(" ")))
+      .slice(0, 12);
+    const fields = (snapshot.fields ?? [])
+      .filter((field) => targetTerms.test([field.label, field.name, field.placeholder, field.kind].filter(Boolean).join(" ")))
+      .slice(0, 8);
+    const visibleLines = visibleControls.length
+      ? visibleControls.map((control) => `- ${control.text || control.ariaLabel || control.tagName}${control.ref ? ` · ref ${control.ref}` : ""}`)
+      : ["- No wallet/governance-specific controls were visible in the current observation."];
+    const fieldLines = fields.length
+      ? fields.map((field) => `- ${field.label || field.name || field.placeholder || field.kind}${field.ref ? ` · ref ${field.ref}` : ""}`)
+      : ["- No wallet/governance-specific fields were visible in the current observation."];
+    await addMessage(
+      "system",
+      [
+        "DAO workflow helper",
+        goal ? `Goal: ${goal}` : "Goal: inspect this DAO page safely.",
+        "",
+        `Page: ${snapshot.title || "Untitled"}`,
+        snapshot.url || "",
+        "",
+        "Visible wallet/governance controls:",
+        ...visibleLines,
+        "",
+        "Relevant fields:",
+        ...fieldLines,
+        "",
+        "Safe sequence:",
+        "1. Read the page/proposal details and verify the domain.",
+        "2. Use `/wallet status` to check whether Phantom is present before any wallet step.",
+        "3. Let Augmentor prepare instructions, compare visible values, and identify risk points.",
+        "4. Human completes wallet connect, signature, vote, transaction, or public submission manually.",
+        "",
+        "Stop rule: ResonantOS will not click wallet connect, sign, vote, submit, transfer, or transaction confirmation controls for you."
+      ].join("\n")
+    );
+    return { ok: true, controls: visibleControls.length, fields: fields.length, snapshot };
+  }
+
+  function daoAffordances(snapshot) {
+    const targetTerms = /\b(wallet|connect|sign|vote|proposal|delegate|governance|submit|confirm|transaction|dao|token|stake|unstake|claim)\b/i;
+    const visibleControls = (snapshot?.controls ?? [])
+      .filter((control) => targetTerms.test([control.text, control.ariaLabel, control.role, control.tagName].filter(Boolean).join(" ")))
+      .slice(0, 16);
+    const fields = (snapshot?.fields ?? [])
+      .filter((field) => targetTerms.test([field.label, field.name, field.placeholder, field.kind].filter(Boolean).join(" ")))
+      .slice(0, 12);
+    return { fields, visibleControls };
+  }
+
+  function walletDaoAuditMarkdown({ goal, snapshot, walletState }) {
+    const { fields, visibleControls } = daoAffordances(snapshot);
+    const controls = visibleControls.length
+      ? visibleControls.map((control) => `- ${control.text || control.ariaLabel || control.tagName}${control.ref ? ` · ref ${control.ref}` : ""}`)
+      : ["- No wallet/governance-specific controls were visible in the current observation."];
+    const fieldLines = fields.length
+      ? fields.map((field) => `- ${field.label || field.name || field.placeholder || field.kind}${field.ref ? ` · ref ${field.ref}` : ""}`)
+      : ["- No wallet/governance-specific fields were visible in the current observation."];
+    return [
+      `# Wallet / DAO Audit: ${goal || snapshot?.title || "Active page"}`,
+      "",
+      `- capturedAt: ${new Date().toISOString()}`,
+      `- pageTitle: ${snapshot?.title || "Untitled"}`,
+      `- pageUrl: ${snapshot?.url || walletState?.tab?.url || "unknown"}`,
+      `- walletProbeSource: ${walletState?.source || "unknown"}`,
+      `- detectionOnly: ${walletState?.detectionOnly ? "yes" : "unknown"}`,
+      "",
+      "## Wallet Provider State",
+      walletStateSummary(walletState),
+      "",
+      "## Visible Wallet / Governance Controls",
+      ...controls,
+      "",
+      "## Relevant Fields",
+      ...fieldLines,
+      "",
+      "## Requested Goal",
+      goal || "_No specific goal was provided._",
+      "",
+      "## Human Boundary",
+      "This artifact is read-only evidence. ResonantOS did not request wallet connection, did not ask for a signature, did not expose seed/private keys, did not submit a transaction, and did not click wallet, vote, transfer, or public-submit controls.",
+      "",
+      "## Review Notes",
+      "- Treat this as raw Living Archive intake, not trusted AI Memory.",
+      "- Review domain, visible proposal values, governance controls, and wallet state before any human action.",
+      "- Any wallet connection, signature, vote, transaction, transfer, or public submission must be completed manually by the human."
+    ].join("\n");
+  }
+
+  async function saveWalletDaoAuditToArchive(goal = "") {
+    const response = deps.getLastSnapshot() ? { ok: true, snapshot: deps.getLastSnapshot() } : await readActivePage({ announce: false });
+    const snapshot = response?.snapshot;
+    if (!snapshot) {
+      await addMessage("system", "There is no readable page for a wallet/DAO audit. Open the DAO or dApp page first, then run `/wallet audit` or `/dao audit <goal>`.");
+      setStatus("Wallet audit unavailable");
+      return { ok: false, error: "No browser page context available." };
+    }
+    setActivity("retrieving", "Saving wallet/DAO audit", snapshot.title || snapshot.url);
+    setStatus("Saving wallet audit");
+    const walletResult = await detectWalletState({ announce: false });
+    if (!walletResult?.ok) {
+      await addMessage("system", `Wallet/DAO audit failed before save: ${walletResult?.error ?? "wallet detection unavailable"}`);
+      setStatus("Wallet audit unavailable");
+      return { ok: false, error: walletResult?.error ?? "Wallet detection unavailable." };
+    }
+    const { fields, visibleControls } = daoAffordances(snapshot);
+    const result = await bridgeRequest("/archive/intake", {
+      method: "POST",
+      body: {
+        title: `Wallet / DAO Audit: ${snapshot.title || snapshot.url || "Active page"}`,
+        url: snapshot.url,
+        origin: "browser-wallet-dao-audit",
+        content: walletDaoAuditMarkdown({ goal, snapshot, walletState: walletResult.state }),
+        metadata: {
+          controls: visibleControls.length,
+          fields: fields.length,
+          goal: String(goal ?? ""),
+          walletDetected: Boolean(walletResult.state?.detected),
+          walletProviders: Object.entries(walletResult.state?.providers ?? {})
+            .filter(([, provider]) => provider?.detected)
+            .map(([name]) => name)
+        }
+      }
+    });
+    const review = await bridgeRequest("/archive/review/request", {
+      method: "POST",
+      body: {
+        path: result.path,
+        reason: "Review this wallet/DAO browser evidence for domain safety, visible governance values, wallet provider state, and human-only action boundaries before any Living Archive wiki update."
+      }
+    });
+    await addMessage(
+      "system",
+      "Saved a wallet/DAO audit to Living Archive intake and queued it for review.\n\nThis is read-only evidence. Wallet connect, signing, voting, transfer, transaction confirmation, and public submission remain human-only."
+    );
+    setStatus("Wallet audit saved");
+    setActivity("completed", "Saved wallet/DAO audit", result.path);
+    return { ok: true, ...result, reviewRequestPath: review.path, controls: visibleControls.length, fields: fields.length };
   }
 
   function pageIntakeMarkdown(snapshot) {
@@ -657,8 +872,10 @@ export function createBrowserPageActions(deps) {
     activeTab,
     clickActivePageText,
     detectActivePageForms,
+    detectWalletState,
     mergeFrameSnapshots,
     openBrowserUrl,
+    prepareDaoWorkflowGuidance,
     readActivePage,
     refreshTabContext,
     scrollActivePage,
@@ -668,6 +885,7 @@ export function createBrowserPageActions(deps) {
     setPageControlOverlay,
     saveCurrentPageToArchive,
     saveResearchTrailToArchive,
+    saveWalletDaoAuditToArchive,
     saveSelectionToArchive,
     summarizeCurrentPageToArchive,
     summarizeSnapshot,

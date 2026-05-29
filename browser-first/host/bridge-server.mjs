@@ -5,6 +5,8 @@ import path from "node:path";
 
 const bridgeTokenHeader = "x-resonantos-bridge-token";
 const bridgeTokenHeaderName = "X-ResonantOS-Bridge-Token";
+const bridgeCapabilityHeader = "x-resonantos-bridge-capability-token";
+const bridgeCapabilityHeaderName = "X-ResonantOS-Bridge-Capability-Token";
 
 export function createBridgeToken() {
   return randomBytes(32).toString("base64url");
@@ -24,7 +26,7 @@ function writeJson(response, status, payload, extensionOrigin) {
   response.writeHead(status, {
     "Content-Type": "application/json",
     "Access-Control-Allow-Origin": extensionOrigin,
-    "Access-Control-Allow-Headers": `Content-Type, ${bridgeTokenHeaderName}`,
+    "Access-Control-Allow-Headers": `Content-Type, ${bridgeTokenHeaderName}, ${bridgeCapabilityHeaderName}`,
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
     "Vary": "Origin",
   });
@@ -65,11 +67,12 @@ function compileRoutes(routes) {
   ]));
 }
 
-export async function writeBridgeConfig({ extensionRoot, bridgePort, bridgeToken }) {
+export async function writeBridgeConfig({ extensionRoot, bridgePort, bridgeToken, bridgeCapabilityTokens = {} }) {
   const configPath = path.join(extensionRoot, "src", "bridge-config.generated.js");
   const config = {
     bridgeUrl: `http://127.0.0.1:${bridgePort}`,
     bridgeToken,
+    bridgeCapabilityTokens,
   };
   await writeFile(
     configPath,
@@ -79,7 +82,15 @@ export async function writeBridgeConfig({ extensionRoot, bridgePort, bridgeToken
   return configPath;
 }
 
-export async function startBridgeServer({ port, bridgeToken, extensionOrigin, routes }) {
+function isAuthorizedCapabilityRequest(request, bridgeCapabilityTokens, requiredCapability) {
+  if (!requiredCapability) {
+    return true;
+  }
+  const expectedToken = bridgeCapabilityTokens?.[requiredCapability];
+  return Boolean(expectedToken) && constantTimeEqual(request.headers[bridgeCapabilityHeader], expectedToken);
+}
+
+export async function startBridgeServer({ port, bridgeToken, bridgeCapabilityTokens = {}, extensionOrigin, routes }) {
   const routeTable = compileRoutes(routes);
   const server = http.createServer(async (request, response) => {
     try {
@@ -95,6 +106,10 @@ export async function startBridgeServer({ port, bridgeToken, extensionOrigin, ro
       const route = routeTable.get(routeKey(request.method, request.url));
       if (!route) {
         writeJson(response, 404, { ok: false, error: "Unknown browser-first bridge route." }, extensionOrigin);
+        return;
+      }
+      if (!isAuthorizedCapabilityRequest(request, bridgeCapabilityTokens, route.requiredCapability)) {
+        writeJson(response, 403, { ok: false, error: `Bridge route requires ${route.requiredCapability} capability.` }, extensionOrigin);
         return;
       }
 

@@ -43,7 +43,13 @@ function createHarness(overrides = {}) {
     createBrowserJob: async ({ existingJob, goal, planner, summary }) => {
       activeJobId = existingJob?.id ?? "job-created";
       controlRun = { ...controlRun, id: activeJobId, goal, planner, summary, steps: [], artifacts: [] };
-      return { id: activeJobId, goal, planner, summary };
+      return {
+        id: activeJobId,
+        goal,
+        planner,
+        summary,
+        pageLock: { tabId: 12, siteKey: "example.test", url: "https://example.test/", reason: "Agent Control goal" }
+      };
     },
     executeControlStep: async (step) => {
       events.push(["execute", step]);
@@ -84,6 +90,7 @@ function createHarness(overrides = {}) {
         goal,
         planner: plan.source,
         summary: plan.summary,
+        pageLock: plan.pageLock ?? null,
         artifacts: Array.isArray(plan.artifacts) ? plan.artifacts : [],
         steps: Array.isArray(plan.steps) ? plan.steps : []
       };
@@ -95,8 +102,8 @@ function createHarness(overrides = {}) {
       controlRun = { ...controlRun, artifacts };
       events.push(["artifacts", artifacts]);
     },
-    updateControlStep: (index, state, note = "") => {
-      controlRun.steps[index] = { ...controlRun.steps[index], state, note };
+    updateControlStep: (index, state, note = "", details = {}) => {
+      controlRun.steps[index] = { ...controlRun.steps[index], state, note, details: { ...(controlRun.steps[index]?.details ?? {}), ...details } };
       events.push(["step", index, state, note]);
     }
   };
@@ -122,6 +129,10 @@ test("agent control runner completes an observe-act-verify loop", async () => {
   assert.equal(harness.getControlRun().status, "completed");
   assert.deepEqual(harness.getControlRun().steps.map((step) => step.state), ["completed"]);
   assert.deepEqual(harness.getControlRun().steps.map((step) => step.note), ['clicked "Next"']);
+  assert.equal(harness.getControlRun().steps[0].details.confidence, "medium");
+  assert.equal(harness.getControlRun().steps[0].details.safetyClass, "safe");
+  assert.match(harness.getControlRun().steps[0].details.uncertainty, /No visible page-state change/);
+  assert.equal(harness.nextActionRequests[1].history[0].result.verificationChanged, false);
   assert.deepEqual(
     harness.events.filter((event) => event[0] === "overlay").map((event) => event[3]),
     ["reading", "working", "clicking", "verifying", "reading", "working"]
@@ -161,6 +172,7 @@ test("agent control runner starts a control job and records the run shell", asyn
 
   assert.equal(harness.getControlRun().id, "job-created");
   assert.equal(harness.getControlRun().planner, "observe-act-verify-loop");
+  assert.equal(harness.getControlRun().pageLock.siteKey, "example.test");
   assert.ok(harness.events.some((event) => event[0] === "message" && /Agent Control Mode started/.test(event[2])));
 });
 
@@ -202,6 +214,9 @@ test("agent control runner stores pending approval when a step requires human re
   assert.equal(result.approvalRequired, true);
   assert.equal(harness.getControlRun().status, "approval");
   assert.equal(harness.getPendingApproval().step.text, "Submit");
+  assert.equal(harness.getControlRun().steps[0].details.confidence, "low");
+  assert.match(harness.getControlRun().steps[0].details.uncertainty, /Public submit requires approval/);
+  assert.match(harness.getControlRun().steps[0].details.nextHumanAction, /approve once, deny, or delegate/);
   assert.ok(harness.events.some((event) => event[0] === "pending" && event[1] === "click"));
 });
 
@@ -224,6 +239,28 @@ test("agent control runner uses scoped task consent only for safe approval retri
   assert.equal(harness.events.filter((event) => event[0] === "execute").length, 2);
   assert.equal(harness.events.find((event) => event[0] === "execute" && event[1].userApproved)?.[1].text, "Details");
   assert.equal(harness.getControlRun().steps[0].note, 'trusted task consent · clicked "Details"');
+});
+
+test("agent control runner blocks repeated no-change actions before re-executing them", async () => {
+  const harness = createHarness({
+    decisions: [
+      { status: "continue", thought: "click next", action: { type: "click", text: "Next" } },
+      { status: "continue", thought: "try next again", action: { type: "click", text: "Next" } }
+    ],
+    stepResults: [{ ok: true, clickedText: "Next" }]
+  });
+
+  const result = await harness.runner.continueControlLoop({ goal: "click next until it works" });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.repeatNoChangePrevented, true);
+  assert.equal(harness.getControlRun().status, "blocked");
+  assert.equal(harness.events.filter((event) => event[0] === "execute").length, 1);
+  assert.deepEqual(harness.getControlRun().steps.map((step) => step.state), ["completed", "blocked"]);
+  assert.equal(harness.getControlRun().steps[1].note, "repeat no-change action prevented");
+  assert.match(harness.getControlRun().steps[1].details.uncertainty, /repeated the same action/);
+  assert.match(harness.getControlRun().steps[1].details.nextHumanAction, /more precise visible target/);
+  assert.ok(harness.events.some((event) => event[0] === "message" && /repeated the same action/.test(event[2])));
 });
 
 test("agent control runner does not use task consent for public-submit approval", async () => {

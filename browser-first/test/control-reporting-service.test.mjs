@@ -11,7 +11,14 @@ function createHarness(overrides = {}) {
     goal: "find a booking slot",
     planner: "observe-act-verify-loop",
     startedAt: "2026-05-26T10:00:00.000Z",
-    summary: "Observe and act"
+    summary: "Observe and act",
+    status: "approval",
+    timing: { durationMs: 2250 },
+    steps: [
+      { type: "read", state: "completed", timing: { durationMs: 900 }, details: { confidence: "high" } },
+      { type: "click", text: "Submit", state: "blocked", details: { confidence: "low", uncertainty: "Public submit boundary.", nextHumanAction: "Review the form before approval." } }
+    ],
+    pageLock: { tabId: 7, siteKey: "manoloremiddi.com", url: "https://manoloremiddi.com/booking", reason: "Agent Control goal: find a booking slot" }
   };
   let lastSnapshot = overrides.lastSnapshot ?? {
     title: "Booking",
@@ -54,14 +61,23 @@ test("control reporting service builds browser control reports with boundaries",
   const harness = createHarness();
 
   const report = harness.service.buildControlReport([
-    { step: { type: "click", text: "Continue" }, result: { ok: true } },
-    { step: { type: "click", text: "Submit" }, result: { ok: false, approvalRequired: true, error: "approval needed" } }
+    { step: { type: "click", text: "Continue", timing: { durationMs: 500 }, details: { confidence: "medium" } }, result: { ok: true } },
+    { step: { type: "click", text: "Submit", details: { confidence: "low", uncertainty: "Public submit boundary.", nextHumanAction: "Review the form, then approve once or deny." } }, result: { ok: false, approvalRequired: true, error: "approval needed" } }
   ], "approval-required");
 
   assert.match(report, /# Browser Agent Control Report/);
   assert.match(report, /find a booking slot/);
-  assert.match(report, /Click "Continue" — ok/);
-  assert.match(report, /Click "Submit" — approval-required — approval needed/);
+  assert.match(report, /duration: 2\.3 sec/);
+  assert.match(report, /## Controlled Target/);
+  assert.match(report, /targetSite: manoloremiddi\.com/);
+  assert.match(report, /targetTab: 7/);
+  assert.match(report, /## Aggregate Progress/);
+  assert.match(report, /phase: approval/);
+  assert.match(report, /summary: Awaiting approval · 1\/2 complete · 2\/2 resolved · 1 blocked · 50%/);
+  assert.match(report, /Click "Continue" — ok · 500 ms · confidence: medium/);
+  assert.match(report, /Click "Submit" — approval-required · confidence: low — approval needed/);
+  assert.match(report, /uncertainty: Public submit boundary/);
+  assert.match(report, /next human action: Review the form, then approve once or deny/);
   assert.match(report, /Wallet, credential, public-submit, payment, and destructive actions/);
 });
 
@@ -90,6 +106,7 @@ test("control reporting service builds and saves durable browser job reports", a
     planner: "observe-act-verify-loop",
     createdAt: "2026-05-26T09:00:00.000Z",
     updatedAt: "2026-05-26T09:02:00.000Z",
+    timing: { durationMs: 122000 },
     summary: "Observed and compared",
     preflightDecision: {
       mode: "skipped-by-consent",
@@ -100,9 +117,10 @@ test("control reporting service builds and saves durable browser job reports", a
       decidedAt: "2026-05-26T08:59:00.000Z",
       reason: "Stored safe task-class consent allowed preflight skip."
     },
+    pageLock: { tabId: 12, siteKey: "example.com", url: "https://example.com/product", reason: "Product comparison task" },
     steps: [
-      { label: "Read page", state: "completed", note: "read product page" },
-      { label: "Click details", state: "completed", note: "clicked details" }
+      { label: "Read page", state: "completed", note: "read product page", timing: { durationMs: 1500 }, details: { confidence: "high" } },
+      { label: "Click details", state: "blocked", note: "clicked details", details: { confidence: "low", uncertainty: "Repeated details controls.", nextHumanAction: "Focus the correct product row before resuming." } }
     ],
     artifacts: [{ type: "archive-intake", path: "/archive/existing.md" }]
   };
@@ -113,7 +131,15 @@ test("control reporting service builds and saves durable browser job reports", a
   assert.match(report, /## Preflight Decision/);
   assert.match(report, /mode: skipped-by-consent/);
   assert.match(report, /taskClass: shopping/);
-  assert.match(report, /Read page — completed — read product page/);
+  assert.match(report, /duration: 2 min 2 sec/);
+  assert.match(report, /targetSite: example\.com/);
+  assert.match(report, /targetReason: Product comparison task/);
+  assert.match(report, /phase: completed/);
+  assert.match(report, /summary: Completed · 1\/2 complete · 2\/2 resolved · 1 blocked · 50%/);
+  assert.match(report, /blockedSteps: 1/);
+  assert.match(report, /Read page — completed · 1\.5 sec · confidence: high — read product page/);
+  assert.match(report, /Click details — blocked · confidence: low — clicked details/);
+  assert.match(report, /next human action: Focus the correct product row before resuming/);
   assert.match(report, /archive-intake: \/archive\/existing\.md/);
 
   const result = await harness.service.saveBrowserJobReportToArchive(job);
@@ -140,8 +166,16 @@ test("control reporting service delegates blocked control issues to Engineer", a
   const bridgeCall = harness.events.find((event) => event[0] === "bridge");
   assert.equal(bridgeCall[1], "/addons/delegate");
   assert.equal(bridgeCall[2].target, "engineer");
+  assert.equal(bridgeCall[2].source, "browser-control-blocker");
+  assert.equal(bridgeCall[2].sourceControlRunId, "job-1");
   assert.match(bridgeCall[2].mission, /find a booking slot/);
   assert.match(bridgeCall[2].mission, /Blocked step: Click "Submit"/);
+  assert.match(bridgeCall[2].contextMarkdown, /# Browser Control Delegation Context/);
+  assert.match(bridgeCall[2].contextMarkdown, /controlRunId: job-1/);
+  assert.match(bridgeCall[2].contextMarkdown, /targetSite: manoloremiddi\.com/);
+  assert.match(bridgeCall[2].contextMarkdown, /blockedStep: Click "Submit"/);
+  assert.match(bridgeCall[2].contextMarkdown, /Review the form before approval/);
+  assert.match(bridgeCall[2].contextMarkdown, /provider routing, wallet actions, credentials/);
   assert.ok(harness.events.some((event) => event[0] === "message" && /Delegated blocked control task/.test(event[2])));
 });
 

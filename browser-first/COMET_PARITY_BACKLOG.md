@@ -29,33 +29,62 @@ Intent: keep the browser-first ResonantOS work aligned with the AI-browser capab
 - Browser History / Activity Search v2: `/history <query> | site:example.com | days:7 | tabs` supports date filtering, per-site filtering, readable open-tab synthesis, explicit incognito exclusion, and `/history <query> | intake` export into Living Archive intake with a review request.
 - Browser-first Add-ons workspace lists visible add-ons, availability, trust tier, and governed workspace actions without granting new capabilities.
 - Main workspace chat now matches the side-panel chat command behavior for keyboard shortcuts, SVG message actions, model/depth controls, shared ring-style context usage, and page/archive/status/mic icon controls. The new-tab main workspace opens first; the side-panel chat stays closed until explicitly opened or a browser-control handoff needs it.
-- Chat composer parity hardening: both main and side-panel chat inputs support select-all, copy, cut, paste, undo, Enter-to-send, and Shift+Enter newline through the shared composer controller, with native clipboard fallback when extension clipboard APIs are unavailable.
+- Main workspace page/context toolbar v1: read current page, save current page to Living Archive intake, save selected page text, and summarize visible context now run directly from the main workspace chat surface instead of opening the side panel for those non-control actions.
+- Chat composer parity hardening: both main and side-panel chat inputs support select-all, copy, cut, paste, undo, Enter-to-send, and Shift+Enter newline through the shared composer controller. Native browser editing is preserved first; an explicit clipboard fallback remains available for restricted extension runtimes.
+- Augmentor delegation hardening: natural chat phrases such as “spawn Hermes,” “dispatch this to OpenCode,” and “use the ResonantOS agent control layer” are routed before provider chat, and the provider prompt is barred from claiming delegation is outside Augmentor's ResonantOS capabilities.
 - Email/Calendar Add-ons v1: `/email` and `/calendar` create host-mediated draft-only packets from both chat surfaces. Sending email and scheduling events remain human-approval gated and are not automated from chat.
 - Email/Calendar Approval v1: the Add-ons workspace lists draft packets and can mark them approved for manual action or rejected with an audit entry; provider sending/scheduling remains blocked until connector-specific approval flows exist.
+- Email/Calendar Provider Connectors v1.1: approved draft packets can open Gmail compose or Google Calendar event-template handoff URLs for human review. ResonantOS records an audit event and still does not send email, schedule events, expose credentials, or bypass the provider UI.
 - Durable Browser Jobs v2: persistent job registry, persisted active job id, interrupted-job recovery after reload, visible job monitor, `/jobs`, `/pause`, `/resume`, `/continue`, `/report`, and `/cancel`. Resume/continue restart from persisted step history and job reports can be written to Living Archive intake.
 - Durable Browser Jobs v2.1: resume/continue reuses the same durable job id, preserves prior step history/artifacts in the monitor, and appends new browser-control steps instead of creating continuation jobs.
 - Parallel Browser Jobs v1: the monitor can show multiple durable jobs at once, mark the focused browser job, switch focus with `/jobs focus <job>`, and keep per-job Continue/Report controls without merging their traces.
 - Parallel Browser Jobs v1.1: running/queued/approval jobs hold explicit tab/site page locks, conflicting Agent Control starts/resumes are blocked before action, paused/terminal jobs release locks, unresolved approval-paused jobs are cancelled when the user starts a new explicit control task on the same page, and the job monitor shows the locked site/tab.
+- Parallel Browser Jobs scheduler state v1: the durable job store now computes scheduler capacity, runnable queued jobs, page-lock-blocked queued jobs, and capacity-waiting queued jobs. `/jobs` and the monitor surface this state so the user can see why a queued job can or cannot run before true simultaneous control loops are enabled.
 - Browser page summaries can be generated into Living Archive intake with source provenance, review queueing, and a deterministic fallback when the provider is unavailable.
 - Multi-tab browser research trails can be captured into one Living Archive intake bundle with per-page provenance and review queueing.
+- Living Archive wiki index maintenance v1: trusted promotion upserts the promoted page in `AI_MEMORY/wiki/index.md` as a deduplicated content catalog while preserving `log.md` as the append-only chronology.
+- Living Archive wiki health v1.1: health checks now flag duplicate `index.md` catalog entries so old append-style drift is visible and repairable.
+- Living Archive search v1.1: AI Memory search now uses `index.md` as the first navigation layer, prioritizes catalog hits, and falls back to page content when the catalog has not caught up.
+- Living Archive LLM Wiki completion v1: bootstrap creates `AGENTS.md`, memory domains, `index.md`, and `log.md`; draft ingest artifacts prefer a configured archive ingest writer model with deterministic fallback and include claims/entities/concepts/links/open questions/provenance; health checks validate provenance and contradiction markers; MCP portable search/lint now exposes the same index-first wiki semantics to external agents such as Hermes.
 - Agent Control visual overlay v1: persistent Matrix-style green perimeter, in-page action toast, and highlighted clicked/typed targets for the full control session.
 - Agent Control UX vNext baseline: structured per-action observation/decision/action/result/safety details, completion/blocker summary cards, and persisted replay details in durable browser jobs.
+- Agent Control timing evidence v1: control runs and individual steps record durable timing metadata; monitor details and saved reports show elapsed step/run durations for audit and debugging.
+- Agent Control confidence/blocker evidence v1: steps now persist confidence, uncertainty, and recommended next human action; the control monitor and saved reports surface that evidence so blocked tasks tell the user what to do next.
+- Agent Control controlled-target evidence v1: active runs persist and display the tab/site/page-lock reason that Augmentor is operating, and saved reports include the same target evidence.
+- Agent Control aggregate progress v1: active runs now show phase semantics (reading, navigating, deciding, acting, approval, blocked, waiting, completed), percent complete, queued/blocked/failed counts, and a compact progress track; saved control/job reports include the same aggregate progress evidence.
+- Agent Control page-state verification v1: after successful click/type/open/search/tab-switch actions, the runner rereads the page and records whether visible state changed, adding uncertainty evidence when an action appears to do nothing.
+- Agent Control no-op repeat guard v1: if the planner repeats the same action after verification found no visible page change, the runner blocks before re-executing it and records guidance to inspect, retarget, or delegate.
+- Durable Browser Jobs blocker guidance v1: expanded job rows now surface aggregate progress plus the latest recommended next human action, so blocked/failed jobs remain understandable outside the active Agent Control monitor.
+- Durable Browser Jobs stale-progress evidence v1: running and approval jobs with no recent recorded progress are flagged passively in `/jobs` and the monitor with last-activity timing plus next human action, without silently mutating job status.
+- Browser Control delegation packets v1: blocked control tasks delegated to the Resonant Engineer carry a bounded context packet with goal, target, aggregate progress, blocker, recent trace, and safety boundary while keeping add-ons outside provider, wallet, credential, and trusted-memory authority.
+- Delegation packet review v1: the Add-ons workspace lists recent Hermes/OpenCode/Engineer handoff packets and highlights whether a bounded context packet is attached, so delegated work remains inspectable instead of disappearing into files.
+- Artifacts Workspace action summary v1: browser-control reports and job reports now expose derived status, target, aggregate progress, and next-human-action summaries in artifact cards/previews, while preserving raw markdown as intake evidence.
 - Secure Autofill Guard v1: content-script field classification permits search/query submits and non-sensitive document/generic typing, while blocking credential, login, payment, wallet, personal-contact, and non-search submit automation before any value is written.
+- Wallet State Detection v1: `/wallet status` checks Phantom provider presence and connected/not-connected state from the active page's main world without requesting wallet connection, signatures, seed/private keys, credentials, or transaction submission.
+- DAO Workflow Helper v1: `/dao <goal>` reads the active page, identifies visible wallet/governance controls and fields, prepares a safe sequence, and explicitly stops before wallet connect, signing, voting, transfer, transaction confirmation, or public submission.
+- Wallet/DAO Audit Artifacts v1: `/wallet audit` and `/dao audit <goal>` save read-only wallet/provider state plus visible governance controls/fields into Living Archive intake and queue review, without requesting wallet connection, signing, voting, transfers, transactions, or public submission.
 - Shopping/search/cart-style flows with safety stops.
 - Wallet, payment, login, credential, and public submit boundaries.
 
 ## Remaining Capability Work
 
 1. Parallel / Durable Browser Jobs
-   - True simultaneous background control loops still require a scheduler that can run more than one non-conflicting page-locked job at the same time. Current v1.1 prevents same-page races and preserves multiple durable job records, but the side panel still has one active control runner.
+   - True simultaneous background control loops still require an execution scheduler that can start and supervise more than one non-conflicting page-locked job at the same time.
+   - Current scheduler state can identify runnable, locked, and capacity-waiting jobs, but the side panel still has one active control runner.
 
 2. Email / Calendar Provider Connectors
-   - Provider-specific Gmail/Calendar connectors.
-   - Draft-only remains the default; sending/scheduling still requires human approval.
+   - Current connectors are manual provider handoffs only.
+   - Future provider API connectors require explicit account grants, provider-specific approval flows, and audit trails before any send/schedule action can exist.
 
 3. Secure Autofill Model
    - Vault-backed credential/payment/contact autofill remains blocked until vault, approval, and audit ADRs are complete.
    - Search/query field submission is allowed only when content-script checks classify the target as search-like.
+
+4. Wallet And DAO Workflow Helpers
+   - Wallet provider detection is read-only only.
+   - DAO helpers now prepare page-specific instructions and stop before signing/submitting.
+   - Wallet-adjacent audit artifacts now save read-only evidence to Living Archive intake and queue review.
+   - Future work still needs richer dApp fixture coverage for common DAO providers.
 
 ## Validation Rule
 

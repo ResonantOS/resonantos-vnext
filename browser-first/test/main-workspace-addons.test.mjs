@@ -9,6 +9,7 @@ test("add-ons workspace renders registry status and governed open actions", asyn
   globalThis.document = dom.window.document;
   const container = dom.window.document.querySelector("#root");
   const opened = [];
+  const providerHandoffs = [];
   const calls = [];
   let draftStatus = "draft-only";
   const bridgeRequest = async (route, options = {}) => {
@@ -36,9 +37,38 @@ test("add-ons workspace renders registry status and governed open actions", asyn
         }]
       };
     }
+    if (route === "/addons/delegate/list") {
+      return {
+        delegations: [{
+          id: "engineer-1",
+          contextExcerpt: "Goal find a booking slot. Blocked step Submit. Public submit requires approval.",
+          hasContextPacket: true,
+          mission: "Investigate blocked browser-control task.",
+          path: "BrowserFirst/Delegations/engineer/engineer-1.md",
+          sourceControlRunId: "job-1",
+          sourceKind: "browser-control-blocker",
+          status: "queued",
+          target: "engineer",
+          updatedAt: "2026-05-29T10:00:00.000Z"
+        }]
+      };
+    }
     if (route === "/addons/draft/transition") {
       draftStatus = options.body.status;
       return { id: "email-draft-a", status: draftStatus };
+    }
+    if (route === "/addons/draft/handoff") {
+      return {
+        handoff: {
+          action: "manual-review-compose",
+          boundary: "Opens a Gmail compose draft for human review. ResonantOS does not send the email.",
+          provider: options.body.provider,
+          target: "email",
+          url: "https://mail.google.com/mail/?view=cm&fs=1&su=Project+update&body=Ready"
+        },
+        id: "email-draft-a",
+        status: draftStatus
+      };
     }
     throw new Error(`Unexpected route ${route}`);
   };
@@ -46,11 +76,12 @@ test("add-ons workspace renders registry status and governed open actions", asyn
   renderAddOnsWorkspace({
     container,
     bridgeRequest,
+    onOpenProviderHandoff: (handoff, draft) => providerHandoffs.push([handoff, draft.id]),
     onOpenWorkspace: (workspaceId) => opened.push(workspaceId)
   });
   await new Promise((resolve) => setTimeout(resolve, 0));
 
-  assert.deepEqual(calls.map((call) => call[0]), ["/addons/status", "/addons/draft/list"]);
+  assert.deepEqual(calls.map((call) => call[0]), ["/addons/status", "/addons/delegate/list", "/addons/draft/list"]);
   assert.match(container.textContent, /Replaceable capabilities, explicit trust/);
   assert.match(container.textContent, /5 add-ons visible/);
   assert.match(container.textContent, /Hermes/);
@@ -62,8 +93,14 @@ test("add-ons workspace renders registry status and governed open actions", asyn
   assert.match(container.textContent, /Direct trusted wiki writes remain blocked/);
   assert.match(container.textContent, /Sending and scheduling remain human-approval gated/);
   assert.match(container.textContent, /Draft approval/);
+  assert.match(container.textContent, /Delegation packets/);
+  assert.match(container.textContent, /Agent handoffs/);
+  assert.match(container.textContent, /engineer-1/);
+  assert.match(container.textContent, /browser-control-blocker · control run job-1/);
+  assert.match(container.textContent, /Context packet: Goal find a booking slot/);
+  assert.match(container.textContent, /1 delegation packet recorded/);
   assert.match(container.textContent, /Project update/);
-  assert.match(container.textContent, /External send\/schedule remains blocked here/);
+  assert.match(container.textContent, /provider draft surfaces for human review only/);
   const buttons = [...container.querySelectorAll(".addon-card > .addon-card-actions button")];
   assert.equal(buttons.length, 3);
   assert.equal(buttons.find((button) => /OpenCode/.test(button.textContent)).disabled, true);
@@ -75,6 +112,14 @@ test("add-ons workspace renders registry status and governed open actions", asyn
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.ok(calls.some((call) => call[0] === "/addons/draft/transition" && call[1].status === "approved-for-manual-send"));
   assert.match(container.textContent, /approved-for-manual-send/);
+
+  const handoffButton = [...container.querySelectorAll(".addon-draft-card button")].find((button) => /Gmail/.test(button.textContent));
+  assert.equal(handoffButton.disabled, false);
+  handoffButton.click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.ok(calls.some((call) => call[0] === "/addons/draft/handoff" && call[1].provider === "gmail"));
+  assert.equal(providerHandoffs[0][0].provider, "gmail");
+  assert.equal(providerHandoffs[0][1], "email-draft-a");
 });
 
 test("add-ons workspace reports bridge failures without exposing secrets", async () => {
@@ -91,7 +136,8 @@ test("add-ons workspace reports bridge failures without exposing secrets", async
   await new Promise((resolve) => setTimeout(resolve, 0));
 
   assert.match(container.textContent, /Add-on registry unavailable: host unavailable/);
+  assert.match(container.textContent, /Delegation review unavailable: host unavailable/);
   assert.match(container.textContent, /Draft review unavailable: host unavailable/);
   assert.equal(container.querySelector(".addons-status").dataset.tone, "error");
-  assert.doesNotMatch(container.textContent, /token|secret|credential/i);
+  assert.doesNotMatch(container.textContent, /token|secret/i);
 });

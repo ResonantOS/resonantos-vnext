@@ -6,6 +6,15 @@ import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import { basename, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { searchMemoryWiki } from "../browser-first/host/memory-search.mjs";
+import { computeWikiHealth } from "../browser-first/host/memory-wiki-health.mjs";
+import {
+  decidePortableReview,
+  processPortableIngestRequest,
+  promotePortableReviewArtifact,
+  runPortableMaintenanceCycle,
+  runPortableSemanticLint,
+} from "./living-archive-portable-workflow.mjs";
 
 const protocolVersion = "2025-06-18";
 const serverInfo = {
@@ -432,11 +441,32 @@ export const createLivingArchiveBridge = (config = parseArgs()) => {
       return proxy("search", { query, limit, domains });
     }
     const root = assertMemoryRoot(memoryRoot);
+    const allowedDomains = new Set((Array.isArray(domains) ? domains : []).map(String));
+    if (!allowedDomains.size || allowedDomains.has("AI_MEMORY")) {
+      const wikiResult = await searchMemoryWiki({ memoryRoot: root, query, limit }).catch(() => null);
+      if (wikiResult?.matches?.length) {
+        return {
+          query,
+          backend: "portable-folder",
+          searchMode: "index-first-wiki",
+          results: wikiResult.matches.map((match) => ({
+            path: match.path,
+            title: match.title,
+            domain: domainForPath(match.path),
+            fileType: extname(match.path).slice(1) || "text",
+            score: match.score,
+            sizeBytes: null,
+            modifiedAt: "",
+            snippet: match.excerpt,
+            matchSource: match.matchSource,
+          })),
+        };
+      }
+    }
     const needle = String(query ?? "").trim().toLowerCase();
     if (!needle) {
       throw new Error("Search query is required.");
     }
-    const allowedDomains = new Set((Array.isArray(domains) ? domains : []).map(String));
     const results = [];
 
     for await (const file of walkFiles(root)) {
@@ -474,6 +504,8 @@ export const createLivingArchiveBridge = (config = parseArgs()) => {
 
     return {
       query,
+      backend: "portable-folder",
+      searchMode: "text-fallback",
       results,
     };
   };
@@ -653,13 +685,95 @@ export const createLivingArchiveBridge = (config = parseArgs()) => {
         });
       }
     }
+    const wikiHealth = await computeWikiHealth({ wikiRoot: join(root, "AI_MEMORY", "wiki") });
+    for (const issue of wikiHealth.issues ?? []) {
+      findings.push({
+        severity: issue.severity,
+        category: issue.type,
+        target: "AI_MEMORY/wiki",
+        detail: issue.message,
+        recommendedAction: issue.type === "missing-provenance"
+          ? "Run the trusted ingest/review path to add visible source provenance before relying on affected pages."
+          : issue.type === "open-questions-or-contradictions"
+            ? "Review contradiction/open-question markers and queue repair intake if needed."
+            : "Run Living Archive maintenance or inspect the affected wiki pages.",
+      });
+    }
     return {
       checkedAt: nowIso(),
       reportPath: null,
-      pagesChecked: 0,
+      pagesChecked: wikiHealth.pages ?? 0,
       sourcesChecked: 0,
+      wikiHealth,
       findings,
     };
+  };
+
+  const processIngestRequest = async ({ requestFile }) => {
+    if (memoryServiceUrl) {
+      return proxy("process-ingest-request", { requestFile });
+    }
+    if (readonly) {
+      throw new Error("This Living Archive MCP bridge is running in readonly mode.");
+    }
+    return processPortableIngestRequest({ memoryRoot: assertMemoryRoot(memoryRoot), requestFile });
+  };
+
+  const decideReview = async ({ artifactFile, actorId, action, notes }) => {
+    if (memoryServiceUrl) {
+      return proxy("decide-review", { artifactFile, actorId, action, notes });
+    }
+    if (readonly) {
+      throw new Error("This Living Archive MCP bridge is running in readonly mode.");
+    }
+    return decidePortableReview({ memoryRoot: assertMemoryRoot(memoryRoot), artifactFile, actorId, action, notes });
+  };
+
+  const promoteReviewArtifact = async ({ artifactFile, actorId }) => {
+    if (memoryServiceUrl) {
+      return proxy("promote-review-artifact", { artifactFile, actorId });
+    }
+    if (readonly) {
+      throw new Error("This Living Archive MCP bridge is running in readonly mode.");
+    }
+    return promotePortableReviewArtifact({ memoryRoot: assertMemoryRoot(memoryRoot), artifactFile, actorId });
+  };
+
+  const maintenanceCycle = async (input = {}) => {
+    if (memoryServiceUrl) {
+      return proxy("maintenance-cycle", input);
+    }
+    if (readonly) {
+      throw new Error("This Living Archive MCP bridge is running in readonly mode.");
+    }
+    return runPortableMaintenanceCycle({
+      memoryRoot: assertMemoryRoot(memoryRoot),
+      maxRequests: input.maxRequests,
+      autoApprove: Boolean(input.autoApprove),
+      actorId: input.actorId,
+    });
+  };
+
+  const backgroundCycle = async (input = {}) => {
+    if (memoryServiceUrl) {
+      return proxy("background-cycle", input);
+    }
+    if (readonly) {
+      throw new Error("This Living Archive MCP bridge is running in readonly mode.");
+    }
+    return runPortableMaintenanceCycle({
+      memoryRoot: assertMemoryRoot(memoryRoot),
+      maxRequests: input.maxRequests,
+      autoApprove: Boolean(input.autoApprove),
+      actorId: input.actorId,
+    });
+  };
+
+  const semanticLint = async () => {
+    if (memoryServiceUrl) {
+      return proxy("semantic-lint");
+    }
+    return runPortableSemanticLint({ memoryRoot: assertMemoryRoot(memoryRoot) });
   };
 
   const handlers = {
@@ -670,31 +784,13 @@ export const createLivingArchiveBridge = (config = parseArgs()) => {
     living_archive_request_ingest: requestIngest,
     living_archive_review_queue: reviewQueue,
     living_archive_review_artifacts: reviewArtifacts,
-    living_archive_process_ingest_request: (input) => proxy("process-ingest-request", input).catch((error) => {
-      if (!memoryServiceUrl) portableUnsupported("living_archive_process_ingest_request");
-      throw error;
-    }),
-    living_archive_decide_review: (input) => proxy("decide-review", input).catch((error) => {
-      if (!memoryServiceUrl) portableUnsupported("living_archive_decide_review");
-      throw error;
-    }),
-    living_archive_promote_review_artifact: (input) => proxy("promote-review-artifact", input).catch((error) => {
-      if (!memoryServiceUrl) portableUnsupported("living_archive_promote_review_artifact");
-      throw error;
-    }),
-    living_archive_maintenance_cycle: (input) => proxy("maintenance-cycle", input).catch((error) => {
-      if (!memoryServiceUrl) portableUnsupported("living_archive_maintenance_cycle");
-      throw error;
-    }),
-    living_archive_background_cycle: (input) => proxy("background-cycle", input).catch((error) => {
-      if (!memoryServiceUrl) portableUnsupported("living_archive_background_cycle");
-      throw error;
-    }),
+    living_archive_process_ingest_request: processIngestRequest,
+    living_archive_decide_review: decideReview,
+    living_archive_promote_review_artifact: promoteReviewArtifact,
+    living_archive_maintenance_cycle: maintenanceCycle,
+    living_archive_background_cycle: backgroundCycle,
     living_archive_lint: lint,
-    living_archive_semantic_lint: (input) => proxy("semantic-lint", input).catch((error) => {
-      if (!memoryServiceUrl) portableUnsupported("living_archive_semantic_lint");
-      throw error;
-    }),
+    living_archive_semantic_lint: semanticLint,
   };
 
   return {

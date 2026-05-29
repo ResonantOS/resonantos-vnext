@@ -89,6 +89,7 @@ const STORAGE_KEYS = {
   forks: "augmentorBrowserForks",
   sessions: "augmentorBrowserSessions",
   activeSessionId: "augmentorActiveBrowserSessionId",
+  projects: "augmentorBrowserProjects",
   pendingSidebarPrompt: "augmentorPendingSidebarPrompt",
   model: "augmentorModel",
   thinkingDepth: "augmentorThinkingDepth",
@@ -117,9 +118,15 @@ let monitorRenderers = null;
 let nextControlPreflightDecision = null;
 
 const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
-const composerController = createComposerController({ commandForm, commandInput, navigator });
+const composerController = createComposerController({
+  commandForm,
+  commandInput,
+  forceClipboardFallback: true,
+  navigator
+});
 
 const MODEL_LABELS = {
+  "__auto__": "Auto route",
   "MiniMax-M2.7": "MiniMax 2.7",
   "MiniMax-M2.7-highspeed": "MiniMax 2.7 High Speed",
   "gpt-5.5": "GPT 5.5",
@@ -421,13 +428,16 @@ const {
   activeTab,
   clickActivePageText,
   detectActivePageForms,
+  detectWalletState,
   openBrowserUrl,
   readActivePage,
+  prepareDaoWorkflowGuidance,
   refreshTabContext,
   scrollActivePage,
   saveCurrentPageToArchive,
   saveResearchTrailToArchive,
   saveSelectionToArchive,
+  saveWalletDaoAuditToArchive,
   searchBrowser,
   sendContentAction,
   setPageControlOverlay,
@@ -470,6 +480,7 @@ monitorRenderers = createMonitorRenderers({
     taskConsentTitle
   },
   getActiveBrowserJobId: () => browserJobStore.getActiveJobId(),
+  getBrowserJobSchedulerState: () => browserJobStore.getSchedulerState({ maxConcurrent: 2 }),
   getBrowserJobs: () => browserJobStore.getJobs(),
   getContextDockExpanded: () => contextDockExpanded,
   getCurrentControlRun: () => currentControlRun,
@@ -1057,13 +1068,15 @@ const {
   runMemorySearchCommand,
   reportBrowserJob,
   runSitePermissionCommand,
-  runStatusCommand
+  runStatusCommand,
+  runWalletStatusCommand
 } = createAppCommandHandlers({
   activeTab,
   addMessage,
   bridgeRequest,
   browserJobStore,
   chrome,
+  detectWalletState,
   finishControlRun,
   getCurrentControlRun: () => currentControlRun,
   permissionForUrl,
@@ -1098,6 +1111,7 @@ const commandRouter = createSidePanelCommandRouter({
   handleWalletBoundary,
   openBrowserUrl,
   pauseBrowserJob,
+  prepareDaoWorkflowGuidance,
   resumeBrowserJob,
   cancelBrowserJob,
   approveControlPreflight,
@@ -1115,6 +1129,8 @@ const commandRouter = createSidePanelCommandRouter({
   reportBrowserJob,
   runSitePermissionCommand,
   runStatusCommand,
+  runWalletStatusCommand,
+  saveWalletDaoAuditToArchive,
   saveIntake,
   scrollActivePage,
   searchBrowser,
@@ -1183,12 +1199,14 @@ fileInput.addEventListener("change", () => void messageActions.attachFiles(fileI
 readButton.addEventListener("click", () => void readActivePage());
 saveIntakeButton.addEventListener("click", () => void saveIntake("page"));
 saveSelectionButton.addEventListener("click", () => void saveIntake("selection"));
-contextToggleButton.addEventListener("click", () => {
+const toggleContextDock = () => {
   contextDockExpanded = !contextDockExpanded;
   void persistContextDockExpanded();
   void renderSitePermissionPanel();
   renderJobMonitor();
-});
+};
+contextToggleButton.addEventListener("click", toggleContextDock);
+contextMeter.addEventListener("click", toggleContextDock);
 approvalApproveButton.addEventListener("click", () => void runBusyUiAction(approvePendingControlStep));
 approvalTrustSiteButton.addEventListener("click", () => void runBusyUiAction(trustCurrentTaskForSafeActions));
 approvalDenyButton.addEventListener("click", () => void denyPendingControlStep());

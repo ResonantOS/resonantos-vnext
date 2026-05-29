@@ -94,3 +94,83 @@ export function mergePromotedMarkdownBody({ existingContent, promotedBody, sourc
   }
   return output.join("\n\n").trim();
 }
+
+function markdownLinkAliases(pagePath) {
+  const normalized = String(pagePath ?? "").replace(/\\/g, "/").replace(/^\.\//, "");
+  const basename = normalized.split("/").pop()?.replace(/\.(md|markdown)$/i, "") ?? "";
+  const withoutExtension = normalized.replace(/\.(md|markdown)$/i, "");
+  return new Set([
+    basename,
+    withoutExtension,
+    normalized,
+  ].filter(Boolean));
+}
+
+function catalogLineTargetsPage(line, pagePath) {
+  const aliases = markdownLinkAliases(pagePath);
+  for (const match of String(line ?? "").matchAll(/\[\[([^\]\n|]+)(?:\|[^\]\n]+)?\]\]/g)) {
+    const target = match[1].trim().replace(/^\.\//, "").replace(/\.(md|markdown)$/i, "");
+    if (aliases.has(target) || aliases.has(`${target}.md`)) return true;
+  }
+  for (const match of String(line ?? "").matchAll(/\[[^\]\n]+\]\(([^)\n]+)\)/g)) {
+    const target = match[1].trim().replace(/^\.\//, "");
+    if (aliases.has(target) || aliases.has(target.replace(/\.(md|markdown)$/i, ""))) return true;
+  }
+  return false;
+}
+
+export function summarizePromotedPageForIndex(content, limit = 180) {
+  const text = stripMarkdownFrontmatter(content)
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) =>
+      line &&
+      !line.startsWith("#") &&
+      !line.startsWith(">") &&
+      !/^[-*]\s+/.test(line) &&
+      !/^Promoted at:/i.test(line) &&
+      !/^<!--/.test(line)
+    )
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return text.length > limit ? `${text.slice(0, limit - 1).trimEnd()}…` : text;
+}
+
+export function upsertWikiIndexCatalogEntry({
+  existingIndex,
+  pagePath,
+  title,
+  summary,
+  sourceArtifact,
+  promotedAt,
+}) {
+  const safeTitle = String(title ?? "").trim() || String(pagePath ?? "Untitled page").split("/").pop()?.replace(/\.(md|markdown)$/i, "") || "Untitled page";
+  const aliases = markdownLinkAliases(pagePath);
+  const primaryAlias = [...aliases][0] || safeFileSlug(safeTitle);
+  const safeSummary = String(summary ?? "").replace(/\s+/g, " ").trim() || "AI-curated memory page.";
+  const metadata = [
+    promotedAt ? `updated ${promotedAt}` : "",
+    sourceArtifact ? `source ${sourceArtifact}` : "",
+  ].filter(Boolean).join("; ");
+  const entry = `- [[${primaryAlias}|${safeTitle}]] — ${safeSummary}${metadata ? ` (${metadata})` : ""}`;
+  const original = String(existingIndex ?? "").trim();
+  if (!original) {
+    return ["# Wiki Index", "", "## Pages", "", entry, ""].join("\n");
+  }
+
+  const lines = original.split(/\r?\n/);
+  const deduped = lines.filter((line) => !catalogLineTargetsPage(line, pagePath));
+  const pagesHeadingIndex = deduped.findIndex((line) => /^##\s+Pages\s*$/i.test(line.trim()));
+  if (pagesHeadingIndex >= 0) {
+    const insertAt = pagesHeadingIndex + 1;
+    const next = [...deduped];
+    while (next[insertAt] === "") {
+      next.splice(insertAt, 1);
+    }
+    next.splice(insertAt, 0, "", entry);
+    return `${next.join("\n").replace(/\s+$/g, "")}\n`;
+  }
+
+  return `${deduped.join("\n").replace(/\s+$/g, "")}\n\n## Pages\n\n${entry}\n`;
+}

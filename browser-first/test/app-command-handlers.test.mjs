@@ -6,6 +6,7 @@ import {
   parseDraftAddonCommand,
   parseCommandSections,
   parseHistorySearchCommand,
+  parseNaturalDelegationIntent,
   sitePermissionModeFromText
 } from "../resonantos-side-panel-extension/src/lib/app-command-handlers.js";
 
@@ -16,7 +17,14 @@ function createHarness(overrides = {}) {
     activateJob: async (id) => calls.push(["activate", id]),
     findJob: (query = "") => query ? jobs.find((job) => job.id.includes(query) || job.goal.toLowerCase().includes(String(query).toLowerCase())) ?? null : jobs[0] ?? null,
     getActiveJobId: () => overrides.activeJobId ?? "job-a",
-    getJobs: () => jobs
+    getJobs: () => jobs,
+    getSchedulerState: () => overrides.schedulerState ?? {
+      activeSlots: jobs.filter((job) => ["running", "approval"].includes(job.status)).length,
+      capacityBlockedQueued: [],
+      lockBlockedQueued: [],
+      maxConcurrent: 2,
+      runnableQueued: jobs.filter((job) => job.status === "queued")
+    }
   };
   const bridgeResponses = {
     "/goals": { id: "goal-a", mission: "Build" },
@@ -56,6 +64,13 @@ function createHarness(overrides = {}) {
           { title: "Extension tab", url: "chrome-extension://abc/panel.html" }
         ]
       }
+    },
+    detectWalletState: async (options = {}) => {
+      calls.push(["wallet", options]);
+      if (options.announce) {
+        calls.push(["message", "system", "Wallet status\nPhantom Solana: available, not connected\n\nBoundary: read-only detection."]);
+      }
+      return { ok: true, state: { detected: true } };
     },
     finishControlRun: (status) => calls.push(["finish", status]),
     getCurrentControlRun: () => overrides.currentControlRun ?? { status: "running" },
@@ -105,6 +120,83 @@ test("app command handlers parse draft-only email and calendar commands", () => 
     body: "Tuesday 10:00 with the team"
   });
   assert.equal(parseDraftAddonCommand("wallet", "no"), null);
+});
+
+test("app command handlers parse natural delegation intents", () => {
+  assert.deepEqual(parseNaturalDelegationIntent("ask Hermes to research the best provider route"), {
+    missingTarget: false,
+    mission: "research the best provider route",
+    target: "hermes"
+  });
+  assert.deepEqual(parseNaturalDelegationIntent("delegate this to OpenCode: inspect the failing tests"), {
+    missingTarget: false,
+    mission: "inspect the failing tests",
+    target: "opencode"
+  });
+  assert.deepEqual(parseNaturalDelegationIntent("please route this work to the Resonant Engineer to diagnose provider recovery"), {
+    missingTarget: false,
+    mission: "diagnose provider recovery",
+    target: "engineer"
+  });
+  assert.deepEqual(parseNaturalDelegationIntent("spawn Hermes to review the research packet"), {
+    missingTarget: false,
+    mission: "review the research packet",
+    target: "hermes"
+  });
+  assert.deepEqual(parseNaturalDelegationIntent("dispatch this task to OpenCode: tighten the command router"), {
+    missingTarget: false,
+    mission: "tighten the command router",
+    target: "opencode"
+  });
+  assert.deepEqual(parseNaturalDelegationIntent("can you delegate this to another agent?"), {
+    missingTarget: true,
+    mission: "to another agent?",
+    target: ""
+  });
+  assert.deepEqual(parseNaturalDelegationIntent("can you spawn or delegate to other agents?"), {
+    missingTarget: true,
+    mission: "or delegate to other agents?",
+    target: ""
+  });
+  assert.deepEqual(parseNaturalDelegationIntent("can you use the ResonantOS agent control layer directly?"), {
+    missingTarget: true,
+    mission: "can you use the ResonantOS agent control layer directly?",
+    target: ""
+  });
+  assert.equal(parseNaturalDelegationIntent("hello augmentor"), null);
+  assert.equal(parseNaturalDelegationIntent("explain the strategy without delegating"), null);
+});
+
+test("app command handlers create governed natural delegations", async () => {
+  const harness = createHarness({
+    bridgeResponses: {
+      "/addons/delegate": { id: "hermes-a", target: "hermes", path: "/tmp/hermes-task.md" }
+    }
+  });
+
+  await harness.handlers.runNaturalDelegationCommand({
+    missingTarget: false,
+    mission: "research the next ResonantOS settings architecture slice",
+    target: "hermes"
+  });
+
+  assert.ok(harness.calls.some((call) =>
+    call[0] === "bridge" &&
+    call[1] === "/addons/delegate" &&
+    call[2].target === "hermes" &&
+    /settings architecture/.test(call[2].mission)
+  ));
+  assert.ok(harness.calls.some((call) => call[0] === "message" && /Delegation queued for Hermes/.test(call[2])));
+  assert.ok(harness.calls.some((call) => call[0] === "message" && /governed task packet/.test(call[2])));
+});
+
+test("app command handlers ask for target when natural delegation is underspecified", async () => {
+  const harness = createHarness();
+
+  await harness.handlers.runNaturalDelegationCommand({ missingTarget: true, mission: "fix this", target: "" });
+
+  assert.ok(harness.calls.some((call) => call[0] === "message" && /Choose a target/.test(call[2])));
+  assert.equal(harness.calls.some((call) => call[0] === "bridge" && call[1] === "/addons/delegate"), false);
 });
 
 test("app command handlers parse history filters", () => {
@@ -163,12 +255,15 @@ test("app command handlers report status, memory, history, capabilities, and sit
   await harness.handlers.runMemorySearchCommand("resonant");
   await harness.handlers.runHistorySearchCommand("example");
   await harness.handlers.runCapabilitiesCommand();
+  await harness.handlers.runWalletStatusCommand();
   await harness.handlers.runSitePermissionCommand("trusted");
 
   assert.ok(harness.calls.some((call) => call[0] === "message" && /ResonantOS Browser status/.test(call[2])));
   assert.ok(harness.calls.some((call) => call[0] === "message" && /Living Archive matches/.test(call[2])));
   assert.ok(harness.calls.some((call) => call[0] === "message" && /Browser history matches/.test(call[2])));
   assert.ok(harness.calls.some((call) => call[0] === "message" && /What Augmentor can do now/.test(call[2])));
+  assert.ok(harness.calls.some((call) => call[0] === "wallet" && call[1].announce === true));
+  assert.ok(harness.calls.some((call) => call[0] === "message" && /Wallet status/.test(call[2])));
   assert.ok(harness.calls.some((call) => call[0] === "message" && /Assistant permission to trusted-for-safe-actions/.test(call[2])));
 });
 
@@ -211,7 +306,7 @@ test("app command handlers save browser activity searches to archive intake", as
 test("app command handlers manage browser jobs", async () => {
   const harness = createHarness({
     jobs: [
-      { id: "job-a", goal: "Find slot", status: "running", steps: [{ type: "read", label: "Read page", state: "completed" }] },
+      { id: "job-a", goal: "Find slot", status: "running", updatedAt: "2026-05-26T09:00:00.000Z", steps: [{ type: "read", label: "Read page", state: "completed", updatedAt: "2026-05-26T09:00:00.000Z" }] },
       { id: "job-b", goal: "Research DAO", status: "paused", steps: [{ type: "read", label: "Read DAO", state: "completed" }] }
     ]
   });
@@ -224,6 +319,8 @@ test("app command handlers manage browser jobs", async () => {
   await harness.handlers.cancelBrowserJob("job-a");
 
   assert.ok(harness.calls.some((call) => call[0] === "message" && /Browser jobs/.test(call[2])));
+  assert.ok(harness.calls.some((call) => call[0] === "message" && /Scheduler:/.test(call[2])));
+  assert.ok(harness.calls.some((call) => call[0] === "message" && /attention job-a: Running job has no recent recorded progress/.test(call[2])));
   assert.ok(harness.calls.some((call) => call[0] === "activate" && call[1] === "job-b"));
   assert.ok(harness.calls.some((call) => call[0] === "message" && /Focused browser job job-b/.test(call[2])));
   assert.ok(harness.calls.some((call) => call[0] === "finish" && call[1] === "paused"));

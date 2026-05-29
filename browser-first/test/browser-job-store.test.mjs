@@ -2,13 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  browserJobSchedulerState,
   createBrowserJobStore,
   isActiveBrowserJobStatus,
   isLockHoldingBrowserJobStatus,
   isTerminalBrowserJobStatus,
   normalizeBrowserJob,
   normalizePageLock,
-  normalizePreflightDecision
+  normalizePreflightDecision,
+  staleBrowserJobEvidence
 } from "../resonantos-side-panel-extension/src/lib/browser-job-store.js";
 
 function createHarness(initial = {}) {
@@ -57,7 +59,17 @@ test("browser job store normalizes job shape and status classes", () => {
         decision: "Click the visible button.",
         action: "Click Continue",
         result: "clicked Continue",
-        safetyClass: "safe"
+        safetyClass: "safe",
+        confidence: "high",
+        uncertainty: "Repeated label on page.",
+        nextHumanAction: "Review target if the click fails."
+      },
+      timing: {
+        startedAt: "2026-05-26T09:59:59.000Z",
+        startedAtMs: 1000,
+        completedAt: "2026-05-26T10:00:00.000Z",
+        completedAtMs: 1800,
+        durationMs: 800
       },
       updatedAt: "2026-05-26T10:00:00.000Z"
     }],
@@ -80,6 +92,13 @@ test("browser job store normalizes job shape and status classes", () => {
       acquiredAt: "2026-05-26T09:59:30.000Z",
       reason: "Agent Control goal"
     },
+    timing: {
+      startedAt: "2026-05-26T09:59:00.000Z",
+      startedAtMs: 1000,
+      completedAt: "2026-05-26T10:00:00.000Z",
+      completedAtMs: 3000,
+      durationMs: 2000
+    },
     lastError: "e"
   }, { now: () => "2026-05-26T10:00:00.000Z" });
 
@@ -100,10 +119,27 @@ test("browser job store normalizes job shape and status classes", () => {
       decision: "Click the visible button.",
       action: "Click Continue",
       result: "clicked Continue",
-      safetyClass: "safe"
+      safetyClass: "safe",
+      confidence: "high",
+      uncertainty: "Repeated label on page.",
+      nextHumanAction: "Review target if the click fails."
+    },
+    timing: {
+      startedAt: "2026-05-26T09:59:59.000Z",
+      startedAtMs: 1000,
+      completedAt: "2026-05-26T10:00:00.000Z",
+      completedAtMs: 1800,
+      durationMs: 800
     },
     updatedAt: "2026-05-26T10:00:00.000Z"
   }]);
+  assert.deepEqual(job.timing, {
+    startedAt: "2026-05-26T09:59:00.000Z",
+    startedAtMs: 1000,
+    completedAt: "2026-05-26T10:00:00.000Z",
+    completedAtMs: 3000,
+    durationMs: 2000
+  });
   assert.deepEqual(job.preflightDecision, {
     id: "control-abc",
     goal: "book a call",
@@ -292,6 +328,130 @@ test("browser job store blocks conflicting active page locks and releases them w
   assert.equal(harness.store.findJob(second.id).pageLock, null);
 });
 
+test("browser job scheduler identifies runnable, locked, and capacity-waiting queued jobs", () => {
+  const state = browserJobSchedulerState([
+    {
+      id: "running-a",
+      goal: "Use DAO page",
+      status: "running",
+      pageLock: { tabId: 1, siteKey: "dao.example", url: "https://dao.example/" }
+    },
+    {
+      id: "approval-a",
+      goal: "Review shop page",
+      status: "approval",
+      pageLock: { tabId: 2, siteKey: "shop.example", url: "https://shop.example/cart" }
+    },
+    {
+      id: "queued-open",
+      goal: "Read docs",
+      status: "queued",
+      pageLock: { tabId: 3, siteKey: "docs.example", url: "https://docs.example/" }
+    },
+    {
+      id: "queued-locked",
+      goal: "Click DAO vote",
+      status: "queued",
+      pageLock: { tabId: 4, siteKey: "dao.example", url: "https://dao.example/vote" }
+    },
+    {
+      id: "queued-capacity",
+      goal: "Research unrelated page",
+      status: "queued",
+      pageLock: { tabId: 5, siteKey: "research.example", url: "https://research.example/" }
+    },
+    { id: "paused-a", goal: "Paused", status: "paused" },
+    { id: "done-a", goal: "Done", status: "completed" }
+  ], { maxConcurrent: 3 });
+
+  assert.equal(state.maxConcurrent, 3);
+  assert.equal(state.activeSlots, 2);
+  assert.equal(state.availableSlots, 1);
+  assert.deepEqual(state.runnableQueued.map((job) => job.id), ["queued-open"]);
+  assert.deepEqual(state.lockBlockedQueued.map((job) => [job.id, job.blockerId]), [["queued-locked", "running-a"]]);
+  assert.deepEqual(state.capacityBlockedQueued.map((job) => job.id), ["queued-capacity"]);
+  assert.equal(state.paused, 1);
+  assert.equal(state.terminal, 1);
+});
+
+test("browser job store exposes scheduler state for monitor and command surfaces", async () => {
+  const harness = createHarness({
+    jobs: [
+      { id: "running", goal: "Running", status: "running", pageLock: { tabId: 1, siteKey: "a.example" } },
+      { id: "queued", goal: "Queued", status: "queued", pageLock: { tabId: 2, siteKey: "b.example" } }
+    ]
+  });
+
+  await harness.store.hydrate();
+
+  const state = harness.store.getSchedulerState({ maxConcurrent: 2 });
+  assert.equal(state.running, 1);
+  assert.deepEqual(state.runnableQueued.map((job) => job.id), ["queued"]);
+});
+
+test("browser job store detects stale running and approval jobs without mutating status", async () => {
+  const stale = staleBrowserJobEvidence({
+    id: "job-stale",
+    goal: "Find a product",
+    status: "running",
+    updatedAt: "2026-05-26T09:40:00.000Z",
+    steps: [{ type: "read", label: "Read page", state: "completed", updatedAt: "2026-05-26T09:41:00.000Z" }]
+  }, {
+    now: "2026-05-26T10:00:00.000Z",
+    thresholdMs: 10 * 60 * 1000
+  });
+
+  assert.equal(stale.reason, "Running job has no recent recorded progress.");
+  assert.equal(stale.lastActivityAt, "2026-05-26T09:41:00.000Z");
+  assert.equal(stale.ageMs, 19 * 60 * 1000);
+  assert.match(stale.nextHumanAction, /continue the job/);
+
+  assert.equal(staleBrowserJobEvidence({
+    id: "job-recent",
+    goal: "Recent",
+    status: "running",
+    updatedAt: "2026-05-26T09:55:00.000Z"
+  }, {
+    now: "2026-05-26T10:00:00.000Z",
+    thresholdMs: 10 * 60 * 1000
+  }), null);
+
+  assert.equal(staleBrowserJobEvidence({
+    id: "job-completed",
+    goal: "Completed",
+    status: "completed",
+    updatedAt: "2026-05-26T09:00:00.000Z"
+  }, {
+    now: "2026-05-26T10:00:00.000Z",
+    thresholdMs: 10 * 60 * 1000
+  }), null);
+
+  const approval = staleBrowserJobEvidence({
+    id: "job-approval",
+    goal: "Approve click",
+    status: "approval",
+    updatedAt: "2026-05-26T09:00:00.000Z"
+  }, {
+    now: "2026-05-26T10:00:00.000Z",
+    thresholdMs: 10 * 60 * 1000
+  });
+  assert.equal(approval.reason, "Approval has been waiting without recorded progress.");
+  assert.match(approval.nextHumanAction, /approval card/);
+
+  const harness = createHarness({
+    jobs: [
+      { id: "job-stale", goal: "stale", status: "running", updatedAt: "2026-05-26T09:40:00.000Z" },
+      { id: "job-done", goal: "done", status: "completed", updatedAt: "2026-05-26T09:00:00.000Z" }
+    ]
+  });
+  await harness.store.hydrate();
+
+  const staleJobs = harness.store.getStaleJobs({ thresholdMs: 10 * 60 * 1000 });
+  assert.equal(staleJobs.length, 1);
+  assert.equal(staleJobs[0].job.id, "job-stale");
+  assert.equal(harness.store.findJob("job-stale").status, "running");
+});
+
 test("browser job store updates terminal completion and monitor collapsed state", async () => {
   const harness = createHarness();
   const job = await harness.store.createJob({ goal: "Task" });
@@ -305,7 +465,7 @@ test("browser job store updates terminal completion and monitor collapsed state"
   const withSteps = await harness.store.updateJob(job.id, {
     steps: [{ type: "read", label: "Read page", state: "completed", note: "saw result" }]
   });
-  assert.deepEqual(withSteps.steps, [{ type: "read", label: "Read page", state: "completed", note: "saw result", details: {}, updatedAt: null }]);
+  assert.deepEqual(withSteps.steps, [{ type: "read", label: "Read page", state: "completed", note: "saw result", details: {}, timing: {}, updatedAt: null }]);
 
   await harness.store.toggleMonitorCollapsed();
   assert.equal(harness.store.getMonitorCollapsed(), false);

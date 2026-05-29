@@ -20,6 +20,7 @@ function createHarness(initial = {}) {
       messages: "messages",
       forks: "forks",
       sessions: "sessions",
+      projects: "projects",
       activeSessionId: "activeSessionId",
       model: "model",
       thinkingDepth: "thinkingDepth",
@@ -70,6 +71,28 @@ test("chat session store hydrates valid state and ignores invalid messages/setti
   assert.equal(harness.store.getForks().length, 1);
   assert.equal(harness.store.getAttachments().length, 1);
 });
+
+test("chat session store clears stale project references on hydrate", async () => {
+  const harness = createHarness({
+    sessions: [{
+      id: "session-a",
+      title: "Old project chat",
+      projectId: "missing-project",
+      messages: [{ id: "message-a", role: "user", content: "hello", createdAt: "2026-05-25T00:00:00.000Z" }]
+    }],
+    projects: [{
+      id: "archived-project",
+      name: "Archived",
+      archivedAt: "2026-05-25T00:00:00.000Z"
+    }],
+    activeSessionId: "session-a"
+  });
+
+  await harness.store.hydrate();
+
+  assert.equal(harness.store.getActiveSession().projectId, "");
+});
+
 
 test("chat session store creates and switches durable chat workspaces", async () => {
   const harness = createHarness();
@@ -139,6 +162,81 @@ test("chat session store renames, deletes, and tracks session workspace metadata
   assert.equal(harness.store.getActiveSession().workspaceId, "memory");
 });
 
+test("chat session store pins sessions and assigns projects", async () => {
+  const harness = createHarness();
+
+  await harness.store.hydrate();
+  const project = await harness.store.createProject("Memory");
+  await harness.store.addMessage("user", "project research");
+  const session = harness.store.getActiveSession();
+
+  await harness.store.setSessionPinned(session.id, true);
+  await harness.store.setSessionProject(session.id, project.id);
+
+  assert.equal(harness.store.getActiveSession().pinned, true);
+  assert.equal(harness.store.getActiveSession().projectId, project.id);
+  assert.equal(await harness.store.setSessionProject(session.id, "missing-project"), null);
+  assert.equal(harness.store.getActiveSession().projectId, project.id);
+
+  await harness.store.setSessionPinned(session.id, false);
+  await harness.store.setSessionProject(session.id, "");
+
+  assert.equal(harness.store.getActiveSession().pinned, false);
+  assert.equal(harness.store.getActiveSession().projectId, "");
+});
+
+test("chat session store creates pins and deletes real projects", async () => {
+  const harness = createHarness();
+
+  await harness.store.hydrate();
+  const project = await harness.store.createProject("ResonantOS Browser");
+  await harness.store.addMessage("user", "project chat");
+  const session = harness.store.getActiveSession();
+  await harness.store.setSessionProject(session.id, project.id);
+  await harness.store.setProjectPinned(project.id, true);
+
+  assert.equal(harness.store.getProjects()[0].name, "ResonantOS Browser");
+  assert.equal(harness.store.getProjects()[0].pinned, true);
+  assert.equal(harness.store.getActiveSession().projectId, project.id);
+
+  await harness.store.deleteProject(project.id);
+
+  assert.equal(harness.store.getProjects().length, 0);
+  assert.equal(harness.store.getActiveSession().projectId, "");
+});
+
+test("chat session store renames, expands, archives, and restores projects and chats", async () => {
+  const harness = createHarness();
+
+  await harness.store.hydrate();
+  const project = await harness.store.createProject("Draft Project");
+  await harness.store.renameProject(project.id, "Client Project");
+  await harness.store.setProjectExpanded(project.id, false);
+  await harness.store.addMessage("user", "project conversation");
+  const session = harness.store.getActiveSession();
+  await harness.store.renameSession(session.id, "Client Chat");
+  await harness.store.setSessionProject(session.id, project.id);
+  await harness.store.setSessionUnread(session.id, true);
+
+  assert.equal(harness.store.getProjects()[0].name, "Client Project");
+  assert.equal(harness.store.getProjects()[0].expanded, false);
+  assert.equal(harness.store.getActiveSession().title, "Client Chat");
+  assert.equal(harness.store.getActiveSession().unread, true);
+
+  await harness.store.setSessionArchived(session.id, true);
+  await harness.store.setProjectArchived(project.id, true);
+
+  assert.ok(harness.store.getSessions().some((item) => item.id === session.id && item.archivedAt));
+  assert.ok(harness.store.getProjects().some((item) => item.id === project.id && item.archivedAt));
+  assert.notEqual(harness.store.getActiveSessionId(), session.id);
+
+  await harness.store.setSessionArchived(session.id, false);
+  await harness.store.setProjectArchived(project.id, false);
+
+  assert.equal(harness.store.getSessions().find((item) => item.id === session.id).archivedAt, "");
+  assert.equal(harness.store.getProjects().find((item) => item.id === project.id).archivedAt, "");
+});
+
 test("chat session store adds, deletes, forks, and trims messages", async () => {
   const harness = createHarness();
 
@@ -157,6 +255,25 @@ test("chat session store adds, deletes, forks, and trims messages", async () => 
 
   await harness.store.deleteMessage(user.id);
   assert.equal(harness.store.findMessage(user.id), null);
+});
+
+test("chat session store forks whole sessions while preserving project context", async () => {
+  const harness = createHarness();
+
+  await harness.store.hydrate();
+  const project = await harness.store.createProject("OpenCode");
+  await harness.store.addMessage("user", "source conversation");
+  const source = harness.store.getActiveSession();
+  await harness.store.setSessionProject(source.id, project.id);
+  await harness.store.setSessionPinned(source.id, true);
+
+  const fork = await harness.store.forkSession(source.id);
+
+  assert.equal(fork.sourceSessionId, source.id);
+  assert.equal(harness.store.getMessages()[0].content, "source conversation");
+  assert.equal(harness.store.getActiveSession().projectId, project.id);
+  assert.equal(harness.store.getActiveSession().pinned, false);
+  assert.match(harness.store.getActiveSession().title, /^Fork:/);
 });
 
 test("chat session store trims to previous user message for regeneration", async () => {

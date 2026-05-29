@@ -8,15 +8,85 @@
   </head>
   <body>
     <main class="workspace-shell" aria-label="ResonantOS main workspace">
-      <aside class="workspace-rail" aria-label="ResonantOS workspaces">
-        <div class="brand-mark">R</div>
-        <button type="button" class="rail-item active" data-workspace="answer">Answer</button>
-        <button type="button" class="rail-item" data-workspace="artifacts">Artifacts</button>
-        <button type="button" class="rail-item" data-workspace="addons">Add-ons</button>
-        <button type="button" class="rail-item" data-workspace="memory">Living Archive</button>
-        <button type="button" class="rail-item" data-workspace="hermes">Hermes</button>
-        <button type="button" class="rail-item" data-workspace="opencode">OpenCode</button>
-        <button type="button" class="rail-item" data-workspace="settings">Settings</button>
+      <aside class="workspace-rail" aria-label="ResonantOS navigation">
+        <header class="rail-header">
+          <div class="brand-lockup">
+            <div class="brand-mark">R</div>
+            <strong>ResonantOS</strong>
+          </div>
+          <button id="rail-toggle" type="button" class="rail-icon-button" title="Collapse sidebar" aria-label="Collapse sidebar">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5v14"/><path d="M4 5h16v14H4z"/></svg>
+          </button>
+        </header>
+
+        <nav class="rail-primary" aria-label="Primary actions">
+          <button id="rail-new-chat" type="button" class="rail-item">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+            <span>New chat</span>
+          </button>
+          <button id="rail-search-toggle" type="button" class="rail-item">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="5.5"/><path d="m15 15 4 4"/></svg>
+            <span>Search chats</span>
+          </button>
+          <button type="button" class="rail-item" data-workspace="addons">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></svg>
+            <span>Add-ons</span>
+          </button>
+          <button type="button" class="rail-item" data-workspace="artifacts">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v14H5z"/><path d="M8 9h8"/><path d="M8 13h5"/></svg>
+            <span>Artifacts</span>
+          </button>
+        </nav>
+
+        <div id="rail-search-box" class="rail-search-box" hidden>
+          <input id="rail-search-input" type="search" placeholder="Search chats" aria-label="Search chats" />
+        </div>
+
+        <section class="rail-section" aria-label="Pinned Add-ons">
+          <h2>Pinned Add-ons</h2>
+          <button type="button" class="rail-project" data-workspace="memory">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h6l2 2h8v10H4z"/></svg>
+            <span class="rail-text">Living Archive</span>
+          </button>
+          <button type="button" class="rail-project" data-workspace="hermes">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v12H4z"/><path d="M8 10h8"/><path d="M8 14h5"/></svg>
+            <span class="rail-text">Hermes</span>
+          </button>
+          <button type="button" class="rail-project" data-workspace="opencode">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 8-4 4 4 4"/><path d="m15 8 4 4-4 4"/></svg>
+            <span class="rail-text">OpenCode</span>
+          </button>
+        </section>
+
+        <section class="rail-section" aria-label="Projects">
+          <div class="rail-section-row">
+            <h2>Projects</h2>
+            <button id="rail-new-project" type="button">New</button>
+          </div>
+          <ol id="rail-project-list" class="rail-project-list"></ol>
+        </section>
+
+        <section class="rail-section rail-recents" aria-label="Recent chats" data-project-id="">
+          <div class="rail-section-row">
+            <h2>Chats</h2>
+            <button id="rail-clear-search" type="button" hidden>Clear</button>
+          </div>
+          <ol id="rail-chat-list" class="rail-chat-list"></ol>
+        </section>
+
+        <footer class="rail-footer">
+          <button type="button" class="rail-user-card" data-workspace="settings">
+            <span class="rail-avatar">M</span>
+            <span>
+              <strong>Manolo Remiddi</strong>
+              <small>Local sovereign profile</small>
+            </span>
+          </button>
+          <button type="button" class="rail-item rail-settings" data-workspace="settings">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/><path d="M4 12h2"/><path d="M18 12h2"/><path d="M12 4v2"/><path d="M12 18v2"/></svg>
+            <span>Settings</span>
+          </button>
+        </footer>
       </aside>
 
       <section class="answer-workspace" aria-label="Augmentor full-screen chat">
@@ -27,7 +97,9 @@
             <button class="topbar-tab" type="button">Images</button>
           </nav>
           <div class="topbar-actions">
-            <button id="new-chat" type="button" class="share-button">New Chat</button>
+            <button id="new-chat" type="button" class="share-button" title="New chat" aria-label="New chat">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+            </button>
           </div>
         </header>
 
@@ -41,7 +113,7 @@
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
             </button>
             <input id="file-input" type="file" multiple hidden />
-            <button id="read-page" type="button" class="icon-button" title="Read current browser page from sidebar" aria-label="Read current browser page">
+            <button id="read-page" type="button" class="icon-button" title="Read current browser page" aria-label="Read current browser page">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Z"/><circle cx="12" cy="12" r="2.5"/></svg>
             </button>
             <button id="save-intake" type="button" class="icon-button" title="Save current browser page to Living Archive intake" aria-label="Save current browser page to Living Archive intake">
@@ -50,10 +122,11 @@
             <button id="save-selection" type="button" class="icon-button" title="Save selected browser text to Living Archive intake" aria-label="Save selected browser text to Living Archive intake">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v14H5z"/><path d="M8 9h8"/><path d="M8 13h5"/><path d="m15 15 2 2 3-4"/></svg>
             </button>
-            <button id="context-toggle" type="button" class="icon-button context-usage-button" title="Open browser context status in sidebar" aria-label="Open browser context status in sidebar">
+            <button id="context-toggle" type="button" class="icon-button context-usage-button" title="Summarize current browser context" aria-label="Summarize current browser context">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 1 16 0"/><path d="M4 12h4"/><path d="M16 12h4"/><path d="M12 4v4"/><path d="M8.5 17.5 12 12l3.5 5.5"/></svg>
             </button>
             <select id="model-select" class="model-select" aria-label="Connected model">
+              <option value="__auto__">Auto route</option>
               <option value="MiniMax-M2.7">MiniMax 2.7</option>
               <option value="MiniMax-M2.7-highspeed">MiniMax 2.7 High Speed</option>
               <option value="gpt-5.5">GPT 5.5</option>

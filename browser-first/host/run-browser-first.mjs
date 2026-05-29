@@ -4,14 +4,46 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import {
   createBridgeToken,
   runBridgeAuthSelfTest,
   startBridgeServer,
   writeBridgeConfig,
 } from "./bridge-server.mjs";
-import { mergePromotedMarkdownBody } from "./archive-merge.mjs";
+import { mergePromotedMarkdownBody, summarizePromotedPageForIndex, upsertWikiIndexCatalogEntry } from "./archive-merge.mjs";
+import {
+  appendProviderHandoffAudit,
+  buildProviderDraftHandoff,
+  parseDraftPacketMarkdown,
+} from "./addon-draft-connectors.mjs";
+import { computeWikiHealth } from "./memory-wiki-health.mjs";
+import { searchMemoryWiki } from "./memory-search.mjs";
+import { ensureLivingArchiveSchema } from "./memory-schema.mjs";
+import { buildDeterministicWikiDraft } from "./memory-ingest-draft.mjs";
+import { runArchiveIngestWriterWithRoute } from "./memory-ingest-writer.mjs";
+import {
+  lineDiffSummary,
+  listSourceFileVersions,
+  recordSourceFileIntakeArtifact,
+  reserveSourceFileVersion,
+  sourceContentHash,
+} from "./memory-source-versioning.mjs";
+import {
+  defaultRoutingStrategies,
+  isModelAllowed,
+  modelById,
+  modelCatalog,
+  modelRuntimeState as providerFabricModelRuntimeState,
+  normalizeFallbackModels,
+  normalizeRoutingStrategy,
+  providerConnectivityTarget,
+  providerProfileById,
+  providerProfiles,
+  providerRouteForModel as providerFabricRouteForModel,
+  providerRouteForWorkload as providerFabricRouteForWorkload,
+  resolveRoutingStrategies,
+} from "./provider-fabric-core.mjs";
 
 const repoRoot = path.resolve(import.meta.dirname, "..", "..");
 const hostBinary = path.join(
@@ -141,6 +173,18 @@ function providerSecretsPath() {
   return path.join(os.homedir(), "ResonantOS_User", "Secrets", "provider-secrets.json");
 }
 
+function providerRoutingPath() {
+  return path.join(os.homedir(), "ResonantOS_User", "ProviderFabric", "routing-strategies.json");
+}
+
+function providerModelPreferencesPath() {
+  return path.join(os.homedir(), "ResonantOS_User", "ProviderFabric", "model-preferences.json");
+}
+
+function providerDiagnosticsHistoryPath() {
+  return path.join(os.homedir(), "ResonantOS_User", "ProviderFabric", "diagnostics-history.json");
+}
+
 function userRoot() {
   return path.join(os.homedir(), "ResonantOS_User");
 }
@@ -149,8 +193,38 @@ function memoryRoot() {
   return path.join(userRoot(), "Memory");
 }
 
+function memorySettingsPath() {
+  return path.join(memoryRoot(), "CONFIG", "memory-settings.json");
+}
+
+function memorySourceAuditPath() {
+  return path.join(memoryRoot(), "CONFIG", "source-audit.md");
+}
+
+function memorySourceFileManifestPath() {
+  return path.join(memoryRoot(), "CONFIG", "source-file-versions.json");
+}
+
 function browserFirstRoot() {
   return path.join(userRoot(), "BrowserFirst");
+}
+
+function diagnosticsRoot() {
+  return path.join(browserFirstRoot(), "Diagnostics");
+}
+
+function redactPathForDiagnostics(filePath) {
+  return String(filePath ?? "").replace(os.homedir(), "~");
+}
+
+function redactDiagnosticText(value) {
+  return String(value ?? "")
+    .replace(/sk-[a-z0-9_-]+/gi, "[redacted-key]")
+    .replace(/bearer\s+[a-z0-9._-]+/gi, "Bearer [redacted-token]")
+    .replace(/api[_-]?key\s*[:=]\s*[^\s]+/gi, "api_key=[redacted]")
+    .replace(/token\s*[:=]\s*[^\s]+/gi, "token=[redacted]")
+    .replace(/secret\s*[:=]\s*[^\s]+/gi, "secret=[redacted]")
+    .replace(os.homedir(), "~");
 }
 
 function hermesHome(profileHome) {
@@ -158,6 +232,14 @@ function hermesHome(profileHome) {
   if (value === "~") return os.homedir();
   if (value.startsWith("~/")) return path.join(os.homedir(), value.slice(2));
   return path.resolve(value);
+}
+
+function expandUserPath(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  if (raw === "~") return os.homedir();
+  if (raw.startsWith("~/")) return path.join(os.homedir(), raw.slice(2));
+  return path.resolve(raw);
 }
 
 function hermesCommand(profileHome) {
@@ -180,6 +262,22 @@ function executableCandidates(commandName) {
   return String(process.env.PATH ?? "")
     .split(path.delimiter)
     .flatMap((entry) => names.map((name) => path.join(entry, name)));
+}
+
+async function execFileStdout(command, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    execFile(command, args, { timeout: 120_000, windowsHide: true, ...options }, (error, stdout, stderr) => {
+      if (error) {
+        reject(new Error(String(stderr || error.message || "Command failed.").trim()));
+        return;
+      }
+      resolve(String(stdout ?? "").trim());
+    });
+  });
+}
+
+function firstExistingExecutable(commandName) {
+  return executableCandidates(commandName).find((candidate) => existsSync(candidate)) ?? null;
 }
 
 function opencodeCommand() {
@@ -284,29 +382,71 @@ async function readProviderSecrets() {
   return JSON.parse(await readFile(filePath, "utf8"));
 }
 
-const providerProfiles = [
-  {
-    id: "shared-minimax",
-    label: "MiniMax",
-    authType: "api-key",
-    models: ["MiniMax-M2.7", "MiniMax-M2.7-highspeed"],
-    role: "Default Augmentor and agent-control provider",
-  },
-  {
-    id: "shared-openai",
-    label: "OpenAI",
-    authType: "api-key",
-    models: ["gpt-5.5", "gpt-5.4-mini"],
-    role: "High-reasoning fallback and archive-quality provider",
-  },
-];
+async function readRoutingOverrides() {
+  const filePath = providerRoutingPath();
+  if (!existsSync(filePath)) {
+    return {};
+  }
+  return JSON.parse(await readFile(filePath, "utf8"));
+}
 
-function providerProfileById(providerId) {
-  return providerProfiles.find((profile) => profile.id === providerId) ?? null;
+async function readProviderModelPreferences() {
+  const filePath = providerModelPreferencesPath();
+  if (!existsSync(filePath)) {
+    return {};
+  }
+  return JSON.parse(await readFile(filePath, "utf8"));
+}
+
+async function readProviderDiagnosticsHistory() {
+  const filePath = providerDiagnosticsHistoryPath();
+  if (!existsSync(filePath)) {
+    return [];
+  }
+  const parsed = JSON.parse(await readFile(filePath, "utf8"));
+  return Array.isArray(parsed.entries) ? parsed.entries : [];
+}
+
+async function appendProviderDiagnosticHistory(entry) {
+  const safeEntry = {
+    providerId: String(entry.providerId ?? ""),
+    label: String(entry.label ?? ""),
+    testedAt: String(entry.testedAt ?? new Date().toISOString()),
+    state: String(entry.state ?? "unknown"),
+    status: typeof entry.status === "number" ? entry.status : null,
+    latencyMs: typeof entry.latencyMs === "number" ? entry.latencyMs : null,
+    endpoint: String(entry.endpoint ?? "provider endpoint"),
+    detail: redactDiagnosticText(entry.detail),
+  };
+  const current = await readProviderDiagnosticsHistory().catch(() => []);
+  const next = [safeEntry, ...current].slice(0, 30);
+  const filePath = providerDiagnosticsHistoryPath();
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, `${JSON.stringify({ entries: next }, null, 2)}\n`, { mode: 0o600 });
+  await chmod(filePath, 0o600).catch(() => undefined);
+  return safeEntry;
+}
+
+async function resolvedRoutingStrategies() {
+  const [secrets, overrides, preferences] = await Promise.all([
+    readProviderSecrets(),
+    readRoutingOverrides().catch(() => ({})),
+    readProviderModelPreferences().catch(() => ({})),
+  ]);
+  return resolveRoutingStrategies({
+    secrets,
+    overrides,
+    preferences,
+    localRuntimeUrl: process.env.RESONANTOS_LOCAL_RUNTIME_URL,
+  });
 }
 
 async function executeProviderStatus() {
-  const secrets = await readProviderSecrets();
+  const [secrets, preferences, strategies] = await Promise.all([
+    readProviderSecrets(),
+    readProviderModelPreferences().catch(() => ({})),
+    resolvedRoutingStrategies(),
+  ]);
   return {
     vault: {
       configured: existsSync(providerSecretsPath()),
@@ -314,9 +454,236 @@ async function executeProviderStatus() {
     },
     providers: providerProfiles.map((profile) => ({
       ...profile,
+      models: modelCatalog
+        .filter((entry) => entry.providerId === profile.id)
+        .map((entry) => ({
+          model: entry.model,
+          label: entry.label,
+          runtime: entry.runtime,
+          costTier: entry.costTier,
+          qualityTier: entry.qualityTier,
+          allowed: isModelAllowed(entry.model, preferences),
+        })),
+      routeConsumers: strategies
+        .filter((strategy) =>
+          [strategy.primary, ...(strategy.fallbackChain ?? [])]
+            .some((entry) => entry?.providerId === profile.id)
+        )
+        .map((strategy) => ({
+          id: strategy.id,
+          label: strategy.label,
+          workload: strategy.workload,
+          routeState: strategy.routeState,
+          hardStop: strategy.hardStop,
+        })),
       configured: Boolean(secrets[profile.id]),
       credentialPreview: secrets[profile.id] ? "stored" : "missing",
     })),
+  };
+}
+
+async function executeProviderHealthCheck(payload) {
+  const providerId = String(payload.providerId ?? "").trim();
+  const profile = providerProfileById(providerId);
+  if (!profile) {
+    throw new Error("Unknown provider profile.");
+  }
+  const [secrets, preferences, strategies] = await Promise.all([
+    readProviderSecrets(),
+    readProviderModelPreferences().catch(() => ({})),
+    resolvedRoutingStrategies(),
+  ]);
+  const models = modelCatalog.filter((entry) => entry.providerId === providerId);
+  const configured = Boolean(secrets[providerId]);
+  const routeConsumers = strategies.filter((strategy) =>
+    [strategy.primary, ...(strategy.fallbackChain ?? [])]
+      .some((entry) => entry?.providerId === providerId)
+  );
+  const blockedConsumers = routeConsumers.filter((strategy) => strategy.routeState !== "routable");
+  const availableModels = models.filter((entry) => providerFabricModelRuntimeState(entry.model, {
+    secrets,
+    preferences,
+    localRuntimeUrl: process.env.RESONANTOS_LOCAL_RUNTIME_URL,
+  })?.configured);
+  const allowedModels = models.filter((entry) => isModelAllowed(entry.model, preferences));
+  const state = configured && availableModels.length
+    ? (blockedConsumers.length ? "degraded" : "ready")
+    : configured && !allowedModels.length
+      ? "disabled"
+    : "missing-credential";
+  return {
+    providerId,
+    label: profile.label,
+    checkedAt: new Date().toISOString(),
+    state,
+    configured,
+    models: models.map((entry) => ({
+      model: entry.model,
+      label: entry.label,
+      runtime: entry.runtime,
+      allowed: isModelAllowed(entry.model, preferences),
+      configured: Boolean(providerFabricModelRuntimeState(entry.model, {
+        secrets,
+        preferences,
+        localRuntimeUrl: process.env.RESONANTOS_LOCAL_RUNTIME_URL,
+      })?.configured),
+    })),
+    routeConsumers: routeConsumers.map((strategy) => ({
+      id: strategy.id,
+      label: strategy.label,
+      routeState: strategy.routeState,
+      hardStop: strategy.hardStop,
+    })),
+    detail: state === "ready"
+      ? `${profile.label} is configured and available to all dependent routing strategies.`
+      : state === "degraded"
+        ? `${profile.label} is configured, but one or more dependent routing strategies still have no available route.`
+        : state === "disabled"
+          ? `${profile.label} is configured, but all declared models are disabled by the current allowed-model policy.`
+        : `${profile.label} has no stored credential in the local provider vault.`,
+  };
+}
+
+async function executeProviderConnectivityTest(payload) {
+  const providerId = String(payload.providerId ?? "").trim();
+  const profile = providerProfileById(providerId);
+  if (!profile) {
+    throw new Error("Unknown provider profile.");
+  }
+  const secrets = await readProviderSecrets();
+  const credential = secrets[providerId];
+  if (!credential) {
+    const result = {
+      providerId,
+      label: profile.label,
+      testedAt: new Date().toISOString(),
+      state: "missing-credential",
+      endpoint: "provider models endpoint",
+      detail: `${profile.label} cannot be tested because no credential is stored in the local provider vault.`,
+    };
+    await appendProviderDiagnosticHistory(result);
+    return result;
+  }
+  const target = providerConnectivityTarget(providerId, {
+    localRuntimeUrl: process.env.RESONANTOS_LOCAL_RUNTIME_URL,
+  });
+  if (!target) {
+    throw new Error("No connectivity diagnostic target exists for this provider.");
+  }
+  const startedAt = Date.now();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 7000);
+  try {
+    const response = await fetch(target.url, {
+      method: "GET",
+      headers: target.sendsCredential ? { Authorization: `Bearer ${credential}` } : {},
+      signal: controller.signal,
+    });
+    const latencyMs = Date.now() - startedAt;
+    const state = response.ok ? "reachable" : response.status === 401 || response.status === 403 ? "auth-failed" : "unreachable";
+    const result = {
+      providerId,
+      label: profile.label,
+      testedAt: new Date().toISOString(),
+      state,
+      status: response.status,
+      latencyMs,
+      endpoint: "provider models endpoint",
+      detail: state === "reachable"
+        ? `${profile.label} endpoint is reachable. No prompt or model generation request was sent.`
+        : state === "auth-failed"
+          ? `${profile.label} endpoint responded, but authentication failed. Update the stored credential.`
+          : `${profile.label} endpoint responded with HTTP ${response.status}.`,
+    };
+    await appendProviderDiagnosticHistory(result);
+    return result;
+  } catch (error) {
+    const result = {
+      providerId,
+      label: profile.label,
+      testedAt: new Date().toISOString(),
+      state: "network-failed",
+      latencyMs: Date.now() - startedAt,
+      endpoint: "provider models endpoint",
+      detail: redactDiagnosticText(error instanceof Error ? error.message : String(error)),
+    };
+    await appendProviderDiagnosticHistory(result);
+    return result;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function executeProviderDiagnosticsHistory() {
+  return {
+    entries: await readProviderDiagnosticsHistory(),
+  };
+}
+
+async function executeProviderModelPreferencesSave(payload) {
+  const providerId = String(payload.providerId ?? "").trim();
+  const profile = providerProfileById(providerId);
+  if (!profile) {
+    throw new Error("Unknown provider profile.");
+  }
+  const declaredModels = modelCatalog
+    .filter((entry) => entry.providerId === providerId)
+    .map((entry) => entry.model);
+  const allowedModels = unique((Array.isArray(payload.allowedModels) ? payload.allowedModels : [])
+    .map((model) => String(model ?? "").trim())
+    .filter((model) => declaredModels.includes(model)));
+  if (!allowedModels.length) {
+    throw new Error("At least one model must remain allowed for this provider.");
+  }
+  const current = await readProviderModelPreferences().catch(() => ({}));
+  const next = {
+    ...current,
+    allowedModels: {
+      ...(current.allowedModels ?? {}),
+      [providerId]: allowedModels,
+    },
+  };
+  const filePath = providerModelPreferencesPath();
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
+  await chmod(filePath, 0o600).catch(() => undefined);
+  return {
+    providerId,
+    allowedModels,
+    savedAt: new Date().toISOString(),
+    strategies: await resolvedRoutingStrategies(),
+  };
+}
+
+async function executeProviderRoutingStrategies() {
+  return {
+    updatedAt: new Date().toISOString(),
+    models: modelCatalog,
+    strategies: await resolvedRoutingStrategies(),
+  };
+}
+
+async function executeProviderRoutingStrategySave(payload) {
+  const strategyId = String(payload.strategyId ?? "").trim();
+  const base = defaultRoutingStrategies.find((strategy) => strategy.id === strategyId);
+  if (!base) {
+    throw new Error("Unknown routing strategy.");
+  }
+  const next = normalizeRoutingStrategy(base, {
+    primaryModel: String(payload.primaryModel ?? "").trim(),
+    fallbackModels: payload.fallbackModels,
+    costPosture: payload.costPosture,
+    hardStop: Boolean(payload.hardStop),
+  });
+  const current = await readRoutingOverrides().catch(() => ({}));
+  const filePath = providerRoutingPath();
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, `${JSON.stringify({ ...current, [strategyId]: next }, null, 2)}\n`, { mode: 0o600 });
+  await chmod(filePath, 0o600).catch(() => undefined);
+  return {
+    strategyId,
+    savedAt: new Date().toISOString(),
+    strategies: await resolvedRoutingStrategies(),
   };
 }
 
@@ -352,22 +719,25 @@ function sanitizeAssistantContent(providerType, content) {
 }
 
 function providerRouteForModel(model) {
-  if (model?.startsWith("gpt-")) {
-    return {
-      providerId: "shared-openai",
-      providerType: "openai",
-      apiBaseUrl: "https://api.openai.com/v1",
-      wireModel: model,
-      label: "Shared OpenAI",
-    };
-  }
-  return {
-    providerId: "shared-minimax",
-    providerType: "minimax",
-    apiBaseUrl: "https://api.minimax.io/v1",
-    wireModel: model === "MiniMax-M2.7-highspeed" ? "MiniMax-M2.7" : model || "MiniMax-M2.7",
-    label: "Shared MiniMax",
-  };
+  return providerFabricRouteForModel(model, {
+    localRuntimeUrl: process.env.RESONANTOS_LOCAL_RUNTIME_URL,
+  });
+}
+
+async function providerRouteForWorkload(workloadId, requestedModel = "") {
+  const [secrets, preferences, strategies] = await Promise.all([
+    readProviderSecrets(),
+    readProviderModelPreferences().catch(() => ({})),
+    resolvedRoutingStrategies(),
+  ]);
+  return providerFabricRouteForWorkload({
+    workloadId,
+    requestedModel,
+    secrets,
+    preferences,
+    strategies,
+    localRuntimeUrl: process.env.RESONANTOS_LOCAL_RUNTIME_URL,
+  });
 }
 
 function providerRouteForArchiveVerifier(secrets, requestedModel = "") {
@@ -477,6 +847,31 @@ async function runArchiveSemanticVerifier({ artifactPath, requestPath, sourceCon
   }
 }
 
+async function runArchiveIngestWriter({
+  sourceContent,
+  sourcePath,
+  sourceTitle,
+  proposedPage,
+  requestPath,
+  existingIndex,
+  requestedModel,
+  deterministicContent,
+}) {
+  const secrets = await readProviderSecrets();
+  const route = providerRouteForArchiveVerifier(secrets, requestedModel);
+  return runArchiveIngestWriterWithRoute({
+    sourceContent,
+    sourcePath,
+    sourceTitle,
+    proposedPage,
+    requestPath,
+    existingIndex,
+    route,
+    credential: route ? secrets[route.providerId] : "",
+    deterministicContent,
+  });
+}
+
 function decodeXmlEntities(value) {
   return String(value ?? "")
     .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
@@ -488,9 +883,14 @@ function decodeXmlEntities(value) {
 }
 
 async function executeBridgeChat(payload) {
-  const route = providerRouteForModel(payload.model);
+  const routeDecision = await providerRouteForWorkload(payload.workload || "augmentor-chat", payload.model);
+  const route = routeDecision.route;
+  if (!route) {
+    const label = routeDecision.strategy?.label ?? "Augmentor Chat";
+    throw new Error(`${label} has no available provider route. Add a provider credential, configure a local runtime, or change the routing strategy in Settings > Routing.`);
+  }
   const secrets = await readProviderSecrets();
-  const apiKey = secrets[route.providerId];
+  const apiKey = route.providerId === "desktop-local" ? "local-runtime" : secrets[route.providerId];
   if (!apiKey) {
     throw new Error(`${route.label} credential missing. Add it in ResonantOS Provider Profiles.`);
   }
@@ -507,6 +907,8 @@ async function executeBridgeChat(payload) {
     "You are running inside the ResonantOS browser side bar.",
     "The web page remains in the main browser viewport; never suggest replacing the page with chat UI.",
     "ResonantOS provides host-mediated browser tools outside the model call: open/search pages, read the active page, click visible page text, and type into editable fields.",
+    "ResonantOS also provides a host-mediated agent control layer for delegation. Augmentor may delegate to approved add-on agents such as Hermes, OpenCode, and Resonant Engineer through governed task packets; never claim delegation is outside Augmentor's ResonantOS capabilities.",
+    "If the user asks for delegation and the request was not executed before this model call, ask for the target agent and mission instead of telling them to use a separate system.",
     "If the user asks you to navigate, search a site, shop, book, click, type, or operate a webpage, do not claim you will do it in plain chat. Those requests must be handled by the host Agent Control Mode before the model call.",
     "If such a browser-action request reaches you anyway, do not mention routers, tools, internals, or implementation details. Say briefly that this needs Agent Control and ask the user to resend it as `/control <task>`.",
     "When the host has already returned a browser-tool result in the conversation, treat that result as authoritative and explain the next useful action.",
@@ -545,7 +947,9 @@ async function executeBridgeChat(payload) {
   return {
     reply,
     providerId: route.providerId,
-    model: payload.model || route.wireModel,
+    model: routeDecision.source === "strategy" ? route.wireModel : (payload.model || route.wireModel),
+    routeSource: routeDecision.source,
+    routeStrategyId: routeDecision.strategy?.id ?? "",
     usage: responsePayload?.usage ?? null,
   };
 }
@@ -1016,6 +1420,7 @@ async function executeNextAction(payload) {
 
 async function executeMemoryStatus() {
   const root = memoryRoot();
+  const schema = await ensureLivingArchiveSchema({ memoryRoot: root });
   const wikiRoot = path.join(root, "AI_MEMORY", "wiki");
   const intakeRoot = path.join(root, "INTAKE");
   const reviewRoot = path.join(root, "REVIEW");
@@ -1025,6 +1430,7 @@ async function executeMemoryStatus() {
   return {
     root,
     exists: existsSync(root),
+    schema,
     wiki: {
       root: wikiRoot,
       pages: await countFiles(wikiRoot, markdownPredicate),
@@ -1043,32 +1449,662 @@ async function executeMemoryStatus() {
   };
 }
 
-async function executeMemorySearch(payload) {
-  const query = String(payload.query ?? "").trim().toLowerCase();
-  if (query.length < 2) {
-    throw new Error("Memory search requires at least two characters.");
+const defaultMemorySettings = {
+  activeMemoryAddon: "living-archive",
+  autoSync: false,
+  costPosture: "use-archive-ingest-routing-strategy",
+  syncMode: "manual-review",
+  sources: [],
+};
+
+async function readMemorySettings() {
+  const filePath = memorySettingsPath();
+  if (!existsSync(filePath)) {
+    return defaultMemorySettings;
   }
-  const root = path.join(memoryRoot(), "AI_MEMORY");
-  const files = await listFilesRecursive(root, (filePath) => /\.(md|markdown)$/i.test(filePath), 600);
-  const matches = [];
+  const parsed = JSON.parse(await readFile(filePath, "utf8"));
+  return {
+    ...defaultMemorySettings,
+    ...parsed,
+    sources: Array.isArray(parsed.sources) ? parsed.sources : [],
+  };
+}
+
+function normalizeMemorySource(source) {
+  const expandedPath = expandUserPath(source?.path);
+  if (!expandedPath) {
+    throw new Error("Memory source path is required.");
+  }
+  const kind = ["folder", "obsidian-vault"].includes(source?.kind) ? source.kind : "folder";
+  const ownership = ["human-knowledge", "external-knowledge", "mixed-library"].includes(source?.ownership)
+    ? source.ownership
+    : "mixed-library";
+  const importMode = ["copy-on-import", "move-on-import", "linked-readonly"].includes(source?.importMode)
+    ? source.importMode
+    : "copy-on-import";
+  return {
+    id: `source-${safeFileSlug(`${kind}-${expandedPath}`)}`,
+    path: expandedPath,
+    kind,
+    ownership,
+    importMode,
+    exists: existsSync(expandedPath),
+    lastSeenAt: new Date().toISOString(),
+  };
+}
+
+function resolveMemorySettings(settings) {
+  return {
+    ...defaultMemorySettings,
+    ...settings,
+    root: memoryRoot(),
+    sources: (settings.sources ?? []).map((source) => ({
+      ...source,
+      exists: existsSync(expandUserPath(source.path)),
+    })),
+  };
+}
+
+async function appendMemorySourceAudit(action, source, extra = {}) {
+  const now = new Date().toISOString();
+  const filePath = memorySourceAuditPath();
+  await mkdir(path.dirname(filePath), { recursive: true });
+  const entry = [
+    `## [${now}] source_${action}`,
+    `- source: ${redactPathForDiagnostics(source?.path ?? extra.sourceId ?? "unknown")}`,
+    `- kind: ${source?.kind ?? "unknown"}`,
+    `- ownership: ${source?.ownership ?? "unknown"}`,
+    `- importMode: ${source?.importMode ?? "unknown"}`,
+    extra.reason ? `- reason: ${redactDiagnosticText(extra.reason)}` : "",
+    "",
+  ].filter(Boolean).join("\n");
+  await appendFile(filePath, entry);
+  await chmod(filePath, 0o600).catch(() => undefined);
+}
+
+async function executeMemorySettings() {
+  const [settings, status, addons] = await Promise.all([
+    readMemorySettings(),
+    executeMemoryStatus(),
+    executeAddonsStatus(),
+  ]);
+  return {
+    settings: resolveMemorySettings(settings),
+    status,
+    memoryAddons: addons.addons.filter((addon) => addon.mode === "memory-system"),
+  };
+}
+
+async function executeMemorySettingsSave(payload = {}) {
+  const current = await readMemorySettings();
+  const next = {
+    ...current,
+    autoSync: typeof payload.autoSync === "boolean" ? payload.autoSync : current.autoSync,
+    costPosture: String(payload.costPosture ?? current.costPosture).trim().slice(0, 100) || current.costPosture,
+    syncMode: ["manual-review", "auto-intake-review", "paused"].includes(payload.syncMode) ? payload.syncMode : current.syncMode,
+  };
+  if (payload.activeMemoryAddon) {
+    next.activeMemoryAddon = String(payload.activeMemoryAddon).trim().slice(0, 100) || current.activeMemoryAddon;
+  }
+  if (payload.source) {
+    const normalized = normalizeMemorySource(payload.source);
+    const existing = next.sources.filter((source) => source.id !== normalized.id && expandUserPath(source.path) !== normalized.path);
+    next.sources = [...existing, normalized];
+  }
+  const filePath = memorySettingsPath();
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
+  await chmod(filePath, 0o600).catch(() => undefined);
+  return {
+    savedAt: new Date().toISOString(),
+    settings: resolveMemorySettings(next),
+  };
+}
+
+async function executeMemorySourceAction(payload = {}) {
+  const sourceId = String(payload.sourceId ?? "").trim();
+  const action = String(payload.action ?? "").trim();
+  if (!sourceId) {
+    throw new Error("Memory source action requires a source id.");
+  }
+  if (!["disable", "enable", "remove"].includes(action)) {
+    throw new Error("Unsupported memory source action.");
+  }
+  const current = await readMemorySettings();
+  const source = current.sources.find((entry) => entry.id === sourceId);
+  if (!source) {
+    throw new Error("Memory source was not found.");
+  }
+  const now = new Date().toISOString();
+  const nextSources = action === "remove"
+    ? current.sources.filter((entry) => entry.id !== sourceId)
+    : current.sources.map((entry) => entry.id === sourceId
+        ? action === "enable"
+          ? { ...entry, disabledAt: undefined, enabledAt: now, lastSeenAt: now }
+          : { ...entry, disabledAt: now, lastSeenAt: now }
+        : entry);
+  const next = { ...current, sources: nextSources };
+  const filePath = memorySettingsPath();
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
+  await chmod(filePath, 0o600).catch(() => undefined);
+  await appendMemorySourceAudit(action, source, { reason: payload.reason, sourceId });
+  return {
+    action,
+    sourceId,
+    savedAt: now,
+    settings: resolveMemorySettings(next),
+  };
+}
+
+async function executeMemorySourceBrowse(payload = {}) {
+  const override = String(process.env.RESONANTOS_BROWSER_FIRST_PICK_FOLDER_RESULT ?? "").trim();
+  let selectedPath = override;
+  if (!selectedPath) {
+    const prompt = String(payload.prompt ?? "Select a folder or Obsidian vault for Living Archive").slice(0, 120);
+    if (process.platform === "darwin") {
+      selectedPath = await execFileStdout("/usr/bin/osascript", [
+        "-e",
+        `POSIX path of (choose folder with prompt ${JSON.stringify(prompt)})`,
+      ]).catch((error) => {
+        if (/user canceled/i.test(error.message)) return "";
+        throw error;
+      });
+    } else if (process.platform === "win32") {
+      selectedPath = await execFileStdout("powershell.exe", [
+        "-NoProfile",
+        "-STA",
+        "-Command",
+        [
+          "Add-Type -AssemblyName System.Windows.Forms",
+          "$dialog = New-Object System.Windows.Forms.FolderBrowserDialog",
+          `$dialog.Description = ${JSON.stringify(prompt)}`,
+          "if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { $dialog.SelectedPath }",
+        ].join("; "),
+      ]);
+    } else {
+      const picker = firstExistingExecutable("zenity") ?? firstExistingExecutable("kdialog");
+      if (!picker) {
+        throw new Error("No supported native folder picker was found. Install zenity/kdialog or paste the path manually.");
+      }
+      selectedPath = picker.endsWith("kdialog")
+        ? await execFileStdout(picker, ["--getexistingdirectory", os.homedir(), "--title", prompt])
+        : await execFileStdout(picker, ["--file-selection", "--directory", "--title", prompt]);
+    }
+  }
+  selectedPath = expandUserPath(selectedPath);
+  if (!selectedPath) {
+    return { cancelled: true, path: "" };
+  }
+  if (!existsSync(selectedPath)) {
+    throw new Error("Selected folder does not exist.");
+  }
+  const details = await stat(selectedPath);
+  if (!details.isDirectory()) {
+    throw new Error("Selected path is not a folder.");
+  }
+  return {
+    cancelled: false,
+    path: selectedPath,
+    kind: existsSync(path.join(selectedPath, ".obsidian")) ? "obsidian-vault" : (payload.kind || "folder"),
+  };
+}
+
+function classifyMemorySourceFile(filePath, rootPath) {
+  const relative = path.relative(rootPath, filePath).replace(/\\/g, "/");
+  const extension = path.extname(filePath).toLowerCase();
+  if (relative.split("/").some((part) => part.startsWith("."))) {
+    return "hidden";
+  }
+  if ([".md", ".markdown", ".txt", ".csv", ".json", ".pdf", ".docx"].includes(extension)) {
+    return "compatible";
+  }
+  if ([".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg"].includes(extension)) {
+    return "raw-audio";
+  }
+  if ([".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"].includes(extension)) {
+    return "media";
+  }
+  if ([".html", ".htm", ".xml", ".yaml", ".yml"].includes(extension)) {
+    return "processed";
+  }
+  return "unsupported";
+}
+
+async function executeMemorySourceScan(payload = {}) {
+  const sourcePath = expandUserPath(payload.path);
+  if (!sourcePath) {
+    throw new Error("Memory source scan requires a folder path.");
+  }
+  if (!existsSync(sourcePath)) {
+    throw new Error("Memory source path does not exist.");
+  }
+  const details = await stat(sourcePath);
+  if (!details.isDirectory()) {
+    throw new Error("Memory source path must be a folder.");
+  }
+  const limit = Math.max(10, Math.min(5_000, Number(payload.limit ?? 2_000)));
+  const files = await listFilesRecursive(sourcePath, () => true, limit + 1);
+  const visibleFiles = files.slice(0, limit);
+  const categories = {
+    compatible: 0,
+    "raw-audio": 0,
+    processed: 0,
+    media: 0,
+    hidden: 0,
+    unsupported: 0,
+  };
+  const samples = {};
+  for (const filePath of visibleFiles) {
+    const kind = classifyMemorySourceFile(filePath, sourcePath);
+    categories[kind] += 1;
+    samples[kind] = samples[kind] ?? [];
+    if (samples[kind].length < 5) {
+      samples[kind].push(path.relative(sourcePath, filePath).replace(/\\/g, "/"));
+    }
+  }
+  return {
+    path: sourcePath,
+    kind: existsSync(path.join(sourcePath, ".obsidian")) ? "obsidian-vault" : "folder",
+    totalScanned: visibleFiles.length,
+    limitReached: files.length > limit,
+    categories,
+    samples,
+    recommendation: categories.compatible || categories.processed
+      ? "This source has compatible knowledge files and can be registered for governed intake."
+      : categories["raw-audio"]
+        ? "This source appears to contain raw audio. Register it only if an audio/TOL add-on will process it into intake bundles."
+        : "This source has little directly compatible knowledge content. Review before registering.",
+  };
+}
+
+async function sourceReviewSnapshot(source, limit = 2_000) {
+  const sourcePath = expandUserPath(source.path);
+  if (source.disabledAt) {
+    throw new Error("Memory source is disabled. Re-enable it before review.");
+  }
+  if (!existsSync(sourcePath)) {
+    throw new Error("Memory source path does not exist.");
+  }
+  const details = await stat(sourcePath);
+  if (!details.isDirectory()) {
+    throw new Error("Memory source path must be a folder.");
+  }
+  const scan = await executeMemorySourceScan({ path: sourcePath, limit });
+  const files = await listFilesRecursive(sourcePath, () => true, Math.min(200, limit));
+  const versionEntries = await listSourceFileVersions({
+    manifestPath: memorySourceFileManifestPath(),
+    sourceId: source.id,
+    limit: 500,
+  }).catch(() => ({ entries: [] }));
+  const versionByFile = new Map((versionEntries.entries ?? []).map((entry) => [entry.sourceFile, entry]));
+  const candidates = [];
   for (const filePath of files) {
-    const content = await readFile(filePath, "utf8").catch(() => "");
-    const index = content.toLowerCase().indexOf(query);
-    if (index < 0) {
+    const category = classifyMemorySourceFile(filePath, sourcePath);
+    if (!["compatible", "processed", "raw-audio"].includes(category)) {
       continue;
     }
-    const start = Math.max(0, index - 160);
-    const end = Math.min(content.length, index + query.length + 220);
-    matches.push({
-      path: path.relative(memoryRoot(), filePath),
-      title: path.basename(filePath, path.extname(filePath)),
-      excerpt: content.slice(start, end).replace(/\s+/g, " ").trim(),
+    const fileDetails = await stat(filePath).catch(() => null);
+    const relativePath = path.relative(sourcePath, filePath).replace(/\\/g, "/");
+    const existingVersion = versionByFile.get(relativePath);
+    let versionStatus = existingVersion ? "tracked" : "new";
+    let currentHash = "";
+    const extension = path.extname(filePath).toLowerCase();
+    if (category === "compatible" && [".md", ".markdown", ".txt", ".csv", ".json"].includes(extension)) {
+      const content = await readFile(filePath, "utf8").catch(() => "");
+      currentHash = sourceContentHash(content);
+      versionStatus = !existingVersion
+        ? "new"
+        : existingVersion.latestHash === currentHash
+          ? "unchanged"
+          : "changed";
+    } else if (existingVersion) {
+      versionStatus = "tracked";
+    }
+    candidates.push({
+      path: path.relative(sourcePath, filePath).replace(/\\/g, "/"),
+      category,
+      bytes: fileDetails?.size ?? 0,
+      modifiedAt: fileDetails?.mtime?.toISOString?.() ?? "",
+      versionStatus,
+      sourceVersion: existingVersion?.latestVersion ?? 0,
+      currentHash,
+      previousSourceContentHash: existingVersion?.latestHash ?? "",
     });
-    if (matches.length >= Number(payload.limit ?? 8)) {
+    if (candidates.length >= 25) {
       break;
     }
   }
-  return { query, matches };
+  return {
+    source: {
+      id: source.id,
+      path: source.path,
+      kind: source.kind,
+      ownership: source.ownership,
+      importMode: source.importMode,
+      exists: true,
+    },
+    scan,
+    candidates,
+    boundary: "Source review is read-only. Creating intake writes only to ResonantOS Memory/INTAKE and never mutates the source folder.",
+  };
+}
+
+async function executeMemorySourceReview(payload = {}) {
+  const sourceId = String(payload.sourceId ?? "").trim();
+  if (!sourceId) {
+    throw new Error("Memory source review requires a source id.");
+  }
+  const settings = await readMemorySettings();
+  const source = settings.sources.find((entry) => entry.id === sourceId);
+  if (!source) {
+    throw new Error("Memory source was not found.");
+  }
+  return sourceReviewSnapshot(source, Math.max(10, Math.min(5_000, Number(payload.limit ?? 2_000))));
+}
+
+async function executeMemorySourceIntake(payload = {}) {
+  const sourceId = String(payload.sourceId ?? "").trim();
+  if (!sourceId) {
+    throw new Error("Memory source intake requires a source id.");
+  }
+  const settings = await readMemorySettings();
+  const source = settings.sources.find((entry) => entry.id === sourceId);
+  if (!source) {
+    throw new Error("Memory source was not found.");
+  }
+  const review = await sourceReviewSnapshot(source, 2_000);
+  const now = new Date();
+  const sourceName = path.basename(expandUserPath(source.path)) || "source";
+  const intakeDir = path.join(memoryRoot(), "INTAKE", "sources");
+  await mkdir(intakeDir, { recursive: true });
+  const fileName = `${now.toISOString().replace(/[:.]/g, "-")}-${safeFileSlug(sourceName)}-source-review.md`;
+  const filePath = path.join(intakeDir, fileName);
+  const categoryLines = Object.entries(review.scan.categories ?? {})
+    .map(([category, count]) => `- ${category}: ${count}`)
+    .join("\n");
+  const candidateLines = review.candidates.length
+    ? review.candidates.map((candidate) =>
+        `- ${candidate.category} | ${candidate.path} | ${candidate.bytes} bytes | ${candidate.modifiedAt || "unknown modified time"}`
+      ).join("\n")
+    : "- No directly compatible candidates found.";
+  const body = [
+    "---",
+    `source: ${JSON.stringify("resonantos-browser-first")}`,
+    `actor: ${JSON.stringify("living-archive.source-review")}`,
+    `type: ${JSON.stringify("source-review-intake")}`,
+    `title: ${JSON.stringify(`Source Review: ${sourceName}`)}`,
+    `createdAt: ${JSON.stringify(now.toISOString())}`,
+    `sourceId: ${JSON.stringify(source.id)}`,
+    `sourceKind: ${JSON.stringify(source.kind)}`,
+    `ownership: ${JSON.stringify(source.ownership)}`,
+    `importMode: ${JSON.stringify(source.importMode)}`,
+    "---",
+    "",
+    `# Source Review: ${sourceName}`,
+    "",
+    "## Boundary",
+    review.boundary,
+    "",
+    "## Source",
+    `- path: ${source.path}`,
+    `- kind: ${source.kind}`,
+    `- ownership: ${source.ownership}`,
+    `- import mode: ${source.importMode}`,
+    "",
+    "## Scan Summary",
+    `- total scanned: ${review.scan.totalScanned}`,
+    `- limit reached: ${review.scan.limitReached ? "yes" : "no"}`,
+    categoryLines,
+    "",
+    "## Recommendation",
+    review.scan.recommendation,
+    "",
+    "## Intake Candidates",
+    candidateLines,
+    "",
+    "## Next Step",
+    "Create a review request from this intake artifact before any AI Memory wiki promotion.",
+    "",
+  ].join("\n");
+  await writeFile(filePath, body, { mode: 0o600 });
+  await chmod(filePath, 0o600).catch(() => undefined);
+  await appendMemorySourceAudit("intake", source, { reason: `Created governed source review intake ${path.relative(memoryRoot(), filePath)}` });
+  return {
+    path: path.relative(memoryRoot(), filePath),
+    bytes: Buffer.byteLength(body, "utf8"),
+    sourceId,
+    candidates: review.candidates.length,
+    recommendation: review.scan.recommendation,
+  };
+}
+
+function resolveSourceRelativeFile(sourcePath, relativePath) {
+  const normalized = String(relativePath ?? "").replace(/\\/g, "/");
+  if (!normalized || normalized.includes("\0") || normalized.startsWith("/") || normalized.split("/").includes("..")) {
+    throw new Error("Selected source file path must stay inside the connected source.");
+  }
+  const resolved = path.resolve(sourcePath, normalized);
+  const root = path.resolve(sourcePath);
+  if (resolved !== root && !resolved.startsWith(`${root}${path.sep}`)) {
+    throw new Error("Selected source file path escapes the connected source.");
+  }
+  return resolved;
+}
+
+async function executeMemorySourceFileIntake(payload = {}) {
+  const sourceId = String(payload.sourceId ?? "").trim();
+  const selectedFiles = Array.isArray(payload.files) ? payload.files.slice(0, 20) : [];
+  if (!sourceId) {
+    throw new Error("Selected file intake requires a source id.");
+  }
+  if (!selectedFiles.length) {
+    throw new Error("Select at least one source file for intake.");
+  }
+  const settings = await readMemorySettings();
+  const source = settings.sources.find((entry) => entry.id === sourceId);
+  if (!source) {
+    throw new Error("Memory source was not found.");
+  }
+  if (source.disabledAt) {
+    throw new Error("Memory source is disabled. Re-enable it before intake.");
+  }
+  const sourcePath = expandUserPath(source.path);
+  if (!existsSync(sourcePath)) {
+    throw new Error("Memory source path does not exist.");
+  }
+  const intakeDir = path.join(memoryRoot(), "INTAKE", "sources", safeFileSlug(path.basename(sourcePath) || sourceId));
+  await mkdir(intakeDir, { recursive: true });
+  const now = new Date();
+  const created = [];
+  const rejected = [];
+  for (const relativeFile of selectedFiles) {
+    try {
+      const sourceFile = resolveSourceRelativeFile(sourcePath, relativeFile);
+      if (!existsSync(sourceFile)) {
+        throw new Error("file missing");
+      }
+      const category = classifyMemorySourceFile(sourceFile, sourcePath);
+      if (category !== "compatible") {
+        throw new Error(`unsupported category ${category}`);
+      }
+      const extension = path.extname(sourceFile).toLowerCase();
+      if (![".md", ".markdown", ".txt", ".csv", ".json"].includes(extension)) {
+        throw new Error(`file type ${extension || "unknown"} requires a specialized add-on`);
+      }
+      const [details, sourceContent] = await Promise.all([
+        stat(sourceFile),
+        readFile(sourceFile, "utf8"),
+      ]);
+      const contentHash = sourceContentHash(sourceContent);
+      const version = await reserveSourceFileVersion({
+        manifestPath: memorySourceFileManifestPath(),
+        sourceId: source.id,
+        relativeFile,
+        contentHash,
+        sourceModifiedAt: details.mtime.toISOString(),
+      });
+      if (!version.changed) {
+        throw new Error(`unchanged since imported version ${version.version}`);
+      }
+      const title = markdownTitle(sourceContent, path.basename(sourceFile, path.extname(sourceFile)));
+      const intakeFile = `${now.toISOString().replace(/[:.]/g, "-")}-${safeFileSlug(relativeFile)}.md`;
+      const intakePath = path.join(intakeDir, intakeFile);
+      const body = [
+        "---",
+        `source: ${JSON.stringify("resonantos-browser-first")}`,
+        `actor: ${JSON.stringify("living-archive.source-file-intake")}`,
+        `type: ${JSON.stringify("source-file-intake")}`,
+        `title: ${JSON.stringify(title)}`,
+        `createdAt: ${JSON.stringify(now.toISOString())}`,
+        `sourceId: ${JSON.stringify(source.id)}`,
+        `sourcePath: ${JSON.stringify(source.path)}`,
+        `sourceFile: ${JSON.stringify(String(relativeFile).replace(/\\/g, "/"))}`,
+        `ownership: ${JSON.stringify(source.ownership)}`,
+        `importMode: ${JSON.stringify(source.importMode)}`,
+        `sourceModifiedAt: ${JSON.stringify(details.mtime.toISOString())}`,
+        `sourceContentHash: ${JSON.stringify(version.contentHash)}`,
+        `sourceVersion: ${JSON.stringify(version.version)}`,
+        `previousSourceContentHash: ${JSON.stringify(version.previousHash)}`,
+        "---",
+        "",
+        `# ${title}`,
+        "",
+        "## Boundary",
+        "This intake artifact is a governed copy of a selected source file. The original source file was not modified.",
+        "",
+        "## Source File",
+        `- source: ${source.path}`,
+        `- file: ${String(relativeFile).replace(/\\/g, "/")}`,
+        `- bytes: ${details.size}`,
+        "",
+        "## Content",
+        sourceContent.trim() || "_Source file was empty._",
+        "",
+      ].join("\n");
+      await writeFile(intakePath, body, { mode: 0o600 });
+      await chmod(intakePath, 0o600).catch(() => undefined);
+      const relativeIntakePath = path.relative(memoryRoot(), intakePath);
+      await recordSourceFileIntakeArtifact({
+        manifestPath: memorySourceFileManifestPath(),
+        sourceId: source.id,
+        relativeFile,
+        version: version.version,
+        intakePath: relativeIntakePath,
+      });
+      created.push({
+        path: relativeIntakePath,
+        sourceFile: String(relativeFile).replace(/\\/g, "/"),
+        bytes: Buffer.byteLength(body, "utf8"),
+        title,
+        sourceContentHash: version.contentHash,
+        sourceVersion: version.version,
+        previousSourceContentHash: version.previousHash,
+      });
+    } catch (error) {
+      rejected.push({
+        sourceFile: String(relativeFile ?? ""),
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  if (!created.length) {
+    throw new Error(`No selected source files could be imported. ${rejected.map((entry) => `${entry.sourceFile}: ${entry.reason}`).join("; ")}`);
+  }
+  await appendMemorySourceAudit("file_intake", source, {
+    reason: `Created ${created.length} selected source file intake artifact(s). ${rejected.length} rejected.`,
+  });
+  return {
+    sourceId,
+    created,
+    rejected,
+  };
+}
+
+async function executeMemorySearch(payload) {
+  return searchMemoryWiki({
+    memoryRoot: memoryRoot(),
+    query: payload.query,
+    limit: payload.limit,
+  });
+}
+
+async function executeMemoryWikiHealth() {
+  return computeWikiHealth({
+    wikiRoot: path.join(memoryRoot(), "AI_MEMORY", "wiki"),
+  });
+}
+
+async function executeMemorySourceVersions(payload = {}) {
+  return listSourceFileVersions({
+    manifestPath: memorySourceFileManifestPath(),
+    sourceId: String(payload.sourceId ?? "").trim(),
+    limit: Number(payload.limit ?? 100),
+  });
+}
+
+async function executeMemorySourceDiff(payload = {}) {
+  const sourceId = String(payload.sourceId ?? "").trim();
+  const relativeFile = String(payload.file ?? "").replace(/\\/g, "/").trim();
+  if (!sourceId) {
+    throw new Error("Source diff requires a source id.");
+  }
+  if (!relativeFile) {
+    throw new Error("Source diff requires a source file.");
+  }
+  const settings = await readMemorySettings();
+  const source = settings.sources.find((entry) => entry.id === sourceId);
+  if (!source) {
+    throw new Error("Memory source was not found.");
+  }
+  if (source.disabledAt) {
+    throw new Error("Memory source is disabled. Re-enable it before diff preview.");
+  }
+  const sourcePath = expandUserPath(source.path);
+  const sourceFile = resolveSourceRelativeFile(sourcePath, relativeFile);
+  if (!existsSync(sourceFile)) {
+    throw new Error("Source file does not exist.");
+  }
+  const category = classifyMemorySourceFile(sourceFile, sourcePath);
+  const extension = path.extname(sourceFile).toLowerCase();
+  if (category !== "compatible" || ![".md", ".markdown", ".txt", ".csv", ".json"].includes(extension)) {
+    throw new Error("Source diff only supports compatible text source files.");
+  }
+  const versions = await listSourceFileVersions({
+    manifestPath: memorySourceFileManifestPath(),
+    sourceId,
+    limit: 500,
+  });
+  const versionEntry = versions.entries.find((entry) => entry.sourceFile === relativeFile);
+  if (!versionEntry?.latestIntakePath) {
+    return {
+      sourceId,
+      sourceFile: relativeFile,
+      status: "unavailable",
+      reason: "No previous governed intake artifact is recorded for this source file.",
+      changes: [],
+    };
+  }
+  const intakeFile = safeMemoryRelativePath(versionEntry.latestIntakePath, "INTAKE");
+  const [currentContent, intakeContent] = await Promise.all([
+    readFile(sourceFile, "utf8"),
+    readFile(intakeFile, "utf8"),
+  ]);
+  const previousContent = markdownSection(intakeContent, "Content") || markdownBody(intakeContent);
+  const diff = lineDiffSummary(previousContent.trimEnd(), currentContent.trimEnd(), {
+    limit: Math.max(10, Math.min(200, Number(payload.limit ?? 80))),
+  });
+  const currentHash = sourceContentHash(currentContent);
+  return {
+    sourceId,
+    sourceFile: relativeFile,
+    status: currentHash === versionEntry.latestHash ? "unchanged" : "changed",
+    latestVersion: versionEntry.latestVersion,
+    latestIntakePath: versionEntry.latestIntakePath,
+    previousHash: versionEntry.latestHash,
+    currentHash,
+    ...diff,
+  };
 }
 
 async function executeArchiveIntake(payload) {
@@ -1175,6 +2211,23 @@ function compactExcerpt(content, limit = 1_800) {
     .slice(0, limit);
 }
 
+function artifactInsights(content) {
+  const value = String(content ?? "");
+  const lineValue = (label) => {
+    const match = new RegExp(`^-\\s*${label}:\\s*(.+)$`, "mi").exec(value);
+    return match?.[1]?.trim() ?? "";
+  };
+  return {
+    nextHumanAction: /^ {0,5}-\s*next human action:\s*(.+)$/gmi.exec(value)?.[1]?.trim() ?? "",
+    percentComplete: lineValue("percentComplete"),
+    phase: lineValue("phase"),
+    status: lineValue("status"),
+    summary: lineValue("summary"),
+    targetReason: lineValue("targetReason"),
+    targetSite: lineValue("targetSite")
+  };
+}
+
 function markdownSection(content, heading) {
   const pattern = new RegExp(`^##\\s+${heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\n([\\s\\S]*?)(?=\\n##\\s+|\\s*$)`, "m");
   return pattern.exec(content)?.[1]?.trim() ?? "";
@@ -1199,6 +2252,7 @@ async function executeArchiveIntakeList(payload = {}) {
         kind: artifactKind(content, filePath),
         bytes: details.size,
         createdAt: frontmatterValue(content, "createdAt") || details.birthtime.toISOString(),
+        insights: artifactInsights(content),
         modifiedAt: details.mtime.toISOString(),
         excerpt: content
           .replace(/^---[\s\S]*?---\s*/m, "")
@@ -1222,6 +2276,7 @@ async function executeArchiveIntakeRead(payload) {
     title: markdownTitle(content, path.basename(filePath, path.extname(filePath))),
     kind: artifactKind(content, filePath),
     bytes: details.size,
+    insights: artifactInsights(content),
     modifiedAt: details.mtime.toISOString(),
     content: content.slice(0, 24_000),
     truncated: content.length > 24_000,
@@ -1409,6 +2464,18 @@ async function executeArchiveReviewDraft(payload = {}) {
   const draftPath = path.join(draftDir, draftFile);
   const sourceExcerpt = compactExcerpt(sourceContent, 2_400);
   const proposedPage = `AI_MEMORY/wiki/${safeFileSlug(sourceTitle)}.md`;
+  const indexPath = path.join(memoryRoot(), "AI_MEMORY", "wiki", "index.md");
+  const existingIndex = existsSync(indexPath) ? await readFile(indexPath, "utf8").catch(() => "") : "";
+  const writer = await runArchiveIngestWriter({
+    sourceContent,
+    sourcePath: artifactPath,
+    sourceTitle,
+    proposedPage,
+    requestPath,
+    existingIndex,
+    requestedModel: payload.model,
+  });
+  const proposedContent = writer.content;
   const draftBody = [
     "---",
     `source: ${JSON.stringify("resonantos-browser-first")}`,
@@ -1418,6 +2485,10 @@ async function executeArchiveReviewDraft(payload = {}) {
     `requestPath: ${JSON.stringify(requestPath)}`,
     `artifactPath: ${JSON.stringify(artifactPath)}`,
     `proposedPage: ${JSON.stringify(proposedPage)}`,
+    `writerStatus: ${JSON.stringify(writer.writerStatus)}`,
+    `writerProvider: ${JSON.stringify(writer.providerId)}`,
+    `writerModel: ${JSON.stringify(writer.model)}`,
+    `writerFallbackReason: ${JSON.stringify(writer.fallbackReason)}`,
     "---",
     "",
     `# Draft Wiki Update: ${sourceTitle}`,
@@ -1429,11 +2500,7 @@ async function executeArchiveReviewDraft(payload = {}) {
     proposedPage,
     "",
     "## Proposed Content",
-    `# ${sourceTitle}`,
-    "",
-    "> Draft generated from an approved browser-first review request. This is not trusted AI Memory until a Strategist-owned ingest/verifier path promotes it.",
-    "",
-    sourceExcerpt || "_No source excerpt available._",
+    proposedContent,
     "",
     "## Source Artifact",
     artifactPath,
@@ -1443,6 +2510,12 @@ async function executeArchiveReviewDraft(payload = {}) {
     "",
     "## Boundary",
     "This artifact is a draft. It must not be treated as a trusted wiki page until the host-mediated ingest/review/promote path completes.",
+    "",
+    "## Writer Event",
+    `- status: ${writer.writerStatus}`,
+    `- provider: ${writer.providerId || "none"}`,
+    `- model: ${writer.model || "none"}`,
+    ...(writer.fallbackReason ? [`- fallback: ${writer.fallbackReason}`] : ["- fallback: none"]),
     "",
   ].join("\n");
   await writeFile(draftPath, draftBody);
@@ -1480,6 +2553,10 @@ async function executeArchiveReviewArtifactRead(payload = {}) {
     semanticVerifierStatus: frontmatterValue(content, "semanticVerifierStatus") || "",
     semanticVerifierProvider: frontmatterValue(content, "semanticVerifierProvider") || "",
     semanticVerifierModel: frontmatterValue(content, "semanticVerifierModel") || "",
+    writerStatus: frontmatterValue(content, "writerStatus") || "",
+    writerProvider: frontmatterValue(content, "writerProvider") || "",
+    writerModel: frontmatterValue(content, "writerModel") || "",
+    writerFallbackReason: frontmatterValue(content, "writerFallbackReason") || "",
     proposedPage: frontmatterValue(content, "proposedPage") || "",
     bytes: details.size,
     modifiedAt: details.mtime.toISOString(),
@@ -1678,6 +2755,32 @@ async function executeArchiveReviewArtifactRevise(payload = {}) {
   const verifierFindings = markdownSection(verifierContent, "Findings").trim();
   const semanticVerifier = markdownSection(verifierContent, "Semantic Verifier").trim();
   const revisionFindings = verifierFindings || "- Verifier artifact was unavailable; revise by preserving source boundaries and strengthening provenance.";
+  const indexPath = path.join(memoryRoot(), "AI_MEMORY", "wiki", "index.md");
+  const existingIndex = existsSync(indexPath) ? await readFile(indexPath, "utf8").catch(() => "") : "";
+  const deterministicRevision = buildDeterministicWikiDraft({
+    sourceContent,
+    sourcePath: sourceArtifactPath,
+    sourceTitle,
+    proposedPage,
+    requestPath,
+    revised: true,
+  });
+  const writer = await runArchiveIngestWriter({
+    sourceContent: [
+      sourceContent,
+      "",
+      "Verifier findings to address:",
+      revisionFindings,
+      semanticVerifier,
+    ].filter(Boolean).join("\n\n"),
+    sourcePath: sourceArtifactPath,
+    sourceTitle,
+    proposedPage,
+    requestPath,
+    existingIndex,
+    requestedModel: payload.model,
+    deterministicContent: deterministicRevision,
+  });
 
   const draftDir = path.join(memoryRoot(), "REVIEW", "artifacts", "browser");
   await mkdir(draftDir, { recursive: true });
@@ -1695,6 +2798,10 @@ async function executeArchiveReviewArtifactRevise(payload = {}) {
     `supersedesDraftPath: ${JSON.stringify(artifactPath)}`,
     `verifierArtifactPath: ${JSON.stringify(verifierArtifactPath || "")}`,
     `revisionReason: ${JSON.stringify("Verifier returned needs-revision.")}`,
+    `writerStatus: ${JSON.stringify(writer.writerStatus)}`,
+    `writerProvider: ${JSON.stringify(writer.providerId)}`,
+    `writerModel: ${JSON.stringify(writer.model)}`,
+    `writerFallbackReason: ${JSON.stringify(writer.fallbackReason)}`,
     "---",
     "",
     `# Revised Draft Wiki Update: ${sourceTitle}`,
@@ -1712,11 +2819,7 @@ async function executeArchiveReviewArtifactRevise(payload = {}) {
     proposedPage,
     "",
     "## Proposed Content",
-    `# ${sourceTitle}`,
-    "",
-    "> Revised draft generated from an approved browser-first review request after verifier findings. This is not trusted AI Memory until the host-mediated verifier/promote path completes.",
-    "",
-    sourceExcerpt || "_No source excerpt available._",
+    writer.content,
     "",
     "## Revision Notes",
     "- Preserves the raw intake source as the authority.",
@@ -1734,6 +2837,12 @@ async function executeArchiveReviewArtifactRevise(payload = {}) {
     "",
     "## Boundary",
     "This artifact is a revised draft. It must not be treated as a trusted wiki page until the host-mediated ingest/review/promote path completes.",
+    "",
+    "## Writer Event",
+    `- status: ${writer.writerStatus}`,
+    `- provider: ${writer.providerId || "none"}`,
+    `- model: ${writer.model || "none"}`,
+    ...(writer.fallbackReason ? [`- fallback: ${writer.fallbackReason}`] : ["- fallback: none"]),
     "",
   ].join("\n");
   await writeFile(revisionPath, revisionBody);
@@ -1874,7 +2983,16 @@ async function executeArchiveReviewArtifactPromote(payload = {}) {
   const indexPath = path.join(memoryRoot(), "AI_MEMORY", "wiki", "index.md");
   const logPath = path.join(memoryRoot(), "AI_MEMORY", "wiki", "log.md");
   await mkdir(path.dirname(indexPath), { recursive: true });
-  await appendFile(indexPath, `- [[${path.basename(proposedPage, path.extname(proposedPage))}]] — promoted from ${artifactPath} at ${now}\n`);
+  const existingIndex = existsSync(indexPath) ? await readFile(indexPath, "utf8").catch(() => "") : "";
+  const nextIndex = upsertWikiIndexCatalogEntry({
+    existingIndex,
+    pagePath: proposedPage,
+    title: pageTitle,
+    summary: summarizePromotedPageForIndex(proposedContent),
+    sourceArtifact: frontmatterValue(artifactContent, "artifactPath") || "",
+    promotedAt: now,
+  });
+  await writeFile(indexPath, nextIndex);
   await appendFile(logPath, `## [${now}] trusted_wiki_promote | ${pageTitle}\n- page: ${proposedPage}\n- review artifact: ${artifactPath}\n${backupPath ? `- backup: ${backupPath}\n` : ""}\n`);
   return {
     path: artifactPath,
@@ -2000,13 +3118,16 @@ async function executeGoalRecord(payload) {
 async function executeDelegationRecord(payload) {
   const target = String(payload.target ?? "").trim().toLowerCase();
   const mission = String(payload.mission ?? "").trim();
+  const contextMarkdown = String(payload.contextMarkdown ?? "").trim().slice(0, 24_000);
+  const source = String(payload.source ?? "resonantos-chat").trim().slice(0, 120);
+  const sourceControlRunId = String(payload.sourceControlRunId ?? "").trim().slice(0, 120);
   if (!["hermes", "opencode", "engineer"].includes(target)) {
     throw new Error("Delegation target must be hermes, opencode, or engineer.");
   }
   if (mission.length < 8) {
     throw new Error("Delegation requires a concrete mission.");
   }
-  const taskDir = path.join(browserFirstRoot(), "Delegations", target);
+  const taskDir = path.join(delegationRoot(), target);
   await mkdir(taskDir, { recursive: true });
   const id = `${target}-${Date.now()}`;
   const taskPath = path.join(taskDir, `${id}.md`);
@@ -2016,17 +3137,36 @@ async function executeDelegationRecord(payload) {
     `- id: ${id}`,
     `- createdAt: ${new Date().toISOString()}`,
     `- source: ResonantOS Browser Layer`,
+    `- sourceKind: ${source || "resonantos-chat"}`,
+    ...(sourceControlRunId ? [`- sourceControlRunId: ${sourceControlRunId}`] : []),
+    `- status: queued`,
     `- trust: add-on agent, not core trusted Strategist`,
     "",
     "## Mission",
     mission,
     "",
+    ...(contextMarkdown
+      ? [
+        "## Context Packet",
+        contextMarkdown,
+        ""
+      ]
+      : []),
     "## Boundary",
     "The add-on receives a task packet only. Provider secrets, wallet actions, and trusted memory writes remain host-mediated.",
     "",
   ].join("\n");
   await writeFile(taskPath, body);
-  return { id, target, mission, path: path.relative(userRoot(), taskPath), status: "queued" };
+  return {
+    hasContextPacket: Boolean(contextMarkdown),
+    id,
+    mission,
+    path: path.relative(userRoot(), taskPath),
+    source,
+    sourceControlRunId,
+    status: "queued",
+    target,
+  };
 }
 
 async function executeAddonDraftRecord(payload) {
@@ -2079,6 +3219,10 @@ function draftRoot() {
   return path.join(browserFirstRoot(), "AddOnDrafts");
 }
 
+function delegationRoot() {
+  return path.join(browserFirstRoot(), "Delegations");
+}
+
 function resolveDraftPath(relativePath) {
   const resolved = path.resolve(userRoot(), String(relativePath ?? ""));
   const root = path.resolve(draftRoot());
@@ -2111,6 +3255,22 @@ function draftSummaryFromMarkdown(filePath, content, details) {
   };
 }
 
+function delegationSummaryFromMarkdown(filePath, content, details) {
+  const context = sectionFromMarkdown(content, "Context Packet");
+  return {
+    contextExcerpt: context.replace(/\s+/g, " ").slice(0, 360),
+    hasContextPacket: Boolean(context),
+    id: fieldFromMarkdown(content, "id") || path.basename(filePath, ".md"),
+    mission: sectionFromMarkdown(content, "Mission").slice(0, 360),
+    path: path.relative(userRoot(), filePath),
+    sourceControlRunId: fieldFromMarkdown(content, "sourceControlRunId"),
+    sourceKind: fieldFromMarkdown(content, "sourceKind") || "resonantos-chat",
+    status: fieldFromMarkdown(content, "status") || "queued",
+    target: path.basename(path.dirname(filePath)),
+    updatedAt: details?.mtime?.toISOString?.() ?? "",
+  };
+}
+
 async function executeAddonDraftList(payload) {
   const limit = Math.min(40, Math.max(1, Number(payload.limit ?? 20)));
   const target = String(payload.target ?? "").trim().toLowerCase();
@@ -2132,6 +3292,29 @@ async function executeAddonDraftList(payload) {
   }
   drafts.sort((left, right) => String(right.updatedAt).localeCompare(String(left.updatedAt)));
   return { root: path.relative(userRoot(), draftRoot()), drafts: drafts.slice(0, limit) };
+}
+
+async function executeDelegationList(payload) {
+  const limit = Math.min(40, Math.max(1, Number(payload.limit ?? 20)));
+  const target = String(payload.target ?? "").trim().toLowerCase();
+  const roots = ["hermes", "opencode", "engineer"]
+    .filter((candidate) => !target || candidate === target)
+    .map((candidate) => path.join(delegationRoot(), candidate));
+  const files = [];
+  for (const root of roots) {
+    files.push(...await listFilesRecursive(root, (filePath) => filePath.endsWith(".md"), limit));
+  }
+  const delegations = [];
+  for (const filePath of files) {
+    const [details, content] = await Promise.all([
+      stat(filePath).catch(() => null),
+      readFile(filePath, "utf8").catch(() => ""),
+    ]);
+    if (!details || !content) continue;
+    delegations.push(delegationSummaryFromMarkdown(filePath, content, details));
+  }
+  delegations.sort((left, right) => String(right.updatedAt).localeCompare(String(left.updatedAt)));
+  return { root: path.relative(userRoot(), delegationRoot()), delegations: delegations.slice(0, limit) };
 }
 
 async function executeAddonDraftRead(payload) {
@@ -2170,6 +3353,27 @@ async function executeAddonDraftTransition(payload) {
   return draftSummaryFromMarkdown(filePath, await readFile(filePath, "utf8"), details);
 }
 
+async function executeAddonDraftProviderHandoff(payload) {
+  const filePath = resolveDraftPath(payload.path);
+  const provider = String(payload.provider ?? "").trim().toLowerCase();
+  const content = await readFile(filePath, "utf8");
+  const draft = parseDraftPacketMarkdown(content, {
+    id: path.basename(filePath, ".md"),
+    target: path.basename(path.dirname(filePath)),
+  });
+  if (draft.status !== "approved-for-manual-send") {
+    throw new Error("Provider handoff requires a human-approved draft packet first.");
+  }
+  const handoff = buildProviderDraftHandoff(draft, provider);
+  const reviewer = String(payload.reviewer ?? "human").trim().slice(0, 80) || "human";
+  await writeFile(filePath, appendProviderHandoffAudit(content, handoff, reviewer));
+  const details = await stat(filePath);
+  return {
+    ...draftSummaryFromMarkdown(filePath, await readFile(filePath, "utf8"), details),
+    handoff,
+  };
+}
+
 async function executeAddonsStatus() {
   return {
     addons: [
@@ -2179,6 +3383,8 @@ async function executeAddonsStatus() {
         available: existsSync(path.join(repoRoot, "src", "modules", "hermes")),
         mode: "delegation-addon",
         trust: "add-on agent",
+        requestedCapabilities: ["agent-delegation", "network", "notifications"],
+        grantedCapabilities: ["agent-delegation"],
       },
       {
         id: "addon.opencode",
@@ -2186,6 +3392,9 @@ async function executeAddonsStatus() {
         available: existsSync(path.join(repoRoot, "src", "modules", "opencode")),
         mode: "coding-addon",
         trust: "add-on agent",
+        requestedCapabilities: ["agent-delegation", "filesystem-scoped", "shell", "providers"],
+        grantedCapabilities: ["agent-delegation"],
+        deniedCapabilities: ["shell"],
       },
       {
         id: "addon.living-archive",
@@ -2193,6 +3402,9 @@ async function executeAddonsStatus() {
         available: existsSync(memoryRoot()),
         mode: "memory-system",
         trust: "host-mediated memory provider",
+        requestedCapabilities: ["archive-read", "archive-intake-write", "archive-knowledge-write"],
+        grantedCapabilities: ["archive-read", "archive-intake-write"],
+        deniedCapabilities: ["archive-knowledge-write"],
       },
       {
         id: "addon.email",
@@ -2200,7 +3412,11 @@ async function executeAddonsStatus() {
         available: true,
         mode: "draft-only-communication-addon",
         trust: "host-mediated draft provider",
-        boundary: "Draft packets only. Sending email requires explicit human approval inside the email add-on.",
+        providers: ["gmail"],
+        requestedCapabilities: ["communication-draft", "provider-handoff"],
+        grantedCapabilities: ["communication-draft", "provider-handoff"],
+        deniedCapabilities: ["external-send"],
+        boundary: "Draft packets only. Gmail handoff opens a compose draft for human review; ResonantOS does not send email.",
       },
       {
         id: "addon.calendar",
@@ -2208,7 +3424,11 @@ async function executeAddonsStatus() {
         available: true,
         mode: "draft-only-scheduling-addon",
         trust: "host-mediated draft provider",
-        boundary: "Draft packets only. Scheduling events requires explicit human approval inside the calendar add-on.",
+        providers: ["google-calendar"],
+        requestedCapabilities: ["calendar-draft", "provider-handoff"],
+        grantedCapabilities: ["calendar-draft", "provider-handoff"],
+        deniedCapabilities: ["external-schedule"],
+        boundary: "Draft packets only. Google Calendar handoff opens an event template for human review; ResonantOS does not schedule events.",
       },
     ],
   };
@@ -2339,16 +3559,182 @@ async function executeSystemStatus() {
   };
 }
 
+async function readPackageVersion() {
+  try {
+    const pkg = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
+    return String(pkg.version ?? "unknown");
+  } catch {
+    return "unknown";
+  }
+}
+
+async function readExtensionVersion() {
+  try {
+    const manifest = JSON.parse(await readFile(path.join(resonantExtension, "manifest.json"), "utf8"));
+    return String(manifest.version ?? "unknown");
+  } catch {
+    return "unknown";
+  }
+}
+
+async function executeDiagnosticsReport() {
+  const generatedAt = new Date().toISOString();
+  const [statusResult, providerResult, addonResult, memoryResult] = await Promise.allSettled([
+    executeSystemStatus(),
+    executeProviderStatus(),
+    executeAddonsStatus(),
+    executeMemoryStatus(),
+  ]);
+  const settledValue = (result) => result.status === "fulfilled"
+    ? result.value
+    : { unavailable: true, error: redactDiagnosticText(result.reason instanceof Error ? result.reason.message : result.reason) };
+  const providers = settledValue(providerResult).providers ?? [];
+  const addons = settledValue(addonResult).addons ?? [];
+  const memory = settledValue(memoryResult);
+  const report = {
+    generatedAt,
+    product: "ResonantOS Browser",
+    version: await readPackageVersion(),
+    extensionVersion: await readExtensionVersion(),
+    platform: {
+      os: process.platform,
+      arch: process.arch,
+      node: process.version,
+    },
+    paths: {
+      userRoot: redactPathForDiagnostics(userRoot()),
+      browserFirstRoot: redactPathForDiagnostics(browserFirstRoot()),
+      memoryRoot: redactPathForDiagnostics(memoryRoot()),
+      profileDir: redactPathForDiagnostics(profileDir),
+    },
+    status: settledValue(statusResult),
+    providers: {
+      total: providers.length,
+      configured: providers.filter((provider) => provider.configured).length,
+      entries: providers.map((provider) => ({
+        id: provider.id,
+        label: provider.label,
+        configured: Boolean(provider.configured),
+        models: provider.models ?? [],
+        role: provider.role ?? "",
+      })),
+    },
+    addons: {
+      total: addons.length,
+      available: addons.filter((addon) => addon.available || addon.enabled).length,
+      entries: addons.map((addon) => ({
+        id: addon.id,
+        name: addon.name,
+        available: Boolean(addon.available || addon.enabled),
+        mode: addon.mode,
+        trust: addon.trust,
+      })),
+    },
+    memory: {
+      wikiPages: memory?.wiki?.pages ?? 0,
+      intakeArtifacts: memory?.intake?.artifacts ?? 0,
+      reviewRequests: memory?.review?.requests ?? 0,
+      reviewArtifacts: memory?.review?.artifacts ?? 0,
+    },
+    redaction: "Provider credentials, bridge tokens, wallet secrets, private keys, and full home paths are excluded or redacted.",
+  };
+  const serialized = redactDiagnosticText(JSON.stringify(report, null, 2));
+  await mkdir(diagnosticsRoot(), { recursive: true });
+  const filePath = path.join(diagnosticsRoot(), `diagnostics-${generatedAt.replace(/[:.]/g, "-")}.json`);
+  await writeFile(filePath, `${serialized}\n`, { mode: 0o600 });
+  return {
+    path: redactPathForDiagnostics(filePath),
+    generatedAt,
+    summary: {
+      providers: report.providers,
+      addons: report.addons,
+      memory: report.memory,
+    },
+  };
+}
+
 const bridgeRoutes = [
   { method: "GET", path: "/status", handler: executeSystemStatus },
   { method: "GET", path: "/providers/status", handler: executeProviderStatus },
-  { method: "POST", path: "/providers/credentials", handler: executeProviderCredentialSave },
+  { method: "POST", path: "/providers/health", handler: executeProviderHealthCheck },
+  { method: "POST", path: "/providers/connectivity-test", handler: executeProviderConnectivityTest },
+  { method: "GET", path: "/providers/diagnostics-history", handler: executeProviderDiagnosticsHistory },
+  { method: "GET", path: "/providers/routing-strategies", handler: executeProviderRoutingStrategies },
+  {
+    method: "POST",
+    path: "/providers/credentials",
+    requiredCapability: "provider-credential-write",
+    handler: executeProviderCredentialSave,
+  },
+  {
+    method: "POST",
+    path: "/providers/routing-strategies",
+    requiredCapability: "provider-routing-write",
+    handler: executeProviderRoutingStrategySave,
+  },
+  {
+    method: "POST",
+    path: "/providers/model-preferences",
+    requiredCapability: "provider-routing-write",
+    handler: executeProviderModelPreferencesSave,
+  },
   { method: "POST", path: "/augmentor/chat", handler: executeBridgeChat },
   { method: "POST", path: "/augmentor/inline", handler: executeInlineAssistant },
   { method: "POST", path: "/augmentor/control-plan", handler: executeControlPlan },
   { method: "POST", path: "/augmentor/next-action", handler: executeNextAction },
   { method: "GET", path: "/memory/status", handler: executeMemoryStatus },
+  { method: "GET", path: "/memory/settings", handler: executeMemorySettings },
+  {
+    method: "POST",
+    path: "/memory/settings",
+    requiredCapability: "memory-settings-write",
+    handler: executeMemorySettingsSave,
+  },
+  {
+    method: "POST",
+    path: "/memory/source/browse",
+    requiredCapability: "memory-source-browse",
+    handler: executeMemorySourceBrowse,
+  },
+  {
+    method: "POST",
+    path: "/memory/source/scan",
+    requiredCapability: "memory-source-scan",
+    handler: executeMemorySourceScan,
+  },
+  {
+    method: "POST",
+    path: "/memory/source/action",
+    requiredCapability: "memory-source-manage",
+    handler: executeMemorySourceAction,
+  },
+  {
+    method: "POST",
+    path: "/memory/source/review",
+    requiredCapability: "memory-source-review",
+    handler: executeMemorySourceReview,
+  },
+  {
+    method: "POST",
+    path: "/memory/source/intake",
+    requiredCapability: "memory-source-intake",
+    handler: executeMemorySourceIntake,
+  },
+  {
+    method: "POST",
+    path: "/memory/source/file-intake",
+    requiredCapability: "memory-source-file-intake",
+    handler: executeMemorySourceFileIntake,
+  },
   { method: "POST", path: "/memory/search", handler: executeMemorySearch },
+  { method: "GET", path: "/memory/wiki/health", handler: executeMemoryWikiHealth },
+  { method: "POST", path: "/memory/source/versions", handler: executeMemorySourceVersions },
+  {
+    method: "POST",
+    path: "/memory/source/diff",
+    requiredCapability: "memory-source-review",
+    handler: executeMemorySourceDiff,
+  },
   { method: "POST", path: "/archive/intake", handler: executeArchiveIntake },
   { method: "POST", path: "/archive/intake/list", handler: executeArchiveIntakeList },
   { method: "POST", path: "/archive/intake/read", handler: executeArchiveIntakeRead },
@@ -2365,6 +3751,12 @@ const bridgeRoutes = [
   { method: "POST", path: "/archive/review/promotions/restore", handler: executeArchivePromotionRestore },
   { method: "GET", path: "/addons/status", handler: executeAddonsStatus },
   { method: "GET", path: "/opencode/status", handler: executeOpenCodeStatus },
+  {
+    method: "POST",
+    path: "/diagnostics/report",
+    requiredCapability: "diagnostics-report-export",
+    handler: executeDiagnosticsReport,
+  },
   { method: "POST", path: "/hermes/dashboard/status", handler: executeHermesDashboardStatus },
   { method: "POST", path: "/hermes/dashboard/start", handler: executeHermesDashboardStart },
   { method: "POST", path: "/hermes/dashboard/stop", handler: executeHermesDashboardStop },
@@ -2373,12 +3765,46 @@ const bridgeRoutes = [
   { method: "POST", path: "/addons/draft/list", handler: executeAddonDraftList },
   { method: "POST", path: "/addons/draft/read", handler: executeAddonDraftRead },
   { method: "POST", path: "/addons/draft/transition", handler: executeAddonDraftTransition },
+  { method: "POST", path: "/addons/draft/handoff", handler: executeAddonDraftProviderHandoff },
   { method: "POST", path: "/addons/delegate", handler: executeDelegationRecord },
+  { method: "POST", path: "/addons/delegate/list", handler: executeDelegationList },
   { method: "POST", path: "/goals", handler: executeGoalRecord },
 ];
 
 const args = parseArgs(process.argv.slice(2));
 const bridgeToken = args.get("bridge-token") ?? process.env.RESONANTOS_BROWSER_FIRST_BRIDGE_TOKEN ?? createBridgeToken();
+const bridgeCapabilityTokens = {
+  "provider-credential-write": args.get("provider-credential-token") ??
+    process.env.RESONANTOS_BROWSER_FIRST_PROVIDER_CREDENTIAL_TOKEN ??
+    createBridgeToken(),
+  "provider-routing-write": args.get("provider-routing-token") ??
+    process.env.RESONANTOS_BROWSER_FIRST_PROVIDER_ROUTING_TOKEN ??
+    createBridgeToken(),
+  "memory-settings-write": args.get("memory-settings-token") ??
+    process.env.RESONANTOS_BROWSER_FIRST_MEMORY_SETTINGS_TOKEN ??
+    createBridgeToken(),
+  "memory-source-browse": args.get("memory-source-browse-token") ??
+    process.env.RESONANTOS_BROWSER_FIRST_MEMORY_SOURCE_BROWSE_TOKEN ??
+    createBridgeToken(),
+  "memory-source-scan": args.get("memory-source-scan-token") ??
+    process.env.RESONANTOS_BROWSER_FIRST_MEMORY_SOURCE_SCAN_TOKEN ??
+    createBridgeToken(),
+  "memory-source-manage": args.get("memory-source-manage-token") ??
+    process.env.RESONANTOS_BROWSER_FIRST_MEMORY_SOURCE_MANAGE_TOKEN ??
+    createBridgeToken(),
+  "memory-source-review": args.get("memory-source-review-token") ??
+    process.env.RESONANTOS_BROWSER_FIRST_MEMORY_SOURCE_REVIEW_TOKEN ??
+    createBridgeToken(),
+  "memory-source-intake": args.get("memory-source-intake-token") ??
+    process.env.RESONANTOS_BROWSER_FIRST_MEMORY_SOURCE_INTAKE_TOKEN ??
+    createBridgeToken(),
+  "memory-source-file-intake": args.get("memory-source-file-intake-token") ??
+    process.env.RESONANTOS_BROWSER_FIRST_MEMORY_SOURCE_FILE_INTAKE_TOKEN ??
+    createBridgeToken(),
+  "diagnostics-report-export": args.get("diagnostics-report-token") ??
+    process.env.RESONANTOS_BROWSER_FIRST_DIAGNOSTICS_REPORT_TOKEN ??
+    createBridgeToken(),
+};
 
 if (args.get("bridge-auth-self-test") === "true") {
   const result = await runBridgeAuthSelfTest({
@@ -2409,7 +3835,12 @@ if (!existsSync(path.join(resonantExtension, "manifest.json"))) {
 
 await mkdir(profileDir, { recursive: true });
 await removeCachedUnpackedExtension(profileDir, resonantExtensionId);
-const bridgeConfigPath = await writeBridgeConfig({ extensionRoot: resonantExtension, bridgePort, bridgeToken });
+const bridgeConfigPath = await writeBridgeConfig({
+  extensionRoot: resonantExtension,
+  bridgePort,
+  bridgeToken,
+  bridgeCapabilityTokens,
+});
 
 const extensionDirs = [resonantExtension];
 const phantomExtension = findPhantomExtension();
@@ -2421,6 +3852,7 @@ await seedPinnedExtensions(profileDir, [resonantExtensionId, phantomExtension ? 
 const bridgeServer = await startBridgeServer({
   port: bridgePort,
   bridgeToken,
+  bridgeCapabilityTokens,
   extensionOrigin: resonantExtensionOrigin,
   routes: bridgeRoutes,
 });

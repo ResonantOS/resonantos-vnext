@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { JSDOM } from "jsdom";
 
-import { renderArtifactsWorkspace } from "../resonantos-side-panel-extension/src/lib/main-workspace-artifacts.js";
+import {
+  artifactInsightsFromMarkdown,
+  renderArtifactsWorkspace
+} from "../resonantos-side-panel-extension/src/lib/main-workspace-artifacts.js";
 
 function setupDom() {
   const dom = new JSDOM("<!doctype html><main id=\"root\"></main>", { url: "https://resonantos.local/" });
@@ -35,7 +38,11 @@ test("artifacts workspace lists and previews archive intake artifacts", async ()
             kind: "browser-job-report",
             bytes: 2048,
             modifiedAt: "2026-05-28T10:00:00.000Z",
-            excerpt: "Observed, clicked, verified, and returned artifacts."
+            excerpt: "Observed, clicked, verified, and returned artifacts.",
+            insights: {
+              nextHumanAction: "Review the product row before continuing.",
+              summary: "Blocked · 1/2 complete · 1 blocked · 50%"
+            }
           }
         ]
       };
@@ -47,7 +54,28 @@ test("artifacts workspace lists and previews archive intake artifacts", async ()
         kind: "browser-job-report",
         bytes: 2048,
         modifiedAt: "2026-05-28T10:00:00.000Z",
-        content: "# Browser Job Report\n\n## Goal\ncompare a product",
+        content: [
+          "# Browser Job Report",
+          "",
+          "- status: blocked",
+          "",
+          "## Controlled Target",
+          "- targetSite: example.com",
+          "- targetReason: Product comparison task",
+          "",
+          "## Aggregate Progress",
+          "- phase: blocked",
+          "- summary: Blocked · 1/2 complete · 1 blocked · 50%",
+          "- percentComplete: 50",
+          "",
+          "## Goal",
+          "compare a product",
+          "",
+          "## Steps",
+          "1. Read page — completed",
+          "2. Click details — blocked",
+          "     - next human action: Review the product row before continuing."
+        ].join("\n"),
         truncated: false
       };
     }
@@ -73,6 +101,10 @@ test("artifacts workspace lists and previews archive intake artifacts", async ()
     assert.match(container.textContent, /Reports and intake created by browser work/);
     assert.match(container.textContent, /Browser job completed/);
     assert.match(container.textContent, /# Browser Job Report/);
+    assert.match(container.textContent, /Next: Review the product row before continuing/);
+    assert.match(container.textContent, /Action Summary/);
+    assert.match(container.textContent, /Blocked · 1\/2 complete · 1 blocked · 50%/);
+    assert.match(container.textContent, /example.com · Product comparison task/);
     assert.ok(calls.some(([route]) => route === "/archive/intake/list"));
     assert.ok(calls.some(([route, options]) => route === "/archive/intake/read" && options.body.path === "INTAKE/browser/job-report.md"));
 
@@ -93,6 +125,63 @@ test("artifacts workspace lists and previews archive intake artifacts", async ()
   } finally {
     cleanup();
   }
+});
+
+test("artifacts workspace extracts wallet and DAO audit summaries", () => {
+  const insights = artifactInsightsFromMarkdown([
+    "# Wallet / DAO Audit: DAO Vote",
+    "",
+    "- capturedAt: 2026-05-29T10:00:00.000Z",
+    "- pageTitle: DAO Vote",
+    "- pageUrl: https://dao.example/vote",
+    "- walletProbeSource: main-world-probe",
+    "- detectionOnly: yes",
+    "",
+    "## Wallet Provider State",
+    "Phantom Solana: available, not connected",
+    "",
+    "## Human Boundary",
+    "This artifact is read-only evidence."
+  ].join("\n"));
+
+  assert.equal(insights.evidenceType, "Wallet / DAO Audit");
+  assert.equal(insights.pageUrl, "https://dao.example/vote");
+  assert.equal(insights.summary, "Read-only wallet/DAO evidence queued for review");
+  assert.equal(insights.walletSummary, "available, not connected");
+});
+
+test("artifacts workspace extracts progress and blocker guidance from markdown reports", () => {
+  const insights = artifactInsightsFromMarkdown([
+    "# Browser Agent Control Report",
+    "",
+    "- status: approval-required",
+    "",
+    "## Controlled Target",
+    "- targetSite: checkout.example",
+    "- targetReason: Agent Control goal: buy safely",
+    "",
+    "## Aggregate Progress",
+    "- phase: approval",
+    "- summary: Awaiting approval · 2/3 complete · 67%",
+    "- percentComplete: 67",
+    "",
+    "## Steps",
+    "3. Click submit — approval-required",
+    "     - next human action: Review the form, then approve once or deny."
+  ].join("\n"));
+
+  assert.deepEqual(insights, {
+    evidenceType: "",
+    nextHumanAction: "Review the form, then approve once or deny.",
+    pageUrl: "",
+    percentComplete: "67",
+    phase: "approval",
+    status: "approval-required",
+    summary: "Awaiting approval · 2/3 complete · 67%",
+    targetReason: "Agent Control goal: buy safely",
+    targetSite: "checkout.example",
+    walletSummary: ""
+  });
 });
 
 test("artifacts workspace reports empty intake clearly", async () => {

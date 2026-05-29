@@ -1,3 +1,5 @@
+import { staleBrowserJobEvidence } from "./browser-job-store.js";
+
 export function sitePermissionDescription(mode) {
   if (mode === "blocked") return "Can see/do now: nothing on this site. Reading, clicking, typing, scrolling, wallet, login, payment, credential, and public-submit actions are blocked.";
   if (mode === "read-only") return "Can see/do now: page text, controls, fields, frames, and metadata. Cannot click, type, scroll, submit, use wallet, login, payment, or credentials.";
@@ -9,6 +11,10 @@ export function controlRunProgress(run) {
   const steps = Array.isArray(run?.steps) ? run.steps : [];
   const total = steps.length;
   const completed = steps.filter((step) => step.state === "completed").length;
+  const terminal = steps.filter((step) => ["completed", "blocked", "failed", "cancelled"].includes(step.state)).length;
+  const pending = steps.filter((step) => step.state === "pending").length;
+  const blockedCount = steps.filter((step) => step.state === "blocked").length;
+  const failed = steps.filter((step) => step.state === "failed").length;
   const active = steps.findIndex((step) => step.state === "active");
   const blocked = steps.findIndex((step) => ["blocked", "failed"].includes(step.state));
   const status = run?.status ?? "idle";
@@ -18,15 +24,66 @@ export function controlRunProgress(run) {
     : blocked >= 0
       ? steps[blocked]
       : steps.find((step) => step.state === "pending") ?? steps.at(-1) ?? null;
+  const percent = total ? Math.round((completed / total) * 100) : 0;
+  const phase = controlRunPhase({ status, currentStep });
   return {
     active,
     activeLabel,
     blocked,
+    blockedCount,
     completed,
     currentStep,
+    failed,
     label: `${status} · ${activeLabel}`,
+    pending,
+    percent,
+    phase,
+    terminal,
     total
   };
+}
+
+export function controlRunPhase({ status, currentStep } = {}) {
+  if (status === "approval") return "approval";
+  if (status === "cancelled") return "cancelled";
+  if (["blocked", "failed", "denied"].includes(status)) return "blocked";
+  if (status === "paused") return "waiting";
+  if (status === "completed") return "completed";
+  const type = currentStep?.type;
+  if (["inspect", "read", "forms", "tabs"].includes(type)) return "reading";
+  if (["open", "search", "switch_tab"].includes(type)) return "navigating";
+  if (["click", "type", "scroll"].includes(type)) return "acting";
+  if (type === "wait") return "waiting";
+  if (status === "running") return "deciding";
+  return "waiting";
+}
+
+export function controlRunPhaseLabel(phase = "waiting") {
+  const labels = {
+    acting: "Acting",
+    approval: "Awaiting approval",
+    blocked: "Blocked",
+    cancelled: "Stopped",
+    completed: "Completed",
+    deciding: "Deciding",
+    navigating: "Navigating",
+    reading: "Reading page",
+    waiting: "Waiting"
+  };
+  return labels[phase] ?? "Working";
+}
+
+export function controlRunProgressSummary(run) {
+  const progress = controlRunProgress(run);
+  return [
+    controlRunPhaseLabel(progress.phase),
+    `${progress.completed}/${progress.total || 0} complete`,
+    progress.terminal !== progress.completed ? `${progress.terminal}/${progress.total || 0} resolved` : "",
+    progress.pending ? `${progress.pending} queued` : "",
+    progress.blockedCount ? `${progress.blockedCount} blocked` : "",
+    progress.failed ? `${progress.failed} failed` : "",
+    `${progress.percent}%`
+  ].filter(Boolean).join(" · ");
 }
 
 export function controlActionStateLabel(state = "pending") {
@@ -34,8 +91,17 @@ export function controlActionStateLabel(state = "pending") {
   if (state === "completed") return "done";
   if (state === "blocked") return "needs review";
   if (state === "failed") return "failed";
+  if (state === "cancelled") return "stopped";
   if (state === "pending") return "queued";
   return String(state || "queued");
+}
+
+export function formatDurationMs(value) {
+  const ms = Number(value);
+  if (!Number.isFinite(ms) || ms < 0) return "";
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)} sec`;
+  return `${Math.floor(ms / 60_000)} min ${Math.round((ms % 60_000) / 1000)} sec`;
 }
 
 function latestAudit(audit, key) {
@@ -66,9 +132,27 @@ function preflightDecisionLabel(decision) {
   ].filter(Boolean).join(" · ");
 }
 
+function jobNextHumanAction(job) {
+  const steps = Array.isArray(job?.steps) ? job.steps : [];
+  const step = [...steps].reverse()
+    .find((candidate) => candidate?.details?.nextHumanAction);
+  return step?.details?.nextHumanAction ?? "";
+}
+
+function pageLockLabel(pageLock) {
+  if (!pageLock) return "";
+  return [
+    `Target: ${pageLock.siteKey || "unknown-site"}`,
+    pageLock.tabId !== null && pageLock.tabId !== undefined ? `tab ${pageLock.tabId}` : "",
+    pageLock.reason || ""
+  ].filter(Boolean).join(" · ");
+}
+
 export function controlRunSummary(run) {
   const progress = controlRunProgress(run);
   const terminal = ["completed", "blocked", "failed", "denied", "cancelled"].includes(run?.status);
+  const nextHumanAction = (Array.isArray(run?.steps) ? run.steps : [])
+    .find((step) => step?.details?.nextHumanAction)?.details?.nextHumanAction ?? "";
   if (!terminal && run?.status !== "approval") return null;
   if (run?.status === "completed") {
     return {
@@ -94,18 +178,25 @@ export function controlRunSummary(run) {
   return {
     state: "blocked",
     title: "Task stopped",
-    body: "Augmentor could not safely continue. The trace below shows the blocker and the recommended next human action."
+    body: [
+      "Augmentor could not safely continue. The trace below shows the blocker and the recommended next human action.",
+      nextHumanAction
+    ].filter(Boolean).join(" ")
   };
 }
 
 function stepDetailRows(step) {
   const details = step?.details ?? {};
   return [
+    ["Timing", formatDurationMs(step?.timing?.durationMs)],
     ["Observation", details.observation?.title || details.observation?.url || ""],
     ["Decision", details.decision || ""],
     ["Action", details.action || ""],
     ["Result", details.result || step?.note || ""],
-    ["Safety", details.safetyClass || ""]
+    ["Safety", details.safetyClass || ""],
+    ["Confidence", details.confidence || ""],
+    ["Uncertainty", details.uncertainty || ""],
+    ["Next human action", details.nextHumanAction || ""]
   ].filter(([, value]) => Boolean(value));
 }
 
@@ -116,6 +207,7 @@ export function createMonitorRenderers({
   elements,
   getBrowserJobs,
   getActiveBrowserJobId = () => null,
+  getBrowserJobSchedulerState = () => null,
   getContextDockExpanded,
   getCurrentControlRun,
   getJobMonitorCollapsed,
@@ -214,6 +306,39 @@ export function createMonitorRenderers({
         : currentControlRun.status === "running"
           ? "Observing the active page..."
           : currentControlRun.status;
+    }
+    const actionCopy = controlCurrentAction.querySelector("div");
+    let targetMeta = controlCurrentAction.querySelector(".control-target-meta");
+    if (!targetMeta && actionCopy) {
+      targetMeta = document.createElement("small");
+      targetMeta.className = "control-target-meta";
+      actionCopy.append(targetMeta);
+    }
+    if (targetMeta) {
+      const target = pageLockLabel(currentControlRun.pageLock);
+      targetMeta.hidden = !target;
+      targetMeta.textContent = target;
+    }
+    let phaseMeta = controlCurrentAction.querySelector(".control-phase-meta");
+    if (!phaseMeta && actionCopy) {
+      phaseMeta = document.createElement("small");
+      phaseMeta.className = "control-phase-meta";
+      actionCopy.append(phaseMeta);
+    }
+    if (phaseMeta) {
+      phaseMeta.hidden = false;
+      phaseMeta.textContent = controlRunProgressSummary(currentControlRun);
+    }
+    let progressTrack = controlCurrentAction.querySelector(".control-progress-track");
+    if (!progressTrack && actionCopy) {
+      progressTrack = document.createElement("span");
+      progressTrack.className = "control-progress-track";
+      progressTrack.append(document.createElement("i"));
+      actionCopy.append(progressTrack);
+    }
+    if (progressTrack) {
+      progressTrack.querySelector("i").style.width = `${progress.percent}%`;
+      progressTrack.setAttribute("aria-label", `Agent Control progress ${progress.percent} percent`);
     }
     controlStepList.replaceChildren();
     currentControlRun.steps.forEach((step, index) => {
@@ -427,7 +552,11 @@ export function createMonitorRenderers({
     }
     const activeCount = browserJobs.filter((job) => ["queued", "running", "paused", "approval"].includes(job.status)).length;
     const focusedJob = activeJobId ? browserJobs.find((job) => job.id === activeJobId) : null;
-    jobMonitorTitle.textContent = `${activeCount} active · ${browserJobs.length} total${focusedJob ? ` · focused ${focusedJob.id}` : ""}`;
+    const scheduler = getBrowserJobSchedulerState?.() ?? null;
+    const schedulerText = scheduler
+      ? ` · ${scheduler.runnableQueued.length} runnable · ${scheduler.lockBlockedQueued.length} locked`
+      : "";
+    jobMonitorTitle.textContent = `${activeCount} active · ${browserJobs.length} total${schedulerText}${focusedJob ? ` · focused ${focusedJob.id}` : ""}`;
     jobMonitorToggle.textContent = jobMonitorCollapsed ? "Show" : "Hide";
     jobList.hidden = jobMonitorCollapsed;
     jobList.replaceChildren();
@@ -464,6 +593,46 @@ export function createMonitorRenderers({
         lock.className = "job-page-lock";
         lock.textContent = `Lock: ${job.pageLock.siteKey}${job.pageLock.tabId !== null ? ` · tab ${job.pageLock.tabId}` : ""}`;
         details.append(lock);
+      }
+      if (job.steps?.length) {
+        const progress = document.createElement("small");
+        progress.className = "job-progress";
+        progress.textContent = `Progress: ${controlRunProgressSummary(job)}`;
+        details.append(progress);
+      }
+      const staleEvidence = staleBrowserJobEvidence(job);
+      if (staleEvidence) {
+        item.dataset.attention = "stale";
+        const stale = document.createElement("small");
+        stale.className = "job-stale-guidance";
+        stale.textContent = `Attention: ${staleEvidence.reason} Last activity ${formatDurationMs(staleEvidence.ageMs)} ago. ${staleEvidence.nextHumanAction}`;
+        details.append(stale);
+      }
+      if (scheduler?.runnableQueued?.some((candidate) => candidate.id === job.id)) {
+        const runnable = document.createElement("small");
+        runnable.className = "job-scheduler-state";
+        runnable.textContent = `Scheduler: runnable when the runner is available (${scheduler.activeSlots}/${scheduler.maxConcurrent} active).`;
+        details.append(runnable);
+      }
+      const locked = scheduler?.lockBlockedQueued?.find((candidate) => candidate.id === job.id);
+      if (locked) {
+        const blocked = document.createElement("small");
+        blocked.className = "job-scheduler-state";
+        blocked.textContent = `Scheduler: locked by ${locked.blockerId}${locked.blockerGoal ? ` · ${locked.blockerGoal}` : ""}.`;
+        details.append(blocked);
+      }
+      if (scheduler?.capacityBlockedQueued?.some((candidate) => candidate.id === job.id)) {
+        const waiting = document.createElement("small");
+        waiting.className = "job-scheduler-state";
+        waiting.textContent = `Scheduler: waiting for capacity (${scheduler.activeSlots}/${scheduler.maxConcurrent} active).`;
+        details.append(waiting);
+      }
+      const nextHumanAction = jobNextHumanAction(job);
+      if (nextHumanAction) {
+        const blocker = document.createElement("small");
+        blocker.className = "job-blocker-guidance";
+        blocker.textContent = `Next human action: ${nextHumanAction}`;
+        details.append(blocker);
       }
       details.append(id);
       const state = document.createElement("span");

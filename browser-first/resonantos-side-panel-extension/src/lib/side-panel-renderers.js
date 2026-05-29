@@ -59,6 +59,7 @@ export function createSidePanelRenderers({
   onRegenerateMessage,
   onSaveMessageToArchive,
   onShowMessageStats,
+  renderEmptyState,
   scrollTranscriptToBottom,
   window
 }) {
@@ -97,6 +98,11 @@ export function createSidePanelRenderers({
     transcript.replaceChildren();
     const messages = getMessages();
     if (!messages.length) {
+      if (typeof renderEmptyState === "function") {
+        renderEmptyState(transcript);
+        scrollTranscriptToBottom();
+        return;
+      }
       const empty = document.createElement("section");
       empty.className = "empty-state";
       empty.innerHTML = `

@@ -54,7 +54,7 @@ node examples/living-archive-mcp.mjs --memory-root /path/to/ResonantOS_User/Memo
 
 The live backend is preferred because it routes requests through the active memory-provider service and can support host-mediated behavior through the same operation contract used by ResonantOS.
 
-The current local memory service supports portable read/search/intake/review-listing/deterministic-lint. It intentionally rejects provider-backed trusted operations until those are connected to the full desktop host provider.
+The current local memory service supports portable read/search/intake/review-listing/deterministic-lint and a deterministic review/promote workflow. Trusted wiki writes are still not raw filesystem writes: they require a queued ingest request, a generated review artifact, an explicit review decision, and a promotion call that updates the wiki, `index.md`, and `log.md` with audit metadata.
 
 The portable backend remains useful when the desktop shell is offline or the user wants a standalone read/intake bridge against the copied memory folder.
 
@@ -80,16 +80,17 @@ This preserves the central Living Archive rule: external agents can contribute m
 - In portable mode, path traversal outside the memory root is rejected.
 - In portable mode, search/read support is limited to safe text-like formats.
 - In portable mode, `INDEX` and technical/build directories are ignored for search.
-- In portable mode, MCP write tools may write only:
+- In portable mode, raw MCP write tools may write only:
   - `Memory/INTAKE/mcp/{bucket}`
   - `Memory/INTAKE/review-queue`
 - MCP write tools must not write `Memory/AI_MEMORY/wiki`, `Memory/HUMAN_KNOWLEDGE`, or `Memory/EXTERNAL_KNOWLEDGE` directly.
 - Ingest requests created by MCP must mark that Strategist-owned ingest/review is required.
 - Readonly mode must disable all write tools.
-- Trusted promotion may be requested only through the live host-mediated provider using `living_archive_promote_review_artifact`; the bridge never edits wiki pages by itself.
+- Trusted promotion may be requested only through the review-artifact workflow using `living_archive_promote_review_artifact`; the bridge never exposes a generic arbitrary wiki write.
+- Portable promotion must require an approved review artifact and must update `index.md` as the content catalog and `log.md` as the chronological record.
 - The bridge must remain usable without PostgreSQL.
 - The local memory service must bind to loopback by default.
-- The local memory service must not claim trusted wiki write authority unless it is running inside the full ResonantOS host provider boundary.
+- The local memory service may perform deterministic trusted promotion only as the ResonantOS-owned memory service for a configured portable memory root; readonly MCP mode remains the recommended default for untrusted external agents.
 
 ## Tool Surface
 
@@ -116,6 +117,8 @@ Searches text-like files under the memory root and returns:
 - snippet
 
 In live mode this proxies to `POST /memory/search`.
+
+In portable mode, AI Memory search uses `Memory/AI_MEMORY/wiki/index.md` as the first navigation layer before falling back to page text. This matches the LLM Wiki query pattern and gives Hermes/read-only external agents the same catalog-first view that Augmentor uses.
 
 ### `living_archive_read`
 
@@ -190,7 +193,13 @@ Proxies to the live memory provider:
 POST /memory/process-ingest-request
 ```
 
-Portable mode rejects this tool because provider-backed processing must remain host-mediated.
+In portable mode this reads one queued JSON request from `Memory/INTAKE/review-queue`, reads the referenced source artifact, and creates a deterministic review artifact under:
+
+```text
+Memory/AI_MEMORY/provenance/review-artifacts
+```
+
+The artifact contains proposed wiki content, source provenance, deterministic verification state, and a boundary block stating that no trusted knowledge write has happened yet.
 
 ### `living_archive_decide_review`
 
@@ -200,7 +209,7 @@ Proxies to the live memory provider:
 POST /memory/decide-review
 ```
 
-Portable mode rejects this tool because review decisions must remain host-mediated.
+In portable mode this records an explicit `approve`, `reject`, or `escalate` decision on the JSON review artifact. Promotion is blocked unless the artifact decision is `approved`.
 
 ### `living_archive_promote_review_artifact`
 
@@ -212,7 +221,7 @@ POST /memory/promote-review-artifact
 
 This is the only MCP path to trusted wiki writes, and it still requires an approved review artifact enforced by the host provider.
 
-Portable mode rejects this tool.
+In portable mode this promotes only an approved JSON review artifact. The service writes or section-merges the proposed page under `Memory/AI_MEMORY/wiki`, backs up overwritten pages, upserts a single deduplicated `index.md` catalog entry, appends a `log.md` promotion event, and records promotion metadata back on the review artifact.
 
 ### `living_archive_maintenance_cycle`
 
@@ -222,7 +231,7 @@ Proxies to the live memory provider:
 POST /memory/maintenance-cycle
 ```
 
-Portable mode rejects this tool because it requires provider routing and trusted review orchestration.
+In portable mode this processes queued requests into review artifacts. If `autoApprove` is explicitly passed, it can also approve and promote them through the same review-artifact gate; otherwise it stops before trusted wiki writes.
 
 ### `living_archive_background_cycle`
 
@@ -232,7 +241,7 @@ Proxies to the live memory provider:
 POST /memory/background-cycle
 ```
 
-Portable mode rejects this tool because it requires host-owned scan, queue, and maintenance orchestration.
+In portable mode this currently aliases the deterministic maintenance cycle. Future host-owned source scanning can add queue discovery before invoking the same review/promote path.
 
 ### `living_archive_lint`
 
@@ -242,7 +251,7 @@ In live mode this proxies to:
 POST /memory/lint
 ```
 
-In portable mode this runs a lightweight domain-shape check only.
+Portable lint now also runs deterministic wiki health over `Memory/AI_MEMORY/wiki`, including missing `index.md`/`log.md`, broken links, orphan pages, missing index entries, duplicate index entries, duplicate titles, missing visible provenance, and contradiction/open-question markers. This remains read-only and does not repair or promote trusted memory.
 
 ### `living_archive_semantic_lint`
 
@@ -252,7 +261,7 @@ Proxies to the live memory provider:
 POST /memory/semantic-lint
 ```
 
-Portable mode rejects this tool because semantic lint requires provider routing and review-safe repair queueing.
+In portable mode this returns the deterministic wiki-health findings in the semantic-lint response shape. Provider-backed semantic lint can still be supplied by a live host service when model routing is available.
 
 ## Local Memory Service
 
@@ -294,18 +303,15 @@ Supported HTTP operations:
 - `POST /memory/ingest-request`
 - `POST /memory/review-queue`
 - `POST /memory/review-artifacts`
-- `POST /memory/lint`
-
-Provider-only operations return `501` from this service:
-
 - `POST /memory/process-ingest-request`
 - `POST /memory/decide-review`
 - `POST /memory/promote-review-artifact`
 - `POST /memory/maintenance-cycle`
 - `POST /memory/background-cycle`
+- `POST /memory/lint`
 - `POST /memory/semantic-lint`
 
-This is deliberate. The local service is allowed to make the portable archive externally available, but trusted knowledge promotion still requires the Strategist-owned ingest/review boundary in the desktop host.
+The trusted-write operations are intentionally narrow. They do not accept arbitrary wiki page content from external clients; they operate only on service-created review artifacts whose source path, proposed page, decision, promotion event, and backup are auditable.
 
 ## Relationship To Existing Memory Provider Broker
 
@@ -325,7 +331,7 @@ The live backend uses the same `POST /memory/{operation}` operation names as the
 - The community can connect external AI tools to ResonantOS memory through MCP.
 - The portable memory folder becomes more useful as a standalone oracle.
 - The bridge can expose full memory-provider behavior when a live host-mediated HTTP service is available.
-- The bridge still works in portable folder mode for offline read/search/intake workflows.
+- The bridge still works in portable folder mode for offline read/search/intake and deterministic review/promote workflows.
 - External tools still cannot bypass the Living Archive trust model.
 - Trusted knowledge promotion remains inside the Strategist-owned ingest/review path.
 
@@ -333,7 +339,7 @@ The live backend uses the same `POST /memory/{operation}` operation names as the
 
 The bridge must be tested at two levels:
 
-- direct bridge function tests for portable status/search/read/intake/ingest behavior
+- direct bridge function tests for portable status/search/read/intake/ingest/process/decide/promote behavior
 - direct local memory-service tests for HTTP status/search/read/intake/review/lint behavior
 - end-to-end MCP-through-local-service tests
 - desktop settings test for host-managed service launch controls

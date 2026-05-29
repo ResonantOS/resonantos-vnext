@@ -4,9 +4,13 @@ import { JSDOM } from "jsdom";
 
 import {
   controlActionStateLabel,
+  controlRunPhase,
+  controlRunPhaseLabel,
   controlRunProgress,
+  controlRunProgressSummary,
   controlRunSummary,
   createMonitorRenderers,
+  formatDurationMs,
   sitePermissionDescription
 } from "../resonantos-side-panel-extension/src/lib/monitor-renderers.js";
 
@@ -39,7 +43,7 @@ function createHarness(overrides = {}) {
       <strong id="control-title"></strong>
       <span id="control-status"></span>
       <button id="control-stop"></button>
-      <div id="control-current"><small></small><strong></strong></div>
+      <div id="control-current"><span></span><div><small></small><strong></strong></div></div>
       <div id="control-summary-card"></div>
       <ol id="control-steps"></ol>
       <div id="control-artifacts"></div>
@@ -59,6 +63,7 @@ function createHarness(overrides = {}) {
     contextDockExpanded: overrides.contextDockExpanded ?? true,
     currentControlRun: overrides.currentControlRun ?? null,
     jobMonitorCollapsed: overrides.jobMonitorCollapsed ?? true,
+    schedulerState: overrides.schedulerState ?? null,
     pendingApproval: overrides.pendingApproval ?? null,
     tab: overrides.tab ?? { url: "https://example.com/page" },
     continued: [],
@@ -101,6 +106,7 @@ function createHarness(overrides = {}) {
     },
     getBrowserJobs: () => state.browserJobs,
     getActiveBrowserJobId: () => state.activeJobId,
+    getBrowserJobSchedulerState: () => state.schedulerState,
     getContextDockExpanded: () => state.contextDockExpanded,
     getCurrentControlRun: () => state.currentControlRun,
     getJobMonitorCollapsed: () => state.jobMonitorCollapsed,
@@ -147,19 +153,47 @@ test("monitor renderers calculate control run progress", () => {
     active: 1,
     activeLabel: "step 2/3",
     blocked: -1,
+    blockedCount: 0,
     completed: 1,
     currentStep: { state: "active" },
+    failed: 0,
     label: "running · step 2/3",
+    pending: 1,
+    percent: 33,
+    phase: "deciding",
+    terminal: 1,
     total: 3
   });
+  assert.equal(controlRunPhase({ status: "running", currentStep: { type: "read" } }), "reading");
+  assert.equal(controlRunPhase({ status: "running", currentStep: { type: "click" } }), "acting");
+  assert.equal(controlRunPhase({ status: "approval", currentStep: { type: "click" } }), "approval");
+  assert.equal(controlRunPhase({ status: "cancelled", currentStep: { type: "click" } }), "cancelled");
+  assert.equal(controlRunPhaseLabel("navigating"), "Navigating");
+  assert.equal(controlRunPhaseLabel("cancelled"), "Stopped");
+  assert.equal(controlRunProgressSummary({
+    status: "running",
+    steps: [{ state: "completed" }, { state: "active", type: "click" }, { state: "pending" }]
+  }), "Acting · 1/3 complete · 1 queued · 33%");
+  assert.equal(controlRunProgressSummary({
+    status: "cancelled",
+    steps: [{ state: "completed" }, { state: "cancelled", type: "click" }, { state: "pending" }]
+  }), "Stopped · 1/3 complete · 2/3 resolved · 1 queued · 33%");
   assert.equal(controlActionStateLabel("active"), "working");
   assert.equal(controlActionStateLabel("completed"), "done");
   assert.equal(controlActionStateLabel("blocked"), "needs review");
+  assert.equal(controlActionStateLabel("cancelled"), "stopped");
+  assert.equal(formatDurationMs(450), "450 ms");
+  assert.equal(formatDurationMs(1_250), "1.3 sec");
+  assert.equal(formatDurationMs(12_400), "12 sec");
   assert.deepEqual(controlRunSummary({ status: "completed", steps: [{ state: "completed" }] }), {
     state: "completed",
     title: "Task completed",
     body: "1/1 actions completed. Review the trace below or save the report to Living Archive intake."
   });
+  assert.match(controlRunSummary({
+    status: "blocked",
+    steps: [{ state: "blocked", details: { nextHumanAction: "Select the correct visible button." } }]
+  }).body, /Select the correct visible button/);
 });
 
 test("monitor renderers hide control monitor when no run exists", () => {
@@ -177,6 +211,7 @@ test("monitor renderers render control steps, artifacts, and approval boundaries
     currentControlRun: {
       goal: "find product",
       status: "approval",
+      pageLock: { tabId: 44, siteKey: "example.com", url: "https://example.com/product", reason: "Agent Control goal: find product" },
       steps: [
         {
           type: "read",
@@ -187,8 +222,12 @@ test("monitor renderers render control steps, artifacts, and approval boundaries
             decision: "Read first.",
             action: "Read page",
             result: "saw page",
-            safetyClass: "safe"
-          }
+            safetyClass: "safe",
+            confidence: "high",
+            uncertainty: "None detected.",
+            nextHumanAction: "No human action needed."
+          },
+          timing: { durationMs: 1250 }
         },
         { type: "click", label: "Click button", state: "blocked" }
       ],
@@ -210,6 +249,12 @@ test("monitor renderers render control steps, artifacts, and approval boundaries
   assert.equal(harness.dom.window.document.querySelector("#control-current").dataset.state, "blocked");
   assert.equal(harness.dom.window.document.querySelector("#control-current small").textContent, "Needs approval");
   assert.equal(harness.dom.window.document.querySelector("#control-current strong").textContent, "Click button");
+  assert.match(harness.dom.window.document.querySelector(".control-target-meta").textContent, /Target: example\.com · tab 44/);
+  assert.match(harness.dom.window.document.querySelector(".control-target-meta").textContent, /find product/);
+  assert.match(harness.dom.window.document.querySelector(".control-phase-meta").textContent, /Awaiting approval/);
+  assert.match(harness.dom.window.document.querySelector(".control-phase-meta").textContent, /1\/2 complete · 2\/2 resolved · 1 blocked · 50%/);
+  assert.equal(harness.dom.window.document.querySelector(".control-progress-track").getAttribute("aria-label"), "Agent Control progress 50 percent");
+  assert.equal(harness.dom.window.document.querySelector(".control-progress-track i").style.width, "50%");
   assert.equal(harness.dom.window.document.querySelector("#control-summary-card").hidden, false);
   assert.equal(harness.dom.window.document.querySelector("#control-summary-card").dataset.state, "approval");
   assert.match(harness.dom.window.document.querySelector("#control-summary-card").textContent, /Human approval needed/);
@@ -224,6 +269,10 @@ test("monitor renderers render control steps, artifacts, and approval boundaries
     { index: "2", state: "blocked", text: "Click button", note: "", badge: "needs review" }
   ]);
   assert.match(harness.dom.window.document.querySelector(".control-step-detail").textContent, /Observation/);
+  assert.match(harness.dom.window.document.querySelector(".control-step-detail").textContent, /1\.3 sec/);
+  assert.match(harness.dom.window.document.querySelector(".control-step-detail").textContent, /Confidence/);
+  assert.match(harness.dom.window.document.querySelector(".control-step-detail").textContent, /high/);
+  assert.match(harness.dom.window.document.querySelector(".control-step-detail").textContent, /Next human action/);
   assert.match(harness.dom.window.document.querySelector(".control-step-detail").textContent, /Product page/);
   assert.match(harness.dom.window.document.querySelector("#control-artifacts").textContent, /report: \/tmp\/report\.md/);
   assert.equal(harness.dom.window.document.querySelector("#approval").hidden, false);
@@ -245,7 +294,7 @@ test("monitor renderers render collapsed and expanded browser jobs", () => {
     {
       id: "job-b",
       goal: "B task",
-      status: "completed",
+      status: "blocked",
       updatedAt: "2026-05-26T09:00:00.000Z",
       planner: "loop",
       preflightDecision: {
@@ -254,7 +303,15 @@ test("monitor renderers render collapsed and expanded browser jobs", () => {
         siteKey: "example.com",
         reason: "Human trusted safe booking actions."
       },
-      steps: [{ state: "completed", label: "Read page" }, { state: "blocked", label: "Click Submit" }]
+      steps: [
+        { state: "completed", label: "Read page", type: "read" },
+        {
+          state: "blocked",
+          label: "Click Submit",
+          type: "click",
+          details: { nextHumanAction: "Review the submit button before continuing." }
+        }
+      ]
     }
   ];
   const harness = createHarness({ browserJobs, jobMonitorCollapsed: true, activeJobId: "job-a" });
@@ -271,11 +328,17 @@ test("monitor renderers render collapsed and expanded browser jobs", () => {
 
   assert.equal(harness.dom.window.document.querySelector("#jobs-toggle").textContent, "Hide");
   assert.equal(harness.dom.window.document.querySelector("#jobs-list").hidden, false);
-  assert.deepEqual([...harness.dom.window.document.querySelectorAll("#jobs-list > li")].map((item) => item.dataset.status), ["running", "completed"]);
+  assert.deepEqual([...harness.dom.window.document.querySelectorAll("#jobs-list > li")].map((item) => item.dataset.status), ["running", "blocked"]);
   assert.deepEqual([...harness.dom.window.document.querySelectorAll("#jobs-list > li")].map((item) => item.dataset.active), ["true", "false"]);
   assert.match(harness.dom.window.document.querySelector("#jobs-list").textContent, /Focused browser job/);
   assert.match(harness.dom.window.document.querySelector("#jobs-list").textContent, /Lock: example\.com · tab 12/);
+  assert.equal(harness.dom.window.document.querySelector("#jobs-list > li").dataset.attention, "stale");
+  assert.match(harness.dom.window.document.querySelector(".job-stale-guidance").textContent, /Attention: Running job has no recent recorded progress/);
+  assert.match(harness.dom.window.document.querySelector(".job-stale-guidance").textContent, /continue the job/);
   assert.match(harness.dom.window.document.querySelector("#jobs-list").textContent, /Preflight: trusted safe actions · booking · example\.com/);
+  assert.match(harness.dom.window.document.querySelector("#jobs-list").textContent, /Progress: Blocked · 1\/2 complete · 2\/2 resolved · 1 blocked · 50%/);
+  assert.match(harness.dom.window.document.querySelector("#jobs-list").textContent, /Next human action: Review the submit button before continuing/);
+  assert.equal(harness.dom.window.document.querySelector(".job-blocker-guidance").textContent, "Next human action: Review the submit button before continuing.");
   assert.match(harness.dom.window.document.querySelector("#jobs-list").textContent, /done · Read page/);
   harness.dom.window.document.querySelectorAll(".job-actions button")[1].click();
   assert.deepEqual(harness.state.focused, ["job-b"]);
@@ -283,6 +346,32 @@ test("monitor renderers render collapsed and expanded browser jobs", () => {
   assert.deepEqual(harness.state.continued, ["job-b"]);
   harness.dom.window.document.querySelectorAll(".job-actions button")[3].click();
   assert.deepEqual(harness.state.reported, ["job-b"]);
+});
+
+test("monitor renderers expose scheduler state for queued browser jobs", () => {
+  const browserJobs = [
+    { id: "job-a", goal: "A task", status: "running", updatedAt: "2026-05-26T10:00:00.000Z", planner: "loop" },
+    { id: "job-b", goal: "B task", status: "queued", updatedAt: "2026-05-26T09:00:00.000Z", planner: "loop" },
+    { id: "job-c", goal: "C task", status: "queued", updatedAt: "2026-05-26T08:00:00.000Z", planner: "loop" }
+  ];
+  const harness = createHarness({
+    activeJobId: "job-a",
+    browserJobs,
+    jobMonitorCollapsed: false,
+    schedulerState: {
+      activeSlots: 1,
+      capacityBlockedQueued: [],
+      lockBlockedQueued: [{ id: "job-c", goal: "C task", status: "queued", blockerId: "job-a", blockerGoal: "A task" }],
+      maxConcurrent: 2,
+      runnableQueued: [{ id: "job-b", goal: "B task", status: "queued" }]
+    }
+  });
+
+  harness.renderers.renderJobMonitor();
+
+  assert.equal(harness.dom.window.document.querySelector("#jobs-title").textContent, "3 active · 3 total · 1 runnable · 1 locked · focused job-a");
+  assert.match(harness.dom.window.document.querySelector("#jobs-list").textContent, /Scheduler: runnable when the runner is available \(1\/2 active\)/);
+  assert.match(harness.dom.window.document.querySelector("#jobs-list").textContent, /Scheduler: locked by job-a · A task/);
 });
 
 test("monitor renderers show and hide site permission panel", async () => {

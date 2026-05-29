@@ -20,6 +20,7 @@ function createHarness() {
     handleWalletBoundary: handler("wallet"),
     openBrowserUrl: handler("open"),
     pauseBrowserJob: handler("pause"),
+    prepareDaoWorkflowGuidance: handler("dao"),
     resumeBrowserJob: handler("resume"),
     runBrowserCommand: handler("browser"),
     runCapabilitiesCommand: handler("capabilities"),
@@ -31,9 +32,12 @@ function createHarness() {
     runHistorySearchCommand: handler("history"),
     runJobsCommand: handler("jobs"),
     runMemorySearchCommand: handler("memory"),
+    runNaturalDelegationCommand: handler("natural-delegate"),
     reportBrowserJob: handler("report"),
     runSitePermissionCommand: handler("site"),
     runStatusCommand: handler("status"),
+    runWalletStatusCommand: handler("wallet-status"),
+    saveWalletDaoAuditToArchive: handler("wallet-audit"),
     saveIntake: handler("save"),
     scrollActivePage: handler("scroll"),
     searchBrowser: handler("search"),
@@ -84,6 +88,10 @@ test("side panel command router dispatches browser state slash commands", async 
   await harness.router.respondToCommand("/site read-only");
   await harness.router.respondToCommand("/memory augmentatism");
   await harness.router.respondToCommand("/history resonantos");
+  await harness.router.respondToCommand("/wallet status");
+  await harness.router.respondToCommand("/wallet audit");
+  await harness.router.respondToCommand("/dao review proposal");
+  await harness.router.respondToCommand("/dao audit review proposal");
   await harness.router.respondToCommand("/capabilities");
   await harness.router.respondToCommand("/jobs running");
   await harness.router.respondToCommand("/pause job-a");
@@ -98,6 +106,10 @@ test("side panel command router dispatches browser state slash commands", async 
     "bind", "site",
     "bind", "memory",
     "bind", "history",
+    "bind", "wallet-status",
+    "bind", "wallet-audit",
+    "bind", "dao",
+    "bind", "wallet-audit",
     "bind", "capabilities",
     "bind", "jobs",
     "bind", "pause",
@@ -139,6 +151,24 @@ test("side panel command router dispatches natural browser intents before chat",
     "control"
   ]);
   assert.deepEqual(harness.calls.at(-1), ["control", "go to amazon.it and find me a rtx5090"]);
+});
+
+test("side panel command router dispatches natural delegation before chat", async () => {
+  const harness = createHarness();
+
+  await harness.router.respondToCommand("ask Hermes to research the project options");
+  await harness.router.respondToCommand("delegate this to OpenCode: inspect the failing tests");
+  await harness.router.respondToCommand("spawn Hermes to review the research packet");
+  await harness.router.respondToCommand("can you pass this to another agent?");
+  await harness.router.respondToCommand("can you spawn or delegate to other agents?");
+
+  assert.deepEqual(harness.calls.filter((call) => call[0] !== "bind"), [
+    ["natural-delegate", { missingTarget: false, mission: "research the project options", target: "hermes" }],
+    ["natural-delegate", { missingTarget: false, mission: "inspect the failing tests", target: "opencode" }],
+    ["natural-delegate", { missingTarget: false, mission: "review the research packet", target: "hermes" }],
+    ["natural-delegate", { missingTarget: true, mission: "to another agent?", target: "" }],
+    ["natural-delegate", { missingTarget: true, mission: "or delegate to other agents?", target: "" }]
+  ]);
 });
 
 test("side panel command router gates wallet terms and falls back to chat", async () => {

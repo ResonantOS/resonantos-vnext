@@ -53,22 +53,36 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   const workspace = await readText(path.join(extensionRoot, "src", "main-workspace.html"));
   const workspaceScript = await readText(path.join(extensionRoot, "src", "main-workspace.js"));
   const workspaceStyles = await readText(path.join(extensionRoot, "src", "main-workspace.css"));
+  const promptRouter = await readText(path.join(extensionRoot, "src", "lib", "main-workspace-prompt-router.js"));
   const launcher = await readText(path.join(browserFirstRoot, "host", "run-browser-first.mjs"));
   const archiveMerge = await readText(path.join(browserFirstRoot, "host", "archive-merge.mjs"));
   const background = await readText(path.join(extensionRoot, "src", "background.js"));
   const sidePanel = await readText(path.join(extensionRoot, "src", "side-panel.js"));
   const commandRouter = await readText(path.join(extensionRoot, "src", "lib", "side-panel-command-router.js"));
   const appCommandHandlers = await readText(path.join(extensionRoot, "src", "lib", "app-command-handlers.js"));
+  const workspaceSettings = await readText(path.join(extensionRoot, "src", "lib", "main-workspace-settings.js"));
+  const workspaceRail = await readText(path.join(extensionRoot, "src", "lib", "main-workspace-rail.js"));
+  const diagnosticsSettings = await readText(path.join(extensionRoot, "src", "lib", "settings", "diagnostics-section.js"));
 
   assert.equal(manifest.chrome_url_overrides.newtab, "src/main-workspace.html");
   assert.match(workspace, /ResonantOS main workspace/);
-  assert.doesNotMatch(workspace, /chat-history/);
+  assert.match(workspace, /New chat/);
+  assert.match(workspace, /Search chats/);
+  assert.match(workspace, /Pinned Add-ons/);
+  assert.doesNotMatch(workspace, /aria-label="Pinned"/);
+  assert.match(workspace, /Projects/);
+  assert.match(workspace, /rail-new-project/);
+  assert.match(workspace, /rail-project-list/);
+  assert.match(workspace, /Chats/);
+  assert.match(workspace, /rail-chat-list/);
+  assert.doesNotMatch(workspace, /ResonantOS Architecture/);
   assert.match(workspace, /Artifacts/);
   assert.match(workspace, /Add-ons/);
   assert.match(workspace, /Living Archive/);
   assert.match(workspace, /Hermes/);
   assert.match(workspace, /OpenCode/);
   assert.match(workspace, /Settings/);
+  assert.doesNotMatch(workspace, /System Settings/);
   assert.match(workspace, /model-select/);
   assert.match(workspace, /thinking-depth/);
   assert.match(workspace, /read-page/);
@@ -77,6 +91,10 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(workspace, /context-toggle/);
   assert.match(workspace, /context-meter/);
   assert.match(workspace, /dictate-button/);
+  assert.match(workspace, /title="Read current browser page"/);
+  assert.match(workspace, /title="Summarize current browser context"/);
+  assert.doesNotMatch(workspace, /from sidebar/);
+  assert.doesNotMatch(workspace, /Open browser context status in sidebar/);
   for (const id of ["save-intake", "save-selection", "context-toggle", "dictate-button", "connection-line"]) {
     const button = workspace.match(new RegExp(`<button id="${id}"[\\s\\S]*?<\\/button>`))?.[0] ?? "";
     assert.match(button, /<svg /);
@@ -87,30 +105,74 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.doesNotMatch(workspace, /id="open-sidebar"/);
   assert.match(workspace, /main-workspace\.js/);
   assert.match(workspaceScript, /createChatSessionStore/);
-  assert.match(workspaceScript, /createComposerController/);
+  assert.match(workspaceScript, /renderRailNavigation/);
+  assert.match(workspaceScript, /railSearchMatchesProject/);
+  assert.match(workspaceScript, /railSearchMatchesSession/);
+  assert.match(workspaceRail, /railSearchMatchesProject/);
+  assert.match(workspaceRail, /railSearchMatchesSession/);
+  assert.match(workspaceScript, /chatSessionStore\.getSessions/);
+  assert.match(workspaceScript, /chatSessionStore\.getProjects/);
+  assert.match(workspaceScript, /chatSessionStore\.switchSession/);
+  assert.match(workspaceScript, /setSessionPinned/);
+  assert.match(workspaceScript, /setSessionArchived/);
+  assert.match(workspaceScript, /renameSession/);
+  assert.match(workspaceScript, /setSessionProject/);
+  assert.match(workspaceScript, /createProject/);
+  assert.match(workspaceScript, /renameProject/);
+  assert.match(workspaceScript, /setProjectArchived/);
+  assert.match(workspaceScript, /setProjectExpanded/);
+  assert.match(workspaceScript, /deleteSessionFromRail/);
+  assert.match(workspaceScript, /forkSession/);
+  assert.match(workspaceScript, /orderedRailItems/);
+  assert.match(workspaceScript, /!session\.projectId/);
+  assert.match(workspaceScript, /rail-project-chat-list/);
+  assert.match(workspaceScript, /rail-unread-dot/);
+  assert.match(workspaceScript, /railProjectActions/);
+  assert.match(workspaceScript, /aria-expanded/);
+  assert.match(workspaceScript, /Collapse.*project/);
+  assert.match(workspaceScript, /Open chat:/);
+  assert.match(workspaceScript, /aria-current", "true"/);
+  assert.match(workspaceScript, /dragstart/);
+  assert.match(workspaceScript, /drop/);
+  assert.match(workspaceScript, /createComposerController\(\{\s*commandForm,\s*commandInput,\s*forceClipboardFallback: true,/);
+  assert.match(workspaceScript, /createBrowserPageActions/);
   assert.match(workspaceScript, /fileLooksTextLike/);
   assert.match(workspaceScript, /removeAttachment/);
   assert.match(workspaceScript, /renderArtifactsWorkspace/);
   assert.match(workspaceScript, /renderAddOnsWorkspace/);
   assert.match(workspaceScript, /continueFromArtifact/);
   assert.doesNotMatch(workspaceScript, /renderChatHistory/);
-  assert.doesNotMatch(workspaceScript, /chatHistory/);
   assert.doesNotMatch(workspaceScript, /historyActionButton/);
   assert.match(workspaceScript, /setActiveSessionWorkspace/);
   assert.match(workspaceScript, /\/augmentor\/chat/);
   assert.match(workspaceScript, /response\?\.reply/);
-  assert.match(workspaceScript, /parseAutonomousBrowserActionIntent/);
-  assert.match(workspaceScript, /parseNaturalBrowserIntent/);
+  assert.match(workspaceScript, /planMainWorkspacePrompt/);
+  assert.match(promptRouter, /parseAutonomousBrowserActionIntent/);
+  assert.match(promptRouter, /parseNaturalBrowserIntent/);
+  assert.match(promptRouter, /parseNaturalDelegationIntent/);
   assert.match(workspaceScript, /augmentorPendingSidebarPrompt/);
   assert.match(workspaceScript, /handoffSidebarPrompt/);
   assert.match(workspaceScript, /open_side_panel/);
+  assert.match(workspaceScript, /type: "open_side_panel",\s*force: true/);
+  assert.match(workspaceScript, /suppressSidebarChatForMainWorkspace/);
+  assert.match(workspaceScript, /suppress_side_panel_on_main_workspace/);
   assert.doesNotMatch(workspaceScript, /openSidebarButton/);
   assert.match(workspaceScript, /chrome\.tabs\.update/);
   assert.match(workspaceScript, /composerController\.bind\(\)/);
   assert.match(workspaceScript, /connectionLine\.innerHTML/);
+  assert.match(workspaceScript, /readPageButton\?\.addEventListener\("click", \(\) => void browserPageActions\.readActivePage\(\)\)/);
+  assert.match(workspaceScript, /saveIntakeButton\?\.addEventListener\("click", \(\) => void browserPageActions\.saveCurrentPageToArchive\(\)\)/);
+  assert.match(workspaceScript, /saveSelectionButton\?\.addEventListener\("click", \(\) => void browserPageActions\.saveSelectionToArchive\(\)\)/);
+  assert.match(workspaceScript, /contextToggleButton\?\.addEventListener\("click", \(\) => void browserPageActions\.summarizeSnapshot\(\)\)/);
+  assert.match(workspaceScript, /contextMeter\?\.addEventListener\("click", \(\) => void browserPageActions\.summarizeSnapshot\(\)\)/);
   assert.match(workspaceScript, /renderHermesWorkspace/);
   assert.match(workspaceScript, /renderOpenCodeWorkspace/);
   assert.match(workspaceScript, /renderSettingsWorkspace/);
+  assert.match(workspaceSettings, /renderPrivacySection/);
+  assert.match(workspaceSettings, /renderAboutSection/);
+  assert.match(workspaceSettings, /label: "Privacy"/);
+  assert.match(workspaceSettings, /label: "About"/);
+  assert.match(diagnosticsSettings, /diagnostics-report-export/);
   assert.match(workspaceScript, /document\.body\.dataset\.workspace/);
   assert.match(workspaceScript, /\/addons\/status/);
   assert.match(workspaceScript, /\/hermes\/dashboard\/status/);
@@ -121,16 +183,24 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(commandRouter, /name === "calendar"/);
   assert.match(appCommandHandlers, /parseDraftAddonCommand/);
   assert.match(appCommandHandlers, /\/addons\/draft/);
+  assert.match(appCommandHandlers, /Sending email/);
+  assert.match(appCommandHandlers, /Scheduling calendar events/);
   assert.match(workspaceScript, /target: "hermes"/);
-  assert.match(workspaceScript, /parseHermesSlashCommand/);
-  assert.match(workspaceScript, /parseMemorySlashCommand/);
-  assert.match(workspaceScript, /parseOpenCodeSlashCommand/);
+  assert.match(promptRouter, /parseHermesSlashCommand/);
+  assert.match(promptRouter, /parseMemorySlashCommand/);
+  assert.match(promptRouter, /parseOpenCodeSlashCommand/);
   assert.match(workspaceScript, /parseDraftAddonCommand/);
-  assert.match(workspaceScript, /parseDraftSlashCommand/);
+  assert.match(promptRouter, /parseDraftSlashCommand/);
+  assert.match(promptRouter, /parseWalletSlashCommand/);
+  assert.match(promptRouter, /parseDaoSlashCommand/);
   assert.match(workspaceScript, /runMemoryCommand/);
+  assert.match(workspaceScript, /detectWalletState/);
+  assert.match(workspaceScript, /prepareDaoWorkflowGuidance/);
   assert.match(workspaceScript, /runOpenCodeCommand/);
   assert.match(workspaceScript, /runDraftAddonCommand/);
   assert.match(workspaceScript, /\/addons\/draft/);
+  assert.match(workspaceScript, /onOpenProviderHandoff/);
+  assert.match(workspaceScript, /chrome\.tabs\.create/);
   assert.match(workspaceScript, /pendingWorkspaceAction/);
   assert.match(workspaceScript, /AI browser workspace/);
   assert.match(workspaceScript, /data-workspace-command="browser"/);
@@ -143,8 +213,11 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(workspaceScript, /iframe\.src = dashboard\.url/);
   assert.match(workspaceScript, /augmentorMainWorkspace/);
   assert.match(workspaceScript, /hydrateActiveWorkspace/);
-  assert.match(workspaceScript, /ACTION_ICONS/);
-  assert.match(workspaceScript, /messageActionButton/);
+  assert.match(workspaceScript, /createSidePanelRenderers/);
+  assert.match(workspaceScript, /chatRenderers\.renderMessages/);
+  assert.match(workspaceScript, /chatRenderers\.renderAttachments/);
+  assert.match(workspaceScript, /renderEmptyState/);
+  assert.doesNotMatch(workspaceScript, /messageActionButton/);
   assert.match(workspaceScript, /copyMessage/);
   assert.match(workspaceScript, /forkFromMessage/);
   assert.match(workspaceScript, /deleteMessage/);
@@ -166,6 +239,9 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(workspaceStyles, /addon-draft-card/);
   assert.match(workspaceStyles, /artifact-preview/);
   assert.match(workspaceStyles, /artifact-actions/);
+  assert.match(workspaceStyles, /artifact-insights/);
+  assert.match(workspaceStyles, /artifact-row-guidance/);
+  assert.match(launcher, /artifactInsights/);
   assert.match(workspaceStyles, /module-workspace/);
   assert.match(workspaceStyles, /dashboard-frame-card/);
   assert.match(workspaceStyles, /settings-workspace/);
@@ -184,10 +260,40 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(launcher, /executeAddonDraftTransition/);
   assert.match(launcher, /\/addons\/draft\/list/);
   assert.match(launcher, /\/addons\/draft\/transition/);
+  assert.match(launcher, /\/addons\/draft\/handoff/);
+  assert.match(launcher, /executeAddonDraftProviderHandoff/);
+  assert.match(launcher, /buildProviderDraftHandoff/);
   assert.match(launcher, /\/opencode\/status/);
   assert.match(launcher, /\/providers\/status/);
   assert.match(launcher, /\/providers\/credentials/);
+  assert.match(launcher, /\/providers\/routing-strategies/);
+  assert.match(launcher, /provider-routing-write/);
+  assert.match(launcher, /defaultRoutingStrategies/);
+  assert.match(launcher, /\/diagnostics\/report/);
+  assert.match(launcher, /diagnostics-report-export/);
+  assert.match(launcher, /executeDiagnosticsReport/);
   assert.match(launcher, /\/archive\/intake\/list/);
+  assert.match(launcher, /\/memory\/settings/);
+  assert.match(launcher, /memory-settings-write/);
+  assert.match(launcher, /\/memory\/source\/browse/);
+  assert.match(launcher, /memory-source-browse/);
+  assert.match(launcher, /\/memory\/source\/scan/);
+  assert.match(launcher, /memory-source-scan/);
+  assert.match(launcher, /\/memory\/source\/action/);
+  assert.match(launcher, /memory-source-manage/);
+  assert.match(launcher, /\/memory\/source\/review/);
+  assert.match(launcher, /memory-source-review/);
+  assert.match(launcher, /\/memory\/source\/intake/);
+  assert.match(launcher, /memory-source-intake/);
+  assert.match(launcher, /\/memory\/source\/file-intake/);
+  assert.match(launcher, /\/memory\/wiki\/health/);
+  assert.match(launcher, /computeWikiHealth/);
+  assert.match(launcher, /sourceContentHash/);
+  assert.match(launcher, /sourceVersion/);
+  assert.match(launcher, /\/memory\/source\/versions/);
+  assert.match(launcher, /\/memory\/source\/diff/);
+  assert.match(launcher, /memory-source-file-intake/);
+  assert.match(launcher, /RESONANTOS_BROWSER_FIRST_PICK_FOLDER_RESULT/);
   assert.match(launcher, /\/archive\/intake\/read/);
   assert.match(launcher, /\/archive\/review\/request/);
   assert.match(launcher, /\/archive\/review\/list/);
@@ -213,6 +319,9 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(launcher, /Hermes dashboard can only bind to localhost/);
   assert.match(launcher, /main-workspace\.html/);
   assert.match(background, /open_side_panel/);
+  assert.match(background, /suppress_side_panel_on_main_workspace/);
+  assert.match(background, /openResonantSidePanel\(windowId, \{ force: Boolean\(message\.force\) \}\)/);
+  assert.match(background, /setSidePanelEnabledForTab\(tab\.id, false\)/);
   assert.match(sidePanel, /consumePendingSidebarPrompt/);
   assert.match(sidePanel, /chrome\.storage\?\.onChanged/);
   assert.doesNotMatch(background, /onInstalled[\s\S]*setTimeout/);
@@ -255,6 +364,7 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   const sidePanelRenderers = await readText(path.join(extensionRoot, "src", "lib", "side-panel-renderers.js"));
   const monitorRenderers = await readText(path.join(extensionRoot, "src", "lib", "monitor-renderers.js"));
   const commandRouter = await readText(path.join(extensionRoot, "src", "lib", "side-panel-command-router.js"));
+  const walletState = await readText(path.join(extensionRoot, "src", "lib", "wallet-state.js"));
   const sitePermissionStore = await readText(path.join(extensionRoot, "src", "lib", "site-permission-store.js"));
   const taskConsentStore = await readText(path.join(extensionRoot, "src", "lib", "task-consent-store.js"));
   const tabContextController = await readText(path.join(extensionRoot, "src", "lib", "tab-context-controller.js"));
@@ -288,16 +398,26 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(panel, /Thinking depth/);
   assert.match(panel, /Save current page to Living Archive intake/);
   assert.match(panel, /Save selected page text to Living Archive intake/);
+  assert.match(panel, /context-meter-label/);
   for (const id of ["save-intake", "save-selection", "context-toggle", "dictate-button", "connection-line"]) {
     const button = panel.match(new RegExp(`<button id="${id}"[\\s\\S]*?<\\/button>`))?.[0] ?? "";
     assert.match(button, /<svg /);
     assert.doesNotMatch(button.replace(/aria-label="[^"]*"/g, "").replace(/title="[^"]*"/g, ""), />\s*(Save|Status|Mic|Ready)\s*</i);
   }
+  assert.match(script, /createComposerController\(\{\s*commandForm,\s*commandInput,\s*forceClipboardFallback: true,/);
+  assert.match(script, /contextMeter\.addEventListener\("click", toggleContextDock\)/);
+  assert.match(composerController, /shortcutKey === "z"/);
+  assert.match(composerController, /shortcutKey === "a"/);
+  assert.match(composerController, /\["x", "c", "v"\]/);
   assert.match(background, /openPanelOnActionClick/);
   assert.match(background, /openResonantSidePanel/);
   assert.match(background, /open-augmentor-side-panel/);
   assert.doesNotMatch(background, /chrome\.tabs\.create/);
-  assert.doesNotMatch(background, /chrome\.tabs\.onUpdated/);
+  assert.match(background, /syncSidePanelForTab/);
+  assert.match(background, /chrome\.tabs\.onActivated/);
+  assert.match(background, /chrome\.tabs\.onUpdated/);
+  assert.match(background, /isMainWorkspaceUrl\(tab\.url\) && !force/);
+  assert.match(background, /setSidePanelEnabledForTab\(tab\.id, false\)/);
   assert.match(script, /isReadableBrowserTab/);
   assert.match(pageActions, /currentWindow: true/);
   assert.match(pageActions, /summarizeSnapshot/);
@@ -314,11 +434,15 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(chatTurnController, /pageContextForSnapshot/);
   assert.match(chatTurnController, /runtimeContextForAttachments/);
   assert.match(chatTurnController, /providerMessagesFromHistory/);
-  assert.match(script, /createComposerController/);
+  assert.match(script, /createComposerController\(\{\s*commandForm,\s*commandInput,\s*forceClipboardFallback: true,/);
   assert.match(script, /connectionLine\.innerHTML/);
   assert.match(script, /connectionLine\.setAttribute\("aria-label", connectionLine\.title\)/);
   assert.doesNotMatch(panel, /<span>Ready<\/span>/);
   assert.match(composerController, /handleClipboardShortcut/);
+  assert.match(composerController, /selectedRange/);
+  assert.match(composerController, /replaceSelection/);
+  assert.match(composerController, /clipboard\?\.readText/);
+  assert.match(composerController, /clipboard\?\.writeText/);
   assert.match(composerController, /resetUndoStack/);
   assert.match(composerController, /requestSubmit/);
   assert.match(script, /createMessageActionController/);
@@ -343,6 +467,18 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(appCommandHandlers, /runSitePermissionCommand/);
   assert.match(appCommandHandlers, /runJobsCommand/);
   assert.match(appCommandHandlers, /pauseBrowserJob/);
+  assert.match(appCommandHandlers, /runWalletStatusCommand/);
+  assert.match(commandRouter, /name === "wallet"/);
+  assert.match(commandRouter, /name === "dao"/);
+  assert.match(pageActions, /detectWalletState/);
+  assert.match(pageActions, /prepareDaoWorkflowGuidance/);
+  assert.match(pageActions, /saveWalletDaoAuditToArchive/);
+  assert.match(pageActions, /browser-wallet-dao-audit/);
+  assert.match(commandRouter, /saveWalletDaoAuditToArchive/);
+  assert.match(commandRouter, /\^audit\\b/);
+  assert.match(pageActions, /world: "MAIN"/);
+  assert.match(walletState, /detectionOnly/);
+  assert.match(walletState, /read-only detection/);
   assert.match(script, /createSidePanelCommandRouter/);
   assert.match(commandRouter, /respondToCommand/);
   assert.match(commandRouter, /name === "hermes"/);
@@ -376,8 +512,17 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(monitorRenderers, /Can see\/do now/);
   assert.match(monitorRenderers, /renderSitePermissionPanel/);
   assert.match(monitorRenderers, /renderJobMonitor/);
+  assert.match(monitorRenderers, /getBrowserJobSchedulerState/);
+  assert.match(monitorRenderers, /job-scheduler-state/);
   assert.match(monitorRenderers, /renderControlMonitor/);
   assert.match(monitorRenderers, /controlActionStateLabel/);
+  assert.match(monitorRenderers, /controlRunPhase/);
+  assert.match(monitorRenderers, /controlRunProgressSummary/);
+  assert.match(monitorRenderers, /control-phase-meta/);
+  assert.match(monitorRenderers, /control-progress-track/);
+  assert.match(monitorRenderers, /jobNextHumanAction/);
+  assert.match(monitorRenderers, /job-blocker-guidance/);
+  assert.match(monitorRenderers, /job-progress/);
   assert.match(script, /controlStopButton\.addEventListener/);
   assert.match(script, /createTabContextController/);
   assert.match(tabContextController, /resolveTabMention/);
@@ -390,6 +535,7 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(bridgeClient, /__RESONANTOS_BRIDGE_CONFIG__/);
   assert.match(bridgeClient, /X-ResonantOS-Bridge-Token/);
   assert.match(script, /browserJobStore\.getMonitorCollapsed/);
+  assert.match(script, /browserJobStore\.getSchedulerState/);
   assert.match(chatTurnController, /\/augmentor\/chat/);
   assert.match(controlReportingService, /\/archive\/intake/);
   assert.match(appCommandHandlers, /\/memory\/search/);
@@ -405,12 +551,14 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(script, /pendingApproval = null/);
   assert.match(browserJobStore, /normalizeBrowserJob/);
   assert.match(browserJobStore, /normalizePageLock/);
+  assert.match(browserJobStore, /browserJobSchedulerState/);
   assert.match(browserJobStore, /createBrowserJobStore/);
   assert.match(browserJobStore, /LOCK_HOLDING_JOB_STATUSES/);
   assert.match(browserJobStore, /conflictingActiveJobForLock/);
   assert.match(browserJobStore, /Browser target is already controlled/);
   assert.match(browserJobStore, /toggleMonitorCollapsed/);
   assert.match(browserJobStore, /findJob/);
+  assert.match(browserJobStore, /getSchedulerState/);
   assert.match(browserJobStore, /steps/);
   assert.match(commandParser, /parseNaturalSearchIntent/);
   assert.match(commandParser, /parseTypeIntent/);
@@ -438,6 +586,7 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(appCommandHandlers, /pauseBrowserJob/);
   assert.match(appCommandHandlers, /resumeBrowserJob/);
   assert.match(appCommandHandlers, /continueBrowserJob/);
+  assert.match(appCommandHandlers, /Scheduler:/);
   assert.match(appCommandHandlers, /reportBrowserJob/);
   assert.match(appCommandHandlers, /cancelBrowserJob/);
   assert.match(commandRouter, /reportBrowserJob/);
@@ -549,6 +698,39 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.doesNotMatch(script, /Full LLM replies will come from/);
 });
 
+test("main workspace and side-panel chat composers expose the same core controls", async () => {
+  const workspace = await readText(path.join(extensionRoot, "src", "main-workspace.html"));
+  const panel = await readText(path.join(extensionRoot, "src", "side-panel.html"));
+  const coreComposerControls = [
+    "attach-file",
+    "read-page",
+    "save-intake",
+    "save-selection",
+    "context-toggle",
+    "model-select",
+    "thinking-depth",
+    "dictate-button",
+    "connection-line",
+    "context-meter"
+  ];
+
+  for (const id of coreComposerControls) {
+    assert.match(workspace, new RegExp(`id="${id}"`), `main workspace missing ${id}`);
+    assert.match(panel, new RegExp(`id="${id}"`), `side panel missing ${id}`);
+  }
+  assert.match(workspace, /value="__auto__">Auto route/);
+  assert.match(panel, /value="__auto__">Auto route/);
+
+  for (const id of ["save-intake", "save-selection", "context-toggle", "dictate-button", "connection-line"]) {
+    const workspaceControl = workspace.match(new RegExp(`<button id="${id}"[\\s\\S]*?<\\/button>`))?.[0] ?? "";
+    const panelControl = panel.match(new RegExp(`<button id="${id}"[\\s\\S]*?<\\/button>`))?.[0] ?? "";
+    assert.match(workspaceControl, /<svg /, `main workspace ${id} must be icon-only`);
+    assert.match(panelControl, /<svg /, `side panel ${id} must be icon-only`);
+    assert.doesNotMatch(workspaceControl.replace(/aria-label="[^"]*"/g, "").replace(/title="[^"]*"/g, ""), />\s*(Save|Status|Mic|Ready)\s*</i);
+    assert.doesNotMatch(panelControl.replace(/aria-label="[^"]*"/g, "").replace(/title="[^"]*"/g, ""), />\s*(Save|Status|Mic|Ready)\s*</i);
+  }
+});
+
 test("browser layer can read active tab context without raw privileged access", async () => {
   const content = await readText(path.join(extensionRoot, "src", "content.js"));
   const panel = await readText(path.join(extensionRoot, "src", "side-panel.js"));
@@ -607,6 +789,12 @@ test("browser layer can read active tab context without raw privileged access", 
   assert.match(content, /approvalRequired/);
   assert.match(content, /document\.body\?\.innerText/);
   assert.match(content, /phantomSolana/);
+  assert.match(pageActions, /phantomEthereum/);
+  assert.match(pageActions, /phantomSolana/);
+  assert.match(pageActions, /Wallet \/ DAO Audit/);
+  assert.match(pageActions, /ResonantOS did not request wallet connection/);
+  assert.doesNotMatch(pageActions, /\.connect\(/);
+  assert.doesNotMatch(pageActions, /signMessage|signTransaction|signAndSendTransaction/);
   assert.match(pageActions, /chrome\.tabs\.sendMessage/);
   assert.match(pageActions, /phase/);
   assert.match(pageActions, /chrome\.scripting/);
@@ -643,9 +831,15 @@ test("browser-first host is a runnable app path, not documentation-only scaffold
   assert.match(launcher, /startBridgeServer/);
   assert.match(bridgeServer, /bridge-config\.generated\.js/);
   assert.match(bridgeServer, /X-ResonantOS-Bridge-Token/);
+  assert.match(bridgeServer, /X-ResonantOS-Bridge-Capability-Token/);
+  assert.match(bridgeServer, /requiredCapability/);
   assert.match(bridgeServer, /Unauthorized browser-first bridge request/);
   assert.doesNotMatch(bridgeServer, /Access-Control-Allow-Origin": "\*"/);
   assert.match(launcher, /provider-secrets\.json/);
+  assert.match(launcher, /providerRouteForWorkload/);
+  assert.match(launcher, /workload \|\| "augmentor-chat"/);
+  assert.match(launcher, /requiredCapability: "provider-credential-write"/);
+  assert.match(launcher, /requiredCapability: "provider-routing-write"/);
   assert.match(launcher, /\/augmentor\/chat/);
   assert.match(launcher, /\/augmentor\/inline/);
   assert.match(launcher, /executeInlineAssistant/);
@@ -667,6 +861,10 @@ test("browser-first host is a runnable app path, not documentation-only scaffold
   assert.match(launcher, /\/memory\/search/);
   assert.match(launcher, /\/archive\/intake/);
   assert.match(launcher, /\/addons\/delegate/);
+  assert.match(launcher, /\/addons\/delegate\/list/);
+  assert.match(launcher, /contextMarkdown/);
+  assert.match(launcher, /sourceControlRunId/);
+  assert.match(launcher, /Context Packet/);
   assert.match(launcher, /\/web\/news/);
   assert.match(launcher, /news\.google\.com\/rss/);
   assert.match(launcher, /keystroke \\"a\\" using \{option down, shift down\}/);

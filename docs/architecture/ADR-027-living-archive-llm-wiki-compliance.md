@@ -106,6 +106,7 @@ Implemented:
 - chunk staging for large text sources, with chunk manifests recorded in review artifacts
 - conservative attachment stubs for non-text sources that require a specialist add-on pipeline
 - separate ingest-writer and verifier provider fields so the verifier can use a different configured model/route
+- browser-first draft generation now uses a provider-backed archive ingest writer when an archive-quality route is configured, validates the required LLM Wiki sections, and falls back to deterministic draft generation rather than dead-ending the ingest loop
 - source-specific durable queue filenames for imported-library AI Memory builds; request files must not be named only by timestamp/actor/intent because large same-second batches can overwrite work
 - persisted job integrity checks that reclassify stale imported-source paths or missing queued request files as `attention`
 - live AI Memory build results must apply the same queue-integrity checks before reporting status, so a current run cannot report `needs-human-review` or `complete` when queued sources have no durable request files

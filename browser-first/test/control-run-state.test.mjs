@@ -60,12 +60,15 @@ test("control run state starts a run with active job id and overlay", () => {
     plan: {
       source: "planner",
       summary: "read and click",
+      pageLock: { tabId: 9, siteKey: "example.test", url: "https://example.test/", reason: "test target" },
       steps: [{ type: "read" }, { type: "click", text: "Book" }]
     }
   });
 
   assert.equal(run.id, "job-a");
+  assert.equal(run.pageLock.siteKey, "example.test");
   assert.equal(harness.getPendingApproval(), null);
+  assert.equal(run.timing.startedAtMs, 1_000);
   assert.deepEqual(harness.getCurrentControlRun().steps.map((step) => step.state), ["pending", "pending"]);
   assert.ok(harness.events.some((event) => event[0] === "render"));
   assert.ok(harness.events.some((event) => event[0] === "overlay" && event[1] === true && /find booking/.test(event[2]) && event[3] === "working"));
@@ -79,6 +82,7 @@ test("control run state preserves resumed job steps and artifacts", () => {
     plan: {
       source: "planner",
       summary: "continue same durable job",
+      pageLock: { tabId: 3, siteKey: "example.com", url: "https://example.com/", reason: "resume target" },
       artifacts: [{ type: "archive-intake", path: "/old.md" }],
       steps: [{ type: "read", label: "Read page", state: "completed", note: "already read" }]
     }
@@ -88,6 +92,7 @@ test("control run state preserves resumed job steps and artifacts", () => {
   assert.equal(run.steps[0].state, "completed");
   assert.equal(run.steps[0].note, "already read");
   assert.deepEqual(run.artifacts, [{ type: "archive-intake", path: "/old.md" }]);
+  assert.equal(run.pageLock.reason, "resume target");
 });
 
 
@@ -101,12 +106,47 @@ test("control run state appends and updates steps immutably", () => {
   });
 
   const index = harness.state.appendControlStep({ type: "click", text: "Next" });
+  harness.setNowMs(1_250);
   harness.state.updateControlStep(1, "active", "Clicking");
+  harness.setNowMs(1_600);
+  harness.state.updateControlStep(1, "completed", "Clicked");
 
   assert.equal(index, 1);
   assert.equal(harness.getCurrentControlRun().steps.length, 2);
-  assert.equal(harness.getCurrentControlRun().steps[1].state, "active");
-  assert.equal(harness.getCurrentControlRun().steps[1].note, "Clicking");
+  assert.equal(harness.getCurrentControlRun().steps[1].state, "completed");
+  assert.equal(harness.getCurrentControlRun().steps[1].note, "Clicked");
+  assert.equal(harness.getCurrentControlRun().steps[1].timing.startedAtMs, 1_250);
+  assert.equal(harness.getCurrentControlRun().steps[1].timing.completedAtMs, 1_600);
+  assert.equal(harness.getCurrentControlRun().steps[1].timing.durationMs, 350);
+});
+
+test("control run state updates the page overlay with active and blocked step labels", () => {
+  const harness = createHarness({
+    currentControlRun: {
+      id: "job-a",
+      steps: [
+        { type: "read", state: "pending" },
+        { type: "click", text: "Reserve", state: "pending" }
+      ],
+      artifacts: []
+    }
+  });
+
+  harness.state.updateControlStep(0, "active", "Reading visible content");
+  harness.state.updateControlStep(1, "blocked", "Click requires approval");
+
+  assert.ok(harness.events.some((event) =>
+    event[0] === "overlay" &&
+    event[1] === true &&
+    event[2] === "Augmentor: Reading page: Reading visible content" &&
+    event[3] === "reading"
+  ));
+  assert.ok(harness.events.some((event) =>
+    event[0] === "overlay" &&
+    event[1] === true &&
+    event[2] === "Blocked: Clicking Reserve: Click requires approval" &&
+    event[3] === "blocked"
+  ));
 });
 
 test("control run state ignores step updates when no run or index exists", () => {
@@ -139,6 +179,7 @@ test("control run state finishes run, clears overlay, and syncs browser job", as
       id: "job-a",
       planner: "planner",
       summary: "summary",
+      pageLock: { tabId: 9, siteKey: "example.test", url: "https://example.test/", reason: "finish target" },
       steps: [],
       artifacts: [{ type: "existing", path: "/old.md" }]
     }
@@ -149,13 +190,53 @@ test("control run state finishes run, clears overlay, and syncs browser job", as
 
   assert.equal(harness.getCurrentControlRun().status, "completed");
   assert.ok(harness.getCurrentControlRun().completedAt);
+  assert.ok(harness.getCurrentControlRun().timing.completedAt);
   assert.deepEqual(harness.getCurrentControlRun().artifacts.map((artifact) => artifact.path), ["/old.md", "/new.md"]);
   assert.ok(harness.events.some((event) => event[0] === "overlay" && event[1] === false && event[3] === "returning"));
   assert.ok(harness.events.some((event) =>
     event[0] === "job" &&
     event[1] === "job-a" &&
     event[2].status === "completed" &&
-    event[2].planner === "planner"
+    event[2].planner === "planner" &&
+    event[2].pageLock.siteKey === "example.test" &&
+    event[2].timing.completedAt
+  ));
+});
+
+test("control run state records the stopped step when cancelled", async () => {
+  const harness = createHarness({
+    minimumOverlayMs: 0,
+    currentControlRun: {
+      id: "job-a",
+      planner: "planner",
+      summary: "summary",
+      pageLock: { tabId: 9, siteKey: "example.test", url: "https://example.test/", reason: "cancel target" },
+      steps: [
+        { type: "read", state: "completed", note: "read page" },
+        { type: "click", text: "Reserve", state: "active" },
+        { type: "type", field: "Name", state: "pending" }
+      ],
+      artifacts: []
+    }
+  });
+
+  harness.state.finishControlRun("cancelled");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(harness.getCurrentControlRun().status, "cancelled");
+  assert.equal(harness.getCurrentControlRun().steps[1].state, "cancelled");
+  assert.equal(harness.getCurrentControlRun().steps[1].note, "Stopped by human.");
+  assert.match(harness.getCurrentControlRun().steps[1].details.nextHumanAction, /restart or resume/);
+  assert.equal(harness.getCurrentControlRun().steps[2].state, "pending");
+  assert.ok(harness.events.some((event) =>
+    event[0] === "job" &&
+    event[2].status === "cancelled" &&
+    event[2].steps[1].state === "cancelled"
+  ));
+  assert.ok(harness.events.some((event) =>
+    event[0] === "overlay" &&
+    event[1] === true &&
+    /Cancelled: Clicking Reserve/.test(event[2])
   ));
 });
 

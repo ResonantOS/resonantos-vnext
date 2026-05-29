@@ -294,6 +294,11 @@ const fixtureHtml = `<!doctype html>
     <div id="details">details closed</div>
     <script>
       window.__submitted = false;
+      window.solana = {
+        isConnected: true,
+        isPhantom: true,
+        publicKey: { toString: () => "9abc11112222333344445555666677778888wxyz" }
+      };
       document.querySelector("#safe").addEventListener("click", () => {
         document.querySelector("#details").textContent = "safe details opened";
         document.querySelector("#status").textContent = "clicked";
@@ -500,10 +505,18 @@ try {
   })`);
 
   await evaluate(panel, `chrome.storage.local.clear(); document.querySelector("#transcript").replaceChildren();`);
-  const shortcutState = (await evaluate(panel, `(() => {
+  const shortcutState = (await evaluate(panel, `(async () => {
     const input = document.querySelector("#command-input");
     const form = document.querySelector("#command-form");
     const originalRequestSubmit = form.requestSubmit.bind(form);
+    let clipboardText = "";
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        readText: async () => clipboardText,
+        writeText: async (value) => { clipboardText = value; },
+      },
+    });
     input.value = "first line";
     let submitted = false;
     form.requestSubmit = () => { submitted = true; };
@@ -522,10 +535,23 @@ try {
     const clipboardChecks = {};
     for (const key of ["c", "x", "v"]) {
       input.value = "first line";
+      clipboardText = key === "v" ? "pasted" : "";
       input.setSelectionRange(0, key === "c" ? input.value.length : 5);
       const event = new KeyboardEvent("keydown", { key, metaKey: true, bubbles: true, cancelable: true });
       input.dispatchEvent(event);
-      clipboardChecks[key] = { defaultPrevented: event.defaultPrevented, submitted, value: input.value };
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      clipboardChecks[key] = { defaultPrevented: event.defaultPrevented, submitted, value: input.value, clipboardText };
+    }
+    const fallbackClipboardChecks = {};
+    for (const key of ["c", "x", "v"]) {
+      input.value = "first line";
+      clipboardText = key === "v" ? "pasted" : "";
+      input.setSelectionRange(0, key === "c" ? input.value.length : 5);
+      const event = new KeyboardEvent("keydown", { key, metaKey: true, bubbles: true, cancelable: true });
+      Object.defineProperty(event, "resonantosUseClipboardFallback", { value: true });
+      input.dispatchEvent(event);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      fallbackClipboardChecks[key] = { defaultPrevented: event.defaultPrevented, submitted, value: input.value, clipboardText };
     }
 
     input.value = "undo baseline";
@@ -542,15 +568,26 @@ try {
     const afterMetaEnter = { submitted, value: input.value };
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
     form.requestSubmit = originalRequestSubmit;
-    return { afterMetaA, clipboardChecks, afterMetaZ, afterShiftEnter, afterMetaEnter, submitted };
+    return { afterMetaA, clipboardChecks, fallbackClipboardChecks, afterMetaZ, afterShiftEnter, afterMetaEnter, submitted };
   })()`)).result.value;
   assert(shortcutState.afterMetaA.defaultPrevented, `Command+A should be handled by the composer: ${JSON.stringify(shortcutState)}`);
   assert(shortcutState.afterMetaA.selectionStart === 0, `Command+A should select from start: ${JSON.stringify(shortcutState)}`);
   assert(shortcutState.afterMetaA.selectionEnd === shortcutState.afterMetaA.value.length, `Command+A should select full composer text: ${JSON.stringify(shortcutState)}`);
   assert(!shortcutState.afterMetaA.submitted, `Command+A should not submit: ${JSON.stringify(shortcutState)}`);
-  assert(!shortcutState.clipboardChecks.c.defaultPrevented, `Command+C must remain native browser copy: ${JSON.stringify(shortcutState)}`);
-  assert(!shortcutState.clipboardChecks.x.defaultPrevented, `Command+X must remain native browser cut: ${JSON.stringify(shortcutState)}`);
-  assert(!shortcutState.clipboardChecks.v.defaultPrevented, `Command+V must remain native browser paste: ${JSON.stringify(shortcutState)}`);
+  assert(shortcutState.clipboardChecks.c.defaultPrevented, `Command+C should use the governed composer clipboard path in the extension UI: ${JSON.stringify(shortcutState)}`);
+  assert(shortcutState.clipboardChecks.c.clipboardText === "first line", `Command+C should copy selected composer text: ${JSON.stringify(shortcutState)}`);
+  assert(shortcutState.clipboardChecks.x.defaultPrevented, `Command+X should use the governed composer clipboard path in the extension UI: ${JSON.stringify(shortcutState)}`);
+  assert(shortcutState.clipboardChecks.x.clipboardText === "first", `Command+X should copy selected composer text: ${JSON.stringify(shortcutState)}`);
+  assert(shortcutState.clipboardChecks.x.value === " line", `Command+X should remove selected composer text: ${JSON.stringify(shortcutState)}`);
+  assert(shortcutState.clipboardChecks.v.defaultPrevented, `Command+V should use the governed composer clipboard path in the extension UI: ${JSON.stringify(shortcutState)}`);
+  assert(shortcutState.clipboardChecks.v.value === "pasted line", `Command+V should paste clipboard text into selection: ${JSON.stringify(shortcutState)}`);
+  assert(shortcutState.fallbackClipboardChecks.c.defaultPrevented, `Explicit Command+C fallback should use composer clipboard API: ${JSON.stringify(shortcutState)}`);
+  assert(shortcutState.fallbackClipboardChecks.c.clipboardText === "first line", `Explicit Command+C fallback should copy selected composer text: ${JSON.stringify(shortcutState)}`);
+  assert(shortcutState.fallbackClipboardChecks.x.defaultPrevented, `Explicit Command+X fallback should use composer clipboard API: ${JSON.stringify(shortcutState)}`);
+  assert(shortcutState.fallbackClipboardChecks.x.clipboardText === "first", `Explicit Command+X fallback should copy selected composer text: ${JSON.stringify(shortcutState)}`);
+  assert(shortcutState.fallbackClipboardChecks.x.value === " line", `Explicit Command+X fallback should remove selected composer text: ${JSON.stringify(shortcutState)}`);
+  assert(shortcutState.fallbackClipboardChecks.v.defaultPrevented, `Explicit Command+V fallback should use composer clipboard API: ${JSON.stringify(shortcutState)}`);
+  assert(shortcutState.fallbackClipboardChecks.v.value === "pasted line", `Explicit Command+V fallback should paste clipboard text into selection: ${JSON.stringify(shortcutState)}`);
   assert(shortcutState.afterMetaZ.value === "undo baseline", `Command+Z should undo the last composer edit: ${JSON.stringify(shortcutState)}`);
   assert(!shortcutState.afterShiftEnter.submitted, `Shift+Enter should not submit: ${JSON.stringify(shortcutState)}`);
   assert(!shortcutState.afterMetaEnter.submitted, `Command-modified Enter should not submit: ${JSON.stringify(shortcutState)}`);
@@ -622,6 +659,14 @@ try {
   assert(sitePanelMode.mode, `Site permission panel mode missing: ${JSON.stringify(sitePanelMode)}`);
   await submitControlCommand(panel, `/capabilities`);
   await waitForPanelText(panel, /What Augmentor can do now:/, "capabilities command");
+  await submitControlCommand(panel, `/wallet status`);
+  await waitForPanelText(panel, /Wallet status[\s\S]*Phantom Solana: (connected|available, not connected)[\s\S]*read-only detection/, "wallet status command");
+  await submitControlCommand(panel, `/dao review the governance action`);
+  await waitForPanelText(panel, /DAO workflow helper[\s\S]*\/wallet status[\s\S]*will not click wallet connect, sign, vote, submit, transfer, or transaction confirmation/, "dao workflow helper");
+  await submitControlCommand(panel, `/wallet audit`);
+  await waitForPanelText(panel, /Saved a wallet\/DAO audit to Living Archive intake[\s\S]*Wallet connect, signing, voting, transfer, transaction confirmation, and public submission remain human-only/, "wallet audit command");
+  await submitControlCommand(panel, `/dao audit review the governance action`);
+  await waitForPanelText(panel, /Saved a wallet\/DAO audit to Living Archive intake[\s\S]*read-only evidence/, "dao audit command");
   await submitControlCommand(panel, `/site block`);
   await waitForPanelText(panel, /Set 127\.0\.0\.1 Assistant permission to blocked/, "site block command");
   const blockedSiteMode = (await evaluate(panel, `document.querySelector("#site-permission-mode").value`)).result.value;

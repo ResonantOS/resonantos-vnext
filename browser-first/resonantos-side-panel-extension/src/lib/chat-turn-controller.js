@@ -42,6 +42,7 @@ export function createChatTurnController({
       method: "POST",
       body: {
         model: getModel(),
+        workload: "augmentor-chat",
         thinkingDepth: getThinkingDepth(),
         pageContext: pageContextForSnapshot(getLastSnapshot()),
         runtimeContext: runtimeContextForAttachments(attachments),

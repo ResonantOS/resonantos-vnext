@@ -103,6 +103,7 @@ The side panel now includes an Agent Control Monitor:
 
 - current goal and run status
 - planned steps with pending, active, completed, blocked, or failed state
+- durable browser job scheduler state, including runnable queued jobs, page-lock-blocked jobs, and jobs waiting for execution capacity
 - expandable action details covering observation, decision, action, result, and safety class
 - completion and blocker summary cards for fast replay
 - approval card for public-submit and other gated actions
@@ -117,6 +118,20 @@ Browser memory commands remain intake-only:
 - `/save trail <title>` or `/trail <title>` captures readable open web tabs as one multi-page research trail intake bundle
 
 All browser memory commands queue review requests. They do not write trusted wiki pages directly.
+
+Durable browser job commands:
+
+- `/jobs` lists recent browser jobs and shows scheduler capacity, runnable queued jobs, page-lock-blocked jobs, and capacity-waiting jobs.
+- `/jobs focus <job>` changes the focused durable job without merging job traces.
+- `/pause <job>`, `/resume <job>`, `/continue <job>`, `/report <job>`, and `/cancel <job>` operate on persisted job records.
+
+The current scheduler state is visibility and routing groundwork. True simultaneous background control loops remain blocked until the execution runner can supervise more than one non-conflicting page-locked job at the same time.
+
+Wallet/DAO safety command:
+
+- `/wallet status` checks whether the active page exposes Phantom wallet providers and whether they appear connected. This is detection-only: it does not request connection, signatures, seed/private keys, credentials, or transaction submission.
+- `/dao <goal>` reads the active page and prepares human-safe DAO workflow instructions. It can identify visible wallet/governance controls, but it stops before wallet connect, signing, voting, transfer, transaction confirmation, or public submission.
+- `/wallet audit` and `/dao audit <goal>` save a read-only wallet/DAO evidence artifact to Living Archive intake and create a review request. These commands record wallet-provider state and visible governance controls/fields only; they do not connect wallets, sign, vote, transfer, confirm transactions, or submit public actions.
 
 Allowed next actions are:
 

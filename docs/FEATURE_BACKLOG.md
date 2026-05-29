@@ -1,6 +1,6 @@
 # ResonantOS vNext Feature Backlog
 
-Last updated: 2026-05-05
+Last updated: 2026-05-29
 
 ## Core Shell
 
@@ -24,6 +24,11 @@ Last updated: 2026-05-05
   - terminal/TUI add-ons such as OpenClaw and Hermes should open in the center as terminal workspaces
   - embedded add-ons such as Obsidian, OpenCode, and Browser should open in the center as embedded app workspaces
   - active workspaces should support full-screen mode over the ResonantOS chrome
+- Added browser-first Settings plan on 2026-05-29:
+  - documented Hermes Dashboard comparison and the ResonantOS-specific Settings information architecture in `docs/product/SETTINGS-001-browser-first-settings-plan.md`
+  - Settings should become one center workspace with its own sub-sidebar, while the global left rail remains an app/workspace launcher
+  - initial sections should cover Overview/Health, Providers/Models, Cost/Routing, Browser/Agent Control, Add-ons/Permissions, Memory, Chats/Projects/Artifacts, Automations, Profiles/Identity, Security/Wallet/Keys, Diagnostics, Appearance, Backup, Advanced Config, and Help/About
+  - implementation must stay modular, avoid raw secret exposure, and route privileged mutations through the host bridge
 - Completed on 2026-04-23:
   - extracted `chat`
   - extracted `archive`
@@ -139,7 +144,7 @@ Last updated: 2026-05-05
   - trusted wiki promotion now uses section-aware markdown merge with superseded-section provenance instead of pure append-only drift
   - memory-provider broker and reference third-party memory service now include `background-cycle`, `lint`, and `semantic-lint`
   - standalone Living Archive MCP bridge now exposes scoped status/search/read/intake/ingest-request/review/maintenance/lint tools for external clients, with live `POST /memory/{operation}` proxy mode and portable `ResonantOS_User/Memory` fallback
-  - local Living Archive memory service now exposes the V1 `POST /memory/{operation}` contract over loopback for portable status/search/read/intake/review-listing/lint, giving MCP clients a real local endpoint
+  - local Living Archive memory service now exposes the V1 `POST /memory/{operation}` contract over loopback for portable status/search/read/intake/review-listing/process/decide/promote/maintenance/lint, giving MCP clients a real local endpoint with a deterministic review-artifact promotion path
   - desktop Settings now includes a Memory Bridge launcher backed by Rust IPC, so users can start/stop the local memory service without terminal commands
   - imported-library manifests can now enter the standard ingest/review/promote path from the Source Registry through `Build AI Memory`; this starts a durable AI Memory build job with persisted status/progress, while imported files remain searchable as raw evidence first and become trusted wiki memory only after the approved promotion path
   - the Review Desk now reloads durable AI Memory build job summaries after restart, so users can see prior build status, queue pressure, promotion counts, errors, and next action

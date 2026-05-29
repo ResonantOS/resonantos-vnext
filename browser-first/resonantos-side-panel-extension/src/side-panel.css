@@ -450,15 +450,38 @@ textarea:disabled {
 
 .job-list .job-preflight,
 .job-list .job-focused,
-.job-list .job-page-lock {
+.job-list .job-page-lock,
+.job-list .job-progress,
+.job-list .job-stale-guidance {
   color: rgba(36, 209, 143, 0.72);
 }
 
 .job-list .job-focused,
-.job-list .job-page-lock {
+.job-list .job-page-lock,
+.job-list .job-progress {
   font-weight: 900;
   letter-spacing: 0.03em;
   text-transform: uppercase;
+}
+
+.job-list .job-blocker-guidance {
+  display: block;
+  margin-top: 2px;
+  border-left: 2px solid rgba(255, 179, 166, 0.52);
+  color: rgba(255, 218, 211, 0.82);
+  font-weight: 850;
+  padding-left: 7px;
+  white-space: normal;
+}
+
+.job-list .job-stale-guidance {
+  display: block;
+  margin-top: 2px;
+  border-left: 2px solid rgba(255, 213, 92, 0.68);
+  color: rgba(255, 232, 162, 0.9);
+  font-weight: 900;
+  padding-left: 7px;
+  white-space: normal;
 }
 
 .job-list li[data-active="true"] {
@@ -466,6 +489,10 @@ textarea:disabled {
   background:
     linear-gradient(135deg, rgba(36, 209, 143, 0.08), rgba(255, 255, 255, 0.035)),
     rgba(255, 255, 255, 0.04);
+}
+
+.job-list li[data-attention="stale"] {
+  border-color: rgba(255, 213, 92, 0.34);
 }
 
 .job-list code {
@@ -680,6 +707,42 @@ textarea:disabled {
 .control-current-action strong {
   color: rgba(247, 255, 249, 0.9);
   font-size: 0.72rem;
+}
+
+.control-current-action .control-target-meta,
+.control-current-action .control-phase-meta {
+  margin-top: 2px;
+  color: rgba(207, 219, 210, 0.6);
+  font-size: 0.54rem;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.control-current-action .control-phase-meta {
+  color: rgba(36, 209, 143, 0.72);
+  font-weight: 850;
+}
+
+.control-progress-track {
+  display: block;
+  width: min(100%, 220px);
+  height: 4px;
+  margin-top: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.control-progress-track i {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background:
+    linear-gradient(90deg, rgba(36, 209, 143, 0.52), rgba(117, 255, 187, 0.96)),
+    var(--accent);
+  box-shadow: 0 0 12px rgba(36, 209, 143, 0.36);
+  transition: width 180ms ease;
 }
 
 .control-summary-card {

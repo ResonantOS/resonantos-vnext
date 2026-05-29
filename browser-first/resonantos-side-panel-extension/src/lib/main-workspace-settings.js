@@ -1,119 +1,149 @@
-const knownProviderOrder = ["shared-minimax", "shared-openai"];
+import { renderAddonsSection } from "./settings/addons-section.js";
+import { renderAboutSection } from "./settings/about-section.js";
+import { renderAppearanceSection } from "./settings/appearance-section.js";
+import { renderBrowserControlSection } from "./settings/browser-control-section.js";
+import { renderDiagnosticsSection } from "./settings/diagnostics-section.js";
+import { renderMemorySection } from "./settings/memory-section.js";
+import { renderOverviewSection } from "./settings/overview-section.js";
+import { renderPrivacySection } from "./settings/privacy-section.js";
+import { renderProvidersSection } from "./settings/providers-section.js";
+import { renderRoutingSection } from "./settings/routing-section.js";
+import { renderWorkSection } from "./settings/work-section.js";
 
-function providerSort(left, right) {
-  const leftIndex = knownProviderOrder.indexOf(left.id);
-  const rightIndex = knownProviderOrder.indexOf(right.id);
-  return (leftIndex === -1 ? 99 : leftIndex) - (rightIndex === -1 ? 99 : rightIndex);
-}
+const sections = [
+  {
+    id: "overview",
+    label: "Overview",
+    hint: "System health",
+    render: renderOverviewSection
+  },
+  {
+    id: "providers",
+    label: "Providers",
+    hint: "Models and credentials",
+    render: renderProvidersSection
+  },
+  {
+    id: "routing",
+    label: "Routing",
+    hint: "Cost and fallback",
+    render: renderRoutingSection
+  },
+  {
+    id: "work",
+    label: "Chats & Projects",
+    hint: "Archive and restore",
+    render: renderWorkSection
+  },
+  {
+    id: "memory",
+    label: "Memory",
+    hint: "Sources and sync",
+    render: renderMemorySection
+  },
+  {
+    id: "browser-control",
+    label: "Browser Control",
+    hint: "AI permissions",
+    render: renderBrowserControlSection
+  },
+  {
+    id: "addons",
+    label: "Add-ons",
+    hint: "Permissions",
+    render: renderAddonsSection
+  },
+  {
+    id: "privacy",
+    label: "Privacy",
+    hint: "Trust boundaries",
+    render: renderPrivacySection
+  },
+  {
+    id: "diagnostics",
+    label: "Diagnostics",
+    hint: "Logs and reports",
+    render: renderDiagnosticsSection
+  },
+  {
+    id: "appearance",
+    label: "Appearance",
+    hint: "Density and motion",
+    render: renderAppearanceSection
+  },
+  {
+    id: "about",
+    label: "About",
+    hint: "Version and architecture",
+    render: renderAboutSection
+  }
+];
 
-function setStatus(node, message, tone = "") {
-  node.textContent = message;
-  node.dataset.tone = tone;
-}
-
-function providerCard({ provider, bridgeRequest, statusNode, reload }) {
-  const card = document.createElement("article");
-  card.className = "settings-provider-card";
-  card.dataset.configured = String(Boolean(provider.configured));
-
-  const heading = document.createElement("div");
-  heading.className = "settings-provider-heading";
-  const title = document.createElement("div");
+function sectionButton(section, activeId, onSelect) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "settings-nav-item";
+  button.dataset.section = section.id;
+  button.dataset.active = String(section.id === activeId);
   const label = document.createElement("strong");
-  label.textContent = provider.label;
-  const role = document.createElement("p");
-  role.textContent = provider.role;
-  title.append(label, role);
-  const badge = document.createElement("span");
-  badge.textContent = provider.configured ? "Ready" : "Missing";
-  heading.append(title, badge);
-
-  const models = document.createElement("p");
-  models.className = "settings-model-list";
-  models.textContent = `Models: ${(provider.models ?? []).join(", ") || "not declared"}`;
-
-  const form = document.createElement("form");
-  form.className = "settings-provider-form";
-  const input = document.createElement("input");
-  input.type = "password";
-  input.name = "credential";
-  input.autocomplete = "off";
-  input.placeholder = provider.configured ? "Replace key" : "Paste key";
-  input.setAttribute("aria-label", `${provider.label} credential`);
-  const save = document.createElement("button");
-  save.type = "submit";
-  save.textContent = provider.configured ? "Update" : "Save";
-  form.append(input, save);
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const credential = input.value.trim();
-    if (!credential) {
-      setStatus(statusNode, `Add a ${provider.label} credential before saving.`, "warning");
-      return;
-    }
-    save.disabled = true;
-    setStatus(statusNode, `Saving ${provider.label} credential...`);
-    try {
-      await bridgeRequest("/providers/credentials", {
-        method: "POST",
-        body: { providerId: provider.id, credential }
-      });
-      input.value = "";
-      setStatus(statusNode, `${provider.label} credential saved in the local provider vault.`, "success");
-      await reload();
-    } catch (error) {
-      setStatus(statusNode, `Save failed: ${error instanceof Error ? error.message : String(error)}`, "error");
-    } finally {
-      save.disabled = false;
-    }
-  });
-
-  card.append(heading, models, form);
-  return card;
+  label.textContent = section.label;
+  const hint = document.createElement("span");
+  hint.textContent = section.hint;
+  button.append(label, hint);
+  button.addEventListener("click", () => onSelect(section.id));
+  return button;
 }
 
-export function renderSettingsWorkspace({ container, bridgeRequest }) {
-  const section = document.createElement("section");
-  section.className = "settings-workspace";
-  section.innerHTML = `
-    <header class="settings-hero">
-      <span class="module-eyebrow">System settings</span>
-      <h1>Provider Profiles</h1>
-      <p>Configure shared model credentials for Augmentor, Agent Control, and approved add-ons. ResonantOS stores credentials in the local host vault and only exposes health state to the browser extension.</p>
-    </header>
-  `;
+export function renderSettingsWorkspace({
+  container,
+  bridgeRequest,
+  chatSessionStore = null,
+  onOpenSession = null,
+  onRestore = null,
+  chromeApi = null,
+  sitePermissionStore = null,
+  taskConsentStore = null,
+  storage = null,
+  storageKeys = {},
+  initialSection = "overview"
+}) {
+  let activeId = sections.some((section) => section.id === initialSection) ? initialSection : "overview";
+  const shell = document.createElement("section");
+  shell.className = "settings-workspace";
+  const nav = document.createElement("nav");
+  nav.className = "settings-subnav";
+  nav.setAttribute("aria-label", "Settings sections");
+  const panel = document.createElement("div");
+  panel.className = "settings-panel";
 
-  const statusNode = document.createElement("p");
-  statusNode.className = "settings-status";
-  statusNode.textContent = "Loading provider profiles...";
-  const grid = document.createElement("div");
-  grid.className = "settings-provider-grid";
-  const note = document.createElement("section");
-  note.className = "settings-note";
-  note.innerHTML = `
-    <strong>Security boundary</strong>
-    <p>Add-ons can request model access, but they do not receive raw provider credentials. The host resolves approved requests through scoped provider grants.</p>
-  `;
-  section.append(statusNode, grid, note);
-  container.replaceChildren(section);
-
-  const load = async () => {
-    const result = await bridgeRequest("/providers/status", { method: "GET" });
-    const providers = [...(result.providers ?? [])].sort(providerSort);
-    grid.replaceChildren(...providers.map((provider) => providerCard({
-      provider,
-      bridgeRequest,
-      statusNode,
-      reload: load
-    })));
-    setStatus(statusNode, providers.length
-      ? `${providers.filter((provider) => provider.configured).length}/${providers.length} provider profiles configured.`
-      : "No provider profiles are registered.",
-      providers.every((provider) => provider.configured) ? "success" : "warning"
-    );
+  const context = {
+    bridgeRequest,
+    chromeApi,
+    chatSessionStore,
+    onSelectSection: (nextId) => {
+      if (!sections.some((section) => section.id === nextId) || nextId === activeId) return;
+      activeId = nextId;
+      renderActive();
+    },
+    onOpenSession,
+    onRestore,
+    sitePermissionStore,
+    storage,
+    storageKeys,
+    taskConsentStore
   };
 
-  void load().catch((error) => {
-    setStatus(statusNode, `Provider status unavailable: ${error instanceof Error ? error.message : String(error)}`, "error");
-  });
+  const renderActive = () => {
+    const activeSection = sections.find((section) => section.id === activeId) ?? sections[0];
+    nav.replaceChildren(...sections.map((section) => sectionButton(section, activeId, (nextId) => {
+      if (nextId === activeId) return;
+      activeId = nextId;
+      renderActive();
+    })));
+    activeSection.render(panel, { ...context, sectionId: activeSection.id });
+  };
+
+  shell.append(nav, panel);
+  container.replaceChildren(shell);
+  renderActive();
 }

@@ -4,7 +4,7 @@ import { JSDOM } from "jsdom";
 
 import { createComposerController } from "../resonantos-side-panel-extension/src/lib/composer-controller.js";
 
-function createHarness() {
+function createHarness({ clipboard = {} } = {}) {
   const dom = new JSDOM('<form id="form"><textarea id="input"></textarea></form>');
   globalThis.Event = dom.window.Event;
   const writes = [];
@@ -14,9 +14,10 @@ function createHarness() {
   const controller = createComposerController({
     commandForm: form,
     commandInput: input,
-    navigator: {}
+    navigator: { clipboard }
   });
   return {
+    clipboard,
     controller,
     input,
     writes
@@ -57,7 +58,15 @@ test("composer controller supports undo and enter submit", () => {
 });
 
 test("composer controller supports select all without blocking native clipboard shortcuts", async () => {
-  const harness = createHarness();
+  let clipboardText = "";
+  const harness = createHarness({
+    clipboard: {
+      readText: async () => clipboardText,
+      writeText: async (value) => {
+        clipboardText = value;
+      }
+    }
+  });
   harness.input.value = "hello world";
 
   harness.controller.handleKeydown(keyEvent("a", { metaKey: true }));
@@ -68,8 +77,68 @@ test("composer controller supports select all without blocking native clipboard 
     const event = keyEvent(shortcut, { metaKey: true });
     harness.controller.handleKeydown(event);
     assert.equal(event.defaultPrevented, undefined);
-    assert.equal(await harness.controller.handleClipboardShortcut(event), false);
   }
 
   assert.equal(harness.input.value, "hello world");
+  assert.equal(clipboardText, "");
+});
+
+test("composer controller provides explicit clipboard fallback when browser clipboard is available", async () => {
+  let clipboardText = "";
+  const harness = createHarness({
+    clipboard: {
+      readText: async () => clipboardText,
+      writeText: async (value) => {
+        clipboardText = value;
+      }
+    }
+  });
+  harness.input.value = "alpha beta";
+  harness.input.setSelectionRange(6, 10);
+
+  const copyEvent = keyEvent("c", { metaKey: true });
+  assert.equal(await harness.controller.handleClipboardShortcut(copyEvent), true);
+  assert.equal(copyEvent.defaultPrevented, true);
+  assert.equal(clipboardText, "beta");
+
+  harness.input.setSelectionRange(0, 5);
+  const cutEvent = keyEvent("x", { metaKey: true });
+  assert.equal(await harness.controller.handleClipboardShortcut(cutEvent), true);
+  assert.equal(cutEvent.defaultPrevented, true);
+  assert.equal(clipboardText, "alpha");
+  assert.equal(harness.input.value, " beta");
+
+  clipboardText = "gamma";
+  harness.input.setSelectionRange(0, 0);
+  const pasteEvent = keyEvent("v", { metaKey: true });
+  assert.equal(await harness.controller.handleClipboardShortcut(pasteEvent), true);
+  assert.equal(pasteEvent.defaultPrevented, true);
+  assert.equal(harness.input.value, "gamma beta");
+});
+
+test("composer controller can opt into clipboard fallback for restricted runtimes", () => {
+  let clipboardText = "";
+  const dom = new JSDOM('<form id="form"><textarea id="input"></textarea></form>');
+  globalThis.Event = dom.window.Event;
+  const input = dom.window.document.querySelector("#input");
+  input.value = "alpha beta";
+  input.setSelectionRange(6, 10);
+  const controller = createComposerController({
+    commandForm: dom.window.document.querySelector("#form"),
+    commandInput: input,
+    forceClipboardFallback: true,
+    navigator: {
+      clipboard: {
+        readText: async () => clipboardText,
+        writeText: async (value) => {
+          clipboardText = value;
+        }
+      }
+    }
+  });
+
+  const event = keyEvent("x", { metaKey: true });
+  controller.handleKeydown(event);
+
+  assert.equal(event.defaultPrevented, true);
 });

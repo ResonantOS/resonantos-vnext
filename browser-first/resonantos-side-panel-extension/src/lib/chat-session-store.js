@@ -17,6 +17,7 @@ export function createChatSessionStore({
   let forks = [];
   let attachments = [];
   let sessions = [];
+  let projects = [];
   let activeSessionId = "";
 
   const validMessage = (message) =>
@@ -38,26 +39,43 @@ export function createChatSessionStore({
       title: String(session?.title || sessionTitleFromMessages(normalizedMessages)).trim() || "New chat",
       titleEdited,
       workspaceId: typeof session?.workspaceId === "string" ? session.workspaceId : "answer",
+      projectId: typeof session?.projectId === "string" ? session.projectId : "",
+      pinned: Boolean(session?.pinned),
+      unread: Boolean(session?.unread),
+      archivedAt: typeof session?.archivedAt === "string" ? session.archivedAt : "",
       createdAt: session?.createdAt || now(),
+      lastOpenedAt: session?.lastOpenedAt || session?.updatedAt || session?.createdAt || now(),
       updatedAt: session?.updatedAt || session?.createdAt || now(),
       messages: normalizedMessages
     };
   };
 
+  const normalizeProject = (project) => ({
+    id: String(project?.id || `project-${createId()}`),
+    name: String(project?.name ?? "New project").replace(/\s+/g, " ").trim().slice(0, 80) || "New project",
+    pinned: Boolean(project?.pinned),
+    expanded: project?.expanded !== false,
+    archivedAt: typeof project?.archivedAt === "string" ? project.archivedAt : "",
+    createdAt: project?.createdAt || now(),
+    updatedAt: project?.updatedAt || project?.createdAt || now()
+  });
+
   const ensureSession = () => {
-    if (!sessions.length) {
+    if (!sessions.some((session) => !session.archivedAt)) {
       sessions = [normalizeSession({
         id: `session-${createId()}`,
         title: "New chat",
         messages: [],
         createdAt: now(),
         updatedAt: now()
-      })];
+      }), ...sessions];
     }
-    if (!activeSessionId || !sessions.some((session) => session.id === activeSessionId)) {
-      activeSessionId = sessions[0].id;
+    if (!activeSessionId || !sessions.some((session) => session.id === activeSessionId && !session.archivedAt)) {
+      activeSessionId = sessions.find((session) => !session.archivedAt)?.id || sessions[0].id;
     }
-    const active = sessions.find((session) => session.id === activeSessionId) ?? sessions[0];
+    const active = sessions.find((session) => session.id === activeSessionId && !session.archivedAt)
+      ?? sessions.find((session) => !session.archivedAt)
+      ?? sessions[0];
     activeSessionId = active.id;
     messages = active.messages.map((message) => ({ ...message }));
   };
@@ -88,27 +106,33 @@ export function createChatSessionStore({
 
   async function persist() {
     writeActiveSession();
-    await storage?.set?.({
+    const payload = {
       [storageKeys.messages]: messages,
       [storageKeys.forks]: forks,
       [storageKeys.sessions]: sessions,
+      [storageKeys.projects]: projects,
       [storageKeys.activeSessionId]: activeSessionId,
       [storageKeys.model]: getModel(),
       [storageKeys.thinkingDepth]: getThinkingDepth(),
       [storageKeys.attachments]: attachments
-    }).catch(() => undefined);
+    };
+    await storage?.set?.(Object.fromEntries(
+      Object.entries(payload).filter(([key]) => key !== "undefined")
+    )).catch(() => undefined);
   }
 
   async function hydrate() {
-    const settings = await storage?.get?.([
+    const keys = [
       storageKeys.messages,
       storageKeys.forks,
       storageKeys.sessions,
+      storageKeys.projects,
       storageKeys.activeSessionId,
       storageKeys.model,
       storageKeys.thinkingDepth,
       storageKeys.attachments
-    ]).catch(() => ({}));
+    ].filter((key) => typeof key === "string" && key.length > 0);
+    const settings = await storage?.get?.(keys).catch(() => ({}));
     if (settings?.[storageKeys.model] && isAllowedModel(settings[storageKeys.model])) {
       setModel(settings[storageKeys.model]);
     }
@@ -130,6 +154,13 @@ export function createChatSessionStore({
     activeSessionId = String(settings?.[storageKeys.activeSessionId] || sessions[0]?.id || "");
     ensureSession();
     forks = Array.isArray(settings?.[storageKeys.forks]) ? settings[storageKeys.forks] : [];
+    projects = Array.isArray(settings?.[storageKeys.projects])
+      ? settings[storageKeys.projects].map(normalizeProject)
+      : [];
+    const activeProjectIds = new Set(projects.filter((project) => !project.archivedAt).map((project) => project.id));
+    sessions = sessions.map((session) => session.projectId && !activeProjectIds.has(session.projectId)
+      ? { ...session, projectId: "", updatedAt: now() }
+      : session);
     attachments = Array.isArray(settings?.[storageKeys.attachments]) ? settings[storageKeys.attachments] : [];
     return snapshot();
   }
@@ -138,6 +169,7 @@ export function createChatSessionStore({
     return {
       messages,
       sessions,
+      projects,
       activeSessionId,
       forks,
       attachments
@@ -158,6 +190,10 @@ export function createChatSessionStore({
 
   function getSessions() {
     return sessions;
+  }
+
+  function getProjects() {
+    return projects;
   }
 
   function getActiveSessionId() {
@@ -219,10 +255,13 @@ export function createChatSessionStore({
 
   async function switchSession(id) {
     writeActiveSession();
-    const session = sessions.find((item) => item.id === id);
+    const session = sessions.find((item) => item.id === id && !item.archivedAt);
     if (!session) return null;
     activeSessionId = session.id;
     messages = session.messages.map((message) => ({ ...message }));
+    sessions = sessions.map((item) => item.id === id
+      ? { ...item, unread: false, lastOpenedAt: now() }
+      : item);
     attachments = [];
     await persist();
     return session;
@@ -245,6 +284,183 @@ export function createChatSessionStore({
     if (!renamed) return null;
     await persist();
     return renamed;
+  }
+
+  async function setSessionPinned(id, pinned) {
+    let updated = null;
+    sessions = sessions.map((session) => {
+      if (session.id !== id) return session;
+      updated = {
+        ...session,
+        pinned: Boolean(pinned),
+        updatedAt: now()
+      };
+      return updated;
+    });
+    if (!updated) return null;
+    await persist();
+    return updated;
+  }
+
+  async function setSessionUnread(id, unread) {
+    let updated = null;
+    sessions = sessions.map((session) => {
+      if (session.id !== id) return session;
+      updated = {
+        ...session,
+        unread: Boolean(unread),
+        updatedAt: now()
+      };
+      return updated;
+    });
+    if (!updated) return null;
+    await persist();
+    return updated;
+  }
+
+  async function setSessionArchived(id, archived) {
+    let updated = null;
+    const archivedAt = archived ? now() : "";
+    sessions = sessions.map((session) => {
+      if (session.id !== id) return session;
+      updated = {
+        ...session,
+        archivedAt,
+        unread: false,
+        updatedAt: now()
+      };
+      return updated;
+    });
+    if (!updated) return null;
+    if (archived && activeSessionId === id) {
+      const replacement = sessions.find((session) => !session.archivedAt && session.id !== id);
+      if (replacement) {
+        activeSessionId = replacement.id;
+        messages = replacement.messages.map((message) => ({ ...message }));
+      } else {
+        const session = normalizeSession({
+          title: "New chat",
+          messages: [],
+          createdAt: now(),
+          updatedAt: now()
+        });
+        sessions = [session, ...sessions];
+        activeSessionId = session.id;
+        messages = [];
+      }
+    }
+    await persist();
+    return updated;
+  }
+
+  async function setSessionProject(id, projectId = "") {
+    const normalizedProjectId = String(projectId ?? "").trim();
+    if (normalizedProjectId && !projects.some((project) => project.id === normalizedProjectId && !project.archivedAt)) {
+      return null;
+    }
+    let updated = null;
+    sessions = sessions.map((session) => {
+      if (session.id !== id) return session;
+      updated = {
+        ...session,
+        projectId: normalizedProjectId,
+        updatedAt: now()
+      };
+      return updated;
+    });
+    if (!updated) return null;
+    await persist();
+    return updated;
+  }
+
+  async function createProject(name) {
+    const project = normalizeProject({
+      name,
+      createdAt: now(),
+      updatedAt: now()
+    });
+    projects = [project, ...projects];
+    await persist();
+    return project;
+  }
+
+  async function renameProject(id, name) {
+    const nextName = String(name ?? "").replace(/\s+/g, " ").trim().slice(0, 80);
+    if (!nextName) return null;
+    let updated = null;
+    projects = projects.map((project) => {
+      if (project.id !== id) return project;
+      updated = {
+        ...project,
+        name: nextName,
+        updatedAt: now()
+      };
+      return updated;
+    });
+    if (!updated) return null;
+    await persist();
+    return updated;
+  }
+
+  async function setProjectPinned(id, pinned) {
+    let updated = null;
+    projects = projects.map((project) => {
+      if (project.id !== id) return project;
+      updated = {
+        ...project,
+        pinned: Boolean(pinned),
+        updatedAt: now()
+      };
+      return updated;
+    });
+    if (!updated) return null;
+    await persist();
+    return updated;
+  }
+
+  async function setProjectExpanded(id, expanded) {
+    let updated = null;
+    projects = projects.map((project) => {
+      if (project.id !== id) return project;
+      updated = {
+        ...project,
+        expanded: Boolean(expanded),
+        updatedAt: now()
+      };
+      return updated;
+    });
+    if (!updated) return null;
+    await persist();
+    return updated;
+  }
+
+  async function setProjectArchived(id, archived) {
+    let updated = null;
+    const archivedAt = archived ? now() : "";
+    projects = projects.map((project) => {
+      if (project.id !== id) return project;
+      updated = {
+        ...project,
+        archivedAt,
+        updatedAt: now()
+      };
+      return updated;
+    });
+    if (!updated) return null;
+    await persist();
+    return updated;
+  }
+
+  async function deleteProject(id) {
+    if (!projects.some((project) => project.id === id)) {
+      return false;
+    }
+    projects = projects.filter((project) => project.id !== id);
+    sessions = sessions.map((session) => session.projectId === id
+      ? { ...session, projectId: "", updatedAt: now() }
+      : session);
+    await persist();
+    return true;
   }
 
   async function deleteSession(id) {
@@ -304,6 +520,36 @@ export function createChatSessionStore({
     return fork;
   }
 
+  async function forkSession(id = activeSessionId) {
+    writeActiveSession();
+    const source = sessions.find((session) => session.id === id);
+    if (!source) return null;
+    const fork = {
+      id: `fork-${Date.now()}`,
+      sourceSessionId: source.id,
+      createdAt: now(),
+      messages: source.messages.map((message) => ({ ...message }))
+    };
+    forks = [...forks, fork];
+    const session = normalizeSession({
+      id: fork.id,
+      title: `Fork: ${source.title || sessionTitleFromMessages(source.messages)}`,
+      titleEdited: true,
+      workspaceId: source.workspaceId,
+      projectId: source.projectId,
+      pinned: false,
+      messages: fork.messages,
+      createdAt: fork.createdAt,
+      updatedAt: fork.createdAt
+    });
+    sessions = [session, ...sessions];
+    activeSessionId = session.id;
+    messages = session.messages.map((message) => ({ ...message }));
+    attachments = [];
+    await persist();
+    return fork;
+  }
+
   async function deleteMessage(id) {
     const before = messages.length;
     messages = messages.filter((message) => message.id !== id);
@@ -348,22 +594,34 @@ export function createChatSessionStore({
     addMessage,
     clearAttachments,
     createSession,
+    createProject,
     deleteMessage,
+    deleteProject,
     deleteSession,
     ensureFreshSession,
     findMessage,
     forkFromMessage,
+    forkSession,
     getActiveSession,
     getActiveSessionId,
     getAttachments,
     getForks,
     getMessages,
+    getProjects,
     getSessions,
     hydrate,
     persist,
+    renameProject,
     renameSession,
     removeAttachment,
     setActiveSessionWorkspace,
+    setProjectArchived,
+    setProjectExpanded,
+    setProjectPinned,
+    setSessionArchived,
+    setSessionPinned,
+    setSessionProject,
+    setSessionUnread,
     snapshot,
     switchSession,
     trimToPreviousUserMessage

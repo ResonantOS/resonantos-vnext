@@ -213,6 +213,135 @@ test("browser page actions save selected text to archive intake", async () => {
   assert.equal(harness.events.some((event) => event[0] === "message" && /INTAKE\/browser|REVIEW\/requests/.test(event[2])), false);
 });
 
+test("browser page actions detect Phantom wallet state without requesting access", async () => {
+  const harness = createHarness({
+    scripting: {
+      executeScript: async (payload) => {
+        harness.events.push(["wallet-probe", payload.world, payload.target]);
+        return [{
+          result: {
+            phantomSolana: {
+              detected: true,
+              isConnected: true,
+              isPhantom: true,
+              publicKeyPreview: "9abc...wxyz"
+            },
+            source: "main-world-probe"
+          }
+        }];
+      }
+    }
+  });
+
+  const result = await harness.actions.detectWalletState();
+
+  assert.equal(result.ok, true);
+  assert.equal(result.state.detected, true);
+  assert.equal(result.state.detectionOnly, true);
+  assert.equal(result.state.providers.phantomSolana.isConnected, true);
+  assert.ok(harness.events.some((event) => event[0] === "wallet-probe" && event[1] === "MAIN"));
+  const message = harness.events.find((event) => event[0] === "message" && /Wallet status/.test(event[2]))?.[2] ?? "";
+  assert.match(message, /Phantom Solana: connected/);
+  assert.match(message, /read-only detection/);
+  assert.doesNotMatch(message, /connect\(|signMessage|signTransaction|signAndSendTransaction/i);
+});
+
+test("browser page actions block wallet status detection on blocked sites", async () => {
+  const harness = createHarness({ permission: "blocked" });
+
+  const result = await harness.actions.detectWalletState();
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /blocked/);
+  assert.equal(harness.events.some((event) => event[0] === "inject" || event[0] === "wallet-probe"), false);
+});
+
+test("browser page actions prepare DAO workflow guidance without wallet automation", async () => {
+  const harness = createHarness({
+    lastSnapshot: {
+      title: "DAO Vote",
+      url: "https://dao.example/vote",
+      text: "Vote on proposal 12.",
+      controls: [
+        { ref: "r1", text: "Connect Wallet", tagName: "button" },
+        { ref: "r2", text: "Vote For", tagName: "button" },
+        { ref: "r3", text: "Open details", tagName: "button" }
+      ],
+      fields: [{ ref: "f1", label: "Delegate vote reason", kind: "document-edit" }]
+    }
+  });
+
+  const result = await harness.actions.prepareDaoWorkflowGuidance("review proposal 12");
+
+  assert.equal(result.ok, true);
+  assert.equal(result.controls, 2);
+  const message = harness.events.find((event) => event[0] === "message" && /DAO workflow helper/.test(event[2]))?.[2] ?? "";
+  assert.match(message, /Goal: review proposal 12/);
+  assert.match(message, /Connect Wallet · ref r1/);
+  assert.match(message, /Vote For · ref r2/);
+  assert.match(message, /\/wallet status/);
+  assert.match(message, /Human completes wallet connect, signature, vote, transaction, or public submission manually/);
+  assert.match(message, /will not click wallet connect, sign, vote, submit, transfer, or transaction confirmation/);
+});
+
+test("browser page actions save wallet and DAO audit evidence to reviewed intake", async () => {
+  const harness = createHarness({
+    lastSnapshot: {
+      title: "DAO Vote",
+      url: "https://dao.example/vote",
+      text: "Vote on proposal 12.",
+      controls: [
+        { ref: "r1", text: "Connect Wallet", tagName: "button" },
+        { ref: "r2", text: "Vote For", tagName: "button" },
+        { ref: "r3", text: "Open details", tagName: "button" }
+      ],
+      fields: [{ ref: "f1", label: "Delegate vote reason", kind: "document-edit" }]
+    },
+    bridgeRequest: async (route) => route === "/archive/intake"
+      ? { path: "INTAKE/browser/wallet-dao-audit.md", bytes: 120 }
+      : { path: "REVIEW/requests/wallet-dao-audit.md", status: "pending" },
+    scripting: {
+      executeScript: async (payload) => {
+        harness.events.push(["wallet-probe", payload.world, payload.target]);
+        return [{
+          result: {
+            phantomSolana: {
+              detected: true,
+              isConnected: false,
+              isPhantom: true,
+              publicKeyPreview: ""
+            },
+            source: "main-world-probe"
+          }
+        }];
+      }
+    }
+  });
+
+  const result = await harness.actions.saveWalletDaoAuditToArchive("review proposal 12");
+
+  assert.equal(result.ok, true);
+  assert.equal(result.path, "INTAKE/browser/wallet-dao-audit.md");
+  assert.equal(result.reviewRequestPath, "REVIEW/requests/wallet-dao-audit.md");
+  assert.equal(result.controls, 2);
+  assert.equal(result.fields, 1);
+  const bridgeCall = harness.events.find((event) => event[0] === "bridge" && event[1] === "/archive/intake");
+  assert.equal(bridgeCall[2].body.origin, "browser-wallet-dao-audit");
+  assert.equal(bridgeCall[2].body.url, "https://dao.example/vote");
+  assert.equal(bridgeCall[2].body.metadata.walletDetected, true);
+  assert.deepEqual(bridgeCall[2].body.metadata.walletProviders, ["phantomSolana"]);
+  assert.match(bridgeCall[2].body.content, /Wallet \/ DAO Audit/);
+  assert.match(bridgeCall[2].body.content, /Phantom Solana: available, not connected/);
+  assert.match(bridgeCall[2].body.content, /Connect Wallet · ref r1/);
+  assert.match(bridgeCall[2].body.content, /Vote For · ref r2/);
+  assert.match(bridgeCall[2].body.content, /ResonantOS did not request wallet connection/);
+  assert.doesNotMatch(bridgeCall[2].body.content, /connect\(|signMessage|signTransaction|signAndSendTransaction/i);
+  const reviewCall = harness.events.find((event) => event[0] === "bridge" && event[1] === "/archive/review/request");
+  assert.equal(reviewCall[2].body.path, "INTAKE/browser/wallet-dao-audit.md");
+  assert.match(reviewCall[2].body.reason, /wallet\/DAO browser evidence/i);
+  assert.ok(harness.events.some((event) => event[0] === "message" && /Saved a wallet\/DAO audit/.test(event[2])));
+});
+
 test("browser page actions summarize current page into reviewed archive intake", async () => {
   const harness = createHarness({
     lastSnapshot: {

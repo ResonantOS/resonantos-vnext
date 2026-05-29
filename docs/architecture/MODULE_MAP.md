@@ -251,8 +251,8 @@ This map defines which folder owns which feature area so contributors do not kee
     - architecture reference: `docs/architecture/ADR-029-living-archive-mcp-bridge.md`
   - `examples/living-archive-memory-service.mjs`
     - loopback HTTP memory service for the portable `ResonantOS_User/Memory` folder
-    - implements the V1 `POST /memory/{operation}` contract for status/search/read/intake/ingest-request/review-listing/lint
-    - deliberately rejects provider-only trusted promotion and semantic operations until those are mediated by the full desktop host provider
+    - implements the V1 `POST /memory/{operation}` contract for status/search/read/intake/ingest-request/review-listing/process/decide/promote/maintenance/lint
+    - trusted wiki writes are narrow review-artifact promotions only; external clients cannot perform arbitrary direct `AI_MEMORY/wiki` writes
     - lets MCP clients point `RESONANTOS_MEMORY_SERVICE_URL` at a real ResonantOS-owned local endpoint instead of a mock
   - `src-tauri/src/memory_service.rs`
     - host-owned launcher for the Living Archive local memory service

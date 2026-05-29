@@ -70,6 +70,7 @@ test("chat turn controller calls provider and records assistant reply", async ()
   assert.ok(harness.events.some((event) => event[0] === "bridge" && event[1] === "/augmentor/chat"));
   const bridgeEvent = harness.events.find((event) => event[0] === "bridge");
   assert.equal(bridgeEvent[2].body.model, "MiniMax-M2.7");
+  assert.equal(bridgeEvent[2].body.workload, "augmentor-chat");
   assert.equal(bridgeEvent[2].body.thinkingDepth, "high");
   assert.match(bridgeEvent[2].body.pageContext, /Visible text/);
   assert.match(bridgeEvent[2].body.runtimeContext, /notes\.md/);

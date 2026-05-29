@@ -15,6 +15,46 @@ const kindLabel = (kind) => ({
   intake: "Intake"
 }[kind] ?? "Artifact");
 
+export function artifactInsightsFromMarkdown(content) {
+  const value = String(content ?? "");
+  const lineValue = (label) => {
+    const match = new RegExp(`^-\\s*${label}:\\s*(.+)$`, "mi").exec(value);
+    return match?.[1]?.trim() ?? "";
+  };
+  const isWalletDaoAudit = /^#\s*Wallet \/ DAO Audit\b/im.test(value) || /origin:\s*browser-wallet-dao-audit/i.test(value);
+  const walletSummary = [
+    /Phantom Solana:\s*(.+)$/mi.exec(value)?.[1]?.trim(),
+    /Phantom Ethereum:\s*(.+)$/mi.exec(value)?.[1]?.trim()
+  ].filter(Boolean).join(" · ");
+  const nextHumanAction = /^ {0,5}-\s*next human action:\s*(.+)$/gmi.exec(value)?.[1]?.trim() ?? "";
+  const summary = lineValue("summary");
+  const phase = lineValue("phase");
+  const percentComplete = lineValue("percentComplete");
+  const targetSite = lineValue("targetSite");
+  const targetReason = lineValue("targetReason");
+  const status = lineValue("status");
+  return {
+    evidenceType: isWalletDaoAudit ? "Wallet / DAO Audit" : "",
+    nextHumanAction,
+    pageUrl: lineValue("pageUrl"),
+    percentComplete,
+    phase,
+    status,
+    summary: summary || (isWalletDaoAudit ? "Read-only wallet/DAO evidence queued for review" : ""),
+    targetReason,
+    targetSite,
+    walletSummary
+  };
+}
+
+function normalizedArtifactInsights(artifact) {
+  const fallback = artifactInsightsFromMarkdown(artifact?.content ?? artifact?.excerpt ?? "");
+  return {
+    ...fallback,
+    ...(artifact?.insights && typeof artifact.insights === "object" ? artifact.insights : {})
+  };
+}
+
 function setStatus(node, text, tone = "neutral") {
   node.textContent = text;
   node.dataset.tone = tone;
@@ -32,6 +72,15 @@ function artifactRow(artifact, onOpen) {
   const excerpt = document.createElement("small");
   excerpt.textContent = artifact.excerpt || "No preview available.";
   row.append(title, meta, excerpt);
+  const insights = normalizedArtifactInsights(artifact);
+  if (insights.summary || insights.nextHumanAction) {
+    const insight = document.createElement("small");
+    insight.className = insights.nextHumanAction ? "artifact-row-guidance" : "artifact-row-progress";
+    insight.textContent = insights.nextHumanAction
+      ? `Next: ${insights.nextHumanAction}`
+      : `Progress: ${insights.summary}`;
+    row.append(insight);
+  }
   row.addEventListener("click", () => onOpen(artifact));
   return row;
 }
@@ -63,6 +112,34 @@ function previewArticle(artifact, actions) {
   heading.append(copy, meta);
   const content = document.createElement("pre");
   content.textContent = artifact.content || "No artifact content returned.";
+  const insights = normalizedArtifactInsights(artifact);
+  const insightRows = [
+    ["Status", insights.status],
+    ["Evidence", insights.evidenceType],
+    ["Wallet", insights.walletSummary],
+    ["Progress", insights.summary],
+    ["Phase", insights.phase],
+    ["Complete", insights.percentComplete ? `${insights.percentComplete}%` : ""],
+    ["Target", [insights.targetSite || insights.pageUrl, insights.targetReason].filter(Boolean).join(" · ")],
+    ["Next human action", insights.nextHumanAction]
+  ].filter(([, value]) => Boolean(value));
+  const insightPanel = document.createElement("section");
+  insightPanel.className = "artifact-insights";
+  insightPanel.hidden = insightRows.length === 0;
+  if (insightRows.length) {
+    const insightTitle = document.createElement("strong");
+    insightTitle.textContent = "Action Summary";
+    insightPanel.append(insightTitle);
+    insightRows.forEach(([labelText, value]) => {
+      const row = document.createElement("p");
+      const label = document.createElement("span");
+      label.textContent = labelText;
+      const copy = document.createElement("b");
+      copy.textContent = value;
+      row.append(label, copy);
+      insightPanel.append(row);
+    });
+  }
   const actionRow = document.createElement("div");
   actionRow.className = "artifact-actions";
   actionRow.append(
@@ -70,7 +147,7 @@ function previewArticle(artifact, actions) {
     actionButton("Request Review", () => void actions.requestReview(artifact)),
     actionButton("Continue", () => void actions.continueFrom(artifact))
   );
-  article.append(heading, actionRow, content);
+  article.append(heading, insightPanel, actionRow, content);
   if (artifact.truncated) {
     const truncated = document.createElement("p");
     truncated.className = "artifact-warning";

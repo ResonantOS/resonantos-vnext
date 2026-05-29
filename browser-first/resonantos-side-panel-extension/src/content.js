@@ -415,17 +415,6 @@ const isEditable = (element) =>
   !element.disabled &&
   !element.readOnly;
 
-const describeEditable = (element) => ({
-  ref: ensureControlRef(element),
-  tagName: element.tagName.toLowerCase(),
-  type: element.getAttribute("type") || "",
-  name: element.getAttribute("name") || "",
-  id: element.id || "",
-  role: element.getAttribute("role") || "",
-  label: element.getAttribute("aria-label") || element.getAttribute("placeholder") || element.getAttribute("title") || "",
-  valuePreview: "value" in element ? String(element.value || "").slice(0, 120) : String(element.textContent || "").slice(0, 120)
-});
-
 const editableLabel = (element) => [
   element.getAttribute("aria-label"),
   element.getAttribute("placeholder"),
@@ -502,6 +491,37 @@ const classifyEditableField = (element) => {
     return { kind: "document-edit", safeToType: true, safeToSubmit: false, reason: "Document-like fields may be edited but not submitted automatically." };
   }
   return { kind: "generic-text", safeToType: true, safeToSubmit: false, reason: "Generic text fields may be edited but not submitted automatically." };
+};
+
+const editableRawValue = (element) =>
+  "value" in element ? String(element.value || "") : String(element.textContent || "");
+
+const editableValuePreview = (element, fieldSafety) => {
+  const rawValue = editableRawValue(element).slice(0, 120);
+  if (!rawValue) {
+    return "";
+  }
+  if (fieldSafety.kind === "search-query") {
+    return rawValue;
+  }
+  return `[redacted:${fieldSafety.kind}]`;
+};
+
+const describeEditable = (element) => {
+  const fieldSafety = classifyEditableField(element);
+  const rawValue = editableRawValue(element);
+  return {
+    ref: ensureControlRef(element),
+    tagName: element.tagName.toLowerCase(),
+    type: element.getAttribute("type") || "",
+    name: element.getAttribute("name") || "",
+    id: element.id || "",
+    role: element.getAttribute("role") || "",
+    label: element.getAttribute("aria-label") || element.getAttribute("placeholder") || element.getAttribute("title") || "",
+    fieldKind: fieldSafety.kind,
+    hasValue: Boolean(rawValue),
+    valuePreview: editableValuePreview(element, fieldSafety)
+  };
 };
 
 const findEditableTarget = (field, ref = "") => {

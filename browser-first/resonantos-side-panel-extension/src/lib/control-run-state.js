@@ -13,18 +13,79 @@ export function createControlRunState({
   let overlayGeneration = 0;
   let overlayStartedAtMs = 0;
 
-  const createStepRecord = (step, state = "pending", note = "", details = {}) => ({
-    ...step,
-    state,
-    note,
-    details: {
-      ...(step?.details ?? {}),
-      ...details
-    },
-    updatedAt: new Date().toISOString()
-  });
+  const nowIso = () => new Date().toISOString();
+  const terminalStepStates = new Set(["completed", "blocked", "failed", "cancelled"]);
+
+  const stepLabel = (step) => {
+    if (step?.label) return String(step.label);
+    if (step?.type === "open") return `Opening ${step.url || "page"}`;
+    if (step?.type === "search") return `Searching ${step.query || "web"}`;
+    if (step?.type === "read") return "Reading page";
+    if (step?.type === "inspect") return "Inspecting page";
+    if (step?.type === "forms") return "Checking forms";
+    if (step?.type === "tabs") return "Reading tabs";
+    if (step?.type === "click") return `Clicking ${step.text || step.selector || "target"}`;
+    if (step?.type === "type") return `Typing into ${step.field || "page"}`;
+    if (step?.type === "scroll") return "Scrolling page";
+    if (step?.type === "wait") return "Waiting";
+    if (step?.type === "switch_tab") return "Switching tab";
+    return "Working";
+  };
+
+  const overlayPhaseForStep = (step, state) => {
+    if (["blocked", "failed"].includes(state)) return "blocked";
+    if (state === "completed") return "working";
+    if (["inspect", "read", "forms", "tabs"].includes(step?.type)) return "reading";
+    if (["open", "search", "switch_tab"].includes(step?.type)) return "navigating";
+    if (["click", "type", "scroll"].includes(step?.type)) return "acting";
+    if (step?.type === "wait") return "waiting";
+    return "working";
+  };
+
+  const updateOverlayForStep = (step, state, note = "") => {
+    if (!["active", "blocked", "failed", "cancelled"].includes(state)) return;
+    const prefix = state === "active"
+      ? "Augmentor"
+      : state === "blocked"
+        ? "Blocked"
+        : state === "cancelled"
+          ? "Cancelled"
+          : "Failed";
+    const label = [prefix, stepLabel(step), note].filter(Boolean).join(": ");
+    void setPageControlOverlay(true, label, overlayPhaseForStep(step, state));
+  };
+
+  const createStepRecord = (step, state = "pending", note = "", details = {}) => {
+    const timestamp = nowIso();
+    const timestampMs = nowMs();
+    const timing = { ...(step?.timing ?? {}) };
+    if (state === "active" && !timing.startedAt) {
+      timing.startedAt = timestamp;
+      timing.startedAtMs = timestampMs;
+    }
+    if (terminalStepStates.has(state) && !timing.completedAt) {
+      timing.completedAt = timestamp;
+      timing.completedAtMs = timestampMs;
+      if (Number.isFinite(Number(timing.startedAtMs))) {
+        timing.durationMs = Math.max(0, timestampMs - Number(timing.startedAtMs));
+      }
+    }
+    return {
+      ...step,
+      state,
+      note,
+      details: {
+        ...(step?.details ?? {}),
+        ...details
+      },
+      timing,
+      updatedAt: timestamp
+    };
+  };
 
   const startControlRun = ({ goal, plan }) => {
+    const startedAt = nowIso();
+    const startedAtMs = nowMs();
     const run = {
       id: browserJobStore.getActiveJobId() ?? `control-${Date.now()}`,
       goal,
@@ -33,11 +94,16 @@ export function createControlRunState({
       status: "running",
       steps: plan.steps.map((step) => createStepRecord(step, step.state ?? "pending", step.note ?? "", step.details ?? {})),
       artifacts: Array.isArray(plan.artifacts) ? plan.artifacts : [],
-      startedAt: new Date().toISOString(),
-      completedAt: null
+      pageLock: plan.pageLock ?? null,
+      startedAt,
+      completedAt: null,
+      timing: {
+        startedAt,
+        startedAtMs
+      }
     };
     overlayGeneration += 1;
-    overlayStartedAtMs = nowMs();
+    overlayStartedAtMs = startedAtMs;
     setCurrentControlRun(run);
     setPendingApproval(null);
     renderControlMonitor();
@@ -52,6 +118,7 @@ export function createControlRunState({
     steps[index] = createStepRecord(steps[index], state, note, details);
     setCurrentControlRun({ ...currentControlRun, steps });
     renderControlMonitor();
+    updateOverlayForStep(steps[index], state, note);
   };
 
   const appendControlStep = (step) => {
@@ -75,10 +142,40 @@ export function createControlRunState({
   const finishControlRun = (status, artifact = null) => {
     const currentControlRun = getCurrentControlRun();
     if (!currentControlRun) return;
+    const completedAt = nowIso();
+    const completedAtMs = nowMs();
+    const runTiming = {
+      ...(currentControlRun.timing ?? {}),
+      completedAt,
+      completedAtMs
+    };
+    if (Number.isFinite(Number(runTiming.startedAtMs))) {
+      runTiming.durationMs = Math.max(0, completedAtMs - Number(runTiming.startedAtMs));
+    }
+    let steps = currentControlRun.steps;
+    if (status === "cancelled") {
+      const cancelledIndex = steps.findIndex((step) => ["active", "pending"].includes(step.state ?? "pending"));
+      if (cancelledIndex >= 0) {
+        steps = [...steps];
+        steps[cancelledIndex] = createStepRecord(
+          steps[cancelledIndex],
+          "cancelled",
+          "Stopped by human.",
+          {
+            ...(steps[cancelledIndex]?.details ?? {}),
+            phase: "cancelled",
+            nextHumanAction: "Review the page state and restart or resume the browser task when ready."
+          }
+        );
+        updateOverlayForStep(steps[cancelledIndex], "cancelled", "Stopped by human.");
+      }
+    }
     const completedRun = {
       ...currentControlRun,
       status,
-      completedAt: new Date().toISOString(),
+      steps,
+      completedAt,
+      timing: runTiming,
       artifacts: artifact ? [...currentControlRun.artifacts, artifact] : currentControlRun.artifacts
     };
     setCurrentControlRun(completedRun);
@@ -98,9 +195,11 @@ export function createControlRunState({
     void updateBrowserJob(completedRun.id, {
       status,
       artifacts: completedRun.artifacts,
+      pageLock: completedRun.pageLock,
       summary: completedRun.summary,
       planner: completedRun.planner,
-      steps: completedRun.steps
+      steps: completedRun.steps,
+      timing: completedRun.timing
     });
   };
 

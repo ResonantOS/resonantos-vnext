@@ -30,7 +30,7 @@ These are the features currently implemented in the browser-first version.
 ### ResonantOS Side Panel
 
 - ResonantOS is exposed as a browser side panel.
-- The side panel opens by default in the browser-first app.
+- The browser-first app opens to the main workspace by default; the side panel opens only when the user explicitly opens it or when a browser-control handoff needs the side-panel control surface.
 - The side panel contains the Augmentor chat interface.
 - The side panel is intended to remain beside the webpage, not replace the webpage.
 - The side panel can be hidden or shown through the extension control.
@@ -41,7 +41,7 @@ These are the features currently implemented in the browser-first version.
 
 - Augmentor chat works inside the browser side panel.
 - Augmentor chat also works in the browser new-tab main workspace as a full-screen chat surface.
-- The main workspace and side-panel chat share the same keyboard behavior for Enter, Shift+Enter, select-all, copy, cut, paste, and undo.
+- The main workspace and side-panel chat share the same keyboard behavior for Enter, Shift+Enter, select-all, copy, cut, paste, and undo; native browser editing is not intercepted unless the explicit fallback path is requested.
 - The main workspace and side-panel chat share the same message-action semantics: copy, fork, edit user prompt, regenerate, save assistant output to Living Archive intake, stats when available, and delete.
 - The main workspace rail is navigation-only; chat history is no longer shown in that rail.
 - New chat creation is available from the main workspace top bar rather than the workspace rail history area.
@@ -64,11 +64,30 @@ These are the features currently implemented in the browser-first version.
 - Chat input supports Shift+Enter for newline.
 - Chat input supports Command+A, Command+C, Command+X, Command+V, and Command+Z.
 - Command+Q is handled by the native browser host to quit the app.
+- `/wallet status` checks read-only Phantom provider presence and connection state on the active page without requesting connection, signing, seed/private keys, credentials, or transaction submission.
+- `/dao <goal>` prepares a read-only DAO workflow plan from the active page and stops before wallet connect, signing, voting, transfer, transaction confirmation, or public submission.
+- `/wallet audit` and `/dao audit <goal>` save wallet/DAO browser evidence to raw Living Archive intake and queue review while preserving the same human-only wallet/signing/transaction boundary.
+
+### Email And Calendar Add-ons
+
+- `/email` creates a host-mediated email draft packet from chat.
+- `/calendar` creates a host-mediated calendar draft packet from chat.
+- Draft packets are visible in the browser-first Add-ons workspace.
+- Draft packets can be approved for manual action or rejected with an audit entry.
+- Approved email draft packets can open a Gmail compose handoff URL for human review.
+- Approved calendar draft packets can open a Google Calendar event-template handoff URL for human review.
+- Provider handoff appends an auditable `Provider Handoff` event to the draft packet.
+- ResonantOS does not send email through this route.
+- ResonantOS does not schedule calendar events through this route.
+- Gmail and Google Calendar handoffs do not expose provider credentials to the extension.
+- Future send/schedule automation remains blocked until provider-specific account grants, approval flows, and audit trails exist.
 
 ### Browser Reading And Context
 
 - Augmentor can read the active webpage through mediated content-script messages.
 - Page observations include title, URL, visible text, viewport state, links, controls, editable fields, iframe summaries, and wallet-provider detection.
+- Wallet-provider status can also be checked directly through a main-world read-only probe so the result reflects page-injected providers instead of isolated extension state.
+- DAO workflow guidance can identify visible wallet/governance controls and fields and turn them into human-safe instructions while preserving wallet/signing boundaries.
 - Readable iframe content is merged into page observations where browser security allows it.
 - Stable element refs are assigned to visible controls and fields.
 - Augmentor can use refs to avoid ambiguous click/type targets.
@@ -97,9 +116,19 @@ These are the features currently implemented in the browser-first version.
 - Agent Control reports can be saved into Living Archive intake through the bridge path.
 - Agent Control now classifies editable fields before typing: search/query submits and non-sensitive document/generic edits are allowed, while credential, login, payment, wallet, personal-contact, and non-search submit automation is blocked before any value is written.
 - The Augmentor sidebar can save the current browser page or selected page text directly into Living Archive intake and immediately create a governed review request; these captures remain raw intake artifacts and still require review, verification, and promotion before becoming trusted AI Memory.
-- The main workspace exposes matching icon affordances for page read, page save, selection save, and browser status by handing those operations to the governed side-panel/browser-control surface.
+- The main workspace exposes matching icon affordances for page read, page save, selection save, and browser status/context summary, and runs those non-control operations directly from the main workspace chat surface.
+- The Artifacts workspace extracts status, target, aggregate progress, and next-human-action summaries from browser-control/job reports so the user can understand saved evidence without opening raw markdown first.
 - The Augmentor sidebar can summarize the current browser page into a source-grounded Living Archive intake artifact through the selected provider, with a deterministic source-excerpt fallback when the provider is unavailable.
 - The Augmentor sidebar can capture a multi-tab browser research trail into one Living Archive intake artifact, preserving per-page visible text, links, tab provenance, skipped-tab reasons, and a governed review request.
+- Trusted wiki promotion now maintains `AI_MEMORY/wiki/index.md` as a deduplicated content catalog by upserting the promoted page entry instead of blindly appending stale duplicates; `log.md` remains the append-only chronological record.
+- Wiki health now detects duplicate `index.md` catalog entries so older or manually degraded memory indexes can be surfaced for repair instead of silently confusing future retrieval.
+- AI Memory search is now index-aware: it reads `AI_MEMORY/wiki/index.md` as the first navigation layer, prioritizes catalog matches, and falls back to wiki page content when the index has not caught up.
+- Living Archive bootstrap now creates the LLM Wiki schema file `AI_MEMORY/wiki/AGENTS.md`, standard memory domains, `index.md`, and `log.md` without overwriting existing user-maintained files.
+- Draft wiki updates now include structured LLM Wiki sections: summary, source provenance, key claims, candidate entities/concepts, source structure, suggested links, contradiction/open-question markers, and maintenance notes.
+- Draft wiki updates now prefer a configured archive ingest writer model for LLM-authored wiki pages, validate that the provider response follows the required LLM Wiki structure, and fall back to the deterministic writer when no provider is available or the response is malformed.
+- Wiki health now checks visible source provenance and contradiction/open-question markers in addition to links, orphans, index coverage, duplicate index entries, and duplicate titles.
+- The Living Archive MCP bridge used by external agents such as Hermes now shares the same index-first AI Memory search behavior and exposes wiki health findings through `living_archive_lint`.
+- The Living Archive MCP memory service now supports the full deterministic portable loop: external agents can write intake and queue ingest, the service can process queued requests into review artifacts, approved artifacts can be promoted through a narrow trusted path, and promotion updates `AI_MEMORY/wiki`, `index.md`, and `log.md` without allowing arbitrary direct wiki writes.
 - Browser artifacts can request Living Archive review, and the browser-first Living Archive workspace now exposes an auditable review queue with `pending`, `in-progress`, `approved`, and `rejected` state transitions.
 - Review queue cards now show an archive pipeline timeline for `Intake`, `Review`, `Draft`, `Verify`, `Revise`, `Promote`, and `Restore`, using host-read artifact metadata rather than UI guesses.
 - Approved browser-first review requests can generate draft wiki-update artifacts under `Memory/REVIEW/artifacts`; these drafts are not trusted AI Memory until a later host-mediated ingest/verifier/promote path completes.
@@ -194,11 +223,29 @@ These are the features currently implemented in the browser-first version.
 - Paused and terminal browser jobs release their page locks.
 - A new explicit Agent Control request on the same page cancels an unresolved approval-paused job before starting, so the user is not trapped behind an old approval card.
 - Expanded job monitor rows show the locked site/tab so the human can see why a conflicting control request is blocked.
+- The durable job scheduler now computes capacity, runnable queued jobs, page-lock-blocked queued jobs, and capacity-waiting queued jobs.
+- `/jobs` reports scheduler state so the human can see whether queued work is runnable, locked by another browser job, or waiting for execution capacity.
+- Expanded job monitor rows show per-job scheduler state for queued jobs, including the blocking job id when a page lock prevents execution.
+- Expanded job monitor rows show aggregate progress and the latest recommended next human action when blocked/failed job evidence contains blocker guidance.
 
 ### Agent Control Visual Feedback
 
 - Agent Control Mode has a persistent green Matrix-style page perimeter overlay.
 - Agent Control monitor now records structured action traces with observation, decision, action, result, and safety details.
+- Agent Control run state now records durable run and step timing metadata.
+- Control monitor details can show step elapsed duration where timing evidence exists.
+- Saved Agent Control reports and Browser Job reports include elapsed duration where timing evidence exists.
+- Agent Control steps now record confidence, uncertainty, and recommended next human action where evidence is available.
+- Control monitor details and saved Agent Control reports expose confidence, uncertainty, and blocker guidance so the human can see why the agent stopped and what to do next.
+- Agent Control runs now persist the controlled tab/site target and page-lock reason.
+- The control monitor and saved reports show the controlled tab/site target so the human can see exactly what browser target Augmentor is operating.
+- Agent Control runs now expose aggregate progress semantics: phase, percent complete, queued count, blocked count, failed count, and a compact progress track in the monitor.
+- Saved Agent Control reports and Browser Job reports include aggregate progress evidence so replay artifacts show the task phase and completion state without reconstructing it from raw steps.
+- Agent Control now rereads the page after successful click/type/open/search/tab-switch actions and records page-state verification evidence, including uncertainty when no visible page change is detected.
+- Agent Control now blocks repeated identical actions after no visible page-state change, preventing same-action loops and recording next-human-action guidance.
+- Durable Browser Jobs now detect stale running/approval jobs passively and surface last-activity timing plus next human action in `/jobs` and the monitor, without auto-killing, auto-resuming, or changing the persisted status.
+- Blocked Agent Control tasks delegated to the Resonant Engineer now include a bounded context packet with source run id, browser target, aggregate progress, blocker reason, recent trace, and explicit safety boundary.
+- The Add-ons workspace now lists recent Hermes/OpenCode/Engineer delegation packets and shows whether each handoff includes a bounded context packet.
 - Completed, blocked, approval, and denied control runs now show compact summary cards before the replayable action list.
 - The overlay starts once when the agent begins operating the page.
 - The overlay remains active across the whole control session.
@@ -260,11 +307,11 @@ These are the next capability areas planned for the browser-first app.
 
 ### Agent Control Quality
 
-- Refine the control monitor with richer action timing, elapsed duration, and confidence/uncertainty markers.
-- Add visible blockers with recommended next human action.
-- Add better progress semantics for multi-step tasks.
+- Refine the control monitor with richer aggregate progress semantics and clearer multi-step task phases. Initial aggregate phase/progress evidence is now implemented; next work is to propagate the same clarity into non-control workspace blockers.
+- Add visible blockers with recommended next human action in more workspace surfaces beyond Agent Control. Initial job-monitor and Artifacts workspace blocker guidance is implemented; next work is to extend this to delegation workspaces.
+- Add better progress semantics for multi-step tasks. Initial monitor/report progress semantics are implemented; next work is richer phase-specific copy and recovery actions.
 - Add a true parallel job scheduler for non-conflicting page-locked jobs; current page-locking prevents same-page races but the side panel still runs one active control loop at a time.
-- Improve replayable run reports with richer timing and confidence evidence.
+- Improve replayable run reports with richer aggregate progress and confidence evidence. Initial aggregate progress and confidence evidence is now present in saved reports.
 - Add clearer distinction between reading, deciding, acting, verifying, blocked, and waiting.
 
 ### Agent Control Browser Capability
@@ -276,7 +323,7 @@ These are the next capability areas planned for the browser-first app.
 - Add page-state verification after actions.
 - Add more robust tab-aware workflows.
 - Add multi-tab tasks with explicit safe tab switching.
-- Add user-visible current controlled tab and reason.
+- Improve controlled-tab visibility across more workspace surfaces beyond the Agent Control monitor and saved reports.
 - Add action retries when an action does not change the page state.
 - Add page-specific task adapters only when they can stay behind the same safety boundaries.
 
@@ -299,7 +346,7 @@ Current browser-first implementation note:
 ### Memory And Archive Integration In Browser-First
 
 - Connect browser-first Agent Control reports more deeply to Living Archive intake.
-- Improve saved page/context artifacts with richer metadata and user-facing artifact previews.
+- Improve saved page/context artifacts with richer metadata and user-facing artifact previews. Browser-control/job report artifacts now show derived action summaries; next work is richer grouping/filtering for non-report intake.
 - Improve browser-collected source provenance with better previews, filtering, and artifact grouping.
 - Keep direct trusted wiki writes blocked; browser artifacts must enter intake/review.
 
@@ -310,6 +357,7 @@ Current browser-first implementation note:
 - Route delegation through approved add-on manifests, not raw command execution.
 - Add task handoff artifacts from browser-first Agent Control into delegation workspaces.
 - Keep add-ons untrusted by default.
+- Email and Calendar now have manual provider handoff connectors; future account-level connectors still need explicit grants and stronger audit/approval flows.
 
 ### Wallet And DAO Workflows
 
@@ -318,7 +366,7 @@ Current browser-first implementation note:
 - Add dApp fixture tests around wallet provider presence.
 - Add explicit wallet approval UX for human-only actions.
 - Add DAO workflow helpers that read pages, prepare instructions, and stop before signing/submitting.
-- Add audit trail for wallet-adjacent tasks.
+- Add audit trail for wallet-adjacent tasks. Implemented v1 as read-only Living Archive intake artifacts with review requests.
 
 ### Browser Product Surface
 

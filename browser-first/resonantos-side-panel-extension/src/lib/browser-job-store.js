@@ -2,6 +2,7 @@ const TERMINAL_JOB_STATUSES = ["completed", "blocked", "denied", "cancelled", "f
 const ACTIVE_JOB_STATUSES = ["queued", "running", "paused", "approval"];
 const LOCK_HOLDING_JOB_STATUSES = ["queued", "running", "approval"];
 const VALID_JOB_STATUSES = [...ACTIVE_JOB_STATUSES, ...TERMINAL_JOB_STATUSES];
+const DEFAULT_STALE_JOB_THRESHOLD_MS = 15 * 60 * 1000;
 
 const defaultNow = () => new Date().toISOString();
 const defaultId = () => `job-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
@@ -15,6 +16,7 @@ const VALID_PREFLIGHT_DECISION_MODES = [
 
 function normalizeStepDetails(details) {
   if (!details || typeof details !== "object") return {};
+  const confidence = String(details.confidence ?? "").toLowerCase();
   return {
     phase: details.phase ? String(details.phase).slice(0, 80) : null,
     observation: details.observation && typeof details.observation === "object"
@@ -26,8 +28,24 @@ function normalizeStepDetails(details) {
     decision: details.decision ? String(details.decision).slice(0, 500) : null,
     action: details.action ? String(details.action).slice(0, 120) : null,
     result: details.result ? String(details.result).slice(0, 500) : null,
-    safetyClass: details.safetyClass ? String(details.safetyClass).slice(0, 80) : null
+    safetyClass: details.safetyClass ? String(details.safetyClass).slice(0, 80) : null,
+    confidence: ["high", "medium", "low"].includes(confidence) ? confidence : null,
+    uncertainty: details.uncertainty ? String(details.uncertainty).slice(0, 500) : null,
+    nextHumanAction: details.nextHumanAction ? String(details.nextHumanAction).slice(0, 500) : null
   };
+}
+
+function normalizeTiming(timing) {
+  if (!timing || typeof timing !== "object") return {};
+  const normalized = {};
+  for (const key of ["startedAt", "completedAt"]) {
+    if (timing[key]) normalized[key] = String(timing[key]).slice(0, 40);
+  }
+  for (const key of ["startedAtMs", "completedAtMs", "durationMs"]) {
+    const value = Number(timing[key]);
+    if (Number.isFinite(value) && value >= 0) normalized[key] = value;
+  }
+  return normalized;
 }
 
 export function normalizePreflightDecision(decision) {
@@ -71,6 +89,7 @@ export function normalizeBrowserJob(job, { now = defaultNow } = {}) {
       state: String(step?.state ?? "pending").slice(0, 40),
       note: String(step?.note ?? "").slice(0, 240),
       details: normalizeStepDetails(step?.details),
+      timing: normalizeTiming(step?.timing),
       updatedAt: step?.updatedAt ? String(step.updatedAt).slice(0, 40) : null
     }))
     : [];
@@ -78,7 +97,7 @@ export function normalizeBrowserJob(job, { now = defaultNow } = {}) {
     id: String(job?.id ?? `job-${Date.now()}`),
     goal: String(job?.goal ?? "Browser job").slice(0, 300),
     status,
-    createdAt: job?.createdAt ?? now(),
+    createdAt: job?.createdAt ?? job?.updatedAt ?? now(),
     updatedAt: job?.updatedAt ?? now(),
     completedAt: job?.completedAt ?? null,
     planner: String(job?.planner ?? "observe-act-verify-loop").slice(0, 120),
@@ -87,6 +106,7 @@ export function normalizeBrowserJob(job, { now = defaultNow } = {}) {
     lastError: job?.lastError ? String(job.lastError).slice(0, 700) : null,
     preflightDecision: normalizePreflightDecision(job?.preflightDecision),
     pageLock: LOCK_HOLDING_JOB_STATUSES.includes(status) ? normalizePageLock(job?.pageLock, { now }) : null,
+    timing: normalizeTiming(job?.timing),
     steps
   };
 }
@@ -101,6 +121,142 @@ export function isActiveBrowserJobStatus(status) {
 
 export function isLockHoldingBrowserJobStatus(status) {
   return LOCK_HOLDING_JOB_STATUSES.includes(status);
+}
+
+function parseTimeMs(value) {
+  if (value === null || value === undefined || value === "") return null;
+  if (value instanceof Date) {
+    const time = value.getTime();
+    return Number.isFinite(time) ? time : null;
+  }
+  if (typeof value === "number") return Number.isFinite(value) && value >= 0 ? value : null;
+  const parsed = Date.parse(String(value));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function latestBrowserJobActivityMs(job) {
+  const times = [
+    parseTimeMs(job?.createdAt),
+    parseTimeMs(job?.updatedAt),
+    parseTimeMs(job?.timing?.startedAt),
+    parseTimeMs(job?.timing?.completedAt),
+    parseTimeMs(job?.timing?.startedAtMs),
+    parseTimeMs(job?.timing?.completedAtMs)
+  ];
+  if (Array.isArray(job?.steps)) {
+    for (const step of job.steps) {
+      times.push(
+        parseTimeMs(step?.updatedAt),
+        parseTimeMs(step?.timing?.startedAt),
+        parseTimeMs(step?.timing?.completedAt),
+        parseTimeMs(step?.timing?.startedAtMs),
+        parseTimeMs(step?.timing?.completedAtMs)
+      );
+    }
+  }
+  return Math.max(...times.filter((time) => Number.isFinite(time)), 0);
+}
+
+export function staleBrowserJobEvidence(job, {
+  now = defaultNow,
+  thresholdMs = DEFAULT_STALE_JOB_THRESHOLD_MS
+} = {}) {
+  const normalizedNow = typeof now === "function" ? now : () => String(now);
+  const normalized = normalizeBrowserJob(job, { now: normalizedNow });
+  if (!["running", "approval"].includes(normalized.status)) return null;
+  const currentTimeMs = parseTimeMs(typeof now === "function" ? now() : now);
+  const lastActivityMs = latestBrowserJobActivityMs({
+    ...normalized,
+    createdAt: job?.createdAt ?? null
+  });
+  const threshold = Number.isFinite(Number(thresholdMs)) && Number(thresholdMs) > 0
+    ? Number(thresholdMs)
+    : DEFAULT_STALE_JOB_THRESHOLD_MS;
+  if (!Number.isFinite(currentTimeMs) || !lastActivityMs) return null;
+  const ageMs = currentTimeMs - lastActivityMs;
+  if (ageMs < threshold) return null;
+  const awaitingApproval = normalized.status === "approval";
+  return {
+    ageMs,
+    lastActivityAt: new Date(lastActivityMs).toISOString(),
+    nextHumanAction: awaitingApproval
+      ? "Review the pending approval card, then approve once, trust safe actions where allowed, deny, pause, or cancel."
+      : "Check the page state. If the task is still valid, continue the job; otherwise pause, cancel, or save a report.",
+    reason: awaitingApproval
+      ? "Approval has been waiting without recorded progress."
+      : "Running job has no recent recorded progress.",
+    thresholdMs: threshold
+  };
+}
+
+function pageLocksConflict(left, right) {
+  const leftLock = normalizePageLock(left);
+  const rightLock = normalizePageLock(right);
+  if (!leftLock || !rightLock) return false;
+  if (leftLock.tabId !== null && rightLock.tabId !== null && leftLock.tabId === rightLock.tabId) return true;
+  if (leftLock.siteKey && leftLock.siteKey !== "unknown-site" && leftLock.siteKey === rightLock.siteKey) return true;
+  return Boolean(leftLock.url && leftLock.url === rightLock.url);
+}
+
+function schedulerJobSummary(job, blocker = null) {
+  return {
+    blockerGoal: blocker?.goal ?? "",
+    blockerId: blocker?.id ?? "",
+    goal: job.goal,
+    id: job.id,
+    pageLock: job.pageLock,
+    status: job.status
+  };
+}
+
+export function browserJobSchedulerState(jobs = [], { maxConcurrent = 1 } = {}) {
+  const normalizedJobs = Array.isArray(jobs) ? jobs.map((job) => normalizeBrowserJob(job)) : [];
+  const capacity = Math.max(1, Math.min(8, Number.isFinite(Number(maxConcurrent)) ? Math.trunc(Number(maxConcurrent)) : 1));
+  const runningJobs = normalizedJobs.filter((job) => job.status === "running");
+  const approvalJobs = normalizedJobs.filter((job) => job.status === "approval");
+  const queuedJobs = normalizedJobs.filter((job) => job.status === "queued");
+  const pausedJobs = normalizedJobs.filter((job) => job.status === "paused");
+  const terminalJobs = normalizedJobs.filter((job) => isTerminalBrowserJobStatus(job.status));
+  const lockHolders = [...runningJobs, ...approvalJobs]
+    .filter((job) => job.pageLock);
+  const activeSlots = runningJobs.length + approvalJobs.length;
+  const availableSlots = Math.max(0, capacity - activeSlots);
+  const runnableQueued = [];
+  const lockBlockedQueued = [];
+  const capacityBlockedQueued = [];
+
+  for (const job of queuedJobs) {
+    const blocker = job.pageLock
+      ? lockHolders.find((holder) => pageLocksConflict(job.pageLock, holder.pageLock)) ?? null
+      : null;
+    if (blocker) {
+      lockBlockedQueued.push(schedulerJobSummary(job, blocker));
+      continue;
+    }
+    if (runnableQueued.length < availableSlots) {
+      runnableQueued.push(schedulerJobSummary(job));
+      if (job.pageLock) {
+        lockHolders.push(job);
+      }
+      continue;
+    }
+    capacityBlockedQueued.push(schedulerJobSummary(job));
+  }
+
+  return {
+    activeSlots,
+    approval: approvalJobs.length,
+    availableSlots,
+    capacityBlockedQueued,
+    lockBlockedQueued,
+    maxConcurrent: capacity,
+    paused: pausedJobs.length,
+    queued: queuedJobs.length,
+    runnableQueued,
+    running: runningJobs.length,
+    terminal: terminalJobs.length,
+    total: normalizedJobs.length
+  };
 }
 
 export function createBrowserJobStore({
@@ -173,6 +329,16 @@ export function createBrowserJobStore({
 
   function getMonitorCollapsed() {
     return monitorCollapsed;
+  }
+
+  function getSchedulerState(options = {}) {
+    return browserJobSchedulerState(jobs, options);
+  }
+
+  function getStaleJobs(options = {}) {
+    return jobs
+      .map((job) => ({ evidence: staleBrowserJobEvidence(job, { now, ...options }), job }))
+      .filter((entry) => entry.evidence);
   }
 
   function currentJob() {
@@ -306,6 +472,8 @@ export function createBrowserJobStore({
     getActiveJobId,
     getJobs,
     getMonitorCollapsed,
+    getSchedulerState,
+    getStaleJobs,
     hydrate,
     persist,
     recoverInterruptedJobs,

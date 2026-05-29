@@ -4,19 +4,31 @@ import {
 import {
   normalizeBrowserUrl,
   parseAmazonShoppingTask,
-  parseAutonomousBrowserActionIntent,
   parseNaturalBrowserIntent
 } from "./lib/browser-command-parser.js";
+import { createBrowserPageActions } from "./lib/browser-page-actions.js";
 import { createBridgeClient } from "./lib/bridge-client.js";
 import { createChatSessionStore } from "./lib/chat-session-store.js";
 import { createComposerController } from "./lib/composer-controller.js";
+import { applyAppearancePreferences } from "./lib/settings/appearance-section.js";
 import { renderAddOnsWorkspace } from "./lib/main-workspace-addons.js";
 import { renderArtifactsWorkspace } from "./lib/main-workspace-artifacts.js";
 import { renderLivingArchiveWorkspace } from "./lib/main-workspace-memory.js";
 import { renderOpenCodeWorkspace } from "./lib/main-workspace-opencode.js";
+import { railSearchMatchesProject, railSearchMatchesSession } from "./lib/main-workspace-rail.js";
+import {
+  parseDaoSlashCommand,
+  parseDraftSlashCommand,
+  parseHermesSlashCommand,
+  parseMemorySlashCommand,
+  parseOpenCodeSlashCommand,
+  planMainWorkspacePrompt
+} from "./lib/main-workspace-prompt-router.js";
 import { renderSettingsWorkspace } from "./lib/main-workspace-settings.js";
 import { fileLooksTextLike } from "./lib/message-action-controller.js";
-import { ACTION_ICONS, markdownToSafeHtml } from "./lib/side-panel-renderers.js";
+import { createSitePermissionStore } from "./lib/site-permission-store.js";
+import { createSidePanelRenderers } from "./lib/side-panel-renderers.js";
+import { createTaskConsentStore } from "./lib/task-consent-store.js";
 
 const STORAGE_KEYS = {
   messages: "augmentorBrowserMessages",
@@ -26,11 +38,20 @@ const STORAGE_KEYS = {
   model: "augmentorModel",
   thinkingDepth: "augmentorThinkingDepth",
   attachments: "augmentorBrowserAttachments",
+  projects: "augmentorBrowserProjects",
   pendingSidebarPrompt: "augmentorPendingSidebarPrompt",
-  activeWorkspace: "augmentorMainWorkspace"
+  activeWorkspace: "augmentorMainWorkspace",
+  sitePermissions: "augmentorSitePermissions",
+  sitePermissionAudit: "augmentorSitePermissionAudit",
+  taskConsents: "augmentorTaskConsents",
+  taskConsentAudit: "augmentorTaskConsentAudit",
+  browserJobs: "augmentorBrowserJobs",
+  activeBrowserJob: "augmentorActiveBrowserJob",
+  appearance: "augmentorAppearancePreferences"
 };
 
 const MODEL_LABELS = {
+  "__auto__": "Auto route",
   "MiniMax-M2.7": "MiniMax 2.7",
   "MiniMax-M2.7-highspeed": "MiniMax 2.7 High Speed",
   "gpt-5.5": "GPT 5.5",
@@ -41,6 +62,14 @@ const MODEL_LABELS = {
 const transcript = document.querySelector("#transcript");
 const workspaceButtons = [...document.querySelectorAll("[data-workspace]")];
 const newChatButton = document.querySelector("#new-chat");
+const railNewChatButton = document.querySelector("#rail-new-chat");
+const railSearchToggle = document.querySelector("#rail-search-toggle");
+const railSearchBox = document.querySelector("#rail-search-box");
+const railSearchInput = document.querySelector("#rail-search-input");
+const railClearSearch = document.querySelector("#rail-clear-search");
+const railChatList = document.querySelector("#rail-chat-list");
+const railNewProjectButton = document.querySelector("#rail-new-project");
+const railProjectList = document.querySelector("#rail-project-list");
 const commandForm = document.querySelector("#command-form");
 const commandInput = document.querySelector("#command-input");
 const attachFileButton = document.querySelector("#attach-file");
@@ -59,27 +88,19 @@ const bridgeRequest = createBridgeClient();
 let busy = false;
 let activeWorkspace = "answer";
 let pendingWorkspaceAction = null;
+let controlledTabId = null;
+let lastSnapshot = null;
+let railSearchQuery = "";
 const allowedWorkspaces = new Set(["answer", "artifacts", "addons", "memory", "hermes", "opencode", "settings"]);
 
 const supportsThinkingDepth = (model) => model.startsWith("gpt-5.");
-const composerController = createComposerController({ commandForm, commandInput, navigator });
+const composerController = createComposerController({
+  commandForm,
+  commandInput,
+  forceClipboardFallback: true,
+  navigator
+});
 const assistantTextFromResponse = (response) => String(response?.content ?? response?.reply ?? "").trim();
-const parseHermesSlashCommand = (value) => {
-  const match = /^\/\s*hermes(?:\s+([\s\S]*))?$/i.exec(String(value ?? "").trim());
-  return match ? (match[1] ?? "").trim() : null;
-};
-const parseMemorySlashCommand = (value) => {
-  const match = /^\/\s*(?:memory|archive)(?:\s+([\s\S]*))?$/i.exec(String(value ?? "").trim());
-  return match ? (match[1] ?? "").trim() : null;
-};
-const parseOpenCodeSlashCommand = (value) => {
-  const match = /^\/\s*(?:opencode|open\s+code)(?:\s+([\s\S]*))?$/i.exec(String(value ?? "").trim());
-  return match ? (match[1] ?? "").trim() : null;
-};
-const parseDraftSlashCommand = (value) => {
-  const match = /^\/\s*(email|calendar)(?:\s+([\s\S]*))?$/i.exec(String(value ?? "").trim());
-  return match ? { target: match[1].toLowerCase(), body: (match[2] ?? "").trim() } : null;
-};
 const providerMessagesFromHistory = (messages, limit = 18) => messages
   .filter((message) => ["user", "assistant"].includes(message.role))
   .slice(-limit)
@@ -98,6 +119,92 @@ const chatSessionStore = createChatSessionStore({
   },
   isAllowedModel: (model) => [...modelSelect.options].some((option) => option.value === model),
   isAllowedThinkingDepth: (depth) => [...thinkingDepthSelect.options].some((option) => option.value === depth)
+});
+const sitePermissionStore = createSitePermissionStore({
+  storage: chrome.storage?.local,
+  sitePermissionAuditStorageKey: STORAGE_KEYS.sitePermissionAudit,
+  sitePermissionStorageKey: STORAGE_KEYS.sitePermissions
+});
+const taskConsentStore = createTaskConsentStore({
+  storage: chrome.storage?.local,
+  taskConsentAuditStorageKey: STORAGE_KEYS.taskConsentAudit,
+  taskConsentStorageKey: STORAGE_KEYS.taskConsents
+});
+
+const isReadableBrowserTab = (tab) => typeof tab?.url === "string" && /^https?:\/\//i.test(tab.url);
+const setMainActivity = (_phase, label, detail = "") => {
+  updateConnectionLine(detail ? `${label}: ${detail}` : label);
+};
+const browserPageActions = createBrowserPageActions({
+  addMessage,
+  bridgeRequest,
+  chrome,
+  getControlledTabId: () => controlledTabId,
+  getLastSnapshot: () => lastSnapshot,
+  getModel: () => modelSelect.value,
+  getThinkingDepth: () => thinkingDepthSelect.value,
+  isReadableBrowserTab,
+  normalizeBrowserUrl,
+  permissionForUrl: sitePermissionStore.permissionForUrl,
+  renderSitePermissionPanel: async () => undefined,
+  setActivity: setMainActivity,
+  setContextMeter: (snapshot) => {
+    if (snapshot) {
+      const roughPercent = Math.min(99, Math.max(0, Math.round(String(snapshot.text ?? "").length / 900)));
+      contextMeter.style.setProperty("--context-used", `${roughPercent}%`);
+      contextMeter.querySelector(".context-meter-label").textContent = `${roughPercent}%`;
+      contextMeter.setAttribute("aria-label", `Context usage ${roughPercent} percent`);
+    } else {
+      updateContextMeter();
+    }
+  },
+  setControlledTabId: (tabId) => {
+    controlledTabId = tabId;
+  },
+  setLastSnapshot: (snapshot) => {
+    lastSnapshot = snapshot;
+  },
+  setReadButtonTitle: (title) => {
+    readPageButton.title = title;
+  },
+  setStatus: updateConnectionLine,
+  siteKeyForUrl: sitePermissionStore.siteKeyForUrl,
+  sleep: (ms) => new Promise((resolve) => window.setTimeout(resolve, ms))
+});
+
+async function suppressSidebarChatForMainWorkspace() {
+  await chrome.runtime.sendMessage({
+    channel: "resonantos.browser_first",
+    type: "suppress_side_panel_on_main_workspace"
+  }).catch(() => undefined);
+}
+
+const chatRenderers = createSidePanelRenderers({
+  attachmentStrip,
+  transcript,
+  getAttachments: () => chatSessionStore.getAttachments(),
+  getMessages: () => chatSessionStore.getMessages(),
+  onRemoveAttachment: async (id) => {
+    await chatSessionStore.removeAttachment(id);
+    renderAttachments();
+    updateConnectionLine("Attachment removed");
+  },
+  onCopyMessage: (id) => void copyMessage(chatSessionStore.findMessage(id)),
+  onDeleteMessage: (id) => void deleteMessage(id),
+  onEditMessage: editMessage,
+  onForkMessage: (id) => void forkFromMessage(id),
+  onRegenerateMessage: (id) => void regenerateFromMessage(id),
+  onSaveMessageToArchive: (id) => void saveMessageToArchive(id),
+  onShowMessageStats: (id) => void showMessageStats(id),
+  renderEmptyState: (container) => {
+    container.append(emptyHero());
+  },
+  scrollTranscriptToBottom: () => {
+    requestAnimationFrame(() => {
+      transcript.scrollTop = transcript.scrollHeight;
+    });
+  },
+  window
 });
 
 function updateConnectionLine(status = "Ready") {
@@ -119,9 +226,274 @@ function updateContextMeter() {
   contextMeter.setAttribute("aria-label", `Context usage ${roughPercent} percent`);
 }
 
-function setActiveWorkspace(workspaceId, { persist = false } = {}) {
-  activeWorkspace = allowedWorkspaces.has(workspaceId) ? workspaceId : "answer";
-  document.body.dataset.workspace = activeWorkspace;
+function relativeTime(value) {
+  const time = new Date(value).getTime();
+  if (!Number.isFinite(time)) return "";
+  const seconds = Math.max(0, Math.round((Date.now() - time) / 1000));
+  if (seconds < 60) return "now";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.round(hours / 24);
+  if (days < 30) return `${days}d`;
+  return `${Math.round(days / 30)}mo`;
+}
+
+function iconSvg(kind) {
+  const paths = {
+    archive: `<path d="M4 7h16v13H4z"/><path d="M4 7l2-4h12l2 4"/><path d="M9 12h6"/>`,
+    chevronDown: `<path d="m7 10 5 5 5-5"/>`,
+    chevronRight: `<path d="m10 7 5 5-5 5"/>`,
+    delete: `<path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M6 7l1 14h10l1-14"/><path d="M9 7V4h6v3"/>`,
+    dot: `<circle cx="12" cy="12" r="4"/>`,
+    fork: `<path d="M7 6v5a3 3 0 0 0 3 3h7"/><path d="M14 10l4 4-4 4"/><path d="M7 6h4"/>`,
+    folder: `<path d="M4 6h6l2 2h8v10H4z"/>`,
+    pin: `<path d="m14 4 6 6"/><path d="m5 19 6-6"/><path d="m9 15-2-2 8-8 4 4-8 8-2-2Z"/>`,
+    rename: `<path d="M4 20h4l10-10-4-4L4 16v4Z"/><path d="m13 7 4 4"/>`,
+    unpin: `<path d="m3 3 18 18"/><path d="m14 4 6 6"/><path d="m5 19 6-6"/><path d="m9 15-2-2 8-8 4 4"/>`
+  };
+  return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[kind] ?? ""}</svg>`;
+}
+
+function orderedRailItems(items) {
+  return [...items].sort((left, right) => {
+    if (left.pinned !== right.pinned) return left.pinned ? -1 : 1;
+    return new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime();
+  });
+}
+
+async function switchToSession(sessionId) {
+  const next = await chatSessionStore.switchSession(sessionId);
+  activeWorkspace = allowedWorkspaces.has(next?.workspaceId) ? next.workspaceId : "answer";
+  await persistActiveWorkspace();
+  renderAll();
+}
+
+async function toggleSessionPinned(sessionId) {
+  const session = chatSessionStore.getSessions().find((item) => item.id === sessionId);
+  if (!session) return;
+  await chatSessionStore.setSessionPinned(sessionId, !session.pinned);
+  renderAll();
+}
+
+async function forkSessionFromRail(sessionId) {
+  const fork = await chatSessionStore.forkSession(sessionId);
+  if (!fork) return;
+  activeWorkspace = "answer";
+  await persistActiveWorkspace();
+  renderAll();
+}
+
+async function deleteSessionFromRail(sessionId) {
+  const session = chatSessionStore.getSessions().find((item) => item.id === sessionId);
+  if (!session) return;
+  if (!window.confirm(`Delete chat "${session.title}"? This cannot be undone.`)) return;
+  await chatSessionStore.deleteSession(sessionId);
+  activeWorkspace = "answer";
+  await persistActiveWorkspace();
+  renderAll();
+}
+
+async function archiveSessionFromRail(sessionId) {
+  const session = chatSessionStore.getSessions().find((item) => item.id === sessionId);
+  if (!session) return;
+  await chatSessionStore.setSessionArchived(sessionId, true);
+  updateConnectionLine(`Archived chat: ${session.title}`);
+  activeWorkspace = "answer";
+  await persistActiveWorkspace();
+  renderAll();
+}
+
+async function renameSessionFromRail(sessionId) {
+  const session = chatSessionStore.getSessions().find((item) => item.id === sessionId);
+  if (!session) return;
+  const title = window.prompt("Rename chat", session.title);
+  if (!title?.trim()) return;
+  await chatSessionStore.renameSession(sessionId, title);
+  renderAll();
+}
+
+async function createProjectFromRail() {
+  const name = window.prompt("Project name");
+  if (!name?.trim()) return;
+  const project = await chatSessionStore.createProject(name);
+  updateConnectionLine(`Created project: ${project.name}`);
+  renderAll();
+}
+
+async function assignSessionProject(sessionId, projectId = "") {
+  const session = await chatSessionStore.setSessionProject(sessionId, projectId);
+  if (!session) return;
+  const project = chatSessionStore.getProjects().find((item) => item.id === projectId);
+  updateConnectionLine(projectId ? `Moved to ${project?.name ?? "project"}` : "Moved out of project");
+  renderAll();
+}
+
+async function toggleProjectExpanded(projectId) {
+  const project = chatSessionStore.getProjects().find((item) => item.id === projectId);
+  if (!project) return;
+  await chatSessionStore.setProjectExpanded(projectId, !project.expanded);
+  renderAll();
+}
+
+async function toggleProjectPinned(projectId) {
+  const project = chatSessionStore.getProjects().find((item) => item.id === projectId);
+  if (!project) return;
+  await chatSessionStore.setProjectPinned(projectId, !project.pinned);
+  renderAll();
+}
+
+async function renameProjectFromRail(projectId) {
+  const project = chatSessionStore.getProjects().find((item) => item.id === projectId);
+  if (!project) return;
+  const name = window.prompt("Rename project", project.name);
+  if (!name?.trim()) return;
+  await chatSessionStore.renameProject(projectId, name);
+  renderAll();
+}
+
+async function archiveProjectFromRail(projectId) {
+  const project = chatSessionStore.getProjects().find((item) => item.id === projectId);
+  if (!project) return;
+  await chatSessionStore.setProjectArchived(projectId, true);
+  updateConnectionLine(`Archived project: ${project.name}`);
+  renderAll();
+}
+
+function railActionButton({ action, icon, label, onClick }) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "rail-chat-action";
+  button.dataset.action = action;
+  button.title = label;
+  button.setAttribute("aria-label", label);
+  button.innerHTML = iconSvg(icon);
+  button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    void onClick();
+  });
+  return button;
+}
+
+function railSessionActions(session) {
+  const actions = document.createElement("span");
+  actions.className = "rail-chat-actions";
+  actions.append(
+    railActionButton({
+      action: session.pinned ? "unpin" : "pin",
+      icon: session.pinned ? "unpin" : "pin",
+      label: session.pinned ? "Unpin chat" : "Pin chat",
+      onClick: () => toggleSessionPinned(session.id)
+    }),
+    railActionButton({
+      action: "rename",
+      icon: "rename",
+      label: "Rename chat",
+      onClick: () => renameSessionFromRail(session.id)
+    }),
+    railActionButton({
+      action: "fork",
+      icon: "fork",
+      label: "Fork chat",
+      onClick: () => forkSessionFromRail(session.id)
+    }),
+    railActionButton({
+      action: "archive",
+      icon: "archive",
+      label: "Archive chat",
+      onClick: () => archiveSessionFromRail(session.id)
+    }),
+    railActionButton({
+      action: "delete",
+      icon: "delete",
+      label: "Delete chat",
+      onClick: () => deleteSessionFromRail(session.id)
+    })
+  );
+  return actions;
+}
+
+function railProjectActions(project) {
+  const actions = document.createElement("span");
+  actions.className = "rail-chat-actions rail-project-actions";
+  actions.append(
+    railActionButton({
+      action: project.pinned ? "unpin-project" : "pin-project",
+      icon: project.pinned ? "unpin" : "pin",
+      label: project.pinned ? "Unpin project" : "Pin project",
+      onClick: () => toggleProjectPinned(project.id)
+    }),
+    railActionButton({
+      action: "rename-project",
+      icon: "rename",
+      label: "Rename project",
+      onClick: () => renameProjectFromRail(project.id)
+    }),
+    railActionButton({
+      action: "archive-project",
+      icon: "archive",
+      label: "Archive project",
+      onClick: () => archiveProjectFromRail(project.id)
+    }),
+    railActionButton({
+      action: "delete-project",
+      icon: "delete",
+      label: "Delete project",
+      onClick: async () => {
+        if (!window.confirm(`Delete project "${project.name}"? Chats will move back to the main chat list.`)) return;
+        await chatSessionStore.deleteProject(project.id);
+        renderAll();
+      }
+    })
+  );
+  return actions;
+}
+
+function railChatButton(session, projectLabelById) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "rail-chat-button";
+  button.draggable = true;
+  button.dataset.sessionId = session.id;
+  button.classList.toggle("active", session.id === chatSessionStore.getActiveSessionId());
+  button.classList.toggle("pinned", Boolean(session.pinned));
+  button.classList.toggle("unread", Boolean(session.unread));
+  button.title = `${session.title}${session.projectId ? ` · ${projectLabelById[session.projectId] ?? "Project"}` : ""}`;
+  button.setAttribute("aria-label", `Open chat: ${button.title}`);
+  if (session.id === chatSessionStore.getActiveSessionId()) {
+    button.setAttribute("aria-current", "true");
+  }
+  const unread = document.createElement("span");
+  unread.className = "rail-unread-dot";
+  unread.innerHTML = session.unread ? iconSvg("dot") : "";
+  const title = document.createElement("span");
+  title.className = "rail-chat-title";
+  title.textContent = session.title || "New chat";
+  const meta = document.createElement("span");
+  meta.className = "rail-chat-meta";
+  meta.innerHTML = `${session.pinned ? iconSvg("pin") : ""}<span>${relativeTime(session.updatedAt)}</span>`;
+  const body = document.createElement("span");
+  body.className = "rail-chat-body";
+  const top = document.createElement("span");
+  top.className = "rail-chat-top";
+  top.append(unread, title, meta);
+  const actionLine = document.createElement("span");
+  actionLine.className = "rail-action-line";
+  actionLine.append(railSessionActions(session));
+  body.append(top, actionLine);
+  button.append(body);
+  button.addEventListener("click", async () => {
+    await switchToSession(session.id);
+  });
+  button.addEventListener("dragstart", (event) => {
+    event.dataTransfer.setData("text/plain", session.id);
+    event.dataTransfer.effectAllowed = "move";
+  });
+  return button;
+}
+
+function renderRailNavigation() {
   workspaceButtons.forEach((button) => {
     const active = button.dataset.workspace === activeWorkspace;
     button.classList.toggle("active", active);
@@ -131,6 +503,100 @@ function setActiveWorkspace(workspaceId, { persist = false } = {}) {
       button.removeAttribute("aria-current");
     }
   });
+  railClearSearch.hidden = !railSearchQuery;
+  const allSessions = chatSessionStore.getSessions().filter((session) => !session.archivedAt);
+  const projectEntries = orderedRailItems(chatSessionStore.getProjects().filter((project) => !project.archivedAt))
+    .map((project) => ({
+      project,
+      projectSessions: orderedRailItems(allSessions.filter((session) => session.projectId === project.id))
+    }))
+    .filter(({ project, projectSessions }) => railSearchMatchesProject(project, projectSessions, railSearchQuery));
+  const projects = projectEntries.map(({ project }) => project);
+  const projectLabelById = Object.fromEntries(chatSessionStore.getProjects().filter((project) => !project.archivedAt).map((project) => [project.id, project.name]));
+  railProjectList.replaceChildren();
+  if (!projectEntries.length) {
+    const empty = document.createElement("li");
+    empty.className = "rail-empty";
+    empty.textContent = railSearchQuery ? "No projects found." : "Create a project folder for chats, artifacts, and code.";
+    railProjectList.append(empty);
+  }
+  for (const { project, projectSessions } of projectEntries) {
+    const row = document.createElement("li");
+    row.className = "rail-project-item";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "rail-project";
+    button.dataset.projectId = project.id;
+    button.classList.toggle("pinned", Boolean(project.pinned));
+    button.setAttribute("aria-expanded", String(Boolean(project.expanded)));
+    button.setAttribute("aria-label", `${project.expanded ? "Collapse" : "Expand"} project: ${project.name}. ${projectSessions.length} chat${projectSessions.length === 1 ? "" : "s"}.`);
+    const top = document.createElement("span");
+    top.className = "rail-project-top";
+    top.innerHTML = `
+      <span class="rail-project-expand">${iconSvg(project.expanded ? "chevronDown" : "chevronRight")}</span>
+      ${iconSvg("folder")}
+      <span class="rail-text">${project.name}</span>
+      <kbd>${projectSessions.length}</kbd>
+    `;
+    const actionLine = document.createElement("span");
+    actionLine.className = "rail-action-line";
+    actionLine.append(railProjectActions(project));
+    button.append(top, actionLine);
+    button.addEventListener("click", () => void toggleProjectExpanded(project.id));
+    button.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      button.classList.add("drag-over");
+      event.dataTransfer.dropEffect = "move";
+    });
+    button.addEventListener("dragleave", () => {
+      button.classList.remove("drag-over");
+    });
+    button.addEventListener("drop", (event) => {
+      event.preventDefault();
+      button.classList.remove("drag-over");
+      const sessionId = event.dataTransfer.getData("text/plain");
+      void assignSessionProject(sessionId, project.id);
+    });
+    row.append(button);
+    if (project.expanded) {
+      const list = document.createElement("ol");
+      list.className = "rail-project-chat-list";
+      for (const session of projectSessions) {
+        const sessionRow = document.createElement("li");
+        sessionRow.append(railChatButton(session, projectLabelById));
+        list.append(sessionRow);
+      }
+      if (!projectSessions.length) {
+        const emptyProject = document.createElement("li");
+        emptyProject.className = "rail-empty rail-project-empty";
+        emptyProject.textContent = "Drop chats here.";
+        list.append(emptyProject);
+      }
+      row.append(list);
+    }
+    railProjectList.append(row);
+  }
+  const sessions = orderedRailItems(allSessions)
+    .filter((session) => !session.projectId && railSearchMatchesSession(session, railSearchQuery))
+    .slice(0, 28);
+  railChatList.replaceChildren();
+  if (!sessions.length) {
+    const empty = document.createElement("li");
+    empty.className = "rail-empty";
+    empty.textContent = railSearchQuery ? "No chats found." : "No recent chats yet.";
+    railChatList.append(empty);
+    return;
+  }
+  for (const session of sessions) {
+    const row = document.createElement("li");
+    row.append(railChatButton(session, projectLabelById));
+    railChatList.append(row);
+  }
+}
+
+function setActiveWorkspace(workspaceId, { persist = false } = {}) {
+  activeWorkspace = allowedWorkspaces.has(workspaceId) ? workspaceId : "answer";
+  document.body.dataset.workspace = activeWorkspace;
   commandForm.hidden = activeWorkspace !== "answer";
   if (persist) {
     void persistActiveWorkspace();
@@ -151,28 +617,13 @@ async function hydrateActiveWorkspace() {
     : "answer";
 }
 
+async function hydrateAppearancePreferences() {
+  const settings = await chrome.storage?.local?.get?.([STORAGE_KEYS.appearance]).catch(() => ({}));
+  applyAppearancePreferences(settings?.[STORAGE_KEYS.appearance]);
+}
+
 function renderAttachments() {
-  const attachments = chatSessionStore.getAttachments();
-  attachmentStrip.replaceChildren();
-  attachmentStrip.hidden = attachments.length === 0;
-  attachments.forEach((attachment) => {
-    const chip = document.createElement("span");
-    chip.className = "attachment-chip";
-    const label = document.createElement("strong");
-    label.textContent = attachment.name;
-    const remove = document.createElement("button");
-    remove.type = "button";
-    remove.textContent = "x";
-    remove.title = `Remove ${attachment.name}`;
-    remove.setAttribute("aria-label", `Remove ${attachment.name}`);
-    remove.addEventListener("click", async () => {
-      await chatSessionStore.removeAttachment(attachment.id);
-      renderAttachments();
-      updateConnectionLine("Attachment removed");
-    });
-    chip.append(label, remove);
-    attachmentStrip.append(chip);
-  });
+  chatRenderers.renderAttachments();
 }
 
 function emptyHero() {
@@ -267,6 +718,11 @@ function renderMessages() {
     renderAddOnsWorkspace({
       container: transcript,
       bridgeRequest,
+      onOpenProviderHandoff: async (handoff) => {
+        if (!handoff?.url) return;
+        await chrome.tabs.create({ url: handoff.url }).catch(() => undefined);
+        await addMessage("system", `Opened ${handoff.provider} draft for human review. ResonantOS did not send or schedule anything.`);
+      },
       onOpenWorkspace: async (workspaceId) => {
         setActiveWorkspace(workspaceId, { persist: true });
         renderAll();
@@ -281,61 +737,23 @@ function renderMessages() {
     return;
   }
   if (activeWorkspace === "settings") {
-    renderSettingsWorkspace({ container: transcript, bridgeRequest });
+    renderSettingsWorkspace({
+      container: transcript,
+      bridgeRequest,
+      chatSessionStore,
+      onOpenSession: async (sessionId) => {
+        await switchToSession(sessionId);
+      },
+      onRestore: renderAll,
+      chromeApi: chrome,
+      sitePermissionStore,
+      storage: chrome.storage?.local,
+      storageKeys: STORAGE_KEYS,
+      taskConsentStore
+    });
     return;
   }
-  const messages = chatSessionStore.getMessages();
-  if (!messages.length) {
-    transcript.append(emptyHero());
-    return;
-  }
-  messages.forEach((message) => {
-    const article = document.createElement("article");
-    article.className = `message ${message.role}`;
-    article.dataset.messageId = message.id;
-    const header = document.createElement("div");
-    header.className = "message-header";
-    const label = document.createElement("strong");
-    label.textContent = message.role === "user" ? "You" : message.role === "system" ? "System" : "Augmentor";
-    const time = document.createElement("time");
-    time.textContent = new Date(message.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    header.append(label, time);
-    const body = document.createElement("div");
-    body.className = "message-content";
-    body.innerHTML = markdownToSafeHtml(message.content);
-    const actions = document.createElement("div");
-    actions.className = "message-actions";
-    actions.append(messageActionButton("copy", "Copy", "Copy this message", () => void copyMessage(message)));
-    actions.append(messageActionButton("fork", "Fork", "Fork the conversation up to this message", () => void forkFromMessage(message.id)));
-    if (message.role === "user") {
-      actions.append(messageActionButton("edit", "Edit", "Edit this message in the composer", () => editMessage(message.id)));
-    }
-    if (message.role === "assistant") {
-      actions.append(messageActionButton("archive", "Save to Living Archive", "Save this message to Living Archive intake", () => void saveMessageToArchive(message.id)));
-      actions.append(messageActionButton("refresh", "Regenerate", "Regenerate from the previous user message", () => void regenerateFromMessage(message.id)));
-      if (message.usage) {
-        actions.append(messageActionButton("stats", "Stats", "Show generation stats", () => void showMessageStats(message.id)));
-      }
-    }
-    actions.append(messageActionButton("delete", "Delete", "Delete this message", () => void deleteMessage(message.id)));
-    article.append(header, body, actions);
-    transcript.append(article);
-  });
-  requestAnimationFrame(() => {
-    transcript.scrollTop = transcript.scrollHeight;
-  });
-}
-
-function messageActionButton(action, label, title, onClick) {
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "message-action";
-  button.dataset.action = action;
-  button.title = title;
-  button.setAttribute("aria-label", label);
-  button.innerHTML = ACTION_ICONS[action];
-  button.addEventListener("click", onClick);
-  return button;
+  chatRenderers.renderMessages();
 }
 
 async function copyMessage(message) {
@@ -344,7 +762,7 @@ async function copyMessage(message) {
   try {
     if (navigator.clipboard?.writeText) {
       await navigator.clipboard.writeText(text);
-      flashCopied(message.id);
+      chatRenderers.flashCopied(message.id);
       return;
     }
   } catch {
@@ -355,17 +773,7 @@ async function copyMessage(message) {
     type: "copy_text",
     text
   }).catch(() => undefined);
-  flashCopied(message.id);
-}
-
-function flashCopied(messageId) {
-  const escapedId = window.CSS?.escape ? window.CSS.escape(messageId) : String(messageId).replace(/["\\]/g, "\\$&");
-  const button = transcript.querySelector(`[data-message-id="${escapedId}"] .message-action[data-action="copy"]`);
-  if (!button) return;
-  button.innerHTML = ACTION_ICONS.check;
-  window.setTimeout(() => {
-    button.innerHTML = ACTION_ICONS.copy;
-  }, 1400);
+  chatRenderers.flashCopied(message.id);
 }
 
 function editMessage(messageId) {
@@ -443,6 +851,7 @@ function renderAll() {
   setActiveWorkspace(activeWorkspace);
   renderMessages();
   renderAttachments();
+  renderRailNavigation();
   updateContextMeter();
   updateConnectionLine();
 }
@@ -590,7 +999,8 @@ async function addMessage(role, content, options = {}) {
 async function openSidebar() {
   await chrome.runtime.sendMessage({
     channel: "resonantos.browser_first",
-    type: "open_side_panel"
+    type: "open_side_panel",
+    force: true
   }).catch(() => undefined);
 }
 
@@ -643,6 +1053,7 @@ async function runChatTurn(prompt) {
     method: "POST",
     body: {
       model: modelSelect.value,
+      workload: "augmentor-chat",
       thinkingDepth: thinkingDepthSelect.value,
       messages: [
         {
@@ -677,6 +1088,41 @@ async function runHermesDelegation(prompt) {
     body: { target: "hermes", mission }
   });
   await addMessage("system", `Delegation queued for Hermes: ${result.id}\n${result.path}`);
+  updateConnectionLine("Ready");
+}
+
+const delegationTargetLabel = (target) => {
+  if (target === "opencode") return "OpenCode";
+  if (target === "hermes") return "Hermes";
+  if (target === "engineer") return "Resonant Engineer";
+  return target;
+};
+
+async function runNaturalDelegation(intent) {
+  if (!intent || intent.missingTarget) {
+    await addMessage(
+      "system",
+      "I can delegate through the ResonantOS agent control layer. Choose Hermes for general agent work, OpenCode for coding, or Resonant Engineer for system repair."
+    );
+    return;
+  }
+  if (intent.mission.length < 8) {
+    await addMessage("system", `Give ${delegationTargetLabel(intent.target)} a concrete mission before I create the delegation packet.`);
+    return;
+  }
+  updateConnectionLine(`Delegating to ${delegationTargetLabel(intent.target)}`);
+  const result = await bridgeRequest("/addons/delegate", {
+    method: "POST",
+    body: { target: intent.target, mission: intent.mission }
+  });
+  await addMessage(
+    "system",
+    [
+      `Delegation queued for ${delegationTargetLabel(result.target)}: ${result.id}`,
+      result.path,
+      "Boundary: the add-on receives a governed task packet. ResonantOS keeps provider secrets, wallet actions, and trusted memory writes mediated."
+    ].join("\n")
+  );
   updateConnectionLine("Ready");
 }
 
@@ -732,6 +1178,22 @@ async function runDraftAddonCommand(prompt) {
   return true;
 }
 
+async function runWalletStatusCommand() {
+  const result = await browserPageActions.detectWalletState({ announce: true });
+  if (!result?.ok) {
+    updateConnectionLine("Wallet status unavailable");
+  }
+}
+
+async function runDaoWorkflowCommand(prompt) {
+  const command = parseDaoSlashCommand(prompt);
+  if (command?.action === "audit") {
+    await browserPageActions.saveWalletDaoAuditToArchive(command.goal);
+    return;
+  }
+  await browserPageActions.prepareDaoWorkflowGuidance(command?.goal ?? "");
+}
+
 commandForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (busy) return;
@@ -743,17 +1205,27 @@ commandForm.addEventListener("submit", async (event) => {
     await addMessage("user", prompt);
     commandInput.value = "";
     composerController.resetUndoStack("");
-    const shouldControl = parseAutonomousBrowserActionIntent(prompt) ||
-      parseNaturalBrowserIntent(prompt);
-    if (parseMemorySlashCommand(prompt) !== null) {
+    const promptPlan = planMainWorkspacePrompt(prompt);
+    if (promptPlan.action === "memory") {
       await runMemoryCommand(prompt);
-    } else if (parseOpenCodeSlashCommand(prompt) !== null) {
+    } else if (promptPlan.action === "opencode") {
       await runOpenCodeCommand(prompt);
-    } else if (parseHermesSlashCommand(prompt) !== null) {
+    } else if (promptPlan.action === "hermes") {
       await runHermesDelegation(prompt);
-    } else if (await runDraftAddonCommand(prompt)) {
+    } else if (promptPlan.action === "delegate") {
+      await runNaturalDelegation(promptPlan.intent);
+    } else if (promptPlan.action === "wallet") {
+      const command = promptPlan.command;
+      if (command?.action === "audit") {
+        await browserPageActions.saveWalletDaoAuditToArchive(command.goal);
+      } else {
+        await runWalletStatusCommand();
+      }
+    } else if (promptPlan.action === "dao") {
+      await runDaoWorkflowCommand(prompt);
+    } else if (promptPlan.action === "draft" && await runDraftAddonCommand(prompt)) {
       // Draft-only communication/scheduling packets are handled locally.
-    } else if (shouldControl) {
+    } else if (promptPlan.action === "control") {
       await handoffToBrowserControl(prompt);
     } else {
       await runChatTurn(prompt);
@@ -769,7 +1241,7 @@ commandForm.addEventListener("submit", async (event) => {
 
 composerController.bind();
 
-newChatButton?.addEventListener("click", async () => {
+async function createNewChat() {
   activeWorkspace = "answer";
   await persistActiveWorkspace();
   await chatSessionStore.createSession({ workspaceId: "answer" });
@@ -777,25 +1249,62 @@ newChatButton?.addEventListener("click", async () => {
   composerController.resetUndoStack("");
   renderAll();
   commandInput.focus();
+}
+
+newChatButton?.addEventListener("click", createNewChat);
+railNewChatButton?.addEventListener("click", createNewChat);
+railSearchToggle?.addEventListener("click", () => {
+  railSearchBox.hidden = !railSearchBox.hidden;
+  if (!railSearchBox.hidden) {
+    railSearchInput.focus();
+    railSearchInput.select();
+  }
+});
+railSearchInput?.addEventListener("input", () => {
+  railSearchQuery = railSearchInput.value.trim();
+  renderRailNavigation();
+});
+railClearSearch?.addEventListener("click", () => {
+  railSearchQuery = "";
+  railSearchInput.value = "";
+  renderRailNavigation();
+  railSearchInput.focus();
+});
+railNewProjectButton?.addEventListener("click", () => void createProjectFromRail());
+
+document.querySelectorAll(".rail-recents[data-project-id]").forEach((target) => {
+  target.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    target.classList.add("drag-over");
+    event.dataTransfer.dropEffect = "move";
+  });
+  target.addEventListener("dragleave", () => {
+    target.classList.remove("drag-over");
+  });
+  target.addEventListener("drop", (event) => {
+    event.preventDefault();
+    target.classList.remove("drag-over");
+    const sessionId = event.dataTransfer.getData("text/plain");
+    void assignSessionProject(sessionId, target.dataset.projectId ?? "");
+  });
 });
 
-readPageButton?.addEventListener("click", () => void handoffSidebarPrompt(
-  "/browser read",
-  "Opened the sidebar to read the current browser page."
-));
-saveIntakeButton?.addEventListener("click", () => void handoffSidebarPrompt(
-  "/save page",
-  "Opened the sidebar to save the current browser page to Living Archive intake."
-));
-saveSelectionButton?.addEventListener("click", () => void handoffSidebarPrompt(
-  "/save selection",
-  "Opened the sidebar to save selected browser text to Living Archive intake."
-));
-contextToggleButton?.addEventListener("click", () => void openSidebar());
+readPageButton?.addEventListener("click", () => void browserPageActions.readActivePage());
+saveIntakeButton?.addEventListener("click", () => void browserPageActions.saveCurrentPageToArchive());
+saveSelectionButton?.addEventListener("click", () => void browserPageActions.saveSelectionToArchive());
+contextToggleButton?.addEventListener("click", () => void browserPageActions.summarizeSnapshot());
+contextMeter?.addEventListener("click", () => void browserPageActions.summarizeSnapshot());
 workspaceButtons.forEach((button) => {
   button.addEventListener("click", () => {
     setActiveWorkspace(button.dataset.workspace, { persist: true });
     renderAll();
+    if (button.dataset.prompt) {
+      commandInput.value = button.dataset.prompt;
+      composerController.resetUndoStack(commandInput.value);
+      if (button.dataset.workspace === "answer") {
+        commandInput.focus();
+      }
+    }
   });
 });
 attachFileButton.addEventListener("click", () => fileInput.click());
@@ -827,8 +1336,10 @@ dictateButton.addEventListener("click", () => {
 
 await Promise.all([
   chatSessionStore.hydrate(),
+  hydrateAppearancePreferences(),
   hydrateActiveWorkspace()
 ]);
+await suppressSidebarChatForMainWorkspace();
 await chatSessionStore.ensureFreshSession({ workspaceId: "answer" });
 activeWorkspace = "answer";
 await persistActiveWorkspace();

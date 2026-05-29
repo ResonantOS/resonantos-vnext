@@ -1,4 +1,4 @@
-import { isTerminalBrowserJobStatus } from "./browser-job-store.js";
+import { isTerminalBrowserJobStatus, staleBrowserJobEvidence } from "./browser-job-store.js";
 
 export const parseCommandSections = (body) => String(body ?? "").split("|").map((part) => part.trim()).filter(Boolean);
 
@@ -74,6 +74,16 @@ function formatHistorySearchMarkdown({ options, results, readableTabs }) {
   return sections.join("\n");
 }
 
+function formatSchedulerState(state) {
+  if (!state) return "";
+  return [
+    `Scheduler: ${state.activeSlots}/${state.maxConcurrent} active`,
+    `${state.runnableQueued?.length ?? 0} runnable`,
+    `${state.lockBlockedQueued?.length ?? 0} locked`,
+    `${state.capacityBlockedQueued?.length ?? 0} waiting`
+  ].join(" · ");
+}
+
 export function sitePermissionModeFromText(body) {
   const normalized = String(body ?? "").trim();
   if (/\b(blocked|block)\b/i.test(normalized)) return "blocked";
@@ -100,12 +110,64 @@ export function parseDraftAddonCommand(target, body) {
   };
 }
 
+const delegationTargets = [
+  { id: "opencode", pattern: /\b(?:opencode|open\s+code)\b/i },
+  { id: "hermes", pattern: /\bhermes\b/i },
+  { id: "engineer", pattern: /\b(?:resonant\s+engineer|engineer\s+agent|engineer|setup\s+agent|r-eg|reg)\b/i }
+];
+
+function delegationTargetLabel(target) {
+  if (target === "opencode") return "OpenCode";
+  if (target === "hermes") return "Hermes";
+  if (target === "engineer") return "Resonant Engineer";
+  return target;
+}
+
+function stripDelegationCommandLanguage(text, target) {
+  const targetPattern = target === "opencode"
+    ? "(?:opencode|open\\s+code)"
+    : target === "engineer"
+      ? "(?:resonant\\s+engineer|engineer\\s+agent|engineer|setup\\s+agent|r-eg|reg)"
+      : "hermes";
+  const starters = [
+    new RegExp(`^(?:can\\s+you\\s+|please\\s+)?(?:delegate|handoff|hand\\s+off|route|send|pass|assign|dispatch|spawn|spin\\s+up|launch)\\s+(?:this\\s+)?(?:task\\s+)?(?:work\\s+)?(?:to\\s+(?:the\\s+)?)?${targetPattern}\\s*(?:to|and|:|-)?\\s*`, "i"),
+    new RegExp(`^(?:can\\s+you\\s+|please\\s+)?(?:ask|tell|have|use)\\s+${targetPattern}\\s*(?:to|for|:|-)?\\s*`, "i"),
+    new RegExp(`^${targetPattern}\\s*(?:should|can|please)?\\s*`, "i")
+  ];
+  return starters.reduce((value, pattern) => value.replace(pattern, ""), text).trim();
+}
+
+export function parseNaturalDelegationIntent(value) {
+  const text = String(value ?? "").trim();
+  if (!text || text.startsWith("/")) return null;
+  if (/\b(?:without|not|don't|do\s+not)\s+(?:delegate|delegating|use|spawn|dispatch|assign)\b/i.test(text)) return null;
+  const target = delegationTargets.find((candidate) => candidate.pattern.test(text))?.id ?? "";
+  const hasDelegationVerb = /\b(delegate|delegating|delegation|handoff|hand\s+off|route|send|pass|ask|tell|have|use|assign|dispatch|spawn|spin\s+up|launch)\b/i.test(text);
+  const asksForAgent = /\b(?:another|other|sub|different)\s+agents?\b/i.test(text) || /\bagent\s+control\s+layer\b/i.test(text);
+  if (!hasDelegationVerb && !asksForAgent) return null;
+  if (!target) {
+    if (!asksForAgent && !/\b(delegate|delegating|delegation|handoff|hand\s+off|route|send|pass|assign|dispatch|spawn|spin\s+up|launch)\b/i.test(text)) return null;
+    return {
+      missingTarget: true,
+      mission: text.replace(/^(?:can\s+you\s+|please\s+)?(?:delegate|delegating|delegation|handoff|hand\s+off|route|send|pass|assign|dispatch|spawn|spin\s+up|launch)\s+(?:this\s+)?(?:task\s+|work\s+)?/i, "").trim(),
+      target: ""
+    };
+  }
+  const mission = stripDelegationCommandLanguage(text, target);
+  return {
+    missingTarget: false,
+    mission: mission || text,
+    target
+  };
+}
+
 export function createAppCommandHandlers({
   activeTab,
   addMessage,
   bridgeRequest,
   browserJobStore,
   chrome,
+  detectWalletState,
   finishControlRun,
   getCurrentControlRun,
   permissionForUrl,
@@ -147,7 +209,35 @@ export function createAppCommandHandlers({
       method: "POST",
       body: { target, mission }
     });
-    await addMessage("system", `Delegation queued for ${result.target}: ${result.id}\n${result.path}`);
+    await addMessage("system", `Delegation queued for ${delegationTargetLabel(result.target)}: ${result.id}\n${result.path}`);
+  }
+
+  async function runNaturalDelegationCommand(intent) {
+    if (!intent || intent.missingTarget) {
+      await addMessage(
+        "system",
+        "I can delegate through the ResonantOS agent control layer. Choose a target: Hermes for general agent work, OpenCode for coding, or Resonant Engineer for system repair."
+      );
+      return;
+    }
+    const mission = String(intent.mission ?? "").trim();
+    if (mission.length < 8) {
+      await addMessage("system", `Give ${delegationTargetLabel(intent.target)} a concrete mission before I create the delegation packet.`);
+      return;
+    }
+    setActivity("tool-running", `Creating ${delegationTargetLabel(intent.target)} delegation`, mission);
+    const result = await bridgeRequest("/addons/delegate", {
+      method: "POST",
+      body: { target: intent.target, mission }
+    });
+    await addMessage(
+      "system",
+      [
+        `Delegation queued for ${delegationTargetLabel(result.target)}: ${result.id}`,
+        result.path,
+        "Boundary: the add-on receives a governed task packet. ResonantOS keeps provider secrets, wallet actions, and trusted memory writes mediated."
+      ].join("\n")
+    );
   }
 
   async function runDraftAddonCommand(target, body) {
@@ -320,6 +410,8 @@ export function createAppCommandHandlers({
         "- Open/search pages, switch tabs, click visible safe controls, type into editable fields, and scroll.",
         "- Use Inline Assistant on selected text and send selected context into chat.",
         "- Search local browser history metadata and readable open tabs with `/history <query> | site:example.com | days:7 | tabs`.",
+        "- Check read-only Phantom wallet provider presence with `/wallet status`.",
+        "- Save read-only wallet/DAO evidence to Living Archive intake with `/wallet audit` or `/dao audit <goal>`.",
         "- Save selected browser activity metadata to raw Living Archive intake with `/history <query> | intake`.",
         "- Save page/context artifacts into ResonantOS intake.",
         "",
@@ -328,6 +420,17 @@ export function createAppCommandHandlers({
         "- Blocked sites disable reading and page actions. Read-only sites disable actions but still allow context reading."
       ].join("\n")
     );
+  }
+
+  async function runWalletStatusCommand() {
+    if (typeof detectWalletState !== "function") {
+      await addMessage("system", "Wallet status detection is not available in this runtime. Wallet connect, signing, seed phrases, private keys, and credential actions stay human-only.");
+      return;
+    }
+    const result = await detectWalletState({ announce: true });
+    if (!result?.ok) {
+      setStatus("Wallet status unavailable");
+    }
   }
 
   async function runJobsCommand(body = "") {
@@ -348,11 +451,23 @@ export function createAppCommandHandlers({
     const visible = browserJobStore.getJobs()
       .filter((job) => !filter || job.status === filter || job.goal.toLowerCase().includes(filter) || job.id.toLowerCase().includes(filter))
       .slice(0, 12);
+    const scheduler = typeof browserJobStore.getSchedulerState === "function"
+      ? browserJobStore.getSchedulerState({ maxConcurrent: 2 })
+      : null;
+    const schedulerLine = formatSchedulerState(scheduler);
+    const blockedLines = scheduler?.lockBlockedQueued?.length
+      ? scheduler.lockBlockedQueued.map((job) => `- locked ${job.id} by ${job.blockerId}: ${job.goal}`).join("\n")
+      : "";
+    const staleLines = visible
+      .map((job) => ({ evidence: staleBrowserJobEvidence(job), job }))
+      .filter((entry) => entry.evidence)
+      .map(({ evidence, job }) => `- attention ${job.id}: ${evidence.reason} Last activity ${Math.round(evidence.ageMs / 60000)} min ago. ${evidence.nextHumanAction}`)
+      .join("\n");
     renderJobMonitor();
     await addMessage(
       "system",
       visible.length
-        ? `Browser jobs:\n${visible.map((job) => `- ${job.id} · ${job.status} · ${job.goal}`).join("\n")}`
+        ? [`Browser jobs:`, schedulerLine, visible.map((job) => `- ${job.id} · ${job.status} · ${job.goal}`).join("\n"), blockedLines, staleLines].filter(Boolean).join("\n")
         : "No browser jobs match that filter."
     );
   }
@@ -468,7 +583,9 @@ export function createAppCommandHandlers({
     runHistorySearchCommand,
     runJobsCommand,
     runMemorySearchCommand,
+    runNaturalDelegationCommand,
     runSitePermissionCommand,
-    runStatusCommand
+    runStatusCommand,
+    runWalletStatusCommand
   };
 }

@@ -42,6 +42,141 @@ test("living archive workspace renders status, search, and intake through bridge
         matches: [{ title: "ResonantOS", path: "AI_MEMORY/wiki/resonantos.md", excerpt: "ResonantOS memory result" }]
       };
     }
+    if (route === "/memory/wiki/health") {
+      return {
+        exists: true,
+        score: 80,
+        pages: 12,
+        issues: [{ severity: "warning", type: "missing-index-entries", message: "2 page(s) are missing from index.md." }],
+        brokenLinks: [],
+        orphanPages: ["orphan.md"],
+        missingIndexEntries: ["orphan.md", "research.md"],
+        duplicateTitles: [],
+        index: { exists: true, entries: 10 },
+        log: { exists: true, modifiedAt: "2026-05-29T08:00:00.000Z" }
+      };
+    }
+    if (route === "/memory/settings") {
+      return {
+        settings: {
+          sources: [{
+            id: "source-test-vault",
+            path: "/Users/test/KnowledgeVault",
+            kind: "obsidian-vault",
+            ownership: "human-knowledge",
+            importMode: "copy-on-import",
+            exists: true
+          }, {
+            id: "source-disabled",
+            path: "/Users/test/DisabledVault",
+            kind: "folder",
+            ownership: "mixed-library",
+            importMode: "linked-readonly",
+            exists: true,
+            disabledAt: "2026-05-29T10:00:00.000Z"
+          }, {
+            id: "source-missing",
+            path: "/Users/test/MissingVault",
+            kind: "folder",
+            ownership: "external-knowledge",
+            importMode: "copy-on-import",
+            exists: false
+          }]
+        }
+      };
+    }
+    if (route === "/memory/source/review") {
+      return {
+        source: {
+          id: options.body.sourceId,
+          path: "/Users/test/KnowledgeVault",
+          kind: "obsidian-vault",
+          ownership: "human-knowledge",
+          importMode: "copy-on-import"
+        },
+        scan: {
+          totalScanned: 7,
+          limitReached: false,
+          categories: { compatible: 3, processed: 1, "raw-audio": 1, unsupported: 2 },
+          recommendation: "This source has compatible knowledge files and can be registered for governed intake."
+        },
+        candidates: [
+          { path: "index.md", category: "compatible", versionStatus: "unchanged", sourceVersion: 2, previousSourceContentHash: "aaaa", bytes: 1200, modifiedAt: "2026-05-29T10:00:00.000Z" },
+          { path: "notes/research.txt", category: "compatible", versionStatus: "changed", sourceVersion: 1, previousSourceContentHash: "abcdef", bytes: 1800, modifiedAt: "2026-05-29T10:00:30.000Z" },
+          { path: "raw/tol.mp3", category: "raw-audio", bytes: 2400, modifiedAt: "2026-05-29T10:01:00.000Z" }
+        ],
+        boundary: "Source review is read-only."
+      };
+    }
+    if (route === "/memory/source/versions") {
+      return {
+        manifestVersion: 1,
+        updatedAt: "2026-05-29T10:30:00.000Z",
+        entries: [{
+          sourceId: options.body.sourceId,
+          sourceFile: "index.md",
+          latestHash: "0123456789abcdef",
+          latestVersion: 2,
+          latestModifiedAt: "2026-05-29T10:25:00.000Z",
+          updatedAt: "2026-05-29T10:30:00.000Z",
+          history: []
+        }]
+      };
+    }
+    if (route === "/memory/source/diff") {
+      return {
+        sourceId: options.body.sourceId,
+        sourceFile: options.body.file,
+        status: "changed",
+        latestVersion: 1,
+        latestIntakePath: "INTAKE/sources/selected-2.md",
+        previousHash: "abcdef",
+        currentHash: "0123456789abcdef",
+        changed: true,
+        previousLines: 2,
+        currentLines: 2,
+        truncated: false,
+        changes: [
+          { type: "removed", line: 2, text: "Old research note" },
+          { type: "added", line: 2, text: "Updated research note" }
+        ]
+      };
+    }
+    if (route === "/memory/source/file-intake") {
+      return {
+        sourceId: options.body.sourceId,
+        created: options.body.files.map((file, index) => ({
+          path: `INTAKE/sources/selected-${index + 1}.md`,
+          sourceFile: file,
+          bytes: 600 + index,
+          title: file
+        })),
+        rejected: []
+      };
+    }
+    if (route === "/archive/review/request" && /^INTAKE\/sources\/selected-\d+\.md$/.test(options.body.path)) {
+      return {
+        path: `REVIEW/requests/${options.body.path.split("/").pop()}`,
+        sourceArtifactPath: options.body.path,
+        status: "pending"
+      };
+    }
+    if (route === "/memory/source/intake") {
+      return {
+        path: "INTAKE/sources/source-review.md",
+        bytes: 512,
+        sourceId: options.body.sourceId,
+        candidates: 2,
+        recommendation: "This source has compatible knowledge files and can be registered for governed intake."
+      };
+    }
+    if (route === "/archive/review/request" && options.body.path === "INTAKE/sources/source-review.md") {
+      return {
+        path: "REVIEW/requests/source-review.md",
+        sourceArtifactPath: options.body.path,
+        status: "pending"
+      };
+    }
     if (route === "/archive/review/list") {
       return {
         root: "Memory/REVIEW/requests",
@@ -89,6 +224,9 @@ test("living archive workspace renders status, search, and intake through bridge
         semanticVerifierStatus: verified ? "unavailable" : "",
         semanticVerifierProvider: "",
         semanticVerifierModel: "",
+        writerStatus: "deterministic-fallback",
+        writerProvider: "",
+        writerModel: "",
         proposedPage: "AI_MEMORY/wiki/browser-job-completed.md",
         content: "# Draft Wiki Update: Browser job completed\n\n## Proposed Content\nBrowser job summary with enough deterministic source detail for verifier acceptance.",
         truncated: false
@@ -170,8 +308,147 @@ test("living archive workspace renders status, search, and intake through bridge
     assert.match(container.textContent, /12/);
     assert.match(container.textContent, /4/);
     assert.match(container.textContent, /5/);
+    assert.match(container.textContent, /Connected Source Review/);
+    assert.match(container.textContent, /Wiki Health/);
+    assert.match(container.textContent, /Health 80\/100/);
+    assert.match(container.textContent, /missing-index-entries/);
+    assert.match(container.textContent, /\/Users\/test\/KnowledgeVault/);
+    assert.match(container.textContent, /\/Users\/test\/DisabledVault/);
+    assert.match(container.textContent, /\/Users\/test\/MissingVault/);
+    assert.match(container.textContent, /3\/3 source\(s\) visible/);
+    Array.from(container.querySelectorAll(".memory-source-card button"))
+      .find((button) => button.textContent === "Versions")
+      .click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.ok(calls.some(([route, options]) =>
+      route === "/memory/source/versions" &&
+      options.body.sourceId === "source-test-vault"
+    ));
+    assert.match(container.textContent, /Source versions/);
+    assert.match(container.textContent, /v2 · index\.md/);
+    const sourceStateFilter = container.querySelector(".memory-source-list-filterbar select");
+    sourceStateFilter.value = "active";
+    sourceStateFilter.dispatchEvent(new Event("change", { bubbles: true }));
+    assert.match(container.textContent, /1\/3 source\(s\) visible/);
+    assert.doesNotMatch(container.querySelector(".memory-source-list").textContent, /DisabledVault|MissingVault/);
+    sourceStateFilter.value = "disabled";
+    sourceStateFilter.dispatchEvent(new Event("change", { bubbles: true }));
+    assert.match(container.querySelector(".memory-source-list").textContent, /DisabledVault/);
+    assert.doesNotMatch(container.querySelector(".memory-source-list").textContent, /KnowledgeVault|MissingVault/);
+    sourceStateFilter.value = "all";
+    sourceStateFilter.dispatchEvent(new Event("change", { bubbles: true }));
+    const sourceTextFilter = container.querySelector(".memory-source-list-filterbar input");
+    sourceTextFilter.value = "missing";
+    sourceTextFilter.dispatchEvent(new Event("input", { bubbles: true }));
+    assert.match(container.textContent, /1\/3 source\(s\) visible/);
+    assert.match(container.querySelector(".memory-source-list").textContent, /MissingVault/);
+    sourceTextFilter.value = "";
+    sourceTextFilter.dispatchEvent(new Event("input", { bubbles: true }));
     assert.ok(calls.some(([route]) => route === "/archive/review/list"));
     assert.ok(calls.some(([route]) => route === "/archive/review/promotions/list"));
+    Array.from(container.querySelectorAll(".memory-source-card button"))
+      .find((button) => button.textContent === "Review Source")
+      .click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.ok(calls.some(([route, options]) =>
+      route === "/memory/source/review" &&
+      options.capability === "memory-source-review" &&
+      options.body.sourceId === "source-test-vault"
+    ));
+    assert.match(container.textContent, /7 scanned/);
+    assert.match(container.textContent, /index\.md/);
+    assert.match(container.textContent, /unchanged v2/);
+    assert.match(container.textContent, /notes\/research\.txt/);
+    assert.match(container.textContent, /changed v1/);
+    assert.match(container.textContent, /raw\/tol\.mp3/);
+    assert.match(container.textContent, /root · 1/);
+    assert.match(container.textContent, /notes · 1/);
+    assert.match(container.textContent, /raw · 1/);
+    assert.match(container.textContent, /3\/3 candidate\(s\) visible/);
+    Array.from(container.querySelectorAll(".memory-review-preview button"))
+      .find((button) => button.textContent === "Create Intake From New/Changed Files")
+      .click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.ok(calls.some(([route, options]) =>
+      route === "/memory/source/file-intake" &&
+      options.body.files.join(",") === "notes/research.txt"
+    ));
+    assert.ok(calls.some(([route, options]) =>
+      route === "/archive/review/request" &&
+      options.body.path === "INTAKE/sources/selected-1.md" &&
+      /selected source file notes\/research\.txt/.test(options.body.reason)
+    ));
+    assert.match(container.textContent, /Created 1 selected file intake artifact\(s\); 0 rejected/);
+    const categoryFilter = container.querySelector(".memory-review-preview .memory-source-filterbar select");
+    categoryFilter.value = "compatible";
+    categoryFilter.dispatchEvent(new Event("change", { bubbles: true }));
+    assert.match(container.textContent, /2\/3 candidate\(s\) visible/);
+    assert.doesNotMatch(container.querySelector(".memory-source-candidates").textContent, /raw\/tol\.mp3/);
+    const textFilter = container.querySelector(".memory-review-preview .memory-source-filterbar input");
+    textFilter.value = "research";
+    textFilter.dispatchEvent(new Event("input", { bubbles: true }));
+    assert.match(container.textContent, /1\/3 candidate\(s\) visible/);
+    assert.doesNotMatch(container.querySelector(".memory-source-candidates").textContent, /index\.md/);
+    Array.from(container.querySelectorAll(".memory-source-candidates button"))
+      .find((button) => button.textContent === "Diff")
+      .click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.ok(calls.some(([route, options]) =>
+      route === "/memory/source/diff" &&
+      options.capability === "memory-source-review" &&
+      options.body.sourceId === "source-test-vault" &&
+      options.body.file === "notes/research.txt"
+    ));
+    assert.match(container.textContent, /Source diff: notes\/research\.txt/);
+    assert.match(container.textContent, /Updated research note/);
+    textFilter.value = "";
+    textFilter.dispatchEvent(new Event("input", { bubbles: true }));
+    const candidateChecks = Array.from(container.querySelectorAll(".memory-source-candidates input"));
+    assert.equal(candidateChecks.length, 2);
+    candidateChecks.find((input) => input.value === "index.md").checked = true;
+    candidateChecks.find((input) => input.value === "index.md").dispatchEvent(new Event("change", { bubbles: true }));
+    candidateChecks.find((input) => input.value === "notes/research.txt").checked = true;
+    candidateChecks.find((input) => input.value === "notes/research.txt").dispatchEvent(new Event("change", { bubbles: true }));
+    Array.from(container.querySelectorAll(".memory-review-preview button"))
+      .find((button) => button.textContent === "Create Intake From Selected Files")
+      .click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.ok(calls.some(([route, options]) =>
+      route === "/memory/source/file-intake" &&
+      options.capability === "memory-source-file-intake" &&
+      options.body.sourceId === "source-test-vault" &&
+      options.body.files.join(",") === "index.md,notes/research.txt"
+    ));
+    assert.ok(calls.some(([route, options]) =>
+      route === "/archive/review/request" &&
+      options.body.path === "INTAKE/sources/selected-1.md" &&
+      /selected source file index\.md/.test(options.body.reason)
+    ));
+    assert.ok(calls.some(([route, options]) =>
+      route === "/archive/review/request" &&
+      options.body.path === "INTAKE/sources/selected-2.md" &&
+      /selected source file notes\/research\.txt/.test(options.body.reason)
+    ));
+    assert.match(container.textContent, /Created 2 selected file intake artifact\(s\); 0 rejected/);
+    Array.from(container.querySelectorAll(".memory-source-card button"))
+      .find((button) => button.textContent === "Create Intake Summary")
+      .click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.ok(calls.some(([route, options]) =>
+      route === "/memory/source/intake" &&
+      options.capability === "memory-source-intake" &&
+      options.body.sourceId === "source-test-vault"
+    ));
+    assert.ok(calls.some(([route, options]) =>
+      route === "/archive/review/request" &&
+      options.body.path === "INTAKE/sources/source-review.md" &&
+      /connected source intake summary/.test(options.body.reason)
+    ));
+    assert.match(container.textContent, /Source intake created: INTAKE\/sources\/source-review\.md/);
+    assert.match(container.textContent, /Review request: REVIEW\/requests\/source-review\.md/);
     assert.match(container.textContent, /Browser job completed: compare a product/);
     assert.match(container.textContent, /INTAKE\/browser\/job-report\.md/);
     assert.match(container.textContent, /Intake/);
@@ -211,6 +488,7 @@ test("living archive workspace renders status, search, and intake through bridge
     ));
     assert.match(container.textContent, /Proposed page: AI_MEMORY\/wiki\/browser-job-completed\.md/);
     assert.match(container.textContent, /Browser job summary/);
+    assert.match(container.textContent, /Writer: deterministic-fallback/);
     assert.match(container.textContent, /Verification: not verified/);
     assert.match(container.textContent, /Semantic: not run/);
     assert.equal(
@@ -276,7 +554,7 @@ test("living archive workspace renders status, search, and intake through bridge
     ));
     assert.match(container.textContent, /Restored AI_MEMORY\/wiki\/browser-job-completed\.md from AI_MEMORY\/backups\/promotions\/2026-05-28\/browser-job-completed\.md/);
 
-    const searchInput = container.querySelector("input[type='search']");
+    const searchInput = container.querySelector(".memory-search input[type='search']");
     searchInput.value = "resonant";
     container.querySelector(".memory-search").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -305,6 +583,12 @@ test("living archive workspace can run an initial routed search", async () => {
     }
     if (route === "/memory/search") {
       return { matches: [{ title: "Augmentor", path: "AI_MEMORY/wiki/augmentor.md", excerpt: "Augmentor search result" }] };
+    }
+    if (route === "/memory/wiki/health") {
+      return { exists: true, score: 100, pages: 1, issues: [], brokenLinks: [], orphanPages: [], missingIndexEntries: [], duplicateTitles: [], index: { exists: true, entries: 1 }, log: { exists: true } };
+    }
+    if (route === "/memory/settings") {
+      return { settings: { sources: [] } };
     }
     if (route === "/archive/review/list") {
       return { root: "Memory/REVIEW/requests", requests: [] };
@@ -350,6 +634,9 @@ test("living archive workspace can revise a draft after verifier findings", asyn
     if (route === "/memory/status") {
       return { exists: true, wiki: { pages: 2, index: { exists: true } }, intake: { artifacts: 1 }, review: { requests: 1, artifacts: 1 } };
     }
+    if (route === "/memory/wiki/health") {
+      return { exists: true, score: 100, pages: 2, issues: [], brokenLinks: [], orphanPages: [], missingIndexEntries: [], duplicateTitles: [], index: { exists: true, entries: 2 }, log: { exists: true } };
+    }
     if (route === "/archive/review/list") {
       return {
         root: "Memory/REVIEW/requests",
@@ -366,6 +653,9 @@ test("living archive workspace can revise a draft after verifier findings", asyn
         }]
       };
     }
+    if (route === "/memory/settings") {
+      return { settings: { sources: [] } };
+    }
     if (route === "/archive/review/promotions/list") {
       return { root: "Memory/REVIEW/artifacts", promotions: [] };
     }
@@ -380,6 +670,9 @@ test("living archive workspace can revise a draft after verifier findings", asyn
         semanticVerifierStatus: "needs-revision",
         semanticVerifierProvider: "openai",
         semanticVerifierModel: "gpt-5.5",
+        writerStatus: "provider-written",
+        writerProvider: "openai",
+        writerModel: "gpt-5.5",
         proposedPage: "AI_MEMORY/wiki/needs-revision-source.md",
         content: "# Draft Wiki Update: Needs revision source\n\n## Proposed Content\nToo little provenance.",
         truncated: false

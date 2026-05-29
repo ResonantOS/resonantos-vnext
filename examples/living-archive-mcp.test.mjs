@@ -24,6 +24,17 @@ const makeMemoryRoot = async () => {
     "# Architecture Memory\nLiving Archive uses file truth with a local index.",
     "utf8",
   );
+  await writeFile(
+    join(root, "AI_MEMORY", "wiki", "index.md"),
+    [
+      "# Wiki Index",
+      "",
+      "## Pages",
+      "",
+      "- [[architecture|Architecture Memory]] — Host-mediated architecture memory for ResonantOS agents.",
+    ].join("\n"),
+    "utf8",
+  );
   return root;
 };
 
@@ -46,6 +57,11 @@ test("Living Archive MCP bridge exposes scoped status, search, read, intake, and
     const search = await bridge.callTool("living_archive_search", { query: "portable", limit: 5 });
     assert.equal(search.results.length, 1);
     assert.equal(search.results[0].path, "HUMAN_KNOWLEDGE/sources/oracle.md");
+
+    const wikiSearch = await bridge.callTool("living_archive_search", { query: "host-mediated", limit: 5 });
+    assert.equal(wikiSearch.searchMode, "index-first-wiki");
+    assert.equal(wikiSearch.results[0].path, "AI_MEMORY/wiki/architecture.md");
+    assert.equal(wikiSearch.results[0].matchSource, "index");
 
     const document = await bridge.callTool("living_archive_read", {
       path: "HUMAN_KNOWLEDGE/sources/oracle.md",
@@ -78,6 +94,40 @@ test("Living Archive MCP bridge exposes scoped status, search, read, intake, and
     const queued = JSON.parse(await readFile(join(root, ingest.requestFile), "utf8"));
     assert.equal(queued.boundary.trustedKnowledgeWrite, false);
     assert.equal(queued.boundary.requiresStrategistOwnedIngest, true);
+
+    const processed = await bridge.callTool("living_archive_process_ingest_request", {
+      requestFile: ingest.requestFile,
+    });
+    assert.match(processed.reviewArtifactFile, /^AI_MEMORY\/provenance\/review-artifacts\/.+\.json$/);
+    const artifacts = await bridge.callTool("living_archive_review_artifacts");
+    assert.equal(artifacts.length, 1);
+    assert.equal(artifacts[0].status, "pending");
+
+    await bridge.callTool("living_archive_decide_review", {
+      artifactFile: processed.reviewArtifactFile,
+      actorId: "strategist.core",
+      action: "approve",
+      notes: "Approved in MCP portable loop test.",
+    });
+    const promoted = await bridge.callTool("living_archive_promote_review_artifact", {
+      artifactFile: processed.reviewArtifactFile,
+      actorId: "strategist.core",
+    });
+    assert.equal(promoted.status, "promoted");
+    assert.equal(promoted.promotedPage, "AI_MEMORY/wiki/external-artifact.md");
+
+    const promotedSearch = await bridge.callTool("living_archive_search", {
+      query: "External Artifact",
+      domains: ["AI_MEMORY"],
+      limit: 5,
+    });
+    assert.equal(promotedSearch.searchMode, "index-first-wiki");
+    assert.equal(promotedSearch.results[0].path, "AI_MEMORY/wiki/external-artifact.md");
+
+    const lint = await bridge.callTool("living_archive_lint");
+    assert.equal(lint.pagesChecked >= 2, true);
+    assert.ok(lint.findings.some((finding) => finding.category === "missing-provenance"));
+    assert.equal(lint.wikiHealth.exists, true);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

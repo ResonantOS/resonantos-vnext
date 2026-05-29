@@ -1,3 +1,8 @@
+import {
+  controlRunProgress,
+  controlRunProgressSummary
+} from "./monitor-renderers.js";
+
 export function createControlReportingService({
   addMessage,
   bridgeRequest,
@@ -6,6 +11,52 @@ export function createControlReportingService({
   getLastSnapshot,
   getPendingApproval
 }) {
+  const formatDurationMs = (value) => {
+    const ms = Number(value);
+    if (!Number.isFinite(ms) || ms < 0) return "";
+    if (ms < 1000) return `${Math.round(ms)} ms`;
+    if (ms < 60_000) return `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)} sec`;
+    return `${Math.floor(ms / 60_000)} min ${Math.round((ms % 60_000) / 1000)} sec`;
+  };
+
+  const stepTimingSuffix = (step) => {
+    const duration = formatDurationMs(step?.timing?.durationMs);
+    return duration ? ` · ${duration}` : "";
+  };
+
+  const stepEvidenceSuffix = (step) => {
+    const confidence = step?.details?.confidence ? ` · confidence: ${step.details.confidence}` : "";
+    return `${stepTimingSuffix(step)}${confidence}`;
+  };
+
+  const stepEvidenceLines = (step) => [
+    step?.details?.uncertainty ? `     - uncertainty: ${step.details.uncertainty}` : "",
+    step?.details?.nextHumanAction ? `     - next human action: ${step.details.nextHumanAction}` : ""
+  ].filter(Boolean);
+
+  const pageLockLines = (pageLock) => pageLock
+    ? [
+      `- targetSite: ${pageLock.siteKey || "unknown-site"}`,
+      `- targetTab: ${pageLock.tabId !== null && pageLock.tabId !== undefined ? pageLock.tabId : "unknown"}`,
+      `- targetUrl: ${pageLock.url || "unknown"}`,
+      `- targetReason: ${pageLock.reason || "not recorded"}`
+    ]
+    : ["No controlled browser target was recorded."];
+
+  const aggregateProgressLines = (run) => {
+    const progress = controlRunProgress(run);
+    return [
+      `- phase: ${progress.phase}`,
+      `- summary: ${controlRunProgressSummary(run)}`,
+      `- completedSteps: ${progress.completed}`,
+      `- totalSteps: ${progress.total}`,
+      `- percentComplete: ${progress.percent}`,
+      `- pendingSteps: ${progress.pending}`,
+      `- blockedSteps: ${progress.blockedCount}`,
+      `- failedSteps: ${progress.failed}`
+    ];
+  };
+
   const buildControlReport = (results, status) => {
     const currentControlRun = getCurrentControlRun();
     if (!currentControlRun) return "";
@@ -18,7 +69,14 @@ export function createControlReportingService({
       `- planner: ${currentControlRun.planner}`,
       `- startedAt: ${currentControlRun.startedAt}`,
       `- completedAt: ${new Date().toISOString()}`,
+      `- duration: ${formatDurationMs(currentControlRun.timing?.durationMs) || "unknown"}`,
       `- page: ${lastSnapshot?.title ?? "unknown"} (${lastSnapshot?.url ?? "unknown"})`,
+      "",
+      "## Controlled Target",
+      ...pageLockLines(currentControlRun.pageLock),
+      "",
+      "## Aggregate Progress",
+      ...aggregateProgressLines(currentControlRun),
       "",
       "## Goal",
       currentControlRun.goal,
@@ -27,7 +85,10 @@ export function createControlReportingService({
       currentControlRun.summary,
       "",
       "## Steps",
-      ...results.map(({ step, result }, index) => `${index + 1}. ${controlStepLabel(step)} — ${result?.ok ? "ok" : result?.approvalRequired ? "approval-required" : "failed"}${result?.error ? ` — ${result.error}` : ""}`),
+      ...results.flatMap(({ step, result }, index) => [
+        `${index + 1}. ${controlStepLabel(step)} — ${result?.ok ? "ok" : result?.approvalRequired ? "approval-required" : "failed"}${stepEvidenceSuffix(step)}${result?.error ? ` — ${result.error}` : ""}`,
+        ...stepEvidenceLines(step)
+      ]),
       "",
       "## Boundary",
       "This is an intake artifact only. Wallet, credential, public-submit, payment, and destructive actions require explicit human approval.",
@@ -64,6 +125,13 @@ export function createControlReportingService({
       `- planner: ${job.planner}`,
       `- createdAt: ${job.createdAt}`,
       `- updatedAt: ${job.updatedAt}`,
+      `- duration: ${formatDurationMs(job.timing?.durationMs) || "unknown"}`,
+      "",
+      "## Controlled Target",
+      ...pageLockLines(job.pageLock),
+      "",
+      "## Aggregate Progress",
+      ...aggregateProgressLines(job),
       "",
       "## Goal",
       job.goal,
@@ -86,7 +154,10 @@ export function createControlReportingService({
       "",
       "## Steps",
       ...(steps.length
-        ? steps.map((step, index) => `${index + 1}. ${step.label} — ${step.state}${step.note ? ` — ${step.note}` : ""}`)
+        ? steps.flatMap((step, index) => [
+          `${index + 1}. ${step.label} — ${step.state}${stepEvidenceSuffix(step)}${step.note ? ` — ${step.note}` : ""}`,
+          ...stepEvidenceLines(step)
+        ])
         : ["No persisted step transcript is available for this job."]),
       "",
       "## Artifacts",
@@ -96,6 +167,51 @@ export function createControlReportingService({
       "",
       "## Boundary",
       "This is an intake artifact only. Wallet, credential, public-submit, payment, and destructive actions require explicit human approval.",
+      ""
+    ].join("\n");
+  };
+
+  const buildControlDelegationPacket = () => {
+    const pendingApproval = getPendingApproval();
+    const currentControlRun = getCurrentControlRun();
+    if (!pendingApproval && !currentControlRun) return "";
+    const lastSnapshot = getLastSnapshot();
+    const step = pendingApproval?.step;
+    const steps = Array.isArray(currentControlRun?.steps) ? currentControlRun.steps : [];
+    return [
+      "# Browser Control Delegation Context",
+      "",
+      "## Requested Outcome",
+      "Diagnose the blocked browser-control task and return a safe recovery plan or bounded implementation task. Do not request provider secrets, wallet signing, credentials, payment, or public submission authority.",
+      "",
+      "## Source Task",
+      `- controlRunId: ${currentControlRun?.id ?? "unknown"}`,
+      `- status: ${currentControlRun?.status ?? "unknown"}`,
+      `- goal: ${currentControlRun?.goal ?? "unknown"}`,
+      `- page: ${lastSnapshot?.title ?? "unknown"} (${lastSnapshot?.url ?? "unknown"})`,
+      "",
+      "## Controlled Target",
+      ...pageLockLines(currentControlRun?.pageLock),
+      "",
+      "## Aggregate Progress",
+      ...(currentControlRun ? aggregateProgressLines(currentControlRun) : ["No active control run progress was available."]),
+      "",
+      "## Blocker",
+      step ? `- blockedStep: ${controlStepLabel(step)}` : "- blockedStep: not recorded",
+      pendingApproval?.reason ? `- reason: ${pendingApproval.reason}` : "- reason: not recorded",
+      ...(step?.details?.uncertainty ? [`- uncertainty: ${step.details.uncertainty}`] : []),
+      ...(step?.details?.nextHumanAction ? [`- nextHumanAction: ${step.details.nextHumanAction}`] : []),
+      "",
+      "## Recent Trace",
+      ...(steps.length
+        ? steps.slice(-8).flatMap((traceStep, index) => [
+          `${index + 1}. ${controlStepLabel(traceStep)} — ${traceStep.state ?? "unknown"}${stepEvidenceSuffix(traceStep)}${traceStep.note ? ` — ${traceStep.note}` : ""}`,
+          ...stepEvidenceLines(traceStep)
+        ])
+        : ["No persisted step trace was available."]),
+      "",
+      "## Boundary",
+      "The receiving add-on gets this context packet only. ResonantOS keeps provider routing, wallet actions, credentials, browser permissions, and trusted memory writes mediated.",
       ""
     ].join("\n");
   };
@@ -123,6 +239,9 @@ export function createControlReportingService({
       method: "POST",
       body: {
         target: "engineer",
+        contextMarkdown: buildControlDelegationPacket(),
+        source: "browser-control-blocker",
+        sourceControlRunId: currentControlRun?.id ?? "",
         mission: [
           "Investigate blocked browser-control task.",
           `Goal: ${currentControlRun?.goal ?? "unknown"}`,
@@ -140,6 +259,7 @@ export function createControlReportingService({
   return {
     buildBrowserJobReport,
     buildControlReport,
+    buildControlDelegationPacket,
     delegateControlIssue,
     saveBrowserJobReportToArchive,
     saveControlReportToArchive

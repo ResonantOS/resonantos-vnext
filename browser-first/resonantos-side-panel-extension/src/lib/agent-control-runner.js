@@ -35,6 +35,103 @@ export function browserJobStepHistory(job = {}) {
     : [];
 }
 
+function normalizedConfidence(value, fallback = "medium") {
+  const normalized = String(value ?? "").toLowerCase();
+  return ["high", "medium", "low"].includes(normalized) ? normalized : fallback;
+}
+
+function controlStepEvidence({ boundary = "safe", decision = {}, result = {}, status = "" } = {}) {
+  const failed = result && result.ok === false;
+  const approvalRequired = Boolean(result?.approvalRequired) || status === "approval";
+  const hardBoundary = ["hard", "public-submit"].includes(boundary);
+  const confidence = normalizedConfidence(
+    decision.confidence,
+    failed || approvalRequired || hardBoundary ? "low" : boundary === "safe" ? "medium" : "medium"
+  );
+  const uncertainty = String(
+    decision.uncertainty ??
+    decision.approvalReason ??
+    (failed ? result?.error : "") ??
+    ""
+  ).trim();
+  let nextHumanAction = "";
+  if (approvalRequired && boundary === "hard") {
+    nextHumanAction = "Complete this action manually in the page. Augmentor must not operate wallet, login, payment, credential, signing, or transfer controls.";
+  } else if (approvalRequired) {
+    nextHumanAction = "Review the visible page state, then approve once, deny, or delegate the blocker.";
+  } else if (failed) {
+    nextHumanAction = "Inspect the page state, adjust the instruction or target text, then resume or delegate the issue.";
+  } else if (status === "blocked") {
+    nextHumanAction = "Clarify the goal or provide a more concrete visible target before resuming.";
+  }
+  return {
+    confidence,
+    uncertainty: uncertainty || null,
+    nextHumanAction: nextHumanAction || null
+  };
+}
+
+function snapshotFingerprint(snapshot = null) {
+  if (!snapshot || typeof snapshot !== "object") return "";
+  const controls = Array.isArray(snapshot.controls) ? snapshot.controls.length : 0;
+  const fields = Array.isArray(snapshot.fields) ? snapshot.fields.length : 0;
+  const text = String(snapshot.text ?? "").replace(/\s+/g, " ").trim().slice(0, 1200);
+  return [
+    String(snapshot.title ?? "").trim(),
+    String(snapshot.url ?? "").trim(),
+    text,
+    `controls:${controls}`,
+    `fields:${fields}`
+  ].join("\n");
+}
+
+function verifyBrowserAction({ before = null, after = null, result = {}, step = {} } = {}) {
+  if (!["click", "type", "open", "search", "switch_tab"].includes(step?.type) || !result?.ok) {
+    return { changed: null, uncertainty: null };
+  }
+  const beforeFingerprint = snapshotFingerprint(before);
+  const afterFingerprint = snapshotFingerprint(after);
+  if (!afterFingerprint) {
+    return {
+      changed: null,
+      uncertainty: "Page verification could not read the state after this action."
+    };
+  }
+  if (beforeFingerprint && beforeFingerprint === afterFingerprint) {
+    return {
+      changed: false,
+      uncertainty: "No visible page-state change was detected after this action. The next step should verify whether the target was already satisfied, choose a more precise target, or stop safely."
+    };
+  }
+  return { changed: true, uncertainty: null };
+}
+
+function browserActionSignature(action = {}) {
+  if (!action || typeof action !== "object") return "";
+  return JSON.stringify({
+    direction: action.direction ?? "",
+    field: action.field ?? "",
+    query: action.query ?? "",
+    ref: action.ref ?? "",
+    submit: Boolean(action.submit),
+    tabId: action.tabId ?? "",
+    target: action.target ?? "",
+    text: action.text ?? "",
+    type: action.type ?? ""
+  });
+}
+
+function repeatedNoChangeActionEvidence(history = [], action = {}) {
+  const previous = [...history].reverse().find((entry) => entry?.action && entry?.result?.verificationChanged === false);
+  if (!previous) return null;
+  if (browserActionSignature(previous.action) !== browserActionSignature(action)) return null;
+  return {
+    previousAction: previous.action,
+    reason: "The planner repeated the same action after the previous execution produced no visible page-state change.",
+    nextHumanAction: "Inspect the page, choose a more precise visible target, or delegate the blocker before retrying this same action."
+  };
+}
+
 export function createAgentControlRunner(deps) {
   const {
     addMessage,
@@ -113,6 +210,58 @@ export function createAgentControlRunner(deps) {
         }
 
         const step = decision.action;
+        const repeatedNoChange = repeatedNoChangeActionEvidence(history, step);
+        if (repeatedNoChange) {
+          const stepIndex = appendControlStep(step);
+          updateControlStep(stepIndex, "blocked", "repeat no-change action prevented", {
+            phase: "blocked",
+            observation: {
+              title: snapshot?.title ?? null,
+              url: snapshot?.url ?? null
+            },
+            decision: decision.thought ?? null,
+            action: controlStepLabel(step),
+            result: "repeat no-change action prevented",
+            safetyClass: approvalBoundaryForStep(step),
+            confidence: "low",
+            uncertainty: repeatedNoChange.reason,
+            nextHumanAction: repeatedNoChange.nextHumanAction
+          });
+          const blockedResult = {
+            approvalRequired: false,
+            error: repeatedNoChange.reason,
+            ok: false,
+            repeatNoChangePrevented: true
+          };
+          results.push({ step, result: blockedResult });
+          history.push({
+            action: step,
+            result: {
+              ok: false,
+              approvalRequired: false,
+              error: repeatedNoChange.reason,
+              repeatNoChangePrevented: true,
+              verificationChanged: false
+            },
+            observation: {
+              title: snapshot?.title ?? null,
+              url: snapshot?.url ?? null
+            }
+          });
+          finishControlRun("blocked");
+          setStatus("Control blocked");
+          setActivity("failed", "Repeated no-change action blocked", controlStepLabel(step));
+          await addMessage(
+            "system",
+            [
+              `Agent Control Mode blocked at action ${stepIndex + 1}: ${controlStepLabel(step)}`,
+              repeatedNoChange.reason,
+              repeatedNoChange.nextHumanAction
+            ].join("\n")
+          );
+          await saveControlReportToArchive(results, "blocked-repeat-no-change");
+          return { ok: false, results, repeatNoChangePrevented: true };
+        }
         const stepIndex = appendControlStep(step);
         updateControlStep(stepIndex, "active", decision.thought, {
           phase: "acting",
@@ -122,18 +271,37 @@ export function createAgentControlRunner(deps) {
           },
           decision: decision.thought ?? null,
           action: controlStepLabel(step),
-          safetyClass: approvalBoundaryForStep(step)
+          safetyClass: approvalBoundaryForStep(step),
+          ...controlStepEvidence({
+            boundary: approvalBoundaryForStep(step),
+            decision
+          })
         });
         await setPageControlOverlay(true, controlStepLabel(step), step.type === "click" ? "clicking" : step.type === "type" ? "typing" : step.type === "read" ? "reading" : step.type === "wait" ? "waiting" : "working");
         setActivity("tool-running", `Executing browser action ${stepIndex + 1}`, controlStepLabel(step));
         const result = await executeControlStep(step);
         await setPageControlOverlay(true, "Verifying page state...", "verifying");
+        const verificationSnapshot = await deps.observeControlPage().catch(() => null);
+        const verification = verifyBrowserAction({
+          after: verificationSnapshot,
+          before: snapshot,
+          result,
+          step
+        });
         const boundary = approvalBoundaryForStep(step, result?.error);
         const consent = result?.approvalRequired && boundary === "safe"
           ? await taskConsentForStep({ goal, step, result })
           : null;
         const finalStep = consent ? { ...step, userApproved: true } : step;
         const finalResult = consent ? await executeControlStep(finalStep) : result;
+        const finalVerification = consent
+          ? verifyBrowserAction({
+            after: await deps.observeControlPage().catch(() => verificationSnapshot),
+            before: verificationSnapshot ?? snapshot,
+            result: finalResult,
+            step: finalStep
+          })
+          : verification;
         results.push({ step: finalStep, result: finalResult });
         history.push({
           action: finalStep,
@@ -145,11 +313,12 @@ export function createAgentControlRunner(deps) {
             typedText: finalResult?.typedText ?? null,
             url: finalResult?.url ?? null,
             query: finalResult?.query ?? null,
-            taskConsent: consent ? `${consent.siteKey}::${consent.taskClass}` : null
+            taskConsent: consent ? `${consent.siteKey}::${consent.taskClass}` : null,
+            verificationChanged: finalVerification.changed
           },
           observation: {
-            title: getLastSnapshot()?.title ?? snapshot?.title ?? null,
-            url: getLastSnapshot()?.url ?? snapshot?.url ?? null
+            title: verificationSnapshot?.title ?? getLastSnapshot()?.title ?? snapshot?.title ?? null,
+            url: verificationSnapshot?.url ?? getLastSnapshot()?.url ?? snapshot?.url ?? null
           }
         });
         if (!finalResult?.ok) {
@@ -166,7 +335,13 @@ export function createAgentControlRunner(deps) {
             decision: decision.thought ?? null,
             action: controlStepLabel(finalStep),
             result: controlResultSummary(finalResult),
-            safetyClass: boundary
+            safetyClass: boundary,
+            ...controlStepEvidence({
+              boundary,
+              decision,
+              result: finalResult,
+              status
+            })
           });
           finishControlRun(status);
           setStatus(finalResult?.approvalRequired ? "Needs approval" : "Control blocked");
@@ -194,13 +369,19 @@ export function createAgentControlRunner(deps) {
         updateControlStep(stepIndex, "completed", consent ? `trusted task consent · ${controlResultSummary(finalResult)}` : controlResultSummary(finalResult), {
           phase: "verified",
           observation: {
-            title: getLastSnapshot()?.title ?? snapshot?.title ?? null,
-            url: getLastSnapshot()?.url ?? snapshot?.url ?? null
+            title: verificationSnapshot?.title ?? getLastSnapshot()?.title ?? snapshot?.title ?? null,
+            url: verificationSnapshot?.url ?? getLastSnapshot()?.url ?? snapshot?.url ?? null
           },
           decision: decision.thought ?? null,
           action: controlStepLabel(finalStep),
           result: controlResultSummary(finalResult),
-          safetyClass: boundary
+          safetyClass: boundary,
+          ...controlStepEvidence({
+            boundary,
+            decision,
+            result: finalResult
+          }),
+          uncertainty: finalVerification.uncertainty ?? null
         });
         await sleep(350);
       }
@@ -245,6 +426,7 @@ export function createAgentControlRunner(deps) {
       plan: {
         source: "observe-act-verify-loop",
         summary: `${continuationPrefix}Adaptive browser-agent loop. The host observes the page, asks for one safe next action, executes it, then verifies before continuing.`,
+        pageLock: job.pageLock ?? null,
         steps: Array.isArray(resumedFromJob?.steps) ? resumedFromJob.steps : [],
         artifacts: Array.isArray(resumedFromJob?.artifacts) ? resumedFromJob.artifacts : []
       }
@@ -284,7 +466,9 @@ export function createAgentControlRunner(deps) {
       phase: "acting",
       decision: "Human approved this action once.",
       action: controlStepLabel(step),
-      safetyClass: approvalBoundaryForStep(step)
+      safetyClass: approvalBoundaryForStep(step),
+      confidence: "medium",
+      uncertainty: "Human approval was required before this step could run."
     });
     const result = await executeControlStep(step);
     results.push({ step, result });
@@ -298,7 +482,13 @@ export function createAgentControlRunner(deps) {
         decision: "Human approved this action once, but the host still could not complete it safely.",
         action: controlStepLabel(step),
         result: controlResultSummary(result),
-        safetyClass: approvalBoundaryForStep(step, result?.error)
+        safetyClass: approvalBoundaryForStep(step, result?.error),
+        ...controlStepEvidence({
+          boundary: approvalBoundaryForStep(step, result?.error),
+          decision: { uncertainty: "The approved browser action did not complete safely." },
+          result,
+          status: result?.approvalRequired ? "approval" : "blocked"
+        })
       });
       finishControlRun(result?.approvalRequired ? "approval" : "blocked");
       setStatus(result?.approvalRequired ? "Needs approval" : "Control blocked");
@@ -316,7 +506,9 @@ export function createAgentControlRunner(deps) {
       decision: "Human approved this action once.",
       action: controlStepLabel(step),
       result: controlResultSummary(result),
-      safetyClass: approvalBoundaryForStep(step, result?.error)
+      safetyClass: approvalBoundaryForStep(step, result?.error),
+      confidence: "medium",
+      uncertainty: "Human approval was used for this completed action."
     });
     const history = [
       ...(approval.history ?? []),
@@ -351,7 +543,10 @@ export function createAgentControlRunner(deps) {
       decision: "Human denied this browser action.",
       action: controlStepLabel(denied.step),
       result: "denied by human",
-      safetyClass: approvalBoundaryForStep(denied.step, denied.reason)
+      safetyClass: approvalBoundaryForStep(denied.step, denied.reason),
+      confidence: "high",
+      uncertainty: denied.reason ?? "Human denied the proposed action.",
+      nextHumanAction: "Revise the task, choose a safer target, or perform the denied action manually."
     });
     finishControlRun("denied");
     renderControlMonitor();

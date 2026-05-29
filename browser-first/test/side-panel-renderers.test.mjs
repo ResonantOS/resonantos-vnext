@@ -9,7 +9,7 @@ import {
   messageLabel
 } from "../resonantos-side-panel-extension/src/lib/side-panel-renderers.js";
 
-function createHarness({ messages = [], attachments = [] } = {}) {
+function createHarness({ messages = [], attachments = [], renderEmptyState } = {}) {
   const dom = new JSDOM('<section id="transcript"></section><div id="attachments"></div>');
   globalThis.document = dom.window.document;
   const calls = [];
@@ -26,6 +26,7 @@ function createHarness({ messages = [], attachments = [] } = {}) {
     onRegenerateMessage: (id) => calls.push(["regenerate", id]),
     onSaveMessageToArchive: (id) => calls.push(["archive", id]),
     onShowMessageStats: (id) => calls.push(["stats", id]),
+    renderEmptyState,
     scrollTranscriptToBottom: () => calls.push(["scroll"]),
     window: dom.window
   });
@@ -76,6 +77,23 @@ test("side panel renderers render role-specific message actions", () => {
 
   articles[1].querySelector('[data-action="archive"]').click();
   assert.ok(harness.calls.some((call) => call[0] === "archive" && call[1] === "a1"));
+  assert.ok(harness.calls.some((call) => call[0] === "scroll"));
+});
+
+test("side panel renderers allow host-specific empty states", () => {
+  const harness = createHarness({
+    renderEmptyState: (container) => {
+      const empty = container.ownerDocument.createElement("section");
+      empty.className = "empty-hero";
+      empty.textContent = "Main workspace";
+      container.append(empty);
+    }
+  });
+
+  harness.renderers.renderMessages();
+
+  assert.equal(harness.transcript.querySelector(".empty-hero").textContent, "Main workspace");
+  assert.equal(harness.transcript.querySelector(".empty-state"), null);
   assert.ok(harness.calls.some((call) => call[0] === "scroll"));
 });
 

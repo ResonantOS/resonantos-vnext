@@ -63,7 +63,19 @@ function createAddonCard(addon, onOpenWorkspace) {
   return card;
 }
 
-function createDraftReviewCard(draft, onTransition) {
+function providerForDraft(draft) {
+  if (draft.target === "email") return "gmail";
+  if (draft.target === "calendar") return "google-calendar";
+  return "";
+}
+
+function providerActionLabel(draft) {
+  if (draft.target === "email") return "Open Gmail Draft";
+  if (draft.target === "calendar") return "Open Google Calendar Draft";
+  return "Open Provider Draft";
+}
+
+function createDraftReviewCard(draft, onTransition, onProviderHandoff) {
   const card = document.createElement("article");
   card.className = "addon-draft-card";
   card.dataset.status = draft.status || "draft-only";
@@ -94,13 +106,61 @@ function createDraftReviewCard(draft, onTransition) {
   reject.textContent = "Reject";
   reject.disabled = draft.status === "rejected";
   reject.addEventListener("click", () => onTransition?.(draft, "rejected"));
-  actions.append(approve, reject);
+  const handoff = document.createElement("button");
+  handoff.type = "button";
+  handoff.textContent = providerActionLabel(draft);
+  handoff.disabled = draft.status !== "approved-for-manual-send";
+  handoff.title = handoff.disabled
+    ? "Approve this draft before opening a provider draft surface."
+    : "Open the provider draft surface for human review. ResonantOS will not send or schedule.";
+  handoff.addEventListener("click", () => onProviderHandoff?.(draft, providerForDraft(draft)));
+  actions.append(approve, handoff, reject);
 
   card.append(header, meta, boundary, actions);
   return card;
 }
 
-export function renderAddOnsWorkspace({ container, bridgeRequest, onOpenWorkspace }) {
+function targetLabel(target) {
+  if (target === "opencode") return "OpenCode";
+  if (target === "hermes") return "Hermes";
+  if (target === "engineer") return "Resonant Engineer";
+  return target || "Unknown target";
+}
+
+function createDelegationCard(delegation) {
+  const card = document.createElement("article");
+  card.className = "addon-delegation-card";
+  card.dataset.status = delegation.status || "queued";
+
+  const header = document.createElement("div");
+  header.className = "addon-card-header";
+  const title = document.createElement("strong");
+  title.textContent = `${targetLabel(delegation.target)} · ${delegation.id || "delegation"}`;
+  const status = document.createElement("span");
+  status.textContent = delegation.status || "queued";
+  header.append(title, status);
+
+  const mission = document.createElement("p");
+  mission.textContent = delegation.mission || "No mission preview available.";
+
+  const meta = document.createElement("small");
+  meta.textContent = [
+    delegation.sourceKind || "resonantos-chat",
+    delegation.sourceControlRunId ? `control run ${delegation.sourceControlRunId}` : "",
+    delegation.path || ""
+  ].filter(Boolean).join(" · ");
+
+  const context = document.createElement("small");
+  context.className = delegation.hasContextPacket ? "addon-delegation-context" : "";
+  context.textContent = delegation.hasContextPacket
+    ? `Context packet: ${delegation.contextExcerpt || "bounded task evidence attached."}`
+    : "No context packet was attached. This delegation only contains the mission text.";
+
+  card.append(header, mission, meta, context);
+  return card;
+}
+
+export function renderAddOnsWorkspace({ container, bridgeRequest, onOpenProviderHandoff, onOpenWorkspace }) {
   const section = document.createElement("section");
   section.className = "addons-workspace";
   section.setAttribute("aria-label", "Add-ons workspace");
@@ -138,7 +198,25 @@ export function renderAddOnsWorkspace({ container, bridgeRequest, onOpenWorkspac
   draftList.className = "addon-draft-list";
   draftReview.append(draftHeader, draftStatus, draftList);
 
-  section.append(header, status, grid, draftReview);
+  const delegationReview = document.createElement("section");
+  delegationReview.className = "addon-draft-review addon-delegation-review";
+  const delegationHeader = document.createElement("div");
+  delegationHeader.className = "addon-draft-review-header";
+  delegationHeader.innerHTML = `
+    <div>
+      <span class="hero-kicker">Delegation packets</span>
+      <h2>Agent handoffs</h2>
+      <p>Review the governed task packets Augmentor has created for Hermes, OpenCode, and the Resonant Engineer. Context packets are evidence only; add-ons still do not receive raw credentials, wallet authority, or trusted memory-write authority.</p>
+    </div>
+  `;
+  const delegationStatus = document.createElement("p");
+  delegationStatus.className = "addons-status";
+  delegationStatus.textContent = "Loading delegation packets...";
+  const delegationList = document.createElement("div");
+  delegationList.className = "addon-draft-list addon-delegation-list";
+  delegationReview.append(delegationHeader, delegationStatus, delegationList);
+
+  section.append(header, status, grid, delegationReview, draftReview);
   container.replaceChildren(section);
 
   const loadDrafts = async () => {
@@ -158,14 +236,43 @@ export function renderAddOnsWorkspace({ container, bridgeRequest, onOpenWorkspac
           }
         });
         await loadDrafts();
+      }, async (selected, provider) => {
+        draftStatus.textContent = `Opening ${providerActionLabel(selected)}...`;
+        draftStatus.dataset.tone = "";
+        const result = await bridgeRequest("/addons/draft/handoff", {
+          method: "POST",
+          body: {
+            path: selected.path,
+            provider,
+            reviewer: "human"
+          }
+        });
+        await onOpenProviderHandoff?.(result.handoff, selected);
+        await loadDrafts();
       })));
       draftStatus.textContent = drafts.length
-        ? `${drafts.length} draft packet${drafts.length === 1 ? "" : "s"} waiting or reviewed. External send/schedule remains blocked here.`
+        ? `${drafts.length} draft packet${drafts.length === 1 ? "" : "s"} waiting or reviewed. Approved drafts can open provider draft surfaces for human review only.`
         : "No email or calendar draft packets yet. Use /email or /calendar from chat to create one.";
       draftStatus.dataset.tone = drafts.length ? "success" : "warning";
     } catch (error) {
       draftStatus.textContent = `Draft review unavailable: ${error instanceof Error ? error.message : String(error)}`;
       draftStatus.dataset.tone = "error";
+    }
+  };
+
+  const loadDelegations = async () => {
+    try {
+      const result = await bridgeRequest("/addons/delegate/list", { method: "POST", body: { limit: 8 } });
+      const delegations = Array.isArray(result.delegations) ? result.delegations : [];
+      delegationList.replaceChildren();
+      delegations.forEach((delegation) => delegationList.append(createDelegationCard(delegation)));
+      delegationStatus.textContent = delegations.length
+        ? `${delegations.length} delegation packet${delegations.length === 1 ? "" : "s"} recorded. Context packets can be audited before an add-on acts.`
+        : "No delegation packets yet. Ask Augmentor to delegate to Hermes, OpenCode, or Resonant Engineer.";
+      delegationStatus.dataset.tone = delegations.length ? "success" : "warning";
+    } catch (error) {
+      delegationStatus.textContent = `Delegation review unavailable: ${error instanceof Error ? error.message : String(error)}`;
+      delegationStatus.dataset.tone = "error";
     }
   };
 
@@ -184,6 +291,7 @@ export function renderAddOnsWorkspace({ container, bridgeRequest, onOpenWorkspac
       status.dataset.tone = "error";
     }
   })();
+  void loadDelegations();
   void loadDrafts();
 
   return section;

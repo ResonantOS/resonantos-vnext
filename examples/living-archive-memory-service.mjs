@@ -59,17 +59,14 @@ export const memoryOperationToTool = {
   "ingest-request": "living_archive_request_ingest",
   "review-queue": "living_archive_review_queue",
   "review-artifacts": "living_archive_review_artifacts",
+  "process-ingest-request": "living_archive_process_ingest_request",
+  "decide-review": "living_archive_decide_review",
+  "promote-review-artifact": "living_archive_promote_review_artifact",
+  "maintenance-cycle": "living_archive_maintenance_cycle",
+  "background-cycle": "living_archive_background_cycle",
   lint: "living_archive_lint",
+  "semantic-lint": "living_archive_semantic_lint",
 };
-
-export const providerOnlyOperations = new Set([
-  "process-ingest-request",
-  "decide-review",
-  "promote-review-artifact",
-  "maintenance-cycle",
-  "background-cycle",
-  "semantic-lint",
-]);
 
 const jsonResponse = (response, statusCode, payload) => {
   response.writeHead(statusCode, {
@@ -132,20 +129,6 @@ export const createLivingArchiveMemoryService = (options = {}) => {
     }
 
     const operation = decodeURIComponent(match[1]);
-    if (providerOnlyOperations.has(operation)) {
-      jsonResponse(response, 501, {
-        error:
-          `${operation} requires the full ResonantOS host provider. ` +
-          "This local memory service exposes portable read, intake, review listing, and deterministic lint only.",
-        operation,
-        boundary: {
-          trustedKnowledgeWrites: false,
-          reason: "Trusted wiki writes require Strategist-owned ingest/review inside the desktop host.",
-        },
-      });
-      return;
-    }
-
     const toolName = memoryOperationToTool[operation];
     if (!toolName) {
       jsonResponse(response, 404, { error: `Unsupported Living Archive memory operation: ${operation}.` });

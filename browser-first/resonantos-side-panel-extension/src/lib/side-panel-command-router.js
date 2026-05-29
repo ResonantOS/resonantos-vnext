@@ -1,3 +1,4 @@
+import { parseNaturalDelegationIntent } from "./app-command-handlers.js";
 import {
   parseAutonomousBrowserActionIntent,
   parseClickIntent,
@@ -27,6 +28,10 @@ export function createSidePanelCommandRouter(handlers) {
       if (name === "site") return handlers.runSitePermissionCommand(body);
       if (name === "memory") return handlers.runMemorySearchCommand(body);
       if (name === "history") return handlers.runHistorySearchCommand(body);
+      if (name === "wallet" && /^audit\b/i.test(body)) {
+        return handlers.saveWalletDaoAuditToArchive(body.replace(/^audit\b/i, "").trim());
+      }
+      if (name === "wallet") return handlers.runWalletStatusCommand(body);
       if (name === "capabilities" || name === "permissions") return handlers.runCapabilitiesCommand();
       if (name === "jobs") return handlers.runJobsCommand(body);
       if (name === "pause") return handlers.pauseBrowserJob(body);
@@ -40,10 +45,17 @@ export function createSidePanelCommandRouter(handlers) {
       if (name === "control") return handlers.runControlCommand(body);
       if (name === "save" || name === "archive" || name === "intake") return handlers.saveIntake(body);
       if (name === "trail" || name === "researchtrail") return handlers.saveIntake(`trail ${body}`.trim());
+      if (name === "dao" && /^audit\b/i.test(body)) {
+        return handlers.saveWalletDaoAuditToArchive(body.replace(/^audit\b/i, "").trim());
+      }
+      if (name === "dao") return handlers.prepareDaoWorkflowGuidance(body);
     }
 
     const controlIntent = parseControlIntent(value);
     if (controlIntent) return handlers.runControlCommand(controlIntent.goal);
+
+    const delegationIntent = parseNaturalDelegationIntent(value);
+    if (delegationIntent) return handlers.runNaturalDelegationCommand(delegationIntent);
 
     const typeIntent = parseTypeIntent(value);
     if (typeIntent) return handlers.typeIntoActivePage(typeIntent);
