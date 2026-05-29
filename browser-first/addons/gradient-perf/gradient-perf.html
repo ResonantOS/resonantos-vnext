@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' blob:; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; connect-src http://127.0.0.1:47773; img-src 'self' data: blob: https:; frame-src https:; font-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com;" />
+  <title>Gradient Performance — ResonantOS</title>
+  <link rel="stylesheet" href="gradient-perf.css">
+</head>
+<body>
+
+<div class="app-shell">
+
+  <!-- ── Header ──────────────────────────────────────── -->
+  <header class="app-header">
+    <div class="header-logo">
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <!-- Chart / metrics icon -->
+        <rect x="3" y="3" width="22" height="22" rx="3" stroke="#14F195" stroke-width="1.5" opacity="0.3"/>
+        <line x1="7" y1="21" x2="7"  y2="14" stroke="#14F195" stroke-width="2" stroke-linecap="round"/>
+        <line x1="11" y1="21" x2="11" y2="10" stroke="#9945FF" stroke-width="2" stroke-linecap="round"/>
+        <line x1="15" y1="21" x2="15" y2="13" stroke="#14F195" stroke-width="2" stroke-linecap="round"/>
+        <line x1="19" y1="21" x2="19" y2="7"  stroke="#9945FF" stroke-width="2" stroke-linecap="round"/>
+        <polyline points="7,14 11,10 15,13 19,7" stroke="#14F195" stroke-width="1" stroke-dasharray="2 2" opacity="0.5"/>
+      </svg>
+      <div>
+        <div class="header-title">Gradient Performance</div>
+        <div class="header-subtitle">ResonantOS Metrics</div>
+      </div>
+    </div>
+
+    <div class="header-spacer"></div>
+
+    <div class="header-status">
+      <div class="status-dot" id="bridge-dot"></div>
+      <span id="bridge-label">Bridge Connected</span>
+    </div>
+  </header>
+
+  <!-- ── Tabs ──────────────────────────────────────── -->
+  <nav class="tab-bar" role="tablist" aria-label="Performance sections">
+    <button class="tab-btn active" role="tab" aria-selected="true"  data-tab="training"    id="tab-training">Training</button>
+    <button class="tab-btn"        role="tab" aria-selected="false" data-tab="benchmarks"  id="tab-benchmarks">Benchmarks</button>
+    <button class="tab-btn"        role="tab" aria-selected="false" data-tab="fleet-speed" id="tab-fleet-speed">Fleet Speed</button>
+  </nav>
+
+  <!-- ── Main ───────────────────────────────────────── -->
+  <main class="app-main" role="main">
+
+    <!-- Training Tab -->
+    <section class="tab-panel active" id="panel-training" role="tabpanel" aria-labelledby="tab-training">
+      <div class="section-header">
+        <div class="section-title">Training Runs</div>
+        <div class="section-meta">Active and completed model training jobs</div>
+      </div>
+      <div id="training-list" class="training-list">
+        <!-- Populated by JS -->
+      </div>
+    </section>
+
+    <!-- Benchmarks Tab -->
+    <section class="tab-panel" id="panel-benchmarks" role="tabpanel" aria-labelledby="tab-benchmarks">
+      <div class="section-header">
+        <div class="section-title">Benchmark Results</div>
+        <div class="section-meta">Model accuracy comparison</div>
+      </div>
+      <div id="benchmarks-table" class="benchmarks-table">
+        <!-- Populated by JS -->
+      </div>
+    </section>
+
+    <!-- Fleet Speed Tab -->
+    <section class="tab-panel" id="panel-fleet-speed" role="tabpanel" aria-labelledby="tab-fleet-speed">
+      <div class="section-header">
+        <div class="section-title">Fleet Speed</div>
+        <div class="section-meta">Token generation rate per machine</div>
+      </div>
+      <div id="fleet-speed-chart" class="fleet-speed-chart">
+        <!-- Populated by JS -->
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ── Footer ─────────────────────────────────────── -->
+  <footer class="app-footer">
+    <div class="footer-left">
+      <span>Updated <span id="last-updated">—</span></span>
+      <span>·</span>
+      <span class="refresh-label">Auto-refresh:</span>
+      <div class="refresh-btns" role="group" aria-label="Auto-refresh interval">
+        <button class="refresh-btn active" data-interval="15"  aria-pressed="true">15s</button>
+        <button class="refresh-btn"        data-interval="30"  aria-pressed="false">30s</button>
+        <button class="refresh-btn"        data-interval="0"   aria-pressed="false">Off</button>
+      </div>
+    </div>
+    <div class="footer-right">
+      <span class="footer-pill">v1.0.0</span>
+      <span class="footer-pill">Mock Data</span>
+      <span style="color:var(--text-dim)">addon.gradient-perf · ResonantOS</span>
+    </div>
+  </footer>
+
+</div>
+
+<script type="module" src="gradient-perf.js"></script>
+</body>
+</html>

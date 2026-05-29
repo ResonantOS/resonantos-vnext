@@ -1,0 +1,16 @@
+{
+  "id": "addon.gradient-perf",
+  "name": "Gradient Performance",
+  "version": "1.0.0",
+  "description": "Training metrics and fleet performance dashboard — training loss, benchmark scores, token generation speeds per node",
+  "author": "Tom Pennington",
+  "mode": "utility",
+  "trust": "host-mediated",
+  "entry": "gradient-perf.html",
+  "contentScripts": [],
+  "commands": ["/gradient", "/perf", "/benchmark"],
+  "messageChannel": "resonantos.gradient-perf",
+  "capabilities": ["metrics-read", "benchmark-read"],
+  "requires": [],
+  "boundary": "Read-only performance metrics display. No external network access. Data sourced from host-mediated bridge."
+}

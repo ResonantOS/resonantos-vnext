@@ -158,3 +158,35 @@ The live test proves:
 - document-like contenteditable typing
 - public form submit remains blocked at the approval boundary
 - wallet-style work stops at the approval boundary
+
+---
+
+## Gradient Performance Addon
+
+**ID:** `addon.gradient-perf` | **Mode:** `utility` | **Trust:** `host-mediated`
+
+Training metrics and fleet performance dashboard for AI workloads:
+
+- **Training loss** — live training curve visualization
+- **Benchmark scores** — per-model benchmark results
+- **Token generation speeds** — tokens/sec per fleet node
+- **Node comparison** — side-by-side performance across the fleet
+
+**Commands:** `/gradient`, `/perf`, `/benchmark`
+
+**Boundary:** Read-only performance metrics display. No external network access. Data sourced from host-mediated bridge.
+
+![Gradient Performance Screenshot](docs/screenshots/gradient-perf.png)
+
+### Addon Structure
+
+```
+browser-first/addons/gradient-perf/
+  addon.json          # Manifest
+  gradient-perf.html  # Metrics dashboard UI
+  gradient-perf.css   # Chart + dashboard styles
+  gradient-perf.js    # Training metrics + benchmark logic
+browser-first/docs/screenshots/
+  gradient-perf.png   # Screenshot
+```
+
