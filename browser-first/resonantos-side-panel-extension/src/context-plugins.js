@@ -279,7 +279,7 @@ function getPluginForDomain(hostname) {
   // 3. TLD parent match (e.g. "github.io" → loose match on "github")
   var hostBase = hostname.split(".").slice(-2).join(".");
   for (var j = 0; j < domains.length; j++) {
-    if (domains[j].indexOf(hostBase) !== -1 || hostBase.indexOf(domains[j]) !== -1) {
+    if (hostBase === domains[j] || hostBase.endsWith('.' + domains[j])) {
       return _PLUGIN_REGISTRY[domains[j]];
     }
   }

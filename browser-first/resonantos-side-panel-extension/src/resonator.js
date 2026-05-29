@@ -420,6 +420,5 @@
   };
 
   injectStyles();
-  console.log('[ResonantOS] Resonator visual guide layer ready');
 
 })();
