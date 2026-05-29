@@ -40,7 +40,6 @@ const MODEL_LABELS = {
 const transcript = document.querySelector("#transcript");
 const workspaceButtons = [...document.querySelectorAll("[data-workspace]")];
 const newChatButton = document.querySelector("#new-chat");
-const openSidebarButton = document.querySelector("#open-sidebar");
 const commandForm = document.querySelector("#command-form");
 const commandInput = document.querySelector("#command-input");
 const attachFileButton = document.querySelector("#attach-file");
@@ -767,7 +766,6 @@ newChatButton?.addEventListener("click", async () => {
   commandInput.focus();
 });
 
-openSidebarButton.addEventListener("click", () => void openSidebar());
 readPageButton?.addEventListener("click", () => void handoffSidebarPrompt(
   "/browser read",
   "Opened the sidebar to read the current browser page."

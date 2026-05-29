@@ -78,7 +78,8 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(workspace, /context-meter/);
   assert.match(workspace, /dictate-button/);
   assert.doesNotMatch(workspace, /mode-select/);
-  assert.match(workspace, /Open Sidebar/);
+  assert.doesNotMatch(workspace, /Open Sidebar/);
+  assert.doesNotMatch(workspace, /id="open-sidebar"/);
   assert.match(workspace, /main-workspace\.js/);
   assert.match(workspaceScript, /createChatSessionStore/);
   assert.match(workspaceScript, /createComposerController/);
@@ -96,6 +97,7 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(workspaceScript, /augmentorPendingSidebarPrompt/);
   assert.match(workspaceScript, /handoffSidebarPrompt/);
   assert.match(workspaceScript, /open_side_panel/);
+  assert.doesNotMatch(workspaceScript, /openSidebarButton/);
   assert.match(workspaceScript, /chrome\.tabs\.update/);
   assert.match(workspaceScript, /composerController\.bind\(\)/);
   assert.match(workspaceScript, /connectionLine\.innerHTML/);
