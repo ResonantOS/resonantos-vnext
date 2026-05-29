@@ -167,6 +167,7 @@ These are the features currently implemented in the browser-first version.
 - `/approve-control <id>` starts the governed run after the preflight.
 - `/deny-control <id>` cancels the pending preflight without taking browser actions.
 - The preflight also appears as a context-dock approval card with clickable Approve and Deny buttons.
+- The preflight card can trust safe actions for the current site + task class through the same scoped task-consent store used by step approvals.
 - Stored safe task-class consent can skip the preflight only for safe scoped tasks.
 - Task-class consent grants and revocations record audit entries with timestamp, source, task class, mode, and reason.
 - The permission manager surfaces the latest task-consent audit evidence next to each stored consent.

@@ -371,7 +371,7 @@ async function waitForPanelText(panel, pattern, label) {
   throw new Error(`${label} did not appear. Panel text:\n${text}`);
 }
 
-async function submitControlCommand(panel, command) {
+async function submitControlCommand(panel, command, { preflightAction = "approve" } = {}) {
   const beforeText = (await evaluate(panel, "document.body.innerText")).result.value;
   const seenPreflightIds = new Set([...beforeText.matchAll(/\/approve-control\s+(control-[a-z0-9-]+)/gi)].map((match) => match[1]));
   const expression = `(() => {
@@ -381,10 +381,10 @@ async function submitControlCommand(panel, command) {
     document.querySelector("#command-form").requestSubmit();
   })()`;
   await evaluate(panel, expression);
-  await approveControlPreflightIfNeeded(panel, seenPreflightIds);
+  await approveControlPreflightIfNeeded(panel, seenPreflightIds, { preflightAction });
 }
 
-async function approveControlPreflightIfNeeded(panel, seenPreflightIds = new Set()) {
+async function approveControlPreflightIfNeeded(panel, seenPreflightIds = new Set(), { preflightAction = "approve" } = {}) {
   for (let index = 0; index < 20; index += 1) {
     const state = (await evaluate(panel, `({
       text: document.body.innerText,
@@ -395,7 +395,7 @@ async function approveControlPreflightIfNeeded(panel, seenPreflightIds = new Set
     const match = matches.at(-1);
     if (match && !state.disabled) {
       await evaluate(panel, `(() => {
-        const button = document.querySelector("#control-preflight-approve");
+        const button = document.querySelector(${JSON.stringify(preflightAction === "trust" ? "#control-preflight-trust" : "#control-preflight-approve")});
         if (button && !button.closest("[hidden]")) {
           button.click();
           return;
@@ -648,7 +648,7 @@ try {
     approvalReason: snapshot?.text?.includes("Booking calendar frame") ? null : "Iframe booking context was not visible.",
     doneSummary: history.length ? "Iframe booking context was observed." : null
   }); return true; })()`);
-  await submitControlCommand(panel, `book a call now`);
+  await submitControlCommand(panel, `book a call now`, { preflightAction: "trust" });
   await waitForPageCondition(page, `document.querySelector("#resonantos-control-overlay")?.dataset.session === "active"`, "persistent control overlay session start");
   const iframePanelText = await waitForPanelText(panel, /Booking calendar frame|Iframe booking context was not visible/, "iframe context read");
   assert(!/Iframe booking context was not visible/.test(iframePanelText), "Agent planner could not see iframe booking context.");
@@ -661,6 +661,8 @@ try {
   }))()`)).result.value;
   assert(firstJobState.monitorVisible, "Browser job monitor is not visible after a control task.");
   assert(firstJobState.stored.some((job) => job.goal === "book a call now"), `Browser job did not persist: ${JSON.stringify(firstJobState)}`);
+  const trustedTaskConsent = (await evaluate(panel, `(async () => (await chrome.storage.local.get("augmentorTaskConsents")).augmentorTaskConsents ?? {})()`)).result.value;
+  assert(Object.values(trustedTaskConsent).some((consent) => consent.siteKey === "127.0.0.1" && consent.taskClass === "booking" && consent.source === "control-preflight"), `Preflight trust did not persist scoped consent: ${JSON.stringify(trustedTaskConsent)}`);
   await submitControlCommand(panel, `/jobs`);
   await waitForPanelText(panel, /Browser jobs:/, "jobs command");
   await submitControlCommand(panel, `/pause book a call`);

@@ -61,6 +61,7 @@ const controlPreflightCard = document.querySelector("#control-preflight-card");
 const controlPreflightTitle = document.querySelector("#control-preflight-title");
 const controlPreflightBody = document.querySelector("#control-preflight-body");
 const controlPreflightApproveButton = document.querySelector("#control-preflight-approve");
+const controlPreflightTrustButton = document.querySelector("#control-preflight-trust");
 const controlPreflightDenyButton = document.querySelector("#control-preflight-deny");
 const jobMonitor = document.querySelector("#job-monitor");
 const jobMonitorTitle = document.querySelector("#job-monitor-title");
@@ -741,6 +742,27 @@ const denyControlPreflight = async (body) => {
   await addMessage("system", `Denied Agent Control preflight for ${preflight.taskClass} on ${preflight.siteKey}. No browser actions were taken.`);
 };
 
+const trustControlPreflightForSafeActions = async (body) => {
+  const preflight = resolvePreflightFromCommand(body);
+  if (!preflight) {
+    await addMessage("system", "No matching Agent Control preflight is waiting.");
+    return;
+  }
+  const consent = await taskConsentStore.setTaskConsent({
+    siteKey: preflight.siteKey,
+    taskClass: preflight.taskClass,
+    mode: "allow-safe",
+    reason: `Trusted from Agent Control preflight: ${preflight.goal}`,
+    source: "control-preflight"
+  });
+  await clearControlPreflight();
+  await renderTaskConsentPanel();
+  await renderPermissionManager();
+  await addMessage("system", `Trusted safe ${consent.taskClass} actions on ${consent.siteKey} and starting governed browser control now. Hard wallet, login, payment, credential, signing, transfer, destructive, and public-submit boundaries remain human-gated.`);
+  setStatus("Taking control");
+  await startControlCommand(preflight.goal, { preflightApproved: true });
+};
+
 const approvePendingControlStep = async () => {
   if (!pendingApproval || !currentControlRun) return;
   const approval = pendingApproval;
@@ -1002,6 +1024,7 @@ approvalTrustSiteButton.addEventListener("click", () => void trustCurrentTaskFor
 approvalDenyButton.addEventListener("click", () => void denyPendingControlStep());
 approvalDelegateButton.addEventListener("click", () => void delegateControlIssue());
 controlPreflightApproveButton.addEventListener("click", () => void approveControlPreflight(pendingControlPreflight?.id ?? ""));
+controlPreflightTrustButton.addEventListener("click", () => void trustControlPreflightForSafeActions(pendingControlPreflight?.id ?? ""));
 controlPreflightDenyButton.addEventListener("click", () => void denyControlPreflight(pendingControlPreflight?.id ?? ""));
 jobMonitorToggle.addEventListener("click", async () => {
   await browserJobStore.toggleMonitorCollapsed();
