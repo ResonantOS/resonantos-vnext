@@ -18,6 +18,31 @@ Save and load your work via Chrome Storage. "Send to Augmentor" forwards content
 
 Drop the `addons/blackboard/` folder into `browser-first/addons/`. The addon discovery engine finds it automatically.
 
+## Screenshots
+
+All 7 render modes:
+
+![Canvas mode](docs/screenshots/bb-v2-canvas.png)
+*Canvas — freehand drawing surface with smiley face, all 7 tabs visible*
+
+![Document mode](docs/screenshots/bb-v2-document.png)
+*Document — rich text editing with /doc commands*
+
+![Table mode](docs/screenshots/bb-v2-table.png)
+*Table — editable data grid with /table commands*
+
+![Web Embed mode](docs/screenshots/bb-v2-embed.png)
+*Web Embed — embed external pages with /show command*
+
+![Image mode](docs/screenshots/bb-v2-image.png)
+*Image Viewer — display images with /image command*
+
+![Slideshow mode](docs/screenshots/bb-v2-present.png)
+*Slideshow — presentation mode with /present commands*
+
+![Annotate mode](docs/screenshots/bb-v2-annotate.png)
+*Annotate — overlay annotations workflow*
+
 ## Files
 
 ```
@@ -216,7 +241,15 @@ Resonant Blackboard is a visual display surface for the ResonantOS side panel. I
 
 **Design System:** Michel — Atomic Design tokens, Inter + Poppins typography, WCAG accessibility.
 
-![Blackboard Screenshot](docs/screenshots/blackboard.png)
+### Screenshots
+
+![Canvas Mode](docs/screenshots/bb-v2-canvas.png)
+![Document Mode](docs/screenshots/bb-v2-document.png)
+![Table Mode](docs/screenshots/bb-v2-table.png)
+![Web Embed Mode](docs/screenshots/bb-v2-embed.png)
+![Image Mode](docs/screenshots/bb-v2-image.png)
+![Slideshow Mode](docs/screenshots/bb-v2-present.png)
+![Annotate Mode](docs/screenshots/bb-v2-annotate.png)
 
 ### Addon Structure
 
