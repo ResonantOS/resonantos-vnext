@@ -1,3 +1,48 @@
+# Task Board Addon
+
+**PR: Community Addon Submission**
+
+Kanban board for tracking work.
+
+## What It Does
+
+Four columns: **Ready**, **In Progress**, **Blocked**, **Done**
+
+- Drag and drop cards between columns
+- Create new tasks with title, description, priority (P0-P3), and assignee
+- Expand cards to see next action, current state, and blocker notes
+- Delete tasks
+- All changes persist immediately to Chrome Storage
+
+## First Use
+
+Opens with 3 onboarding tasks that guide you through the other addons.
+
+## Install
+
+Drop `addons/task-board/` into `browser-first/addons/`.
+
+## Tests
+
+```bash
+node --test browser-first/test/task-board-tab.test.mjs
+# 8 tests, 0 failures
+```
+
+## Files
+
+```
+addons/task-board/
+  addon.json
+  task-board.html / .css / .js
+docs/screenshots/
+  task-board.png
+test/
+  task-board-tab.test.mjs
+```
+
+---
+
 # ResonantOS Browser-First Prototype
 
 Intent citation: `docs/architecture/ADR-037-browser-first-chromium-resonantos.md`
@@ -191,4 +236,3 @@ browser-first/addons/task-board/
 browser-first/docs/screenshots/
   task-board.png    # Screenshot
 ```
-
