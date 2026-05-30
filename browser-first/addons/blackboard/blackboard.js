@@ -338,13 +338,35 @@ function drawLabel(ctx, label, x, y, color) {
 
 function renderDocument(payload) {
   surface.innerHTML = "";
+
+  if (!payload.markdown) {
+    const wrap = document.createElement("div");
+    wrap.className = "bb-welcome bb-fadein";
+    const icon = document.createElement("div");
+    icon.className = "bb-welcome-icon";
+    icon.textContent = "\uD83D\uDCC4";
+    const h2 = document.createElement("h2");
+    h2.textContent = "Document";
+    const p = document.createElement("p");
+    p.textContent = "Rich text and markdown display. Send a document from Augmentor or use the /doc command.";
+    const cmds = document.createElement("div");
+    cmds.className = "bb-welcome-commands";
+    cmds.innerHTML = "<code>/doc</code> \u2014 open document mode<br><code>/doc &lt;markdown&gt;</code> \u2014 render markdown content";
+    wrap.appendChild(icon);
+    wrap.appendChild(h2);
+    wrap.appendChild(p);
+    wrap.appendChild(cmds);
+    surface.appendChild(wrap);
+    return;
+  }
+
   const wrap = document.createElement("div");
   wrap.id = "bb-document-wrap";
   wrap.className = "bb-fadein";
 
   const content = document.createElement("div");
   content.id = "bb-document-content";
-  content.innerHTML = markdownToHtml(payload.markdown ?? "");
+  content.innerHTML = markdownToHtml(payload.markdown);
   wrap.appendChild(content);
   surface.appendChild(wrap);
 }
@@ -497,6 +519,28 @@ function highlightCode(code, lang) {
 
 function renderTable(payload) {
   surface.innerHTML = "";
+
+  if (!payload.headers?.length && !payload.rows?.length) {
+    const wrap = document.createElement("div");
+    wrap.className = "bb-welcome bb-fadein";
+    const icon = document.createElement("div");
+    icon.className = "bb-welcome-icon";
+    icon.textContent = "\uD83D\uDCCA";
+    const h2 = document.createElement("h2");
+    h2.textContent = "Table";
+    const p = document.createElement("p");
+    p.textContent = "Structured data tables with sortable columns. Send tabular data from Augmentor or use the /table command.";
+    const cmds = document.createElement("div");
+    cmds.className = "bb-welcome-commands";
+    cmds.innerHTML = "<code>/table</code> \u2014 open table mode<br><code>/table &lt;data&gt;</code> \u2014 render structured data";
+    wrap.appendChild(icon);
+    wrap.appendChild(h2);
+    wrap.appendChild(p);
+    wrap.appendChild(cmds);
+    surface.appendChild(wrap);
+    return;
+  }
+
   const wrap = document.createElement("div");
   wrap.id = "bb-table-wrap";
   wrap.className = "bb-fadein";
