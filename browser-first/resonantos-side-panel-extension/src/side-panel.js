@@ -13,6 +13,7 @@ import {
   createDictationController,
   hydrateProviderModelOptions,
   modelLabel,
+  renderContextMemoryPopover,
   supportsThinkingDepth,
   updateContextMeterElement
 } from "./lib/composer-runtime.js";
@@ -51,6 +52,7 @@ const activityDetail = document.querySelector("#activity-detail");
 const commandForm = document.querySelector("#command-form");
 const commandInput = document.querySelector("#command-input");
 const contextMeter = document.querySelector("#context-meter");
+const contextPopover = document.querySelector("#context-popover");
 const modelSelect = document.querySelector("#model-select");
 const thinkingDepthSelect = document.querySelector("#thinking-depth");
 const dictateButton = document.querySelector("#dictate-button");
@@ -121,6 +123,8 @@ let pendingApproval = null;
 let pendingControlPreflight = null;
 let controlledTabId = null;
 let contextDockExpanded = false;
+let contextPopoverOpen = false;
+let contextCompactNotice = "";
 let messageActions = null;
 let monitorRenderers = null;
 let nextControlPreflightDecision = null;
@@ -260,13 +264,51 @@ const updateConnectionLine = () => {
 };
 
 const setContextMeter = (snapshot) => {
-  updateContextMeterElement(contextMeter, contextUsageSnapshot({
+  const usage = contextUsageSnapshot({
     attachments: chatSessionStore.getAttachments(),
     messages: chatSessionStore.getMessages(),
     model: modelSelect.value,
     pageSnapshot: snapshot ?? lastSnapshot
-  }));
+  });
+  updateContextMeterElement(contextMeter, usage);
+  if (contextPopoverOpen) {
+    renderContextPopover(usage);
+  }
 };
+
+const compactContextLocally = () => {
+  const messages = chatSessionStore.getMessages();
+  const recent = messages.slice(-8);
+  contextCompactNotice = `Compact memory refreshed locally. ${recent.length}/${messages.length} recent turns are preserved for continuity; raw transcript remains intact.`;
+  renderContextPopover();
+};
+
+function renderContextPopover(snapshot = contextUsageSnapshot({
+  attachments: chatSessionStore.getAttachments(),
+  messages: chatSessionStore.getMessages(),
+  model: modelSelect.value,
+  pageSnapshot: lastSnapshot
+})) {
+  renderContextMemoryPopover(contextPopover, snapshot, {
+    notice: contextCompactNotice,
+    onClose: () => {
+      contextPopoverOpen = false;
+      contextPopover.hidden = true;
+      contextMeter.setAttribute("aria-expanded", "false");
+    },
+    onCompact: compactContextLocally
+  });
+}
+
+function toggleContextPopover() {
+  contextPopoverOpen = !contextPopoverOpen;
+  contextPopover.hidden = !contextPopoverOpen;
+  contextMeter.setAttribute("aria-expanded", contextPopoverOpen ? "true" : "false");
+  if (contextPopoverOpen) {
+    contextCompactNotice = "";
+    renderContextPopover();
+  }
+}
 
 const sitePermissionStore = createSitePermissionStore({
   storage: chrome.storage?.local,
@@ -1232,29 +1274,7 @@ const toggleContextDock = () => {
   renderJobMonitor();
 };
 contextToggleButton.addEventListener("click", toggleContextDock);
-contextMeter.addEventListener("click", async () => {
-  const snapshot = contextUsageSnapshot({
-    attachments: chatSessionStore.getAttachments(),
-    messages: chatSessionStore.getMessages(),
-    model: modelSelect.value,
-    pageSnapshot: lastSnapshot
-  });
-  await addMessage(
-    "system",
-    [
-      "Context usage",
-      `- estimated: ${snapshot.percent}%`,
-      `- tokens: ${snapshot.usedTokens.toLocaleString()} / ${snapshot.contextWindow.toLocaleString()}`,
-      `- messages: ${snapshot.messageTokens.toLocaleString()} tokens`,
-      `- attachments: ${snapshot.attachmentTokens.toLocaleString()} tokens`,
-      `- page context: ${snapshot.pageTokens.toLocaleString()} tokens`,
-      "",
-      snapshot.percent >= 72
-        ? "Recommendation: compact or fork soon, or switch to a larger-context model."
-        : "Context is within the safe operating range."
-    ].join("\n")
-  );
-});
+contextMeter.addEventListener("click", toggleContextPopover);
 approvalApproveButton.addEventListener("click", () => void runBusyUiAction(approvePendingControlStep));
 approvalTrustSiteButton.addEventListener("click", () => void runBusyUiAction(trustCurrentTaskForSafeActions));
 approvalDenyButton.addEventListener("click", () => void denyPendingControlStep());

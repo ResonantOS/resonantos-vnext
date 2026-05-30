@@ -6,6 +6,7 @@ import {
   contextUsageSnapshot,
   createDictationController,
   hydrateProviderModelOptions,
+  renderContextMemoryPopover,
   supportsThinkingDepth,
   updateContextMeterElement
 } from "../resonantos-side-panel-extension/src/lib/composer-runtime.js";
@@ -85,13 +86,44 @@ test("composer runtime updates context meter title and label deterministically",
   assert.match(meter.getAttribute("aria-label"), /Context usage/);
 });
 
+test("composer runtime renders a vNext-style context popover without chat injection", () => {
+  const dom = new JSDOM("<!doctype html><section id=\"popover\"></section>");
+  const popover = dom.window.document.querySelector("#popover");
+  let compacted = false;
+  let closed = false;
+  renderContextMemoryPopover(popover, contextUsageSnapshot({
+    attachments: [{ content: "note" }],
+    messages: [{ content: "conversation" }],
+    model: "MiniMax-M2.7",
+    pageSnapshot: { title: "Page", url: "https://example.com", text: "page text" }
+  }), {
+    notice: "Compact memory refreshed locally.",
+    onClose: () => {
+      closed = true;
+    },
+    onCompact: () => {
+      compacted = true;
+    }
+  });
+
+  assert.match(popover.textContent, /Context map/);
+  assert.match(popover.textContent, /Raw transcript/);
+  assert.match(popover.textContent, /Compact memory/);
+  assert.match(popover.textContent, /Page context/);
+  assert.match(popover.textContent, /Compact memory refreshed locally/);
+  popover.querySelector("button").click();
+  assert.equal(compacted, true);
+  popover.querySelectorAll("button")[1].click();
+  assert.equal(closed, true);
+});
+
 test("composer runtime exposes GPT thinking-depth capability only for GPT routes", () => {
   assert.equal(supportsThinkingDepth("gpt-5.5"), true);
   assert.equal(supportsThinkingDepth("MiniMax-M2.7"), false);
   assert.equal(supportsThinkingDepth("__auto__"), false);
 });
 
-test("dictation controller starts speech recognition and appends transcript", async () => {
+test("dictation controller starts speech recognition and appends transcript without blocking on getUserMedia", async () => {
   const dom = new JSDOM("<!doctype html><button id=\"mic\"></button><textarea id=\"input\"></textarea>");
   globalThis.Event = dom.window.Event;
   let recognitionInstance = null;
@@ -124,7 +156,9 @@ test("dictation controller starts speech recognition and appends transcript", as
     commandInput,
     navigatorRef: {
       mediaDevices: {
-        getUserMedia: async () => ({ getTracks: () => [{ stop() {} }] })
+        getUserMedia: async () => {
+          throw new Error("preflight microphone probe should not block speech recognition");
+        }
       }
     },
     onTranscript: (text) => transcripts.push(text),

@@ -24,6 +24,8 @@
 #include "include/cef_client.h"
 #include "include/cef_command_line.h"
 #include "include/cef_display_handler.h"
+#include "include/cef_download_handler.h"
+#include "include/cef_id_mappers.h"
 #include "include/cef_keyboard_handler.h"
 #include "include/cef_request_context.h"
 #include "include/cef_task.h"
@@ -58,6 +60,46 @@ constexpr const char* kExtensionDisableCommand = "browser.native.extension.disab
 constexpr const char* kWalletConfirmationCommand = "browser.native.wallet.confirmation_state";
 constexpr const char* kCloseCommand = "browser.native.close";
 constexpr const char* kMacBaseHelperName = "ResonantBrowserNativeHost Helper";
+
+std::string JsonEscape(const std::string& value) {
+  std::ostringstream escaped;
+  for (const char character : value) {
+    switch (character) {
+      case '\\':
+        escaped << "\\\\";
+        break;
+      case '"':
+        escaped << "\\\"";
+        break;
+      case '\n':
+        escaped << "\\n";
+        break;
+      case '\r':
+        escaped << "\\r";
+        break;
+      case '\t':
+        escaped << "\\t";
+        break;
+      default:
+        escaped << character;
+    }
+  }
+  return escaped.str();
+}
+
+std::string SafeDownloadFileName(const std::string& suggested_name, const std::string& fallback_name) {
+  std::string name = suggested_name.empty() ? fallback_name : suggested_name;
+  for (char& character : name) {
+    const bool invalid = character == '/' || character == '\\' || character == ':' || character == '\0';
+    if (invalid) {
+      character = '_';
+    }
+  }
+  if (name.empty() || name == "." || name == "..") {
+    return "resonantos-download.bin";
+  }
+  return name;
+}
 
 struct NativeViewBounds {
   int x = 0;
@@ -182,6 +224,7 @@ bool IsPrimaryBrowserShortcut(const CefKeyEvent& event) {
 
 class ResonantBrowserClient final : public CefClient,
                                     public CefDisplayHandler,
+                                    public CefDownloadHandler,
                                     public CefKeyboardHandler,
                                     public CefLifeSpanHandler,
                                     public CefLoadHandler {
@@ -189,6 +232,7 @@ class ResonantBrowserClient final : public CefClient,
   ResonantBrowserClient() = default;
 
   CefRefPtr<CefDisplayHandler> GetDisplayHandler() override { return this; }
+  CefRefPtr<CefDownloadHandler> GetDownloadHandler() override { return this; }
   CefRefPtr<CefKeyboardHandler> GetKeyboardHandler() override { return this; }
   CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override { return this; }
   CefRefPtr<CefLoadHandler> GetLoadHandler() override { return this; }
@@ -196,6 +240,7 @@ class ResonantBrowserClient final : public CefClient,
   void OnAfterCreated(CefRefPtr<CefBrowser> browser) override {
     CEF_REQUIRE_UI_THREAD();
     browsers_.push_back(browser);
+    active_browser_ = browser;
   }
 
   bool DoClose(CefRefPtr<CefBrowser> browser) override {
@@ -214,6 +259,7 @@ class ResonantBrowserClient final : public CefClient,
     }
 
     const int key_code = event.windows_key_code;
+    active_browser_ = browser;
     if (key_code == 'T' || key_code == 't') {
       MarkKeyboardShortcut(is_keyboard_shortcut);
       OpenNewBrowserSurface();
@@ -287,6 +333,7 @@ class ResonantBrowserClient final : public CefClient,
                  int http_status_code) override {
     CEF_REQUIRE_UI_THREAD();
       if (frame && frame->IsMain()) {
+      active_browser_ = browser;
       const std::string loaded_url = frame->GetURL().ToString();
       std::cout << "{\"event\":\"browser.native.load_end\",\"status\":" << http_status_code
                 << ",\"url\":\"" << loaded_url << "\"}" << std::endl;
@@ -304,6 +351,14 @@ class ResonantBrowserClient final : public CefClient,
       if (browser_first_auto_open_side_panel_ && !browser_first_side_panel_requested_ && loaded_web_page) {
         browser_first_side_panel_requested_ = true;
         CefPostDelayedTask(TID_UI, new OpenAugmentorSidePanelTask(browser), 750);
+      }
+      if (download_smoke_ && !download_started_) {
+        download_started_ = true;
+        const std::string target_url = download_url_.empty() ? loaded_url : download_url_;
+        std::cout << "{\"event\":\"browser.native.download_start_requested\","
+                  << "\"url\":\"" << JsonEscape(target_url) << "\"}" << std::endl;
+        browser->GetHost()->StartDownload(target_url);
+        return;
       }
       if (extension_entrypoint_smoke_) {
         loaded_urls_.push_back(loaded_url);
@@ -380,6 +435,194 @@ class ResonantBrowserClient final : public CefClient,
   void SetPhantomExtensionSmoke(bool value) { phantom_extension_smoke_ = value; }
   void SetBrowserFirstAutoOpenSidePanel(bool value) { browser_first_auto_open_side_panel_ = value; }
   void SetDefaultBrowserUrl(std::string url) { default_browser_url_ = std::move(url); }
+  void SetDownloadSmoke(std::string download_url, std::filesystem::path download_dir) {
+    download_smoke_ = true;
+    download_url_ = std::move(download_url);
+    download_dir_ = std::move(download_dir);
+  }
+
+  bool CanDownload(CefRefPtr<CefBrowser> browser,
+                   const CefString& url,
+                   const CefString& request_method) override {
+    CEF_REQUIRE_UI_THREAD();
+    (void)browser;
+    std::cout << "{\"event\":\"browser.native.download_can_download\","
+              << "\"url\":\"" << JsonEscape(url.ToString()) << "\","
+              << "\"method\":\"" << JsonEscape(request_method.ToString()) << "\","
+              << "\"allowed\":true}" << std::endl;
+    return true;
+  }
+
+  bool OnBeforeDownload(CefRefPtr<CefBrowser> browser,
+                        CefRefPtr<CefDownloadItem> download_item,
+                        const CefString& suggested_name,
+                        CefRefPtr<CefBeforeDownloadCallback> callback) override {
+    CEF_REQUIRE_UI_THREAD();
+    (void)browser;
+    if (!download_item || !callback) {
+      return false;
+    }
+
+    std::filesystem::path target_dir = download_dir_;
+    if (target_dir.empty()) {
+      target_dir = std::filesystem::path(std::getenv("HOME") ? std::getenv("HOME") : ".") / "Downloads";
+    }
+    std::filesystem::create_directories(target_dir);
+    const std::string file_name = SafeDownloadFileName(
+        suggested_name.ToString(),
+        download_item->GetSuggestedFileName().ToString().empty() ? "resonantos-download.bin"
+                                                                 : download_item->GetSuggestedFileName().ToString());
+    const std::filesystem::path target_path = target_dir / file_name;
+    std::cout << "{\"event\":\"browser.native.download_before\","
+              << "\"id\":" << download_item->GetId() << ","
+              << "\"url\":\"" << JsonEscape(download_item->GetURL().ToString()) << "\","
+              << "\"path\":\"" << JsonEscape(target_path.string()) << "\"}" << std::endl;
+    callback->Continue(target_path.string(), false);
+    return true;
+  }
+
+  void OnDownloadUpdated(CefRefPtr<CefBrowser> browser,
+                         CefRefPtr<CefDownloadItem> download_item,
+                         CefRefPtr<CefDownloadItemCallback> callback) override {
+    CEF_REQUIRE_UI_THREAD();
+    (void)browser;
+    (void)callback;
+    if (!download_item || !download_item->IsValid()) {
+      return;
+    }
+    std::cout << "{\"event\":\"browser.native.download_updated\","
+              << "\"id\":" << download_item->GetId() << ","
+              << "\"receivedBytes\":" << download_item->GetReceivedBytes() << ","
+              << "\"totalBytes\":" << download_item->GetTotalBytes() << ","
+              << "\"percent\":" << download_item->GetPercentComplete() << ","
+              << "\"complete\":" << (download_item->IsComplete() ? "true" : "false") << ","
+              << "\"canceled\":" << (download_item->IsCanceled() ? "true" : "false") << ","
+              << "\"interrupted\":" << (download_item->IsInterrupted() ? "true" : "false") << ","
+              << "\"path\":\"" << JsonEscape(download_item->GetFullPath().ToString()) << "\"}" << std::endl;
+    if (download_smoke_ && !quit_requested_ &&
+        (download_item->IsComplete() || download_item->IsCanceled() || download_item->IsInterrupted())) {
+      quit_requested_ = true;
+      CefPostDelayedTask(TID_UI, new QuitMessageLoopTask(), 250);
+    }
+  }
+
+  void ExecuteNativeMenuCommand(const std::string& command) {
+    CEF_REQUIRE_UI_THREAD();
+    CefRefPtr<CefBrowser> browser = ActiveBrowser();
+    if (command == "new_tab") {
+      if (!ExecuteChromeCommandByName(browser, "IDC_NEW_TAB", CEF_WOD_NEW_FOREGROUND_TAB)) {
+        OpenNewBrowserSurface();
+      }
+      return;
+    }
+    if (command == "new_window") {
+      if (!ExecuteChromeCommandByName(browser, "IDC_NEW_WINDOW", CEF_WOD_NEW_WINDOW)) {
+        OpenNewBrowserSurface();
+      }
+      return;
+    }
+    if (command == "close_tab") {
+      if (!ExecuteChromeCommandByName(browser, "IDC_CLOSE_TAB", CEF_WOD_CURRENT_TAB) && browser) {
+        browser->GetHost()->CloseBrowser(false);
+      }
+      return;
+    }
+    if (command == "close_window") {
+      if (browser) {
+        browser->GetHost()->CloseBrowser(false);
+      }
+      return;
+    }
+    if (!browser) {
+      return;
+    }
+    if (command == "reload") {
+      browser->Reload();
+      return;
+    }
+    if (command == "back") {
+      if (browser->CanGoBack()) {
+        browser->GoBack();
+      }
+      return;
+    }
+    if (command == "forward") {
+      if (browser->CanGoForward()) {
+        browser->GoForward();
+      }
+      return;
+    }
+    if (command == "zoom_reset") {
+      browser->GetHost()->SetZoomLevel(0.0);
+      return;
+    }
+    if (command == "zoom_in") {
+      browser->GetHost()->SetZoomLevel(browser->GetHost()->GetZoomLevel() + 0.5);
+      return;
+    }
+    if (command == "zoom_out") {
+      browser->GetHost()->SetZoomLevel(browser->GetHost()->GetZoomLevel() - 0.5);
+      return;
+    }
+    if (command == "open_augmentor") {
+      CefPostTask(TID_UI, new OpenAugmentorSidePanelTask(browser));
+      return;
+    }
+    if (command == "new_augmentor_chat") {
+      browser->GetMainFrame()->LoadURL(default_browser_url_.empty() ? kDefaultUrl : default_browser_url_);
+      CefPostDelayedTask(TID_UI, new OpenAugmentorSidePanelTask(browser), 250);
+      return;
+    }
+    if (command == "stop_agent_control") {
+      SendEscapeKey(browser);
+      return;
+    }
+    if (command == "show_history") {
+      if (!ExecuteChromeCommandByName(browser, "IDC_SHOW_HISTORY", CEF_WOD_CURRENT_TAB)) {
+        browser->GetMainFrame()->LoadURL("chrome://history");
+      }
+      return;
+    }
+    if (command == "bookmark_this_page") {
+      ExecuteChromeCommandByName(browser, "IDC_BOOKMARK_THIS_TAB", CEF_WOD_CURRENT_TAB);
+      return;
+    }
+    if (command == "show_bookmarks") {
+      if (!ExecuteChromeCommandByName(browser, "IDC_SHOW_BOOKMARK_MANAGER", CEF_WOD_CURRENT_TAB)) {
+        browser->GetMainFrame()->LoadURL("chrome://bookmarks");
+      }
+      return;
+    }
+    if (command == "manage_profiles") {
+      if (!ExecuteChromeCommandByName(browser, "IDC_MANAGE_CHROME_PROFILES", CEF_WOD_CURRENT_TAB)) {
+        browser->GetMainFrame()->LoadURL("chrome://settings/manageProfile");
+      }
+      return;
+    }
+    if (command == "default_profile") {
+      browser->GetMainFrame()->LoadURL("chrome://settings/manageProfile");
+      return;
+    }
+    if (command == "next_tab") {
+      ExecuteChromeCommandByName(browser, "IDC_SELECT_NEXT_TAB", CEF_WOD_CURRENT_TAB);
+      return;
+    }
+    if (command == "previous_tab") {
+      ExecuteChromeCommandByName(browser, "IDC_SELECT_PREVIOUS_TAB", CEF_WOD_CURRENT_TAB);
+      return;
+    }
+    if (command == "reopen_closed_tab") {
+      ExecuteChromeCommandByName(browser, "IDC_RESTORE_TAB", CEF_WOD_CURRENT_TAB);
+      return;
+    }
+    if (command == "help") {
+      browser->GetMainFrame()->LoadURL("https://resonantos.com");
+      return;
+    }
+    if (command == "print") {
+      ExecuteChromeCommandByName(browser, "IDC_PRINT", CEF_WOD_CURRENT_TAB);
+    }
+  }
 
  private:
   void MarkKeyboardShortcut(bool* is_keyboard_shortcut) {
@@ -407,6 +650,44 @@ class ResonantBrowserClient final : public CefClient,
     }
   }
 
+  CefRefPtr<CefBrowser> ActiveBrowser() {
+    if (active_browser_) {
+      return active_browser_;
+    }
+    if (!browsers_.empty()) {
+      return browsers_.back();
+    }
+    return nullptr;
+  }
+
+  bool ExecuteChromeCommandByName(CefRefPtr<CefBrowser> browser,
+                                  const char* command_id_name,
+                                  cef_window_open_disposition_t disposition) {
+    if (!browser) {
+      return false;
+    }
+    const int command_id = cef_id_for_command_id_name(command_id_name);
+    if (command_id <= 0 || !browser->GetHost()->CanExecuteChromeCommand(command_id)) {
+      return false;
+    }
+    browser->GetHost()->ExecuteChromeCommand(command_id, disposition);
+    return true;
+  }
+
+  void SendEscapeKey(CefRefPtr<CefBrowser> browser) {
+    CefKeyEvent down;
+    down.type = KEYEVENT_RAWKEYDOWN;
+    down.windows_key_code = 27;
+    down.native_key_code = 53;
+    browser->GetHost()->SendKeyEvent(down);
+
+    CefKeyEvent up;
+    up.type = KEYEVENT_KEYUP;
+    up.windows_key_code = 27;
+    up.native_key_code = 53;
+    browser->GetHost()->SendKeyEvent(up);
+  }
+
   void CloseAllBrowserSurfaces() {
     if (browsers_.empty()) {
       CefQuitMessageLoop();
@@ -422,11 +703,16 @@ class ResonantBrowserClient final : public CefClient,
   }
 
   std::vector<CefRefPtr<CefBrowser>> browsers_;
+  CefRefPtr<CefBrowser> active_browser_;
   std::vector<std::string> smoke_urls_;
   std::vector<std::string> loaded_urls_;
   std::string default_browser_url_ = kDefaultUrl;
+  std::string download_url_;
+  std::filesystem::path download_dir_;
   bool quit_after_first_main_frame_load_ = false;
   bool quit_requested_ = false;
+  bool download_smoke_ = false;
+  bool download_started_ = false;
   bool extension_entrypoint_smoke_ = false;
   bool local_extension_smoke_ = false;
   bool phantom_extension_smoke_ = false;
@@ -437,6 +723,25 @@ class ResonantBrowserClient final : public CefClient,
 
   IMPLEMENT_REFCOUNTING(ResonantBrowserClient);
   DISALLOW_COPY_AND_ASSIGN(ResonantBrowserClient);
+};
+
+CefRefPtr<ResonantBrowserClient> g_browser_client;
+
+class ExecuteNativeMenuCommandTask final : public CefTask {
+ public:
+  explicit ExecuteNativeMenuCommandTask(std::string command) : command_(std::move(command)) {}
+
+  void Execute() override {
+    if (g_browser_client) {
+      g_browser_client->ExecuteNativeMenuCommand(command_);
+    }
+  }
+
+ private:
+  std::string command_;
+
+  IMPLEMENT_REFCOUNTING(ExecuteNativeMenuCommandTask);
+  DISALLOW_COPY_AND_ASSIGN(ExecuteNativeMenuCommandTask);
 };
 
 class ResonantBrowserApp final : public CefApp, public CefBrowserProcessHandler {
@@ -479,9 +784,10 @@ class ResonantBrowserApp final : public CefApp, public CefBrowserProcessHandler 
     const bool extension_entrypoint_smoke = command_line->HasSwitch("resonantos-extension-entrypoint-smoke");
     const bool local_extension_smoke = command_line->HasSwitch("resonantos-local-extension-smoke");
     const bool phantom_extension_smoke = command_line->HasSwitch("resonantos-phantom-extension-smoke");
+    const bool download_smoke = command_line->HasSwitch("resonantos-download-smoke");
     const bool browser_first = command_line->HasSwitch("resonantos-browser-first");
     if (!page_smoke && !extension_entrypoint_smoke && !local_extension_smoke && !phantom_extension_smoke &&
-        !browser_first) {
+        !download_smoke && !browser_first) {
       return;
     }
 
@@ -491,6 +797,7 @@ class ResonantBrowserApp final : public CefApp, public CefBrowserProcessHandler 
     }
 
     CefRefPtr<ResonantBrowserClient> client(new ResonantBrowserClient());
+    g_browser_client = client;
     client->SetDefaultBrowserUrl(url);
     if (extension_entrypoint_smoke) {
       client->SetExtensionEntryPointSmoke({kChromeWebStoreUrl});
@@ -498,6 +805,10 @@ class ResonantBrowserApp final : public CefApp, public CefBrowserProcessHandler 
       client->SetLocalExtensionSmoke(true);
     } else if (phantom_extension_smoke) {
       client->SetPhantomExtensionSmoke(true);
+    } else if (download_smoke) {
+      client->SetDownloadSmoke(
+          command_line->GetSwitchValue("resonantos-download-url"),
+          command_line->GetSwitchValue("resonantos-download-dir"));
     } else if (!browser_first) {
       client->SetQuitAfterFirstMainFrameLoad(true);
     } else {
@@ -527,6 +838,7 @@ class ResonantBrowserApp final : public CefApp, public CefBrowserProcessHandler 
               << (extension_entrypoint_smoke   ? "browser.native.extension_entrypoint_smoke_started"
                   : local_extension_smoke       ? "browser.native.local_extension_smoke_started"
                   : phantom_extension_smoke     ? "browser.native.phantom_extension_smoke_started"
+                  : download_smoke              ? "browser.native.download_smoke_started"
                   : browser_first               ? "browser.first.started"
                                                 : "browser.native.smoke_started")
               << "\",\"url\":\"" << url << "\"}" << std::endl;
@@ -592,6 +904,13 @@ void PrintProbeContract() {
 }
 
 }  // namespace resonantos
+
+extern "C" void resonant_browser_native_execute_menu_command(const char* command) {
+  if (!command || !*command) {
+    return;
+  }
+  CefPostTask(TID_UI, new resonantos::ExecuteNativeMenuCommandTask(command));
+}
 
 int resonant_browser_native_cef_main(int argc, char* argv[]) {
   for (int index = 1; index < argc; ++index) {

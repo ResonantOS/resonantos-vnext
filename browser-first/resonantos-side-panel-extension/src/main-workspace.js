@@ -15,6 +15,7 @@ import {
   createDictationController,
   hydrateProviderModelOptions,
   modelLabel,
+  renderContextMemoryPopover,
   supportsThinkingDepth,
   updateContextMeterElement
 } from "./lib/composer-runtime.js";
@@ -83,6 +84,7 @@ const modelSelect = document.querySelector("#model-select");
 const thinkingDepthSelect = document.querySelector("#thinking-depth");
 const dictateButton = document.querySelector("#dictate-button");
 const contextMeter = document.querySelector("#context-meter");
+const contextPopover = document.querySelector("#context-popover");
 const connectionLine = document.querySelector("#connection-line");
 const sendButton = commandForm.querySelector(".send-button");
 const bridgeRequest = createBridgeClient();
@@ -94,6 +96,8 @@ let controlledTabId = null;
 let lastSnapshot = null;
 let railSearchQuery = "";
 let starterPromptsHidden = false;
+let contextPopoverOpen = false;
+let contextCompactNotice = "";
 const allowedWorkspaces = new Set(["answer", "artifacts", "addons", "memory", "hermes", "opencode", "settings"]);
 
 function setComposerBusy(next) {
@@ -222,12 +226,50 @@ function updateConnectionLine(status = "Ready") {
 }
 
 function updateContextMeter() {
-  updateContextMeterElement(contextMeter, contextUsageSnapshot({
+  const usage = contextUsageSnapshot({
     attachments: chatSessionStore.getAttachments(),
     messages: chatSessionStore.getMessages(),
     model: modelSelect.value,
     pageSnapshot: lastSnapshot
-  }));
+  });
+  updateContextMeterElement(contextMeter, usage);
+  if (contextPopoverOpen) {
+    renderContextPopover(usage);
+  }
+}
+
+function compactContextLocally() {
+  const messages = chatSessionStore.getMessages();
+  const recent = messages.slice(-8);
+  contextCompactNotice = `Compact memory refreshed locally. ${recent.length}/${messages.length} recent turns are preserved for continuity; raw transcript remains intact.`;
+  renderContextPopover();
+}
+
+function renderContextPopover(snapshot = contextUsageSnapshot({
+  attachments: chatSessionStore.getAttachments(),
+  messages: chatSessionStore.getMessages(),
+  model: modelSelect.value,
+  pageSnapshot: lastSnapshot
+})) {
+  renderContextMemoryPopover(contextPopover, snapshot, {
+    notice: contextCompactNotice,
+    onClose: () => {
+      contextPopoverOpen = false;
+      contextPopover.hidden = true;
+      contextMeter.setAttribute("aria-expanded", "false");
+    },
+    onCompact: compactContextLocally
+  });
+}
+
+function toggleContextPopover() {
+  contextPopoverOpen = !contextPopoverOpen;
+  contextPopover.hidden = !contextPopoverOpen;
+  contextMeter.setAttribute("aria-expanded", contextPopoverOpen ? "true" : "false");
+  if (contextPopoverOpen) {
+    contextCompactNotice = "";
+    renderContextPopover();
+  }
 }
 
 function relativeTime(value) {
@@ -1342,29 +1384,7 @@ readPageButton?.addEventListener("click", () => void browserPageActions.readActi
 saveIntakeButton?.addEventListener("click", () => void browserPageActions.saveCurrentPageToArchive());
 saveSelectionButton?.addEventListener("click", () => void browserPageActions.saveSelectionToArchive());
 contextToggleButton?.addEventListener("click", () => void browserPageActions.summarizeSnapshot());
-contextMeter?.addEventListener("click", async () => {
-  const snapshot = contextUsageSnapshot({
-    attachments: chatSessionStore.getAttachments(),
-    messages: chatSessionStore.getMessages(),
-    model: modelSelect.value,
-    pageSnapshot: lastSnapshot
-  });
-  await addMessage(
-    "system",
-    [
-      "Context usage",
-      `- estimated: ${snapshot.percent}%`,
-      `- tokens: ${snapshot.usedTokens.toLocaleString()} / ${snapshot.contextWindow.toLocaleString()}`,
-      `- messages: ${snapshot.messageTokens.toLocaleString()} tokens`,
-      `- attachments: ${snapshot.attachmentTokens.toLocaleString()} tokens`,
-      `- page context: ${snapshot.pageTokens.toLocaleString()} tokens`,
-      "",
-      snapshot.percent >= 72
-        ? "Recommendation: compact or fork soon, or switch to a larger-context model."
-        : "Context is within the safe operating range."
-    ].join("\n")
-  );
-});
+contextMeter?.addEventListener("click", toggleContextPopover);
 workspaceButtons.forEach((button) => {
   button.addEventListener("click", () => {
     setActiveWorkspace(button.dataset.workspace, { persist: true });

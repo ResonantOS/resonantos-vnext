@@ -12,6 +12,7 @@
 #include "include/wrapper/cef_library_loader.h"
 
 int resonant_browser_native_cef_main(int argc, char* argv[]);
+extern "C" void resonant_browser_native_execute_menu_command(const char* command);
 
 @interface ResonantBrowserApplication : NSApplication <CefAppProtocol> {
  @private
@@ -35,6 +36,98 @@ int resonant_browser_native_cef_main(int argc, char* argv[]);
 
 - (void)terminate:(id)sender {
   CefQuitMessageLoop();
+}
+
+- (void)resonantNewTab:(id)sender {
+  resonant_browser_native_execute_menu_command("new_tab");
+}
+
+- (void)resonantNewWindow:(id)sender {
+  resonant_browser_native_execute_menu_command("new_window");
+}
+
+- (void)resonantCloseTab:(id)sender {
+  resonant_browser_native_execute_menu_command("close_tab");
+}
+
+- (void)resonantCloseWindow:(id)sender {
+  resonant_browser_native_execute_menu_command("close_window");
+}
+
+- (void)resonantPrint:(id)sender {
+  resonant_browser_native_execute_menu_command("print");
+}
+
+- (void)resonantReloadPage:(id)sender {
+  resonant_browser_native_execute_menu_command("reload");
+}
+
+- (void)resonantActualSize:(id)sender {
+  resonant_browser_native_execute_menu_command("zoom_reset");
+}
+
+- (void)resonantZoomIn:(id)sender {
+  resonant_browser_native_execute_menu_command("zoom_in");
+}
+
+- (void)resonantZoomOut:(id)sender {
+  resonant_browser_native_execute_menu_command("zoom_out");
+}
+
+- (void)resonantOpenAugmentor:(id)sender {
+  resonant_browser_native_execute_menu_command("open_augmentor");
+}
+
+- (void)resonantNewAugmentorChat:(id)sender {
+  resonant_browser_native_execute_menu_command("new_augmentor_chat");
+}
+
+- (void)resonantStopAgentControl:(id)sender {
+  resonant_browser_native_execute_menu_command("stop_agent_control");
+}
+
+- (void)resonantBack:(id)sender {
+  resonant_browser_native_execute_menu_command("back");
+}
+
+- (void)resonantForward:(id)sender {
+  resonant_browser_native_execute_menu_command("forward");
+}
+
+- (void)resonantShowHistory:(id)sender {
+  resonant_browser_native_execute_menu_command("show_history");
+}
+
+- (void)resonantBookmarkThisPage:(id)sender {
+  resonant_browser_native_execute_menu_command("bookmark_this_page");
+}
+
+- (void)resonantShowBookmarks:(id)sender {
+  resonant_browser_native_execute_menu_command("show_bookmarks");
+}
+
+- (void)resonantManageProfiles:(id)sender {
+  resonant_browser_native_execute_menu_command("manage_profiles");
+}
+
+- (void)resonantDefaultProfile:(id)sender {
+  resonant_browser_native_execute_menu_command("default_profile");
+}
+
+- (void)resonantNextTab:(id)sender {
+  resonant_browser_native_execute_menu_command("next_tab");
+}
+
+- (void)resonantPreviousTab:(id)sender {
+  resonant_browser_native_execute_menu_command("previous_tab");
+}
+
+- (void)resonantReopenClosedTab:(id)sender {
+  resonant_browser_native_execute_menu_command("reopen_closed_tab");
+}
+
+- (void)resonantHelp:(id)sender {
+  resonant_browser_native_execute_menu_command("help");
 }
 @end
 
@@ -80,13 +173,13 @@ static void ResonantInstallMainMenu() {
 
   NSMenu* fileMenu = [[NSMenu alloc] initWithTitle:@"File"];
   [fileMenu setAutoenablesItems:NO];
-  ResonantAddMenuItem(fileMenu, @"New Tab", nil, @"t");
-  ResonantAddMenuItem(fileMenu, @"New Window", nil, @"n");
+  ResonantAddMenuItem(fileMenu, @"New Tab", @selector(resonantNewTab:), @"t");
+  ResonantAddMenuItem(fileMenu, @"New Window", @selector(resonantNewWindow:), @"n");
   [fileMenu addItem:[NSMenuItem separatorItem]];
-  ResonantAddMenuItem(fileMenu, @"Close Tab", nil, @"w");
-  ResonantAddMenuItem(fileMenu, @"Close Window", nil, @"W");
+  ResonantAddMenuItem(fileMenu, @"Close Tab", @selector(resonantCloseTab:), @"w");
+  ResonantAddMenuItem(fileMenu, @"Close Window", @selector(resonantCloseWindow:), @"W");
   [fileMenu addItem:[NSMenuItem separatorItem]];
-  ResonantAddMenuItem(fileMenu, @"Print", @selector(print:), @"p");
+  ResonantAddMenuItem(fileMenu, @"Print", @selector(resonantPrint:), @"p");
   ResonantAddTopLevelMenu(mainMenu, @"File", fileMenu);
 
   NSMenu* editMenu = [[NSMenu alloc] initWithTitle:@"Edit"];
@@ -101,45 +194,45 @@ static void ResonantInstallMainMenu() {
 
   NSMenu* viewMenu = [[NSMenu alloc] initWithTitle:@"View"];
   [viewMenu setAutoenablesItems:NO];
-  ResonantAddMenuItem(viewMenu, @"Reload Page", nil, @"r");
-  ResonantAddMenuItem(viewMenu, @"Actual Size", nil, @"0");
-  ResonantAddMenuItem(viewMenu, @"Zoom In", nil, @"+");
-  ResonantAddMenuItem(viewMenu, @"Zoom Out", nil, @"-");
+  ResonantAddMenuItem(viewMenu, @"Reload Page", @selector(resonantReloadPage:), @"r");
+  ResonantAddMenuItem(viewMenu, @"Actual Size", @selector(resonantActualSize:), @"0");
+  ResonantAddMenuItem(viewMenu, @"Zoom In", @selector(resonantZoomIn:), @"+");
+  ResonantAddMenuItem(viewMenu, @"Zoom Out", @selector(resonantZoomOut:), @"-");
   [viewMenu addItem:[NSMenuItem separatorItem]];
   ResonantAddMenuItem(viewMenu, @"Enter Full Screen", @selector(toggleFullScreen:), @"f");
   ResonantAddTopLevelMenu(mainMenu, @"View", viewMenu);
 
   NSMenu* assistantMenu = [[NSMenu alloc] initWithTitle:@"Assistant"];
   [assistantMenu setAutoenablesItems:NO];
-  ResonantAddMenuItem(assistantMenu, @"Open Augmentor", nil, @"");
-  ResonantAddMenuItem(assistantMenu, @"New Augmentor Chat", nil, @"");
-  ResonantAddMenuItem(assistantMenu, @"Stop Agent Control", nil, @".");
+  ResonantAddMenuItem(assistantMenu, @"Open Augmentor", @selector(resonantOpenAugmentor:), @"");
+  ResonantAddMenuItem(assistantMenu, @"New Augmentor Chat", @selector(resonantNewAugmentorChat:), @"");
+  ResonantAddMenuItem(assistantMenu, @"Stop Agent Control", @selector(resonantStopAgentControl:), @".");
   ResonantAddTopLevelMenu(mainMenu, @"Assistant", assistantMenu);
 
   NSMenu* historyMenu = [[NSMenu alloc] initWithTitle:@"History"];
   [historyMenu setAutoenablesItems:NO];
-  ResonantAddMenuItem(historyMenu, @"Back", nil, @"[");
-  ResonantAddMenuItem(historyMenu, @"Forward", nil, @"]");
-  ResonantAddMenuItem(historyMenu, @"Show History", nil, @"y");
+  ResonantAddMenuItem(historyMenu, @"Back", @selector(resonantBack:), @"[");
+  ResonantAddMenuItem(historyMenu, @"Forward", @selector(resonantForward:), @"]");
+  ResonantAddMenuItem(historyMenu, @"Show History", @selector(resonantShowHistory:), @"y");
   ResonantAddTopLevelMenu(mainMenu, @"History", historyMenu);
 
   NSMenu* bookmarksMenu = [[NSMenu alloc] initWithTitle:@"Bookmarks"];
   [bookmarksMenu setAutoenablesItems:NO];
-  ResonantAddMenuItem(bookmarksMenu, @"Bookmark This Page", nil, @"d");
-  ResonantAddMenuItem(bookmarksMenu, @"Show Bookmarks", nil, @"b");
+  ResonantAddMenuItem(bookmarksMenu, @"Bookmark This Page", @selector(resonantBookmarkThisPage:), @"d");
+  ResonantAddMenuItem(bookmarksMenu, @"Show Bookmarks", @selector(resonantShowBookmarks:), @"b");
   ResonantAddTopLevelMenu(mainMenu, @"Bookmarks", bookmarksMenu);
 
   NSMenu* profilesMenu = [[NSMenu alloc] initWithTitle:@"Profiles"];
   [profilesMenu setAutoenablesItems:NO];
-  ResonantAddMenuItem(profilesMenu, @"Default Profile", nil, @"");
-  ResonantAddMenuItem(profilesMenu, @"Manage Profiles", nil, @"");
+  ResonantAddMenuItem(profilesMenu, @"Default Profile", @selector(resonantDefaultProfile:), @"");
+  ResonantAddMenuItem(profilesMenu, @"Manage Profiles", @selector(resonantManageProfiles:), @"");
   ResonantAddTopLevelMenu(mainMenu, @"Profiles", profilesMenu);
 
   NSMenu* tabMenu = [[NSMenu alloc] initWithTitle:@"Tab"];
   [tabMenu setAutoenablesItems:NO];
-  ResonantAddMenuItem(tabMenu, @"Next Tab", nil, @"]");
-  ResonantAddMenuItem(tabMenu, @"Previous Tab", nil, @"[");
-  ResonantAddMenuItem(tabMenu, @"Reopen Closed Tab", nil, @"T");
+  ResonantAddMenuItem(tabMenu, @"Next Tab", @selector(resonantNextTab:), @"]");
+  ResonantAddMenuItem(tabMenu, @"Previous Tab", @selector(resonantPreviousTab:), @"[");
+  ResonantAddMenuItem(tabMenu, @"Reopen Closed Tab", @selector(resonantReopenClosedTab:), @"T");
   ResonantAddTopLevelMenu(mainMenu, @"Tab", tabMenu);
 
   NSMenu* windowMenu = [[NSMenu alloc] initWithTitle:@"Window"];
@@ -152,7 +245,7 @@ static void ResonantInstallMainMenu() {
 
   NSMenu* helpMenu = [[NSMenu alloc] initWithTitle:@"Help"];
   [helpMenu setAutoenablesItems:NO];
-  ResonantAddMenuItem(helpMenu, @"ResonantOS Browser Help", nil, @"");
+  ResonantAddMenuItem(helpMenu, @"ResonantOS Browser Help", @selector(resonantHelp:), @"");
   ResonantAddTopLevelMenu(mainMenu, @"Help", helpMenu);
   [NSApp setHelpMenu:helpMenu];
 

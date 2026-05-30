@@ -128,6 +128,126 @@ export function updateContextMeterElement(contextMeter, snapshot) {
   contextMeter.setAttribute("aria-label", `Context usage ${snapshot.percent} percent`);
 }
 
+function formatTokenCount(value) {
+  const count = Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0;
+  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
+  if (count >= 1_000) return `${(count / 1_000).toFixed(1)}k`;
+  return String(count);
+}
+
+function contextFlowStep(doc, label, active = false) {
+  const item = doc.createElement("span");
+  item.className = active ? "active" : "";
+  item.textContent = label;
+  return item;
+}
+
+function contextMemoryCard(doc, label, value, tone = "neutral") {
+  const card = doc.createElement("article");
+  card.className = `context-memory-card ${tone}`;
+  const caption = doc.createElement("span");
+  caption.textContent = label;
+  const strong = doc.createElement("strong");
+  strong.textContent = value;
+  card.append(caption, strong);
+  return card;
+}
+
+export function renderContextMemoryPopover(popover, snapshot, { notice = "", onClose = () => undefined, onCompact = () => undefined } = {}) {
+  if (!popover || !snapshot) return;
+  const doc = popover.ownerDocument ?? globalThis.document;
+  const usable = Math.max(1, snapshot.contextWindow);
+  const usedWidth = `${Math.min(100, Math.round((snapshot.usedTokens / usable) * 100))}%`;
+  const compactWidth = "72%";
+  const hardStopWidth = "88%";
+
+  const head = doc.createElement("div");
+  head.className = "context-memory-head";
+  const title = doc.createElement("div");
+  const titleLabel = doc.createElement("span");
+  titleLabel.textContent = "Context map";
+  const titleValue = doc.createElement("strong");
+  titleValue.textContent = `${snapshot.percent}%`;
+  title.append(titleLabel, titleValue);
+  const actions = doc.createElement("div");
+  actions.className = "context-memory-actions";
+  const compact = doc.createElement("button");
+  compact.type = "button";
+  compact.textContent = "Compact now";
+  compact.addEventListener("click", onCompact);
+  const close = doc.createElement("button");
+  close.type = "button";
+  close.textContent = "Close";
+  close.addEventListener("click", onClose);
+  actions.append(compact, close);
+  head.append(title, actions);
+
+  const location = doc.createElement("p");
+  location.className = "context-memory-location";
+  location.textContent = "This changes the context view only. Raw chat transcript stays intact.";
+
+  const noticeNode = doc.createElement("div");
+  noticeNode.className = "inline-notice warning";
+  noticeNode.textContent = notice;
+  noticeNode.hidden = !notice;
+
+  const meter = doc.createElement("div");
+  meter.className = "context-memory-meter";
+  meter.title = snapshot.title;
+  const track = doc.createElement("div");
+  track.className = "context-memory-meter-track";
+  const used = doc.createElement("span");
+  used.className = "context-memory-meter-used";
+  used.style.width = usedWidth;
+  const compactThreshold = doc.createElement("span");
+  compactThreshold.className = "context-memory-meter-threshold compact";
+  compactThreshold.style.left = compactWidth;
+  const hardThreshold = doc.createElement("span");
+  hardThreshold.className = "context-memory-meter-threshold hard";
+  hardThreshold.style.left = hardStopWidth;
+  track.append(used, compactThreshold, hardThreshold);
+  const labels = doc.createElement("div");
+  labels.className = "context-memory-meter-labels";
+  const usedLabel = doc.createElement("span");
+  usedLabel.textContent = `${formatTokenCount(snapshot.usedTokens)} used`;
+  const usableLabel = doc.createElement("span");
+  usableLabel.textContent = `${formatTokenCount(snapshot.contextWindow)} usable`;
+  labels.append(usedLabel, usableLabel);
+  meter.append(track, labels);
+
+  const flow = doc.createElement("div");
+  flow.className = "context-memory-flow";
+  flow.setAttribute("aria-label", "Prompt memory layers");
+  flow.append(
+    contextFlowStep(doc, "Raw transcript", true),
+    contextFlowStep(doc, "Compact memory", snapshot.percent >= 72),
+    contextFlowStep(doc, "Recent turns", true),
+    contextFlowStep(doc, "Page context", snapshot.pageTokens > 0),
+    contextFlowStep(doc, "Response reserve")
+  );
+
+  const grid = doc.createElement("div");
+  grid.className = "context-memory-grid";
+  grid.append(
+    contextMemoryCard(doc, "Messages", `${formatTokenCount(snapshot.messageTokens)} tokens`, "primary"),
+    contextMemoryCard(doc, "Attachments", `${formatTokenCount(snapshot.attachmentTokens)} tokens`, "neutral"),
+    contextMemoryCard(doc, "Page context", `${formatTokenCount(snapshot.pageTokens)} tokens`, snapshot.pageTokens > 0 ? "primary" : "neutral"),
+    contextMemoryCard(doc, "Reserve", `${formatTokenCount(Math.max(0, snapshot.contextWindow - snapshot.usedTokens))} tokens`, "neutral")
+  );
+
+  const foot = doc.createElement("div");
+  foot.className = "context-memory-foot";
+  const range = doc.createElement("span");
+  range.textContent = snapshot.percent >= 72
+    ? "Compaction threshold reached or approaching."
+    : "Context is within the safe operating range.";
+  const note = doc.createElement("span");
+  note.textContent = "Use Compact now before old turns leave the prompt.";
+  foot.append(range, note);
+
+  popover.replaceChildren(head, location, noticeNode, meter, flow, grid, foot);
+}
+
 function speechRecognitionConstructor(win = globalThis.window) {
   if (!win) return null;
   return win.SpeechRecognition ?? win.webkitSpeechRecognition ?? null;
@@ -162,15 +282,6 @@ export function createDictationController({
     return Boolean(speechRecognitionConstructor(windowRef));
   }
 
-  async function requestMicrophone() {
-    if (!navigatorRef.mediaDevices?.getUserMedia) return null;
-    const stream = await navigatorRef.mediaDevices.getUserMedia({ audio: true });
-    for (const track of stream.getTracks()) {
-      track.stop();
-    }
-    return true;
-  }
-
   function appendTranscript(text) {
     const value = String(text ?? "").trim();
     if (!value) return;
@@ -189,10 +300,9 @@ export function createDictationController({
       return;
     }
     try {
-      await requestMicrophone();
       recognition = new Recognition();
       recognition.continuous = false;
-      recognition.interimResults = false;
+      recognition.interimResults = true;
       recognition.lang = "en-US";
       recognition.onresult = (event) => {
         const transcript = Array.from(event.results ?? [])

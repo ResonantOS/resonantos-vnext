@@ -1262,6 +1262,149 @@ textarea::placeholder {
   background: rgba(5, 8, 7, 0.94);
 }
 
+.context-memory-popover {
+  margin: 10px 2px 4px;
+  border: 1px solid rgba(36, 209, 143, 0.24);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 18% 0%, rgba(36, 209, 143, 0.13), transparent 32%),
+    rgba(5, 15, 11, 0.98);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.34), inset 0 0 0 1px rgba(255, 255, 255, 0.035);
+  padding: 14px;
+}
+
+.context-memory-popover[hidden] {
+  display: none;
+}
+
+.context-memory-head,
+.context-memory-actions,
+.context-memory-meter-labels,
+.context-memory-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.context-memory-head span,
+.context-memory-card span {
+  display: block;
+  color: rgba(238, 247, 240, 0.54);
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.context-memory-head strong {
+  color: var(--accent);
+  font-size: 1.3rem;
+}
+
+.context-memory-actions button {
+  border: 1px solid rgba(36, 209, 143, 0.24);
+  border-radius: 999px;
+  background: rgba(36, 209, 143, 0.08);
+  color: rgba(238, 247, 240, 0.82);
+  font-size: 0.68rem;
+  font-weight: 900;
+  padding: 7px 10px;
+}
+
+.context-memory-location,
+.context-memory-foot {
+  color: rgba(238, 247, 240, 0.58);
+  font-size: 0.7rem;
+  line-height: 1.35;
+}
+
+.context-memory-meter {
+  margin: 12px 0;
+}
+
+.context-memory-meter-track {
+  position: relative;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.context-memory-meter-used {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(36, 209, 143, 0.9), rgba(153, 255, 214, 0.9));
+}
+
+.context-memory-meter-threshold {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.38);
+}
+
+.context-memory-meter-threshold.hard {
+  background: rgba(255, 112, 112, 0.86);
+}
+
+.context-memory-meter-labels {
+  margin-top: 7px;
+  color: rgba(238, 247, 240, 0.52);
+  font-size: 0.66rem;
+}
+
+.context-memory-flow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0;
+}
+
+.context-memory-flow span {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  color: rgba(238, 247, 240, 0.48);
+  font-size: 0.62rem;
+  font-weight: 800;
+  padding: 5px 8px;
+}
+
+.context-memory-flow span.active {
+  border-color: rgba(36, 209, 143, 0.3);
+  color: rgba(204, 255, 232, 0.86);
+  background: rgba(36, 209, 143, 0.08);
+}
+
+.context-memory-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.context-memory-card {
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 9px;
+}
+
+.context-memory-card strong {
+  display: block;
+  margin-top: 5px;
+  overflow-wrap: anywhere;
+  color: rgba(238, 247, 240, 0.86);
+  font-size: 0.72rem;
+}
+
+.context-memory-card.primary {
+  border-color: rgba(36, 209, 143, 0.26);
+  background: rgba(36, 209, 143, 0.065);
+}
+
 .send-button:hover {
   background: var(--accent-strong);
 }
