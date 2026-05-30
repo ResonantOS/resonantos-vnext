@@ -31,6 +31,11 @@ node --test browser-first/test/canvas-tab.test.mjs
 # 9 tests, 0 failures
 ```
 
+## Screenshot
+
+![System Map with 8 fleet nodes](docs/screenshots/canvas-populated.png)
+*8 fleet nodes on the topology graph with roles (orchestrator, inference, training, gpu-compute, eval). Draggable nodes with minimap.*
+
 ## Files
 
 ```
@@ -39,6 +44,7 @@ addons/canvas/
   canvas.html / .css / .js
 docs/screenshots/
   canvas.png
+  canvas-populated.png
 test/
   canvas-tab.test.mjs
 ```
@@ -224,6 +230,9 @@ Interactive node graph for visualizing fleet topology and protocol connections:
 **Boundary:** Visual display only. No page modification. No wallet interaction. No direct network access.
 
 ![Canvas Screenshot](docs/screenshots/canvas.png)
+
+![Canvas — Populated](docs/screenshots/canvas-populated.png)
+*8 fleet nodes with roles, animated edges, and minimap*
 
 ### Addon Structure
 
