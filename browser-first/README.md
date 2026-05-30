@@ -1,3 +1,66 @@
+# Security & Hardening
+
+**PR: Core Security Components**
+
+Adds security monitoring, wallet detection, audit logging, and a CI pipeline to the browser-first extension.
+
+## Shield — Security Audit Trail
+
+Real-time security log showing what the AI blocked, approved, or flagged. Reads from `chrome.storage.local` where the content script logs security events, and updates live via `storage.onChanged`.
+
+All rendered output is XSS-protected via `escapeHtml()` on every untrusted field.
+
+## Wallet Adapter — Phantom Detection
+
+Read-only Phantom wallet detection:
+- Detects wallet presence via content script delegation (never accesses `window.phantom` directly from extension pages)
+- Reads public key only
+- `wallet_connect` and `wallet_sign` are both gated through `requestApproval()` before any action
+- Filters active tab to `https://` URLs before wallet operations
+- No private key handling anywhere in the codebase
+
+## Audit Trail
+
+Server-side security event logger (`audit-trail.mjs`). Writes wallet audit events to `wallet-audit.jsonl` with timestamps, action types, and page URLs.
+
+## CI Pipeline
+
+GitHub Actions workflow (`.github/workflows/browser-first-ci.yml`):
+- Node 22+
+- Manifest validation
+- Syntax check
+- Full test suite
+- `npm audit --audit-level=moderate` (enforced, not silenced)
+- Actions SHA-pinned to immutable commit digests (not mutable version tags)
+
+## Tests
+
+```bash
+node --test browser-first/test/shield-tab.test.mjs browser-first/test/wallet-adapter.test.mjs
+# 16 tests, 0 failures
+```
+
+## Files
+
+```
+browser-first/
+  resonantos-side-panel-extension/src/
+    shield-tab.html / shield-tab.js
+    wallet-adapter.js
+  addons/
+    shield/addon.json
+    wallet-adapter/addon.json
+  host/
+    audit-trail.mjs
+  test/
+    shield-tab.test.mjs (8 tests)
+    wallet-adapter.test.mjs (8 tests)
+.github/workflows/
+  browser-first-ci.yml
+```
+
+---
+
 # ResonantOS Browser-First Prototype
 
 Intent citation: `docs/architecture/ADR-037-browser-first-chromium-resonantos.md`
@@ -208,4 +271,3 @@ The Shield tab (`shield-tab.html` / `shield-tab.js`) provides a live security au
 GitHub Actions at `.github/workflows/browser-first-ci.yml`:
 - Node 22+, manifest validation, syntax check, full test suite
 - Triggers on push/PR to `browser-first-preview`
-
