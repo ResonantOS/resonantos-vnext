@@ -1,3 +1,46 @@
+# Addon Discovery Engine
+
+**PR: Core Addon Infrastructure**
+
+Adds the dynamic addon discovery system to the browser-first extension. This is the foundation that makes all addons work — without it, addon folders are inert files.
+
+## What This Adds
+
+- **ADDON-SPEC.md** — Complete developer specification for building addons. Covers manifest schema, addon modes, trust model, security validation, and the discovery lifecycle.
+- **addon-discovery.mjs** — The discovery engine (397 lines). Scans `browser-first/addons/` at startup, validates each `addon.json` manifest, and returns a registry of verified addons.
+- **addon-discovery.test.mjs** — 38 tests covering manifest validation, path traversal prevention, symlink escape detection, trust allowlist enforcement, circular dependency detection, and edge cases.
+
+## Security Features
+
+- Path traversal blocked (`../../` in entry fields rejected)
+- Symlink escape detection (realpath + root boundary check)
+- Trust tier allowlist (unknown values rejected — no privilege escalation)
+- Manifest size limit (64KB — prevents DoS via giant JSON)
+- HTML injection blocked in all string fields
+- ID collision detection (first-seen wins)
+- Circular dependency detection (DFS cycle check)
+
+## Tests
+
+```bash
+node --test browser-first/test/addon-discovery.test.mjs
+# 38 tests, 0 failures
+```
+
+## Files
+
+```
+browser-first/
+  addons/
+    ADDON-SPEC.md              # Developer spec
+  host/
+    addon-discovery.mjs        # Discovery engine
+  test/
+    addon-discovery.test.mjs   # 38 tests
+```
+
+---
+
 # ResonantOS Browser-First Prototype
 
 Intent citation: `docs/architecture/ADR-037-browser-first-chromium-resonantos.md`
@@ -201,4 +244,3 @@ Minimal `addon.json`:
   "boundary": "What it can and cannot do."
 }
 ```
-
