@@ -1,5 +1,8 @@
 # Security & Hardening
 
+![Shield Security Tab](docs/screenshots/shield-tab.png)
+
+
 **PR: Core Security Components**
 
 Adds security monitoring, wallet detection, audit logging, and a CI pipeline to the browser-first extension.
