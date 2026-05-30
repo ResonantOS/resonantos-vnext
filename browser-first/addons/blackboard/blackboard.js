@@ -34,7 +34,9 @@ modeTabs.forEach((btn) => {
     else if (mode === "document") handleCommand("document", { markdown: "" });
     else if (mode === "table") handleCommand("table", { headers: [], rows: [] });
     else if (mode === "embed") handleCommand("embed", { url: "" });
+    else if (mode === "image") handleCommand("image", { src: "", alt: "Drop or paste an image" });
     else if (mode === "present") handleCommand("present", { slides: [] });
+    else if (mode === "annotate") handleCommand("annotate", { annotations: [] });
   });
 });
 
@@ -619,6 +621,29 @@ function renderEmbed(payload) {
 
 function renderImage(payload) {
   surface.innerHTML = "";
+
+  // Empty state when no image is provided
+  if (!payload.src) {
+    const wrap = document.createElement("div");
+    wrap.className = "bb-welcome bb-fadein";
+    const icon = document.createElement("div");
+    icon.className = "bb-welcome-icon";
+    icon.textContent = "\uD83D\uDDBC\uFE0F";
+    const h2 = document.createElement("h2");
+    h2.textContent = "Image Viewer";
+    const p = document.createElement("p");
+    p.textContent = "Display generated or fetched images. Send an image from Augmentor or use the /image command.";
+    const cmds = document.createElement("div");
+    cmds.className = "bb-welcome-commands";
+    cmds.innerHTML = "<code>/image &lt;url&gt;</code> \u2014 display an image from URL";
+    wrap.appendChild(icon);
+    wrap.appendChild(h2);
+    wrap.appendChild(p);
+    wrap.appendChild(cmds);
+    surface.appendChild(wrap);
+    return;
+  }
+
   const wrap = document.createElement("div");
   wrap.id = "bb-image-wrap";
   wrap.className = "bb-fadein";
@@ -628,7 +653,7 @@ function renderImage(payload) {
 
   const img = document.createElement("img");
   img.id = "bb-image-el";
-  img.src = payload.src || "";
+  img.src = payload.src;
   img.alt = payload.alt || "";
   container.appendChild(img);
 
@@ -686,7 +711,27 @@ function renderAnnotations(payload) {
   const canvas = document.getElementById("bb-annotation-canvas");
   if (canvas && payload.annotations?.length) {
     drawAnnotations(canvas, payload.annotations);
+    return;
   }
+  // Standalone annotate mode — show empty state with instructions
+  surface.innerHTML = "";
+  const wrap = document.createElement("div");
+  wrap.className = "bb-welcome bb-fadein";
+  const icon = document.createElement("div");
+  icon.className = "bb-welcome-icon";
+  icon.textContent = "\u270F\uFE0F";
+  const h2 = document.createElement("h2");
+  h2.textContent = "Annotate";
+  const p = document.createElement("p");
+  p.textContent = "Load an image first using the Image tab, then switch to Annotate to draw on top of it.";
+  const cmds = document.createElement("div");
+  cmds.className = "bb-welcome-commands";
+  cmds.innerHTML = "<code>/image &lt;url&gt;</code> \u2014 load an image<br><code>/annotate</code> \u2014 switch to annotation mode";
+  wrap.appendChild(icon);
+  wrap.appendChild(h2);
+  wrap.appendChild(p);
+  wrap.appendChild(cmds);
+  surface.appendChild(wrap);
 }
 
 // ── Present mode ──────────────────────────────────────────────────────────────
