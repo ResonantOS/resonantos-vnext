@@ -28,6 +28,11 @@ node --test browser-first/test/open-items-tab.test.mjs
 # 8 tests, 0 failures
 ```
 
+## Screenshot
+
+![Open Items with 9 items across all sections](docs/screenshots/open-items-populated.png)
+*9 items: Needs Attention (2), Pending (4), Completed (3) — sources from TOOLS.md, HEARTBEAT.md, memory logs, GitHub*
+
 ## Files
 
 ```
@@ -222,6 +227,9 @@ Dashboard showing pending and blocked work items across three sections:
 **Boundary:** Read-only work item display. No external network access. Data sourced from host-mediated bridge.
 
 ![Open Items Screenshot](docs/screenshots/open-items.png)
+
+![Open Items — Populated](docs/screenshots/open-items-populated.png)
+*Fully populated dashboard with items across all three sections*
 
 ### Addon Structure
 
