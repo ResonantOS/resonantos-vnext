@@ -192,6 +192,113 @@ test(
 );
 
 test(
+  "native CEF Chrome Runtime host denies privileged page permissions by default",
+  { skip: !existsSync(hostBinary) && "Build the native host before running the CEF permission smoke test." },
+  async () => {
+    const server = createServer((request, response) => {
+      response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      response.end(`<!doctype html>
+        <title>permission-smoke</title>
+        <script>
+          navigator.geolocation.getCurrentPosition(
+            () => { document.title = "permission-allowed"; },
+            (error) => { document.title = "permission-denied-" + error.code; }
+          );
+        </script>`);
+    });
+    const address = await listen(server);
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+    const profile = smokeProfileArgs("cef-permission-smoke");
+
+    try {
+      const { stdout } = await execFileAsync(
+        hostBinary,
+        ["--resonantos-permission-smoke", `--url=${baseUrl}/`, ...profile.args],
+        {
+          cwd: addonRoot,
+          timeout: 30000,
+          maxBuffer: 1024 * 1024 * 2,
+        },
+      );
+
+      const events = parseJsonEvents(stdout);
+      assert.ok(
+        events.some((event) => event.event === "browser.native.permission_smoke_started"),
+        "Permission smoke must start explicitly.",
+      );
+      assert.ok(
+        events.some((event) => event.event === "browser.native.permission.prompt" && event.decision === "deny"),
+        "Permission prompts must be mediated and denied by default.",
+      );
+      assert.ok(
+        events.some((event) => event.event === "browser.native.permission.dismissed" && event.result === "deny"),
+        "Permission prompts must close with a denied result.",
+      );
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+      profile.cleanup();
+    }
+  },
+);
+
+test(
+  "native CEF Chrome Runtime host exposes real page context menus",
+  { skip: !existsSync(hostBinary) && "Build the native host before running the CEF context-menu smoke test." },
+  async () => {
+    const server = createServer((request, response) => {
+      response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      response.end(`<!doctype html>
+        <title>context-menu-smoke</title>
+        <style>
+          body { margin: 0; }
+          a { display: block; position: absolute; left: 20px; top: 20px; width: 220px; height: 42px; }
+        </style>
+        <a id="target" href="/linked-target">Resonant linked target</a>`);
+    });
+    const address = await listen(server);
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+    const profile = smokeProfileArgs("cef-context-menu-smoke");
+
+    try {
+      const { stdout } = await execFileAsync(
+        hostBinary,
+        ["--resonantos-context-menu-smoke", `--url=${baseUrl}/`, ...profile.args],
+        {
+          cwd: addonRoot,
+          timeout: 30000,
+          maxBuffer: 1024 * 1024 * 2,
+        },
+      );
+
+      const events = parseJsonEvents(stdout);
+      assert.ok(
+        events.some((event) => event.event === "browser.native.context_menu_smoke_started"),
+        "Context-menu smoke must start explicitly.",
+      );
+      const before = events.find((event) => event.event === "browser.native.context_menu.before");
+      assert.ok(before, "Context-menu handler must observe the right-click target.");
+      assert.equal(before.linkUrl, `${baseUrl}/linked-target`);
+      assert.equal(before.pageUrl, `${baseUrl}/`);
+      assert.equal(before.modelCount > 0, true);
+      const run = events.find((event) => event.event === "browser.native.context_menu.run");
+      assert.ok(run, "Context-menu display must run through the native handler.");
+      assert.equal(run.modelCount > 0, true);
+      assert.ok(
+        run.items.some((item) => item.commandId === 50100 || item.commandId === 50104),
+        "Link context menus must include Chromium link actions.",
+      );
+      assert.ok(
+        events.some((event) => event.event === "browser.native.context_menu.dismissed"),
+        "Context-menu smoke must dismiss the menu cleanly.",
+      );
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+      profile.cleanup();
+    }
+  },
+);
+
+test(
   "native CEF Chrome Runtime host executes a local unpacked extension",
   { skip: !existsSync(hostBinary) && "Build the native host before running the CEF local extension smoke test." },
   async () => {

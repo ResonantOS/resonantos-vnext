@@ -23,10 +23,13 @@
 #include "include/cef_browser.h"
 #include "include/cef_client.h"
 #include "include/cef_command_line.h"
+#include "include/cef_command_ids.h"
+#include "include/cef_context_menu_handler.h"
 #include "include/cef_display_handler.h"
 #include "include/cef_download_handler.h"
 #include "include/cef_id_mappers.h"
 #include "include/cef_keyboard_handler.h"
+#include "include/cef_permission_handler.h"
 #include "include/cef_request_context.h"
 #include "include/cef_task.h"
 #include "include/wrapper/cef_helpers.h"
@@ -34,6 +37,7 @@
 namespace resonantos {
 
 constexpr const char* kDefaultUrl = "https://resonantos.com";
+constexpr const char* kResonantExtensionOrigin = "chrome-extension://cdpdmmalhmokbfcfgogoepnjplaakgnl";
 constexpr const char* kChromeExtensionsUrl = "chrome://extensions";
 constexpr const char* kChromeNewTabFooterUrl = "chrome://newtab-footer";
 constexpr const char* kChromeWebStoreUrl = "https://chromewebstore.google.com/category/extensions";
@@ -99,6 +103,21 @@ std::string SafeDownloadFileName(const std::string& suggested_name, const std::s
     return "resonantos-download.bin";
   }
   return name;
+}
+
+const char* PermissionResultName(cef_permission_request_result_t result) {
+  switch (result) {
+    case CEF_PERMISSION_RESULT_ACCEPT:
+      return "accept";
+    case CEF_PERMISSION_RESULT_DENY:
+      return "deny";
+    case CEF_PERMISSION_RESULT_DISMISS:
+      return "dismiss";
+    case CEF_PERMISSION_RESULT_IGNORE:
+      return "ignore";
+    default:
+      return "unknown";
+  }
 }
 
 struct NativeViewBounds {
@@ -210,6 +229,32 @@ class OpenAugmentorSidePanelTask final : public CefTask {
   DISALLOW_COPY_AND_ASSIGN(OpenAugmentorSidePanelTask);
 };
 
+class ContextMenuSmokeClickTask final : public CefTask {
+ public:
+  ContextMenuSmokeClickTask(CefRefPtr<CefBrowser> browser, int x, int y) : browser_(browser), x_(x), y_(y) {}
+
+  void Execute() override {
+    if (!browser_) {
+      return;
+    }
+    CefMouseEvent event;
+    event.x = std::max(0, x_);
+    event.y = std::max(0, y_);
+    event.modifiers = 0;
+    browser_->GetHost()->SetFocus(true);
+    browser_->GetHost()->SendMouseClickEvent(event, MBT_RIGHT, false, 1);
+    browser_->GetHost()->SendMouseClickEvent(event, MBT_RIGHT, true, 1);
+  }
+
+ private:
+  CefRefPtr<CefBrowser> browser_;
+  int x_;
+  int y_;
+
+  IMPLEMENT_REFCOUNTING(ContextMenuSmokeClickTask);
+  DISALLOW_COPY_AND_ASSIGN(ContextMenuSmokeClickTask);
+};
+
 bool IsPrimaryBrowserShortcut(const CefKeyEvent& event) {
   if (event.type != KEYEVENT_RAWKEYDOWN) {
     return false;
@@ -223,19 +268,23 @@ bool IsPrimaryBrowserShortcut(const CefKeyEvent& event) {
 }
 
 class ResonantBrowserClient final : public CefClient,
+                                    public CefContextMenuHandler,
                                     public CefDisplayHandler,
                                     public CefDownloadHandler,
                                     public CefKeyboardHandler,
                                     public CefLifeSpanHandler,
-                                    public CefLoadHandler {
+                                    public CefLoadHandler,
+                                    public CefPermissionHandler {
  public:
   ResonantBrowserClient() = default;
 
+  CefRefPtr<CefContextMenuHandler> GetContextMenuHandler() override { return this; }
   CefRefPtr<CefDisplayHandler> GetDisplayHandler() override { return this; }
   CefRefPtr<CefDownloadHandler> GetDownloadHandler() override { return this; }
   CefRefPtr<CefKeyboardHandler> GetKeyboardHandler() override { return this; }
   CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override { return this; }
   CefRefPtr<CefLoadHandler> GetLoadHandler() override { return this; }
+  CefRefPtr<CefPermissionHandler> GetPermissionHandler() override { return this; }
 
   void OnAfterCreated(CefRefPtr<CefBrowser> browser) override {
     CEF_REQUIRE_UI_THREAD();
@@ -326,6 +375,15 @@ class ResonantBrowserClient final : public CefClient,
       browser->GetHost()->CloseBrowser(true);
       CefPostDelayedTask(TID_UI, new QuitMessageLoopTask(), 250);
     }
+    if (permission_smoke_ && title_text.find("permission-denied") != std::string::npos && !quit_requested_) {
+      quit_requested_ = true;
+      std::cout << "{\"event\":\"browser.native.permission_smoke_result\","
+                << "\"verdict\":\"permission-denied-by-policy\","
+                << "\"title\":\"" << JsonEscape(title_text) << "\"}" << std::endl;
+      browser->GetHost()->CloseBrowser(true);
+      CefQuitMessageLoop();
+      CefPostDelayedTask(TID_UI, new QuitMessageLoopTask(), 250);
+    }
   }
 
   void OnLoadEnd(CefRefPtr<CefBrowser> browser,
@@ -400,9 +458,9 @@ class ResonantBrowserClient final : public CefClient,
         }
         return;
       }
-      if (phantom_extension_smoke_ && !phantom_probe_scheduled_) {
-        phantom_probe_scheduled_ = true;
-        frame->ExecuteJavaScript(
+	      if (phantom_extension_smoke_ && !phantom_probe_scheduled_) {
+	        phantom_probe_scheduled_ = true;
+	        frame->ExecuteJavaScript(
             "setTimeout(() => {"
             "  const solana = globalThis.phantom?.solana || globalThis.solana;"
             "  document.title = solana?.isPhantom ? "
@@ -411,9 +469,14 @@ class ResonantBrowserClient final : public CefClient,
             "}, 1500);",
             loaded_url,
             0);
-        return;
-      }
-      if (quit_after_first_main_frame_load_ && !quit_requested_) {
+	        return;
+	      }
+	      if (context_menu_smoke_ && !context_menu_smoke_requested_) {
+	        context_menu_smoke_requested_ = true;
+	        CefPostDelayedTask(TID_UI, new ContextMenuSmokeClickTask(browser, 48, 34), 500);
+	        return;
+	      }
+	      if (quit_after_first_main_frame_load_ && !quit_requested_) {
         quit_requested_ = true;
         // Deterministic smoke runs must prove CEF loaded a real page and then
         // exit without a human closing a window. Closing first exercises the
@@ -439,13 +502,100 @@ class ResonantBrowserClient final : public CefClient,
   void SetPhantomExtensionSmoke(bool value) { phantom_extension_smoke_ = value; }
   void SetBrowserFirstAutoOpenSidePanel(bool value) { browser_first_auto_open_side_panel_ = value; }
   void SetDefaultBrowserUrl(std::string url) { default_browser_url_ = std::move(url); }
-  void SetDownloadSmoke(std::string download_url, std::filesystem::path download_dir) {
-    download_smoke_ = true;
-    download_url_ = std::move(download_url);
-    download_dir_ = std::move(download_dir);
-  }
+	  void SetDownloadSmoke(std::string download_url, std::filesystem::path download_dir) {
+	    download_smoke_ = true;
+	    download_url_ = std::move(download_url);
+	    download_dir_ = std::move(download_dir);
+	  }
+	  void SetPermissionSmoke(bool value) { permission_smoke_ = value; }
+	  void SetContextMenuSmoke(bool value) { context_menu_smoke_ = value; }
 
-  bool CanDownload(CefRefPtr<CefBrowser> browser,
+	  void OnBeforeContextMenu(CefRefPtr<CefBrowser> browser,
+	                           CefRefPtr<CefFrame> frame,
+	                           CefRefPtr<CefContextMenuParams> params,
+	                           CefRefPtr<CefMenuModel> model) override {
+	    CEF_REQUIRE_UI_THREAD();
+	    (void)browser;
+	    const std::string frame_url = frame ? frame->GetURL().ToString() : "";
+	    const std::string page_url = params ? params->GetPageUrl().ToString() : "";
+	    const std::string link_url = params ? params->GetLinkUrl().ToString() : "";
+	    const std::string source_url = params ? params->GetSourceUrl().ToString() : "";
+	    const std::string selection = params ? params->GetSelectionText().ToString() : "";
+	    std::cout << "{\"event\":\"browser.native.context_menu.before\","
+	              << "\"x\":" << (params ? params->GetXCoord() : 0) << ","
+	              << "\"y\":" << (params ? params->GetYCoord() : 0) << ","
+	              << "\"typeFlags\":" << (params ? params->GetTypeFlags() : 0) << ","
+	              << "\"mediaType\":" << (params ? params->GetMediaType() : 0) << ","
+	              << "\"editable\":" << (params && params->IsEditable() ? "true" : "false") << ","
+	              << "\"hasImageContents\":" << (params && params->HasImageContents() ? "true" : "false") << ","
+	              << "\"frameUrl\":\"" << JsonEscape(frame_url) << "\","
+	              << "\"pageUrl\":\"" << JsonEscape(page_url) << "\","
+	              << "\"linkUrl\":\"" << JsonEscape(link_url) << "\","
+	              << "\"sourceUrl\":\"" << JsonEscape(source_url) << "\","
+	              << "\"selectionText\":\"" << JsonEscape(selection) << "\","
+	              << "\"modelCount\":" << (model ? model->GetCount() : 0) << "}" << std::endl;
+	  }
+
+	  bool RunContextMenu(CefRefPtr<CefBrowser> browser,
+	                      CefRefPtr<CefFrame> frame,
+	                      CefRefPtr<CefContextMenuParams> params,
+	                      CefRefPtr<CefMenuModel> model,
+	                      CefRefPtr<CefRunContextMenuCallback> callback) override {
+	    CEF_REQUIRE_UI_THREAD();
+	    (void)browser;
+	    (void)frame;
+	    (void)params;
+	    if (!context_menu_smoke_) {
+	      return false;
+	    }
+	    std::ostringstream items;
+	    if (model) {
+	      for (size_t index = 0; index < model->GetCount(); ++index) {
+	        if (index > 0) {
+	          items << ",";
+	        }
+	        items << "{\"commandId\":" << model->GetCommandIdAt(index)
+	              << ",\"label\":\"" << JsonEscape(model->GetLabelAt(index).ToString()) << "\"}";
+	      }
+	    }
+	    std::cout << "{\"event\":\"browser.native.context_menu.run\","
+	              << "\"modelCount\":" << (model ? model->GetCount() : 0) << ","
+	              << "\"items\":[" << items.str() << "]}" << std::endl;
+	    if (callback) {
+	      callback->Cancel();
+	    }
+	    return true;
+	  }
+
+	  bool OnContextMenuCommand(CefRefPtr<CefBrowser> browser,
+	                            CefRefPtr<CefFrame> frame,
+	                            CefRefPtr<CefContextMenuParams> params,
+	                            int command_id,
+	                            EventFlags event_flags) override {
+	    CEF_REQUIRE_UI_THREAD();
+	    (void)browser;
+	    (void)frame;
+	    (void)params;
+	    std::cout << "{\"event\":\"browser.native.context_menu.command\","
+	              << "\"commandId\":" << command_id << ","
+	              << "\"eventFlags\":" << event_flags << "}" << std::endl;
+	    return false;
+	  }
+
+	  void OnContextMenuDismissed(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame) override {
+	    CEF_REQUIRE_UI_THREAD();
+	    (void)frame;
+	    std::cout << "{\"event\":\"browser.native.context_menu.dismissed\"}" << std::endl;
+	    if (context_menu_smoke_ && !quit_requested_) {
+	      quit_requested_ = true;
+	      if (browser) {
+	        browser->GetHost()->CloseBrowser(true);
+	      }
+	      CefPostDelayedTask(TID_UI, new QuitMessageLoopTask(), 250);
+	    }
+	  }
+
+	  bool CanDownload(CefRefPtr<CefBrowser> browser,
                    const CefString& url,
                    const CefString& request_method) override {
     CEF_REQUIRE_UI_THREAD();
@@ -514,6 +664,72 @@ class ResonantBrowserClient final : public CefClient,
     }
   }
 
+  bool OnRequestMediaAccessPermission(CefRefPtr<CefBrowser> browser,
+                                      CefRefPtr<CefFrame> frame,
+                                      const CefString& requesting_origin,
+                                      uint32_t requested_permissions,
+                                      CefRefPtr<CefMediaAccessCallback> callback) override {
+    CEF_REQUIRE_UI_THREAD();
+    (void)browser;
+    const std::string frame_url = frame ? frame->GetURL().ToString() : "";
+    const std::string origin = requesting_origin.ToString();
+    const uint32_t audio_permission = requested_permissions & CEF_MEDIA_PERMISSION_DEVICE_AUDIO_CAPTURE;
+    const bool allow_resonant_audio =
+        origin.rfind(kResonantExtensionOrigin, 0) == 0 && audio_permission != 0;
+    std::cout << "{\"event\":\"browser.native.permission.media_request\","
+              << "\"origin\":\"" << JsonEscape(origin) << "\","
+              << "\"frameUrl\":\"" << JsonEscape(frame_url) << "\","
+              << "\"requestedPermissions\":" << requested_permissions << ","
+              << "\"policy\":\"deny-by-default\","
+              << "\"decision\":\"" << (allow_resonant_audio ? "allow-resonant-audio" : "deny") << "\"}"
+              << std::endl;
+    if (callback) {
+      callback->Continue(allow_resonant_audio ? audio_permission : CEF_MEDIA_PERMISSION_NONE);
+    }
+    return true;
+  }
+
+  bool OnShowPermissionPrompt(CefRefPtr<CefBrowser> browser,
+                              uint64_t prompt_id,
+                              const CefString& requesting_origin,
+                              uint32_t requested_permissions,
+                              CefRefPtr<CefPermissionPromptCallback> callback) override {
+    CEF_REQUIRE_UI_THREAD();
+    (void)browser;
+    const std::string origin = requesting_origin.ToString();
+    const bool allow_resonant_mic =
+        origin.rfind(kResonantExtensionOrigin, 0) == 0 &&
+        (requested_permissions & CEF_PERMISSION_TYPE_MIC_STREAM) != 0;
+    std::cout << "{\"event\":\"browser.native.permission.prompt\","
+              << "\"promptId\":" << prompt_id << ","
+              << "\"origin\":\"" << JsonEscape(origin) << "\","
+              << "\"requestedPermissions\":" << requested_permissions << ","
+              << "\"policy\":\"deny-by-default\","
+              << "\"decision\":\"" << (allow_resonant_mic ? "allow-resonant-mic" : "deny") << "\"}"
+              << std::endl;
+    if (callback) {
+      callback->Continue(allow_resonant_mic ? CEF_PERMISSION_RESULT_ACCEPT : CEF_PERMISSION_RESULT_DENY);
+    }
+    return true;
+  }
+
+  void OnDismissPermissionPrompt(CefRefPtr<CefBrowser> browser,
+                                 uint64_t prompt_id,
+                                 cef_permission_request_result_t result) override {
+    CEF_REQUIRE_UI_THREAD();
+    std::cout << "{\"event\":\"browser.native.permission.dismissed\","
+              << "\"promptId\":" << prompt_id << ","
+              << "\"result\":\"" << PermissionResultName(result) << "\"}" << std::endl;
+    if (permission_smoke_ && !quit_requested_) {
+      quit_requested_ = true;
+      if (browser) {
+        browser->GetHost()->CloseBrowser(true);
+      }
+      CefQuitMessageLoop();
+      CefPostDelayedTask(TID_UI, new QuitMessageLoopTask(), 250);
+    }
+  }
+
   void ExecuteNativeMenuCommand(const std::string& command) {
     CEF_REQUIRE_UI_THREAD();
     CefRefPtr<CefBrowser> browser = ActiveBrowser();
@@ -572,6 +788,36 @@ class ResonantBrowserClient final : public CefClient,
       browser->GetHost()->SetZoomLevel(browser->GetHost()->GetZoomLevel() - 0.5);
       return;
     }
+    if (command == "save_page") {
+      ExecuteChromeCommandByName(browser, "IDC_SAVE_PAGE", CEF_WOD_CURRENT_TAB);
+      return;
+    }
+    if (command == "find") {
+      ExecuteChromeCommandByName(browser, "IDC_FIND", CEF_WOD_CURRENT_TAB);
+      return;
+    }
+    if (command == "find_next") {
+      ExecuteChromeCommandByName(browser, "IDC_FIND_NEXT", CEF_WOD_CURRENT_TAB);
+      return;
+    }
+    if (command == "find_previous") {
+      ExecuteChromeCommandByName(browser, "IDC_FIND_PREVIOUS", CEF_WOD_CURRENT_TAB);
+      return;
+    }
+    if (command == "view_source") {
+      ExecuteChromeCommandByName(browser, "IDC_VIEW_SOURCE", CEF_WOD_CURRENT_TAB);
+      return;
+    }
+    if (command == "dev_tools") {
+      ExecuteChromeCommandByName(browser, "IDC_DEV_TOOLS", CEF_WOD_CURRENT_TAB);
+      return;
+    }
+    if (command == "show_settings") {
+      if (!ExecuteChromeCommandByName(browser, "IDC_OPTIONS", CEF_WOD_CURRENT_TAB)) {
+        browser->GetMainFrame()->LoadURL("chrome://settings");
+      }
+      return;
+    }
     if (command == "open_augmentor") {
       CefPostTask(TID_UI, new OpenAugmentorSidePanelTask(browser));
       return;
@@ -588,6 +834,12 @@ class ResonantBrowserClient final : public CefClient,
     if (command == "show_history") {
       if (!ExecuteChromeCommandByName(browser, "IDC_SHOW_HISTORY", CEF_WOD_CURRENT_TAB)) {
         browser->GetMainFrame()->LoadURL("chrome://history");
+      }
+      return;
+    }
+    if (command == "show_downloads") {
+      if (!ExecuteChromeCommandByName(browser, "IDC_SHOW_DOWNLOADS", CEF_WOD_CURRENT_TAB)) {
+        browser->GetMainFrame()->LoadURL("chrome://downloads");
       }
       return;
     }
@@ -720,8 +972,11 @@ class ResonantBrowserClient final : public CefClient,
   bool quit_after_first_main_frame_load_ = false;
   bool quit_requested_ = false;
   bool download_smoke_ = false;
-  bool download_started_ = false;
-  bool extension_entrypoint_smoke_ = false;
+	  bool download_started_ = false;
+	  bool permission_smoke_ = false;
+	  bool context_menu_smoke_ = false;
+	  bool context_menu_smoke_requested_ = false;
+	  bool extension_entrypoint_smoke_ = false;
   bool local_extension_smoke_ = false;
   bool phantom_extension_smoke_ = false;
   bool phantom_probe_scheduled_ = false;
@@ -795,13 +1050,15 @@ class ResonantBrowserApp final : public CefApp, public CefBrowserProcessHandler 
     const bool page_smoke = command_line->HasSwitch("resonantos-smoke");
     const bool extension_entrypoint_smoke = command_line->HasSwitch("resonantos-extension-entrypoint-smoke");
     const bool local_extension_smoke = command_line->HasSwitch("resonantos-local-extension-smoke");
-    const bool phantom_extension_smoke = command_line->HasSwitch("resonantos-phantom-extension-smoke");
-    const bool download_smoke = command_line->HasSwitch("resonantos-download-smoke");
-    const bool browser_first = command_line->HasSwitch("resonantos-browser-first");
-    if (!page_smoke && !extension_entrypoint_smoke && !local_extension_smoke && !phantom_extension_smoke &&
-        !download_smoke && !browser_first) {
-      return;
-    }
+	    const bool phantom_extension_smoke = command_line->HasSwitch("resonantos-phantom-extension-smoke");
+	    const bool download_smoke = command_line->HasSwitch("resonantos-download-smoke");
+	    const bool permission_smoke = command_line->HasSwitch("resonantos-permission-smoke");
+	    const bool context_menu_smoke = command_line->HasSwitch("resonantos-context-menu-smoke");
+	    const bool browser_first = command_line->HasSwitch("resonantos-browser-first");
+	    if (!page_smoke && !extension_entrypoint_smoke && !local_extension_smoke && !phantom_extension_smoke &&
+	        !download_smoke && !permission_smoke && !context_menu_smoke && !browser_first) {
+	      return;
+	    }
 
     std::string url = command_line->GetSwitchValue("url");
     if (url.empty()) {
@@ -821,8 +1078,12 @@ class ResonantBrowserApp final : public CefApp, public CefBrowserProcessHandler 
       client->SetDownloadSmoke(
           command_line->GetSwitchValue("resonantos-download-url").ToString(),
           std::filesystem::path(command_line->GetSwitchValue("resonantos-download-dir").ToString()));
-    } else if (!browser_first) {
-      client->SetQuitAfterFirstMainFrameLoad(true);
+	    } else if (permission_smoke) {
+	      client->SetPermissionSmoke(true);
+	    } else if (context_menu_smoke) {
+	      client->SetContextMenuSmoke(true);
+	    } else if (!browser_first) {
+	      client->SetQuitAfterFirstMainFrameLoad(true);
     } else {
       client->SetBrowserFirstAutoOpenSidePanel(true);
     }
@@ -849,15 +1110,20 @@ class ResonantBrowserApp final : public CefApp, public CefBrowserProcessHandler 
     std::cout << "{\"event\":\""
               << (extension_entrypoint_smoke   ? "browser.native.extension_entrypoint_smoke_started"
                   : local_extension_smoke       ? "browser.native.local_extension_smoke_started"
-                  : phantom_extension_smoke     ? "browser.native.phantom_extension_smoke_started"
-                  : download_smoke              ? "browser.native.download_smoke_started"
-                  : browser_first               ? "browser.first.started"
-                                                : "browser.native.smoke_started")
+	                  : phantom_extension_smoke     ? "browser.native.phantom_extension_smoke_started"
+	                  : download_smoke              ? "browser.native.download_smoke_started"
+	                  : permission_smoke            ? "browser.native.permission_smoke_started"
+	                  : context_menu_smoke          ? "browser.native.context_menu_smoke_started"
+	                  : browser_first               ? "browser.first.started"
+	                                                : "browser.native.smoke_started")
               << "\",\"url\":\"" << url << "\"}" << std::endl;
     if (!browser_first) {
       CefPostDelayedTask(
-          TID_UI, new SmokeTimeoutTask(),
-          extension_entrypoint_smoke || local_extension_smoke || phantom_extension_smoke ? 20000 : 10000);
+	          TID_UI, new SmokeTimeoutTask(),
+	          extension_entrypoint_smoke || local_extension_smoke || phantom_extension_smoke || download_smoke ||
+	                  permission_smoke || context_menu_smoke
+	              ? 20000
+              : 10000);
     }
   }
 

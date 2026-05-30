@@ -58,6 +58,22 @@ extern "C" void resonant_browser_native_execute_menu_command(const char* command
   resonant_browser_native_execute_menu_command("print");
 }
 
+- (void)resonantSavePage:(id)sender {
+  resonant_browser_native_execute_menu_command("save_page");
+}
+
+- (void)resonantFind:(id)sender {
+  resonant_browser_native_execute_menu_command("find");
+}
+
+- (void)resonantFindNext:(id)sender {
+  resonant_browser_native_execute_menu_command("find_next");
+}
+
+- (void)resonantFindPrevious:(id)sender {
+  resonant_browser_native_execute_menu_command("find_previous");
+}
+
 - (void)resonantReloadPage:(id)sender {
   resonant_browser_native_execute_menu_command("reload");
 }
@@ -72,6 +88,18 @@ extern "C" void resonant_browser_native_execute_menu_command(const char* command
 
 - (void)resonantZoomOut:(id)sender {
   resonant_browser_native_execute_menu_command("zoom_out");
+}
+
+- (void)resonantViewSource:(id)sender {
+  resonant_browser_native_execute_menu_command("view_source");
+}
+
+- (void)resonantDeveloperTools:(id)sender {
+  resonant_browser_native_execute_menu_command("dev_tools");
+}
+
+- (void)resonantSettings:(id)sender {
+  resonant_browser_native_execute_menu_command("show_settings");
 }
 
 - (void)resonantOpenAugmentor:(id)sender {
@@ -96,6 +124,10 @@ extern "C" void resonant_browser_native_execute_menu_command(const char* command
 
 - (void)resonantShowHistory:(id)sender {
   resonant_browser_native_execute_menu_command("show_history");
+}
+
+- (void)resonantShowDownloads:(id)sender {
+  resonant_browser_native_execute_menu_command("show_downloads");
 }
 
 - (void)resonantBookmarkThisPage:(id)sender {
@@ -179,6 +211,7 @@ static void ResonantInstallMainMenu() {
   ResonantAddMenuItem(fileMenu, @"Close Tab", @selector(resonantCloseTab:), @"w");
   ResonantAddMenuItem(fileMenu, @"Close Window", @selector(resonantCloseWindow:), @"W");
   [fileMenu addItem:[NSMenuItem separatorItem]];
+  ResonantAddMenuItem(fileMenu, @"Save Page As...", @selector(resonantSavePage:), @"s");
   ResonantAddMenuItem(fileMenu, @"Print", @selector(resonantPrint:), @"p");
   ResonantAddTopLevelMenu(mainMenu, @"File", fileMenu);
 
@@ -190,6 +223,11 @@ static void ResonantInstallMainMenu() {
   ResonantAddMenuItem(editMenu, @"Copy", @selector(copy:), @"c");
   ResonantAddMenuItem(editMenu, @"Paste", @selector(paste:), @"v");
   ResonantAddMenuItem(editMenu, @"Select All", @selector(selectAll:), @"a");
+  [editMenu addItem:[NSMenuItem separatorItem]];
+  ResonantAddMenuItem(editMenu, @"Find", @selector(resonantFind:), @"f");
+  ResonantAddMenuItem(editMenu, @"Find Next", @selector(resonantFindNext:), @"g");
+  NSMenuItem* findPrevious = ResonantAddMenuItem(editMenu, @"Find Previous", @selector(resonantFindPrevious:), @"G");
+  [findPrevious setKeyEquivalentModifierMask:NSEventModifierFlagCommand | NSEventModifierFlagShift];
   ResonantAddTopLevelMenu(mainMenu, @"Edit", editMenu);
 
   NSMenu* viewMenu = [[NSMenu alloc] initWithTitle:@"View"];
@@ -199,7 +237,11 @@ static void ResonantInstallMainMenu() {
   ResonantAddMenuItem(viewMenu, @"Zoom In", @selector(resonantZoomIn:), @"+");
   ResonantAddMenuItem(viewMenu, @"Zoom Out", @selector(resonantZoomOut:), @"-");
   [viewMenu addItem:[NSMenuItem separatorItem]];
-  ResonantAddMenuItem(viewMenu, @"Enter Full Screen", @selector(toggleFullScreen:), @"f");
+  ResonantAddMenuItem(viewMenu, @"View Source", @selector(resonantViewSource:), @"u");
+  ResonantAddMenuItem(viewMenu, @"Developer Tools", @selector(resonantDeveloperTools:), @"i");
+  [viewMenu addItem:[NSMenuItem separatorItem]];
+  NSMenuItem* fullScreen = ResonantAddMenuItem(viewMenu, @"Enter Full Screen", @selector(toggleFullScreen:), @"f");
+  [fullScreen setKeyEquivalentModifierMask:NSEventModifierFlagCommand | NSEventModifierFlagControl];
   ResonantAddTopLevelMenu(mainMenu, @"View", viewMenu);
 
   NSMenu* assistantMenu = [[NSMenu alloc] initWithTitle:@"Assistant"];
@@ -214,6 +256,7 @@ static void ResonantInstallMainMenu() {
   ResonantAddMenuItem(historyMenu, @"Back", @selector(resonantBack:), @"[");
   ResonantAddMenuItem(historyMenu, @"Forward", @selector(resonantForward:), @"]");
   ResonantAddMenuItem(historyMenu, @"Show History", @selector(resonantShowHistory:), @"y");
+  ResonantAddMenuItem(historyMenu, @"Show Downloads", @selector(resonantShowDownloads:), @"j");
   ResonantAddTopLevelMenu(mainMenu, @"History", historyMenu);
 
   NSMenu* bookmarksMenu = [[NSMenu alloc] initWithTitle:@"Bookmarks"];
@@ -226,6 +269,8 @@ static void ResonantInstallMainMenu() {
   [profilesMenu setAutoenablesItems:NO];
   ResonantAddMenuItem(profilesMenu, @"Default Profile", @selector(resonantDefaultProfile:), @"");
   ResonantAddMenuItem(profilesMenu, @"Manage Profiles", @selector(resonantManageProfiles:), @"");
+  [profilesMenu addItem:[NSMenuItem separatorItem]];
+  ResonantAddMenuItem(profilesMenu, @"Browser Settings", @selector(resonantSettings:), @",");
   ResonantAddTopLevelMenu(mainMenu, @"Profiles", profilesMenu);
 
   NSMenu* tabMenu = [[NSMenu alloc] initWithTitle:@"Tab"];

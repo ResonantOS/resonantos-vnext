@@ -184,3 +184,48 @@ test("dictation controller starts speech recognition and appends transcript with
   assert.ok(statuses.includes("Listening"));
   delete globalThis.Event;
 });
+
+test("dictation controller diagnoses denied speech recognition through microphone access", async () => {
+  const dom = new JSDOM("<!doctype html><button id=\"mic\"></button><textarea id=\"input\"></textarea>");
+  globalThis.Event = dom.window.Event;
+  let recognitionInstance = null;
+  class FakeRecognition {
+    constructor() {
+      recognitionInstance = this;
+      this.onerror = null;
+      this.onend = null;
+    }
+    start() {
+      this.started = true;
+    }
+    stop() {
+      this.onend?.();
+    }
+  }
+  const notFound = new Error("no microphone");
+  notFound.name = "NotFoundError";
+  const messages = [];
+  const controller = createDictationController({
+    addMessage: async (role, content) => messages.push({ role, content }),
+    button: dom.window.document.querySelector("#mic"),
+    commandInput: dom.window.document.querySelector("#input"),
+    navigatorRef: {
+      mediaDevices: {
+        getUserMedia: async () => {
+          throw notFound;
+        }
+      }
+    },
+    windowRef: { SpeechRecognition: FakeRecognition }
+  });
+
+  controller.toggle();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  recognitionInstance.onerror({ error: "not-allowed" });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].role, "system");
+  assert.match(messages[0].content, /No microphone input device was found/);
+  delete globalThis.Event;
+});

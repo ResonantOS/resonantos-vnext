@@ -844,6 +844,12 @@ test("browser-first host is a runnable app path, not documentation-only scaffold
   const nativeHostMac = await readText(
     path.join(repoRoot, "addons", "resonant-browser-native", "native_host", "src", "resonant_browser_native_host_mac.mm"),
   );
+  const nativeHostInfoPlist = await readText(
+    path.join(repoRoot, "addons", "resonant-browser-native", "native_host", "mac", "Info.plist.in"),
+  );
+  const nativeHelperInfoPlist = await readText(
+    path.join(repoRoot, "addons", "resonant-browser-native", "native_host", "mac", "helper-Info.plist.in"),
+  );
 
   assert.match(packageJson.scripts["browser-first:dev"], /run-browser-first\.mjs/);
   assert.match(packageJson.scripts["browser-first:install"], /install-browser-first-app\.mjs/);
@@ -923,7 +929,15 @@ test("browser-first host is a runnable app path, not documentation-only scaffold
   assert.match(nativeHost, /IDC_NEW_TAB/);
   assert.match(nativeHost, /IDC_NEW_WINDOW/);
   assert.match(nativeHost, /IDC_CLOSE_TAB/);
+  assert.match(nativeHost, /IDC_SAVE_PAGE/);
+  assert.match(nativeHost, /IDC_FIND/);
+  assert.match(nativeHost, /IDC_FIND_NEXT/);
+  assert.match(nativeHost, /IDC_FIND_PREVIOUS/);
+  assert.match(nativeHost, /IDC_VIEW_SOURCE/);
+  assert.match(nativeHost, /IDC_DEV_TOOLS/);
   assert.match(nativeHost, /IDC_SHOW_HISTORY/);
+  assert.match(nativeHost, /IDC_SHOW_DOWNLOADS/);
+  assert.match(nativeHost, /IDC_OPTIONS/);
   assert.match(nativeHost, /IDC_BOOKMARK_THIS_TAB/);
   assert.match(nativeHost, /IDC_SHOW_BOOKMARK_MANAGER/);
   assert.match(nativeHost, /IDC_MANAGE_CHROME_PROFILES/);
@@ -933,12 +947,21 @@ test("browser-first host is a runnable app path, not documentation-only scaffold
   assert.match(nativeHost, /SetZoomLevel/);
   assert.match(nativeHost, /SendEscapeKey/);
   assert.match(nativeHost, /CefDownloadHandler/);
+  assert.match(nativeHost, /CefPermissionHandler/);
   assert.match(nativeHost, /GetDownloadHandler/);
+  assert.match(nativeHost, /GetPermissionHandler/);
   assert.match(nativeHost, /CanDownload/);
   assert.match(nativeHost, /OnBeforeDownload/);
   assert.match(nativeHost, /OnDownloadUpdated/);
+  assert.match(nativeHost, /OnRequestMediaAccessPermission/);
+  assert.match(nativeHost, /OnShowPermissionPrompt/);
   assert.match(nativeHost, /browser\.native\.download_updated/);
+  assert.match(nativeHost, /browser\.native\.permission\.prompt/);
+  assert.match(nativeHost, /deny-by-default/);
+  assert.match(nativeHost, /allow-resonant-mic/);
+  assert.match(nativeHost, /allow-resonant-audio/);
   assert.match(nativeHost, /resonantos-download-smoke/);
+  assert.match(nativeHost, /resonantos-permission-smoke/);
   assert.match(nativeHostMac, /ResonantInstallMainMenu/);
   assert.match(nativeHostMac, /setMainMenu/);
   assert.match(nativeHostMac, /resonant_browser_native_execute_menu_command/);
@@ -958,14 +981,24 @@ test("browser-first host is a runnable app path, not documentation-only scaffold
   assert.match(nativeHostMac, /selectAll:/);
   assert.match(nativeHostMac, /terminate:/);
   assert.match(nativeHostMac, /resonantNewTab:/);
+  assert.match(nativeHostMac, /resonantSavePage:/);
+  assert.match(nativeHostMac, /resonantFind:/);
+  assert.match(nativeHostMac, /resonantFindNext:/);
+  assert.match(nativeHostMac, /resonantFindPrevious:/);
   assert.match(nativeHostMac, /resonantReloadPage:/);
+  assert.match(nativeHostMac, /resonantViewSource:/);
+  assert.match(nativeHostMac, /resonantDeveloperTools:/);
   assert.match(nativeHostMac, /resonantOpenAugmentor:/);
   assert.match(nativeHostMac, /resonantShowHistory:/);
+  assert.match(nativeHostMac, /resonantShowDownloads:/);
   assert.match(nativeHostMac, /resonantBookmarkThisPage:/);
   assert.match(nativeHostMac, /resonantDefaultProfile:/);
   assert.match(nativeHostMac, /resonantManageProfiles:/);
+  assert.match(nativeHostMac, /resonantSettings:/);
   assert.match(nativeHostMac, /resonantNextTab:/);
   assert.match(nativeHostMac, /resonantHelp:/);
+  assert.match(nativeHostInfoPlist, /NSMicrophoneUsageDescription/);
+  assert.match(nativeHelperInfoPlist, /NSMicrophoneUsageDescription/);
 });
 
 test("browser-first bridge rejects unauthenticated localhost requests", () => {

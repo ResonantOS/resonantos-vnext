@@ -253,6 +253,28 @@ function speechRecognitionConstructor(win = globalThis.window) {
   return win.SpeechRecognition ?? win.webkitSpeechRecognition ?? null;
 }
 
+async function diagnoseMicrophoneAccess(navigatorRef = globalThis.navigator) {
+  if (!navigatorRef.mediaDevices?.getUserMedia) {
+    return "Microphone capture is not available in this browser runtime.";
+  }
+  try {
+    const stream = await navigatorRef.mediaDevices.getUserMedia({ audio: true });
+    for (const track of stream.getTracks()) {
+      track.stop();
+    }
+    return "Speech recognition was denied after microphone capture was granted. Restart ResonantOS, then check macOS microphone privacy if it still fails.";
+  } catch (error) {
+    const name = error?.name ?? "";
+    if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+      return "No microphone input device was found. Connect or enable a microphone, then try dictation again.";
+    }
+    if (name === "NotAllowedError" || name === "PermissionDeniedError" || name === "SecurityError") {
+      return "Microphone permission is denied by the browser or operating system. Enable microphone access for ResonantOS Browser, then try again.";
+    }
+    return `Microphone access check failed: ${error instanceof Error ? error.message : String(error)}`;
+  }
+}
+
 export function createDictationController({
   button,
   commandInput,
@@ -313,7 +335,10 @@ export function createDictationController({
       };
       recognition.onerror = async (event) => {
         setStatus("Dictation failed");
-        await addMessage("system", `Voice dictation failed: ${event.error || "unknown error"}`);
+        const reason = event.error === "not-allowed"
+          ? await diagnoseMicrophoneAccess(navigatorRef)
+          : event.error || "unknown error";
+        await addMessage("system", `Voice dictation failed: ${reason}`);
         setDictating(false);
       };
       recognition.onend = () => {
