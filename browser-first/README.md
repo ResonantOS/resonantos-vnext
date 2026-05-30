@@ -1,3 +1,50 @@
+# Canvas / System Map Addon
+
+**PR: Community Addon Submission**
+
+Interactive node graph showing your system topology.
+
+## What It Does
+
+- HTML5 Canvas with draggable nodes
+- Scroll to zoom, click+drag to pan
+- Search bar highlights matching nodes
+- Minimap in the corner
+- Node types: Machine (green), Protocol (purple), Service (cyan)
+- Animated dashed edges between connected nodes
+- Live Ollama probe for each machine node (shows online/offline)
+- Add nodes and connections through the UI
+- Drag positions persist to Chrome Storage
+
+## First Use
+
+Shows your fleet nodes from Chrome Storage. Shares data with Fleet & Compute addon for consistency.
+
+## Install
+
+Drop `addons/canvas/` into `browser-first/addons/`.
+
+## Tests
+
+```bash
+node --test browser-first/test/canvas-tab.test.mjs
+# 9 tests, 0 failures
+```
+
+## Files
+
+```
+addons/canvas/
+  addon.json
+  canvas.html / .css / .js
+docs/screenshots/
+  canvas.png
+test/
+  canvas-tab.test.mjs
+```
+
+---
+
 # ResonantOS Browser-First Prototype
 
 Intent citation: `docs/architecture/ADR-037-browser-first-chromium-resonantos.md`
@@ -189,4 +236,3 @@ browser-first/addons/canvas/
 browser-first/docs/screenshots/
   canvas.png    # Screenshot
 ```
-
