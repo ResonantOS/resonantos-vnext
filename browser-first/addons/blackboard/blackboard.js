@@ -626,6 +626,28 @@ function sortTable(colIdx) {
 
 function renderEmbed(payload) {
   surface.innerHTML = "";
+
+  if (!payload.url) {
+    const wrap = document.createElement("div");
+    wrap.className = "bb-welcome bb-fadein";
+    const icon = document.createElement("div");
+    icon.className = "bb-welcome-icon";
+    icon.textContent = "\ud83c\udf10";
+    const h2 = document.createElement("h2");
+    h2.textContent = "Web Embed";
+    const p = document.createElement("p");
+    p.textContent = "Embed any webpage inside the Blackboard. Send a URL from Augmentor or use the /show command.";
+    const cmds = document.createElement("div");
+    cmds.className = "bb-welcome-commands";
+    cmds.innerHTML = "<code>/show &lt;url&gt;</code> \u2014 embed a webpage";
+    wrap.appendChild(icon);
+    wrap.appendChild(h2);
+    wrap.appendChild(p);
+    wrap.appendChild(cmds);
+    surface.appendChild(wrap);
+    return;
+  }
+
   const wrap = document.createElement("div");
   wrap.id = "bb-embed-wrap";
   wrap.className = "bb-fadein";
@@ -784,13 +806,26 @@ function renderPresent(payload) {
   surface.innerHTML = "";
   presentSlides = payload.slides ?? [];
   presentIndex = 0;
-
   if (!presentSlides.length) {
-    const empty = document.createElement("div");
-    empty.className = "bb-welcome bb-fadein";
-    empty.innerHTML = `<div class="bb-welcome-icon">◈</div><h2>No slides</h2><p>Send a /present command with slides data.</p>`;
-    surface.appendChild(empty);
+    const wrap = document.createElement("div");
+    wrap.className = "bb-welcome bb-fadein";
+    const icon = document.createElement("div");
+    icon.className = "bb-welcome-icon";
+    icon.textContent = "\ud83c\udfac";
+    const h2 = document.createElement("h2");
+    h2.textContent = "Slideshow";
+    const p = document.createElement("p");
+    p.textContent = "Present slides with navigation controls. Send slides from Augmentor or use the /present command.";
+    const cmds = document.createElement("div");
+    cmds.className = "bb-welcome-commands";
+    cmds.innerHTML = "<code>/present</code> \u2014 open slideshow mode<br><code>/present &lt;data&gt;</code> \u2014 render slides";
+    wrap.appendChild(icon);
+    wrap.appendChild(h2);
+    wrap.appendChild(p);
+    wrap.appendChild(cmds);
+    surface.appendChild(wrap);
     return;
+  }
   }
 
   const wrap = document.createElement("div");
