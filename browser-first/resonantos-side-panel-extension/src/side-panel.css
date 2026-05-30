@@ -1159,8 +1159,10 @@ textarea::placeholder {
 .composer-toolbar {
   display: flex;
   align-items: center;
+  flex-wrap: nowrap;
   gap: 5px;
   min-width: 0;
+  width: 100%;
 }
 
 .toolbar-button {
@@ -1179,9 +1181,9 @@ textarea::placeholder {
 
 .model-select,
 .depth-select {
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: 86px;
+  flex: 1 1 86px;
+  min-width: 54px;
+  max-width: 118px;
   height: 32px;
   border: 0;
   border-radius: 10px;
@@ -1192,6 +1194,7 @@ textarea::placeholder {
 }
 
 .depth-select {
+  flex: 0 1 58px;
   max-width: 62px;
 }
 
