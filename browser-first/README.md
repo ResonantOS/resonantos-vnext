@@ -1,5 +1,8 @@
 # Platform Infrastructure
 
+![Living Archive](docs/screenshots/archive-tab.png)
+
+
 **PR: Core Platform Components**
 
 Adds cross-platform install scripts, bridge server modules, extension tabs, and web store materials.
