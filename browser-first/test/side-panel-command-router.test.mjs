@@ -135,6 +135,7 @@ test("side panel command router dispatches natural browser intents before chat",
   await harness.router.respondToCommand("show form fields");
   await harness.router.respondToCommand("go to resonantos.com/dao");
   await harness.router.respondToCommand("find latest AI news on the internet");
+  await harness.router.respondToCommand("hey what's the most inportant new in the world today?");
   await harness.router.respondToCommand("go to amazon.it and find me a rtx5090");
 
   assert.deepEqual(harness.calls.filter((call) => call[0] !== "bind").map((call) => call[0]), [
@@ -147,6 +148,7 @@ test("side panel command router dispatches natural browser intents before chat",
     "scroll",
     "forms",
     "open",
+    "search",
     "search",
     "control"
   ]);

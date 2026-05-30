@@ -1,7 +1,8 @@
 import { parseNaturalDelegationIntent } from "./app-command-handlers.js";
 import {
   parseAutonomousBrowserActionIntent,
-  parseNaturalBrowserIntent
+  parseNaturalBrowserIntent,
+  parseNaturalSearchIntent
 } from "./browser-command-parser.js";
 
 export const parseHermesSlashCommand = (value) => {
@@ -61,7 +62,7 @@ export function planMainWorkspacePrompt(value) {
   if (daoCommand) return { action: "dao", command: daoCommand };
   const draftCommand = parseDraftSlashCommand(prompt);
   if (draftCommand) return { action: "draft", command: draftCommand };
-  if (parseAutonomousBrowserActionIntent(prompt) || parseNaturalBrowserIntent(prompt)) {
+  if (parseAutonomousBrowserActionIntent(prompt) || parseNaturalBrowserIntent(prompt) || parseNaturalSearchIntent(prompt)) {
     return { action: "control" };
   }
   return { action: "chat" };

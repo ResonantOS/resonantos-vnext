@@ -1,6 +1,6 @@
 export const browserIntentVerbs = /\b(open|go\s+to|go\s+on|navi\w*(?:\s+to)?|visit|load|browse(?:\s+to)?|take\s+me\s+to|show\s+me|bring\s+up|pull\s+up)\b/i;
 export const browserTargetPattern = /\b((?:https?:\/\/)?(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/[^\s"'<>)]*)?)/i;
-export const searchIntentVerbs = /\b(search|find|look\s+up|research|news|latest|internet|web)\b/i;
+export const searchIntentVerbs = /\b(search|find|look\s+up|research|news|latest|internet|web|headline|headlines|breaking|today|current)\b/i;
 
 export function normalizeBrowserUrl(target) {
   const trimmed = String(target ?? "").trim().replace(/[.,;:!?]+$/, "");
@@ -152,12 +152,13 @@ export function parseAutonomousBrowserActionIntent(message) {
 
 export function normalizeSearchQuery(message) {
   const cleaned = String(message ?? "")
-    .replace(/\b(can you|please|could you|would you)\b/gi, " ")
-    .replace(/\b(search|find|look\s+up|research|on the internet|on internet|online|web|the web|some)\b/gi, " ")
+    .replace(/\b(hey|hi|hello|can you|please|could you|would you|tell me|show me|what'?s|what is|what are|which is|which are)\b/gi, " ")
+    .replace(/\b(search|find|look\s+up|research|on the internet|on internet|online|web|the web|some|the most|most important|inportant|important|biggest|top)\b/gi, " ")
+    .replace(/\b(new)\b/gi, " news ")
     .replace(/[?.!]+$/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-  if (!cleaned || /^news$/i.test(cleaned) || /^latest news$/i.test(cleaned)) {
+  if (!cleaned || /^(news|latest news|today|world today|news today)$/i.test(cleaned)) {
     return "top stories";
   }
   return cleaned;
@@ -174,7 +175,10 @@ export function parseNaturalSearchIntent(message) {
   if (browserTargetPattern.test(normalized) && browserIntentVerbs.test(normalized)) {
     return null;
   }
-  const wantsNews = /\b(news|latest)\b/i.test(normalized);
+  const wantsNews =
+    /\b(news|new|latest|headline|headlines|breaking|today|current)\b/i.test(normalized) &&
+    (/\b(world|global|today|headline|headlines|breaking|important|inportant|biggest|top)\b/i.test(normalized) ||
+      /\b(news|new)\b/i.test(normalized));
   return {
     action: wantsNews ? "news" : "search",
     query: normalizeSearchQuery(normalized)

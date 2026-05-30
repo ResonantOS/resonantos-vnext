@@ -65,6 +65,7 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   const workspaceRail = await readText(path.join(extensionRoot, "src", "lib", "main-workspace-rail.js"));
   const diagnosticsSettings = await readText(path.join(extensionRoot, "src", "lib", "settings", "diagnostics-section.js"));
   const aboutSettings = await readText(path.join(extensionRoot, "src", "lib", "settings", "about-section.js"));
+  const browserControlSettings = await readText(path.join(extensionRoot, "src", "lib", "settings", "browser-control-section.js"));
 
   assert.equal(manifest.chrome_url_overrides, undefined);
   assert.match(workspace, /ResonantOS main workspace/);
@@ -191,6 +192,16 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(aboutSettings, /Customize Chromium/);
   assert.match(aboutSettings, /chrome:\/\/settings\/appearance/);
   assert.match(aboutSettings, /chrome:\/\/extensions\/\?id=/);
+  assert.match(browserControlSettings, /Native browser surfaces/);
+  assert.match(browserControlSettings, /Recent downloads/);
+  assert.match(browserControlSettings, /\/browser\/downloads/);
+  assert.match(browserControlSettings, /\/browser\/downloads\/action/);
+  assert.match(browserControlSettings, /browser-download-action/);
+  assert.match(browserControlSettings, /Clear Download History/);
+  assert.match(browserControlSettings, /label: "Open"/);
+  assert.match(browserControlSettings, /label: "Reveal"/);
+  assert.match(browserControlSettings, /chrome:\/\/downloads/);
+  assert.match(browserControlSettings, /chrome:\/\/settings\/content/);
   assert.match(diagnosticsSettings, /diagnostics-report-export/);
   assert.match(workspaceScript, /document\.body\.dataset\.workspace/);
   assert.match(workspaceScript, /\/addons\/status/);
@@ -294,6 +305,14 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(launcher, /\/diagnostics\/report/);
   assert.match(launcher, /diagnostics-report-export/);
   assert.match(launcher, /executeDiagnosticsReport/);
+  assert.match(launcher, /\/browser\/downloads/);
+  assert.match(launcher, /\/browser\/downloads\/action/);
+  assert.match(launcher, /executeBrowserDownloads/);
+  assert.match(launcher, /executeBrowserDownloadAction/);
+  assert.match(launcher, /browserDownloadsRoot/);
+  assert.match(launcher, /browser-download-action/);
+  assert.match(launcher, /clear-history/);
+  assert.match(launcher, /openOrRevealDownload/);
   assert.match(launcher, /\/archive\/intake\/list/);
   assert.match(launcher, /\/memory\/settings/);
   assert.match(launcher, /memory-settings-write/);

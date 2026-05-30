@@ -243,6 +243,75 @@ function diagnosticsRoot() {
   return path.join(browserFirstRoot(), "Diagnostics");
 }
 
+function browserDownloadsRoot() {
+  return path.join(os.homedir(), "Downloads");
+}
+
+function browserDownloadsStatePath() {
+  return path.join(browserFirstRoot(), "downloads-state.json");
+}
+
+async function browserDownloadsState() {
+  if (!existsSync(browserDownloadsStatePath())) {
+    return {};
+  }
+  try {
+    return JSON.parse(await readFile(browserDownloadsStatePath(), "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+async function writeBrowserDownloadsState(state) {
+  await mkdir(browserFirstRoot(), { recursive: true });
+  await writeFile(browserDownloadsStatePath(), `${JSON.stringify(state, null, 2)}\n`, { mode: 0o600 });
+}
+
+function resolveDownloadFile(nameOrPath) {
+  const root = path.resolve(browserDownloadsRoot());
+  const raw = String(nameOrPath ?? "").trim();
+  if (!raw) {
+    throw new Error("Download action requires a file name.");
+  }
+  const unredacted = raw.startsWith("~/") ? path.join(os.homedir(), raw.slice(2)) : raw;
+  const candidate = path.isAbsolute(unredacted)
+    ? path.resolve(unredacted)
+    : path.resolve(root, unredacted);
+  const relative = path.relative(root, candidate);
+  if (relative.startsWith("..") || path.isAbsolute(relative) || relative === "") {
+    throw new Error("Download action is limited to files inside the browser downloads folder.");
+  }
+  return candidate;
+}
+
+function launchDetached(command, args) {
+  const child = spawn(command, args, {
+    detached: true,
+    stdio: "ignore",
+  });
+  child.unref();
+}
+
+async function openOrRevealDownload(filePath, action) {
+  const fileStat = await stat(filePath).catch(() => null);
+  if (!fileStat?.isFile?.()) {
+    throw new Error("Download file was not found.");
+  }
+  if (process.platform === "darwin") {
+    launchDetached("open", action === "reveal" ? ["-R", filePath] : [filePath]);
+    return;
+  }
+  if (process.platform === "win32") {
+    if (action === "reveal") {
+      launchDetached("explorer.exe", ["/select,", filePath]);
+    } else {
+      launchDetached("cmd.exe", ["/c", "start", "", filePath]);
+    }
+    return;
+  }
+  launchDetached("xdg-open", [action === "reveal" ? path.dirname(filePath) : filePath]);
+}
+
 function redactPathForDiagnostics(filePath) {
   return String(filePath ?? "").replace(os.homedir(), "~");
 }
@@ -3969,6 +4038,73 @@ async function executeDiagnosticsReport() {
   };
 }
 
+async function executeBrowserDownloads() {
+  const root = browserDownloadsRoot();
+  const state = await browserDownloadsState();
+  const clearedAtMs = Number.isFinite(Date.parse(state.clearedAt ?? ""))
+    ? Date.parse(state.clearedAt)
+    : 0;
+  if (!existsSync(root)) {
+    return {
+      root: redactPathForDiagnostics(root),
+      entries: [],
+      total: 0,
+      clearedAt: state.clearedAt ?? "",
+    };
+  }
+  const names = await readdir(root).catch(() => []);
+  const entries = [];
+  for (const name of names) {
+    if (!name || name.startsWith(".")) {
+      continue;
+    }
+    const filePath = path.join(root, name);
+    const fileStat = await stat(filePath).catch(() => null);
+    if (!fileStat?.isFile?.()) {
+      continue;
+    }
+    if (clearedAtMs && fileStat.mtime.getTime() <= clearedAtMs) {
+      continue;
+    }
+    entries.push({
+      name,
+      path: redactPathForDiagnostics(filePath),
+      size: fileStat.size,
+      modifiedAt: fileStat.mtime.toISOString(),
+    });
+  }
+  entries.sort((left, right) => String(right.modifiedAt).localeCompare(String(left.modifiedAt)));
+  return {
+    root: redactPathForDiagnostics(root),
+    entries: entries.slice(0, 20),
+    total: entries.length,
+    clearedAt: state.clearedAt ?? "",
+  };
+}
+
+async function executeBrowserDownloadAction(payload = {}) {
+  const action = String(payload.action ?? "").trim();
+  if (action === "clear-history") {
+    const clearedAt = new Date().toISOString();
+    await writeBrowserDownloadsState({ clearedAt });
+    return {
+      action,
+      clearedAt,
+      message: "Download history was cleared. Files were not deleted.",
+    };
+  }
+  if (action !== "open" && action !== "reveal") {
+    throw new Error("Unsupported download action.");
+  }
+  const filePath = resolveDownloadFile(payload.name ?? payload.path);
+  await openOrRevealDownload(filePath, action);
+  return {
+    action,
+    name: path.basename(filePath),
+    path: redactPathForDiagnostics(filePath),
+  };
+}
+
 const bridgeRoutes = [
   { method: "GET", path: "/status", handler: executeSystemStatus },
   { method: "GET", path: "/providers/status", handler: executeProviderStatus },
@@ -4073,6 +4209,13 @@ const bridgeRoutes = [
   { method: "POST", path: "/archive/review/promotions/restore", handler: executeArchivePromotionRestore },
   { method: "GET", path: "/addons/status", handler: executeAddonsStatus },
   { method: "GET", path: "/opencode/status", handler: executeOpenCodeStatus },
+  { method: "GET", path: "/browser/downloads", handler: executeBrowserDownloads },
+  {
+    method: "POST",
+    path: "/browser/downloads/action",
+    requiredCapability: "browser-download-action",
+    handler: executeBrowserDownloadAction,
+  },
   {
     method: "POST",
     path: "/diagnostics/report",
@@ -4125,6 +4268,9 @@ const bridgeCapabilityTokens = {
     createBridgeToken(),
   "diagnostics-report-export": args.get("diagnostics-report-token") ??
     process.env.RESONANTOS_BROWSER_FIRST_DIAGNOSTICS_REPORT_TOKEN ??
+    createBridgeToken(),
+  "browser-download-action": args.get("browser-download-action-token") ??
+    process.env.RESONANTOS_BROWSER_FIRST_BROWSER_DOWNLOAD_ACTION_TOKEN ??
     createBridgeToken(),
 };
 

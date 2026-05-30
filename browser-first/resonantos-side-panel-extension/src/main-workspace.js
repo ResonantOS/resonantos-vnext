@@ -85,6 +85,7 @@ const thinkingDepthSelect = document.querySelector("#thinking-depth");
 const dictateButton = document.querySelector("#dictate-button");
 const contextMeter = document.querySelector("#context-meter");
 const contextPopover = document.querySelector("#context-popover");
+const composerNotice = document.querySelector("#composer-notice");
 const connectionLine = document.querySelector("#connection-line");
 const sendButton = commandForm.querySelector(".send-button");
 const bridgeRequest = createBridgeClient();
@@ -223,6 +224,12 @@ function updateConnectionLine(status = "Ready") {
   connectionLine.innerHTML = `
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h4l2-7 4 14 2-7h4"/></svg>
   `;
+}
+
+function setComposerNotice(message = "") {
+  if (!composerNotice) return;
+  composerNotice.textContent = message;
+  composerNotice.hidden = !message;
 }
 
 function updateContextMeter() {
@@ -1072,6 +1079,7 @@ const dictationController = createDictationController({
   commandInput,
   navigatorRef: navigator,
   onTranscript: () => composerController.pushUndoSnapshot(),
+  setNotice: setComposerNotice,
   setStatus: updateConnectionLine,
   windowRef: window
 });

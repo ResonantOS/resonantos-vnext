@@ -66,6 +66,10 @@ test("browser command parser detects autonomous browser work and search work", (
     action: "news",
     query: "latest AI news",
   });
+  assert.deepEqual(parseNaturalSearchIntent("hey what's the most inportant new in the world today?"), {
+    action: "news",
+    query: "news in the world today",
+  });
   assert.equal(parseNaturalSearchIntent("go to resonantos.com"), null);
 });
 

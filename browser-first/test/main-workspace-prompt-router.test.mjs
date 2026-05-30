@@ -85,6 +85,7 @@ test("main workspace prompt router preserves explicit command priority", () => {
 test("main workspace prompt router separates browser control from normal chat", () => {
   assert.equal(planMainWorkspacePrompt("go to resonantos.com and summarize the page").action, "control");
   assert.equal(planMainWorkspacePrompt("find latest AI news on the internet").action, "control");
+  assert.equal(planMainWorkspacePrompt("hey what's the most inportant new in the world today?").action, "control");
   assert.equal(planMainWorkspacePrompt("explain the strategy without delegating").action, "chat");
   assert.equal(planMainWorkspacePrompt("").action, "empty");
 });

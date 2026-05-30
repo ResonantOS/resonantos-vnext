@@ -205,6 +205,7 @@ test("dictation controller diagnoses denied speech recognition through microphon
   const notFound = new Error("no microphone");
   notFound.name = "NotFoundError";
   const messages = [];
+  const notices = [];
   const controller = createDictationController({
     addMessage: async (role, content) => messages.push({ role, content }),
     button: dom.window.document.querySelector("#mic"),
@@ -216,6 +217,7 @@ test("dictation controller diagnoses denied speech recognition through microphon
         }
       }
     },
+    setNotice: (message) => notices.push(message),
     windowRef: { SpeechRecognition: FakeRecognition }
   });
 
@@ -224,8 +226,7 @@ test("dictation controller diagnoses denied speech recognition through microphon
   recognitionInstance.onerror({ error: "not-allowed" });
   await new Promise((resolve) => setTimeout(resolve, 0));
 
-  assert.equal(messages.length, 1);
-  assert.equal(messages[0].role, "system");
-  assert.match(messages[0].content, /No microphone input device was found/);
+  assert.deepEqual(messages, []);
+  assert.match(notices.at(-1), /No microphone input device was found/);
   delete globalThis.Event;
 });

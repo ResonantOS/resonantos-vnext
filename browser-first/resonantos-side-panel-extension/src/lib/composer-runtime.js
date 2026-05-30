@@ -279,6 +279,7 @@ export function createDictationController({
   button,
   commandInput,
   setStatus = () => undefined,
+  setNotice = null,
   addMessage = async () => undefined,
   onTranscript = () => undefined,
   navigatorRef = globalThis.navigator,
@@ -310,13 +311,22 @@ export function createDictationController({
     const prefix = commandInput.value.trim() ? " " : "";
     commandInput.value = `${commandInput.value}${prefix}${value}`.trim();
     commandInput.dispatchEvent(new Event("input", { bubbles: true }));
+    setNotice?.("");
     onTranscript(value);
+  }
+
+  async function reportDictationNotice(message) {
+    if (typeof setNotice === "function") {
+      setNotice(message);
+      return;
+    }
+    await addMessage("system", message);
   }
 
   async function start() {
     const Recognition = speechRecognitionConstructor(windowRef);
     if (!Recognition) {
-      await addMessage("system", "Voice dictation is not available in this browser runtime.");
+      await reportDictationNotice("Voice dictation is not available in this browser runtime.");
       setStatus("Dictation unavailable");
       setDictating(false);
       return;
@@ -338,7 +348,7 @@ export function createDictationController({
         const reason = event.error === "not-allowed"
           ? await diagnoseMicrophoneAccess(navigatorRef)
           : event.error || "unknown error";
-        await addMessage("system", `Voice dictation failed: ${reason}`);
+        await reportDictationNotice(`Voice dictation failed: ${reason}`);
         setDictating(false);
       };
       recognition.onend = () => {
@@ -347,10 +357,11 @@ export function createDictationController({
       };
       setDictating(true);
       setStatus("Listening");
+      setNotice?.("");
       recognition.start();
     } catch (error) {
       setStatus("Dictation failed");
-      await addMessage("system", `Voice dictation failed: ${error instanceof Error ? error.message : String(error)}`);
+      await reportDictationNotice(`Voice dictation failed: ${error instanceof Error ? error.message : String(error)}`);
       setDictating(false);
     }
   }

@@ -13,7 +13,7 @@ function readableTab(tab) {
   return typeof tab?.url === "string" && /^https?:\/\//i.test(tab.url);
 }
 
-function row({ title, meta, actionLabel = "", onAction = null }) {
+function row({ title, meta, actionLabel = "", onAction = null, actions = [] }) {
   const item = document.createElement("li");
   item.className = "settings-control-row";
   const copy = document.createElement("span");
@@ -23,14 +23,54 @@ function row({ title, meta, actionLabel = "", onAction = null }) {
   detail.textContent = meta;
   copy.append(heading, detail);
   item.append(copy);
-  if (actionLabel && onAction) {
-    const action = document.createElement("button");
-    action.type = "button";
-    action.textContent = actionLabel;
-    action.addEventListener("click", () => void onAction());
-    item.append(action);
+  const rowActions = Array.isArray(actions) && actions.length
+    ? actions
+    : actionLabel && onAction
+      ? [{ label: actionLabel, onAction }]
+      : [];
+  if (rowActions.length) {
+    const actionGroup = document.createElement("span");
+    actionGroup.className = "settings-row-actions";
+    rowActions.forEach((itemAction) => {
+      if (!itemAction?.label || !itemAction?.onAction) {
+        return;
+      }
+      const action = document.createElement("button");
+      action.type = "button";
+      action.textContent = itemAction.label;
+      action.addEventListener("click", () => void itemAction.onAction());
+      actionGroup.append(action);
+    });
+    item.append(actionGroup);
   }
   return item;
+}
+
+async function runDownloadAction(bridgeRequest, statusNode, action, payload = {}) {
+  if (!bridgeRequest) {
+    throw new Error("Browser bridge is unavailable.");
+  }
+  const result = await bridgeRequest("/browser/downloads/action", {
+    method: "POST",
+    capability: "browser-download-action",
+    body: { action, ...payload }
+  });
+  if (result?.message) {
+    setStatus(statusNode, result.message, "success");
+  }
+  return result;
+}
+
+function clearButton(label) {
+  const action = document.createElement("button");
+  action.type = "button";
+  action.className = "settings-secondary-action";
+  action.textContent = label;
+  return action;
+}
+
+function openBrowserTab(chromeApi, url) {
+  return chromeApi?.tabs?.create?.({ url, active: true }).catch(() => undefined);
 }
 
 async function activeTab(chromeApi) {
@@ -45,6 +85,7 @@ async function readStored(storage, key, fallback) {
 }
 
 export function renderBrowserControlSection(container, {
+  bridgeRequest,
   chromeApi,
   sitePermissionStore,
   taskConsentStore,
@@ -62,10 +103,29 @@ export function renderBrowserControlSection(container, {
   permissionsList.className = "settings-control-list";
   const jobsList = document.createElement("ol");
   jobsList.className = "settings-control-list";
+  const downloadsList = document.createElement("ol");
+  downloadsList.className = "settings-control-list";
   const clearJobs = document.createElement("button");
   clearJobs.type = "button";
   clearJobs.className = "settings-primary-action";
   clearJobs.textContent = "Clear Completed Browser Jobs";
+  const clearDownloads = clearButton("Clear Download History");
+
+  const nativeActions = document.createElement("div");
+  nativeActions.className = "settings-inline-actions";
+  const downloadsButton = document.createElement("button");
+  downloadsButton.type = "button";
+  downloadsButton.textContent = "Open Downloads";
+  downloadsButton.addEventListener("click", () => void openBrowserTab(chromeApi, "chrome://downloads"));
+  const extensionsButton = document.createElement("button");
+  extensionsButton.type = "button";
+  extensionsButton.textContent = "Manage Extensions";
+  extensionsButton.addEventListener("click", () => void openBrowserTab(chromeApi, "chrome://extensions"));
+  const permissionsButton = document.createElement("button");
+  permissionsButton.type = "button";
+  permissionsButton.textContent = "Site Settings";
+  permissionsButton.addEventListener("click", () => void openBrowserTab(chromeApi, "chrome://settings/content"));
+  nativeActions.append(downloadsButton, extensionsButton, permissionsButton);
 
   container.replaceChildren(
     settingsHeader({
@@ -80,6 +140,17 @@ export function renderBrowserControlSection(container, {
       body: "Site permissions and trusted task-class consents are scoped. Reset or revoke them when a site or task should return to ask-before-action."
     }),
     permissionsList,
+    noteCard({
+      title: "Native browser surfaces",
+      body: "Open Chromium-native management pages for downloads, extensions, and browser site permissions. These are browser-level settings, separate from Augmentor's agent-control grants."
+    }),
+    nativeActions,
+    noteCard({
+      title: "Recent downloads",
+      body: "Review the most recent files saved through the browser download path. Clearing history hides old entries here but does not delete files."
+    }),
+    clearDownloads,
+    downloadsList,
     noteCard({
       title: "Browser jobs",
       body: "Review recent browser-control jobs. Clearing terminal jobs removes completed/blocked/cancelled history from the local monitor only."
@@ -100,11 +171,12 @@ export function renderBrowserControlSection(container, {
       ? `${siteKey} · ${permissionLabel(mode)}`
       : "No readable http/https tab is currently active.";
 
-    const [sitePermissions, taskConsents, jobs, activeJobId] = await Promise.all([
+    const [sitePermissions, taskConsents, jobs, activeJobId, downloads] = await Promise.all([
       sitePermissionStore?.sitePermissions?.().catch(() => ({})) ?? {},
       taskConsentStore?.taskConsents?.().catch(() => ({})) ?? {},
       readStored(storage, storageKeys.browserJobs, []),
-      readStored(storage, storageKeys.activeBrowserJob, "")
+      readStored(storage, storageKeys.activeBrowserJob, ""),
+      bridgeRequest?.("/browser/downloads", { method: "GET" }).catch(() => ({ entries: [], total: 0, root: "" })) ?? { entries: [], total: 0, root: "" }
     ]);
     const permissionEntries = Object.entries(sitePermissions)
       .filter(([key, value]) => key && value && value !== "ask-before-action")
@@ -145,6 +217,31 @@ export function renderBrowserControlSection(container, {
       permissionsList.append(row({ title: "No stored grants", meta: "Agent Control is using ask-before-action defaults." }));
     }
 
+    const recentDownloads = Array.isArray(downloads?.entries) ? downloads.entries : [];
+    downloadsList.replaceChildren();
+    recentDownloads.slice(0, 8).forEach((entry) => {
+      downloadsList.append(row({
+        title: entry.name || "Downloaded file",
+        meta: `${entry.path || downloads.root || "download path unavailable"} · ${entry.size ?? 0} bytes · ${entry.modifiedAt || "no timestamp"}`,
+        actions: [
+          {
+            label: "Open",
+            onAction: async () => runDownloadAction(bridgeRequest, statusNode, "open", { name: entry.name })
+          },
+          {
+            label: "Reveal",
+            onAction: async () => runDownloadAction(bridgeRequest, statusNode, "reveal", { name: entry.name })
+          }
+        ]
+      }));
+    });
+    if (!recentDownloads.length) {
+      downloadsList.append(row({
+        title: "No recent downloads found",
+        meta: downloads?.root ? `Checked ${downloads.root}` : "Downloads endpoint unavailable."
+      }));
+    }
+
     const normalizedJobs = Array.isArray(jobs) ? jobs : [];
     jobsList.replaceChildren();
     normalizedJobs.slice(0, 8).forEach((job) => {
@@ -156,7 +253,7 @@ export function renderBrowserControlSection(container, {
     if (!normalizedJobs.length) {
       jobsList.append(row({ title: "No browser jobs", meta: "Agent Control has no persisted job history yet." }));
     }
-    setStatus(statusNode, `${permissionEntries.length + consentEntries.length} stored grant${permissionEntries.length + consentEntries.length === 1 ? "" : "s"} · ${normalizedJobs.length} browser job${normalizedJobs.length === 1 ? "" : "s"}.`, "success");
+    setStatus(statusNode, `${permissionEntries.length + consentEntries.length} stored grant${permissionEntries.length + consentEntries.length === 1 ? "" : "s"} · ${normalizedJobs.length} browser job${normalizedJobs.length === 1 ? "" : "s"} · ${downloads?.total ?? 0} download${downloads?.total === 1 ? "" : "s"}.`, "success");
   };
 
   clearJobs.addEventListener("click", async () => {
@@ -172,6 +269,18 @@ export function renderBrowserControlSection(container, {
       setStatus(statusNode, `Clear failed: ${safeErrorMessage(error)}`, "error");
     } finally {
       clearJobs.disabled = false;
+    }
+  });
+
+  clearDownloads.addEventListener("click", async () => {
+    clearDownloads.disabled = true;
+    try {
+      await runDownloadAction(bridgeRequest, statusNode, "clear-history");
+      await load();
+    } catch (error) {
+      setStatus(statusNode, `Clear downloads failed: ${safeErrorMessage(error)}`, "error");
+    } finally {
+      clearDownloads.disabled = false;
     }
   });
 

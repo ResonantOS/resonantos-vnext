@@ -53,6 +53,7 @@ const commandForm = document.querySelector("#command-form");
 const commandInput = document.querySelector("#command-input");
 const contextMeter = document.querySelector("#context-meter");
 const contextPopover = document.querySelector("#context-popover");
+const composerNotice = document.querySelector("#composer-notice");
 const modelSelect = document.querySelector("#model-select");
 const thinkingDepthSelect = document.querySelector("#thinking-depth");
 const dictateButton = document.querySelector("#dictate-button");
@@ -263,6 +264,12 @@ const updateConnectionLine = () => {
   `;
 };
 
+function setComposerNotice(message = "") {
+  if (!composerNotice) return;
+  composerNotice.textContent = message;
+  composerNotice.hidden = !message;
+}
+
 const setContextMeter = (snapshot) => {
   const usage = contextUsageSnapshot({
     attachments: chatSessionStore.getAttachments(),
@@ -435,6 +442,7 @@ const dictationController = createDictationController({
   commandInput,
   navigatorRef: navigator,
   onTranscript: () => composerController.pushUndoSnapshot(),
+  setNotice: setComposerNotice,
   setStatus,
   windowRef: window
 });
