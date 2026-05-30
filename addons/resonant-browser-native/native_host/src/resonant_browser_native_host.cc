@@ -357,7 +357,11 @@ class ResonantBrowserClient final : public CefClient,
         const std::string target_url = download_url_.empty() ? loaded_url : download_url_;
         std::cout << "{\"event\":\"browser.native.download_start_requested\","
                   << "\"url\":\"" << JsonEscape(target_url) << "\"}" << std::endl;
-        browser->GetHost()->StartDownload(target_url);
+        // Chrome Runtime does not consistently dispatch download callbacks
+        // from StartDownload() in smoke mode. Navigating to a response with
+        // Content-Disposition: attachment exercises the same handler through
+        // the browser's normal download path.
+        browser->GetMainFrame()->LoadURL(target_url);
         return;
       }
       if (extension_entrypoint_smoke_) {
@@ -502,6 +506,10 @@ class ResonantBrowserClient final : public CefClient,
     if (download_smoke_ && !quit_requested_ &&
         (download_item->IsComplete() || download_item->IsCanceled() || download_item->IsInterrupted())) {
       quit_requested_ = true;
+      if (browser) {
+        browser->GetHost()->CloseBrowser(true);
+      }
+      CefQuitMessageLoop();
       CefPostDelayedTask(TID_UI, new QuitMessageLoopTask(), 250);
     }
   }
@@ -773,6 +781,10 @@ class ResonantBrowserApp final : public CefApp, public CefBrowserProcessHandler 
         command_line->AppendSwitchWithValue("disable-extensions-except", extension_dirs);
         command_line->AppendSwitchWithValue("load-extension", extension_dirs);
       }
+      const std::string user_data_dir = command_line->GetSwitchValue("resonantos-user-data-dir");
+      if (!user_data_dir.empty()) {
+        command_line->AppendSwitchWithValue("user-data-dir", user_data_dir);
+      }
     }
   }
 
@@ -807,8 +819,8 @@ class ResonantBrowserApp final : public CefApp, public CefBrowserProcessHandler 
       client->SetPhantomExtensionSmoke(true);
     } else if (download_smoke) {
       client->SetDownloadSmoke(
-          command_line->GetSwitchValue("resonantos-download-url"),
-          command_line->GetSwitchValue("resonantos-download-dir"));
+          command_line->GetSwitchValue("resonantos-download-url").ToString(),
+          std::filesystem::path(command_line->GetSwitchValue("resonantos-download-dir").ToString()));
     } else if (!browser_first) {
       client->SetQuitAfterFirstMainFrameLoad(true);
     } else {

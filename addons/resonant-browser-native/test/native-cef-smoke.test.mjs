@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -35,6 +36,22 @@ function parseJsonEvents(stdout) {
     .map((line) => JSON.parse(line));
 }
 
+function listen(server) {
+  return new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => resolve(server.address()));
+  });
+}
+
+function smokeProfileArgs(name) {
+  const profileRoot = path.join(tmpdir(), `resonantos-${name}-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+  mkdirSync(profileRoot, { recursive: true });
+  return {
+    args: [`--resonantos-user-data-dir=${profileRoot}`],
+    cleanup: () => rmSync(profileRoot, { force: true, recursive: true }),
+  };
+}
+
 function latestPhantomExtensionDir() {
   if (!phantomExtensionRoot || !existsSync(phantomExtensionRoot)) {
     return null;
@@ -49,22 +66,27 @@ test(
   "native CEF Chrome Runtime host initializes and loads a real page",
   { skip: !existsSync(hostBinary) && "Build the native host before running the CEF smoke test." },
   async () => {
-    const { stdout } = await execFileAsync(hostBinary, ["--resonantos-smoke", "--url=https://example.com"], {
-      cwd: addonRoot,
-      timeout: 20000,
-      maxBuffer: 1024 * 1024,
-    });
+    const profile = smokeProfileArgs("cef-page-smoke");
+    try {
+      const { stdout } = await execFileAsync(hostBinary, ["--resonantos-smoke", "--url=https://example.com", ...profile.args], {
+        cwd: addonRoot,
+        timeout: 20000,
+        maxBuffer: 1024 * 1024,
+      });
 
-    const events = parseJsonEvents(stdout);
-    assert.ok(
-      events.some((event) => event.event === "browser.native.cef_initialize_ok"),
-      "CEF must initialize before the smoke test can be trusted.",
-    );
+      const events = parseJsonEvents(stdout);
+      assert.ok(
+        events.some((event) => event.event === "browser.native.cef_initialize_ok"),
+        "CEF must initialize before the smoke test can be trusted.",
+      );
 
-    const loadEnd = events.find((event) => event.event === "browser.native.load_end");
-    assert.ok(loadEnd, "CEF smoke must emit a main-frame load_end event.");
-    assert.equal(loadEnd.status, 200);
-    assert.equal(loadEnd.url, "https://example.com/");
+      const loadEnd = events.find((event) => event.event === "browser.native.load_end");
+      assert.ok(loadEnd, "CEF smoke must emit a main-frame load_end event.");
+      assert.equal(loadEnd.status, 200);
+      assert.equal(loadEnd.url, "https://example.com/");
+    } finally {
+      profile.cleanup();
+    }
   },
 );
 
@@ -72,30 +94,100 @@ test(
   "native CEF Chrome Runtime host records extension entrypoint readiness",
   { skip: !existsSync(hostBinary) && "Build the native host before running the CEF extension smoke test." },
   async () => {
-    const { stdout } = await execFileAsync(hostBinary, ["--resonantos-extension-entrypoint-smoke"], {
-      cwd: addonRoot,
-      timeout: 30000,
-      maxBuffer: 1024 * 1024 * 2,
+    const profile = smokeProfileArgs("cef-extension-entrypoint-smoke");
+    try {
+      const { stdout } = await execFileAsync(hostBinary, ["--resonantos-extension-entrypoint-smoke", ...profile.args], {
+        cwd: addonRoot,
+        timeout: 30000,
+        maxBuffer: 1024 * 1024 * 2,
+      });
+
+      const events = parseJsonEvents(stdout);
+      assert.ok(
+        events.some((event) => event.event === "browser.native.cef_initialize_ok"),
+        "CEF must initialize before extension entrypoint compatibility can be trusted.",
+      );
+      assert.ok(
+        events.some((event) => event.event === "browser.native.extension_entrypoint_smoke_started"),
+        "Extension entrypoint smoke must start explicitly.",
+      );
+
+      const verdict = events.find((event) => event.event === "browser.native.extension_entrypoints");
+      assert.ok(verdict, "Extension entrypoint smoke must emit a final verdict.");
+      assert.equal(verdict.chromeExtensionsLoaded, true);
+      assert.ok(
+        verdict.chromeWebStoreLoaded || verdict.chromeWebStoreConsentGate,
+        "Chrome Web Store must either load directly or be identified as consent-gated.",
+      );
+      assert.match(verdict.verdict, /entrypoints-ready|chrome-web-store-consent-gated/);
+    } finally {
+      profile.cleanup();
+    }
+  },
+);
+
+test(
+  "native CEF Chrome Runtime host saves downloads through ResonantOS download policy",
+  { skip: !existsSync(hostBinary) && "Build the native host before running the CEF download smoke test." },
+  async () => {
+    const body = "resonantos download smoke\n";
+    const server = createServer((request, response) => {
+      if (request.url === "/download.txt") {
+        response.writeHead(200, {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Content-Length": Buffer.byteLength(body),
+          "Content-Disposition": 'attachment; filename="resonantos-download-smoke.txt"',
+        });
+        response.end(body);
+        return;
+      }
+      response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      response.end("<!doctype html><title>download smoke</title>");
     });
+    const address = await listen(server);
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+    const downloadDir = path.join(tmpdir(), `resonantos-download-smoke-${Date.now()}`);
+    const profile = smokeProfileArgs("cef-download-smoke");
+    rmSync(downloadDir, { force: true, recursive: true });
+    mkdirSync(downloadDir, { recursive: true });
 
-    const events = parseJsonEvents(stdout);
-    assert.ok(
-      events.some((event) => event.event === "browser.native.cef_initialize_ok"),
-      "CEF must initialize before extension entrypoint compatibility can be trusted.",
-    );
-    assert.ok(
-      events.some((event) => event.event === "browser.native.extension_entrypoint_smoke_started"),
-      "Extension entrypoint smoke must start explicitly.",
-    );
+    try {
+      const { stdout } = await execFileAsync(
+        hostBinary,
+        [
+          "--resonantos-download-smoke",
+          `--url=${baseUrl}/`,
+          `--resonantos-download-url=${baseUrl}/download.txt`,
+          `--resonantos-download-dir=${downloadDir}`,
+          ...profile.args,
+        ],
+        {
+          cwd: addonRoot,
+          timeout: 30000,
+          maxBuffer: 1024 * 1024 * 2,
+        },
+      );
 
-    const verdict = events.find((event) => event.event === "browser.native.extension_entrypoints");
-    assert.ok(verdict, "Extension entrypoint smoke must emit a final verdict.");
-    assert.equal(verdict.chromeExtensionsLoaded, true);
-    assert.ok(
-      verdict.chromeWebStoreLoaded || verdict.chromeWebStoreConsentGate,
-      "Chrome Web Store must either load directly or be identified as consent-gated.",
-    );
-    assert.match(verdict.verdict, /entrypoints-ready|chrome-web-store-consent-gated/);
+      const events = parseJsonEvents(stdout);
+      assert.ok(
+        events.some((event) => event.event === "browser.native.download_smoke_started"),
+        "Download smoke must start explicitly.",
+      );
+      assert.ok(
+        events.some((event) => event.event === "browser.native.download_can_download" && event.allowed),
+        "Download policy must explicitly allow the download.",
+      );
+      const before = events.find((event) => event.event === "browser.native.download_before");
+      assert.ok(before, "Download handler must set a ResonantOS-owned target path.");
+      assert.equal(path.dirname(before.path), downloadDir);
+      const completed = events.find((event) => event.event === "browser.native.download_updated" && event.complete);
+      assert.ok(completed, "Download handler must emit a completed download event.");
+      assert.equal(readFileSync(path.join(downloadDir, "resonantos-download-smoke.txt"), "utf8"), body);
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+      rmSync(downloadDir, { force: true, recursive: true });
+      profile.cleanup();
+    }
   },
 );
 
@@ -104,6 +196,7 @@ test(
   { skip: !existsSync(hostBinary) && "Build the native host before running the CEF local extension smoke test." },
   async () => {
     const extensionRoot = path.join(tmpdir(), `resonant-browser-extension-smoke-${Date.now()}`);
+    const profile = smokeProfileArgs("cef-local-extension-smoke");
     mkdirSync(extensionRoot, { recursive: true });
     writeFileSync(
       path.join(extensionRoot, "manifest.json"),
@@ -135,6 +228,7 @@ test(
         "--resonantos-local-extension-smoke",
         `--resonantos-extension-dir=${extensionRoot}`,
         "--url=https://example.com",
+        ...profile.args,
       ],
       {
         cwd: addonRoot,
@@ -152,6 +246,7 @@ test(
     assert.ok(execution, "Local extension smoke must prove content script execution.");
     assert.equal(execution.contentScriptExecuted, true);
     assert.equal(execution.verdict, "local-extension-ready");
+    profile.cleanup();
   },
 );
 
@@ -165,6 +260,7 @@ test(
   },
   async () => {
     const extensionRoot = latestPhantomExtensionDir();
+    const profile = smokeProfileArgs("cef-phantom-extension-smoke");
     const manifest = JSON.parse(readFileSync(path.join(extensionRoot, "manifest.json"), "utf8"));
     assert.equal(manifest.name, "Phantom");
     assert.match(manifest.version, /^\d+\.\d+\.\d+$/);
@@ -185,6 +281,7 @@ test(
         "--resonantos-phantom-extension-smoke",
         `--resonantos-extension-dir=${extensionRoot}`,
         "--url=https://example.com",
+        ...profile.args,
       ],
       {
         cwd: addonRoot,
@@ -203,5 +300,6 @@ test(
     assert.equal(detection.extensionId, "bfnaelmomeimhlpmgjnjophhpkkoljpa");
     assert.equal(detection.providerInjected, true);
     assert.equal(detection.verdict, "phantom-provider-ready");
+    profile.cleanup();
   },
 );
