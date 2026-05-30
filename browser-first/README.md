@@ -1,5 +1,8 @@
 # Resonant Context SDK + Resonator
 
+![Resonant Context SDK](docs/screenshots/resonant-context.png)
+
+
 **PR: Core Context Awareness**
 
 Adds two pure content-script components that give the extension awareness of what the user sees on any webpage.
