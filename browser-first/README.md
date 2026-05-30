@@ -2,7 +2,7 @@
 
 **PR: Community Addon Submission**
 
-Visual display surface for ResonantOS with 5 modes.
+Visual display surface for ResonantOS with 7 render modes.
 
 ## What It Does
 
@@ -10,7 +10,9 @@ Visual display surface for ResonantOS with 5 modes.
 - **Document** — Rich text editing (contenteditable)
 - **Table** — Editable data grid
 - **Web** — Embed external pages
+- **Image** — Display generated or fetched images
 - **Present** — Slideshow mode
+- **Annotate** — Overlay annotations on canvas content
 
 Save and load your work via Chrome Storage. "Send to Augmentor" forwards content to the AI assistant via `chrome.runtime`.
 
