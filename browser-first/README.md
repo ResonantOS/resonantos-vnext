@@ -1,6 +1,5 @@
 # Resonant Context SDK + Resonator
 
-![Resonant Context SDK](docs/screenshots/resonant-context.png)
 
 
 **PR: Core Context Awareness**
