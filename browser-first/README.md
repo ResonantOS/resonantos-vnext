@@ -1,3 +1,56 @@
+# Resonant Context SDK + Resonator
+
+**PR: Core Context Awareness**
+
+Adds two pure content-script components that give the extension awareness of what the user sees on any webpage.
+
+## Resonant Context SDK
+
+Silent viewport observer that tracks:
+- Which page sections are currently visible
+- How long the user looks at each section (dwell time)
+- Scroll depth and reading patterns
+- Form field interactions (excludes passwords)
+- Active overlays and modals
+
+Domain-agnostic by design — all element selectors come from plugin configurations, not hardcoded CSS selectors.
+
+**Privacy:** Explicitly excludes `input[type="password"]` and elements marked `[data-rc-ignore]`. Payload size is capped at 4000 characters with progressive truncation.
+
+## Resonator
+
+Visual guide layer that draws overlays on web pages to guide users through interactions:
+- Highlights (pulsing borders around elements)
+- Arrows (pointing to specific page areas)
+- Spotlights (dim everything except the target)
+- Numbered step badges
+- One-command clear (`data-resonator` cleanup)
+
+All overlays use CSS animations — no JavaScript animation loops. Z-index 999999.
+
+## Context Plugins
+
+Domain-specific configurations that tell the Context SDK what to observe on different sites. Plugin matching uses exact domain or proper subdomain matching (e.g., `app.github.com` matches `github.com`, but `evil-github.com` does not).
+
+## Zero Dependencies
+
+These are pure content scripts. No bridge server needed. No chrome.storage. No fetch calls. They observe and annotate — nothing more.
+
+## Files
+
+```
+browser-first/
+  resonantos-side-panel-extension/src/
+    resonant-context.js    # Viewport observer (831 lines)
+    context-plugins.js     # Domain plugins (288 lines)
+    resonator.js           # Visual guide layer (425 lines)
+  addons/
+    resonant-context/addon.json
+    resonator/addon.json
+```
+
+---
+
 # ResonantOS Browser-First Prototype
 
 Intent citation: `docs/architecture/ADR-037-browser-first-chromium-resonantos.md`
@@ -189,4 +242,3 @@ Resonator runs in `visual-guide` mode with `page-overlay` trust — it renders o
 |-------|----|------|-------|
 | Resonant Context | `addon.resonant-context` | `awareness-engine` | `page-observer` |
 | Resonator | `addon.resonator` | `visual-guide` | `page-overlay` |
-
