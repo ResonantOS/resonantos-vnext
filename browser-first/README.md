@@ -29,6 +29,11 @@ node --test browser-first/test/task-board-tab.test.mjs
 # 8 tests, 0 failures
 ```
 
+## Screenshot
+
+![Task Board with 10 tasks across all columns](docs/screenshots/task-board-populated.png)
+*10 tasks across Ready, In Progress, Blocked, and Done columns with P0-P3 priority badges*
+
 ## Files
 
 ```
@@ -224,6 +229,9 @@ Kanban board for tracking tasks across four columns with drag-and-drop support:
 **Boundary:** Task management interface only. No external network access. All data sourced from host-mediated bridge.
 
 ![Task Board Screenshot](docs/screenshots/task-board.png)
+
+![Task Board — Populated](docs/screenshots/task-board-populated.png)
+*Fully populated board with tasks across all four columns*
 
 ### Addon Structure
 
