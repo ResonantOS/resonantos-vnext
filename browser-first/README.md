@@ -1,5 +1,8 @@
 # Addon Discovery Engine
 
+![Addon Discovery Engine](docs/screenshots/addon-spec.png)
+
+
 **PR: Core Addon Infrastructure**
 
 Adds the dynamic addon discovery system to the browser-first extension. This is the foundation that makes all addons work — without it, addon folders are inert files.
