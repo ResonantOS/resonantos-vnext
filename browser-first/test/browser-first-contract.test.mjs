@@ -926,6 +926,15 @@ test("browser-first host is a runnable app path, not documentation-only scaffold
   assert.match(nativeHost, /resonant_browser_native_execute_menu_command/);
   assert.match(nativeHost, /ExecuteChromeCommandByName/);
   assert.match(nativeHost, /cef_id_for_command_id_name/);
+  assert.match(nativeHost, /CefContextMenuHandler/);
+  assert.match(nativeHost, /GetContextMenuHandler/);
+  assert.match(nativeHost, /OnBeforeContextMenu/);
+  assert.match(nativeHost, /RunContextMenu/);
+  assert.match(nativeHost, /OnContextMenuCommand/);
+  assert.match(nativeHost, /OnContextMenuDismissed/);
+  assert.match(nativeHost, /browser\.native\.context_menu\.before/);
+  assert.match(nativeHost, /browser\.native\.context_menu\.run/);
+  assert.match(nativeHost, /resonantos-context-menu-smoke/);
   assert.match(nativeHost, /IDC_NEW_TAB/);
   assert.match(nativeHost, /IDC_NEW_WINDOW/);
   assert.match(nativeHost, /IDC_CLOSE_TAB/);
