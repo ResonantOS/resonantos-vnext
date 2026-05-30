@@ -1,3 +1,53 @@
+# Platform Infrastructure
+
+**PR: Core Platform Components**
+
+Adds cross-platform install scripts, bridge server modules, extension tabs, and web store materials.
+
+## Install Scripts
+
+One-command installation for all platforms:
+- `install.sh` — macOS and Linux (auto-detects, sets up LaunchAgent or systemd)
+- `install.ps1` — Windows (PowerShell, creates scheduled task)
+- `install.bat` — Windows shortcut launcher
+- `uninstall.ps1` — Clean removal on Windows
+
+## Native Messaging
+
+Chrome native messaging host setup so the browser can communicate with local services:
+- `com.resonantos.bridge.json` — Native messaging manifest
+- `install-native-host.sh` — Registers the host with Chrome/Brave/Chromium
+- `resonantos-bridge-host` — Bridge host binary launcher
+
+## Bridge Server Modules
+
+Backend modules that run on the host machine:
+- **provider-router.mjs** — Multi-provider API routing (Groq, OpenAI, Anthropic, xAI, DeepSeek, Google)
+- **living-archive.mjs** — Page archival, retrieval, and search
+- **system-prompts.mjs** — Centralized prompt management
+- **update-check.mjs** — Version checking against upstream
+
+## Extension Tabs
+
+Additional UI tabs for the extension:
+- **Living Archive** — Save and search anything you've browsed
+- **R-Awareness** — See how much context the AI has about the current page
+- **Protocol Store** — Browse and install AI protocols
+
+## Web Store Materials
+
+Everything needed for Chrome Web Store submission:
+- Store listing copy, privacy policy, publish checklist, review notes, required assets list
+
+## Tests
+
+```bash
+node --test browser-first/test/archive-tab.test.mjs browser-first/test/awareness-tab.test.mjs browser-first/test/protocol-store.test.mjs
+# 21 tests, 0 failures
+```
+
+---
+
 # ResonantOS Browser-First Prototype
 
 Intent citation: `docs/architecture/ADR-037-browser-first-chromium-resonantos.md`
@@ -249,4 +299,3 @@ Then remove the extension from `chrome://extensions`.
 | Archive | `addon.archive` | `memory-system` | `host-mediated` |
 | Awareness | `addon.awareness` | `page-observer` | `page-observer` |
 | Protocol Store | `addon.protocol-store` | `utility` | `host-mediated` |
-
