@@ -54,6 +54,10 @@ extern "C" void resonant_browser_native_execute_menu_command(const char* command
   resonant_browser_native_execute_menu_command("close_window");
 }
 
+- (void)resonantOpenFile:(id)sender {
+  resonant_browser_native_execute_menu_command("open_file");
+}
+
 - (void)resonantPrint:(id)sender {
   resonant_browser_native_execute_menu_command("print");
 }
@@ -102,6 +106,10 @@ extern "C" void resonant_browser_native_execute_menu_command(const char* command
   resonant_browser_native_execute_menu_command("show_settings");
 }
 
+- (void)resonantManageExtensions:(id)sender {
+  resonant_browser_native_execute_menu_command("manage_extensions");
+}
+
 - (void)resonantOpenAugmentor:(id)sender {
   resonant_browser_native_execute_menu_command("open_augmentor");
 }
@@ -130,6 +138,10 @@ extern "C" void resonant_browser_native_execute_menu_command(const char* command
   resonant_browser_native_execute_menu_command("show_downloads");
 }
 
+- (void)resonantClearBrowsingData:(id)sender {
+  resonant_browser_native_execute_menu_command("clear_browsing_data");
+}
+
 - (void)resonantBookmarkThisPage:(id)sender {
   resonant_browser_native_execute_menu_command("bookmark_this_page");
 }
@@ -140,6 +152,10 @@ extern "C" void resonant_browser_native_execute_menu_command(const char* command
 
 - (void)resonantManageProfiles:(id)sender {
   resonant_browser_native_execute_menu_command("manage_profiles");
+}
+
+- (void)resonantPasswordManager:(id)sender {
+  resonant_browser_native_execute_menu_command("password_manager");
 }
 
 - (void)resonantDefaultProfile:(id)sender {
@@ -208,6 +224,8 @@ static void ResonantInstallMainMenu() {
   ResonantAddMenuItem(fileMenu, @"New Tab", @selector(resonantNewTab:), @"t");
   ResonantAddMenuItem(fileMenu, @"New Window", @selector(resonantNewWindow:), @"n");
   [fileMenu addItem:[NSMenuItem separatorItem]];
+  ResonantAddMenuItem(fileMenu, @"Open File...", @selector(resonantOpenFile:), @"o");
+  [fileMenu addItem:[NSMenuItem separatorItem]];
   ResonantAddMenuItem(fileMenu, @"Close Tab", @selector(resonantCloseTab:), @"w");
   ResonantAddMenuItem(fileMenu, @"Close Window", @selector(resonantCloseWindow:), @"W");
   [fileMenu addItem:[NSMenuItem separatorItem]];
@@ -239,6 +257,7 @@ static void ResonantInstallMainMenu() {
   [viewMenu addItem:[NSMenuItem separatorItem]];
   ResonantAddMenuItem(viewMenu, @"View Source", @selector(resonantViewSource:), @"u");
   ResonantAddMenuItem(viewMenu, @"Developer Tools", @selector(resonantDeveloperTools:), @"i");
+  ResonantAddMenuItem(viewMenu, @"Manage Extensions", @selector(resonantManageExtensions:), @"");
   [viewMenu addItem:[NSMenuItem separatorItem]];
   NSMenuItem* fullScreen = ResonantAddMenuItem(viewMenu, @"Enter Full Screen", @selector(toggleFullScreen:), @"f");
   [fullScreen setKeyEquivalentModifierMask:NSEventModifierFlagCommand | NSEventModifierFlagControl];
@@ -257,6 +276,8 @@ static void ResonantInstallMainMenu() {
   ResonantAddMenuItem(historyMenu, @"Forward", @selector(resonantForward:), @"]");
   ResonantAddMenuItem(historyMenu, @"Show History", @selector(resonantShowHistory:), @"y");
   ResonantAddMenuItem(historyMenu, @"Show Downloads", @selector(resonantShowDownloads:), @"j");
+  [historyMenu addItem:[NSMenuItem separatorItem]];
+  ResonantAddMenuItem(historyMenu, @"Clear Browsing Data...", @selector(resonantClearBrowsingData:), @"");
   ResonantAddTopLevelMenu(mainMenu, @"History", historyMenu);
 
   NSMenu* bookmarksMenu = [[NSMenu alloc] initWithTitle:@"Bookmarks"];
@@ -269,6 +290,7 @@ static void ResonantInstallMainMenu() {
   [profilesMenu setAutoenablesItems:NO];
   ResonantAddMenuItem(profilesMenu, @"Default Profile", @selector(resonantDefaultProfile:), @"");
   ResonantAddMenuItem(profilesMenu, @"Manage Profiles", @selector(resonantManageProfiles:), @"");
+  ResonantAddMenuItem(profilesMenu, @"Password Manager", @selector(resonantPasswordManager:), @"");
   [profilesMenu addItem:[NSMenuItem separatorItem]];
   ResonantAddMenuItem(profilesMenu, @"Browser Settings", @selector(resonantSettings:), @",");
   ResonantAddTopLevelMenu(mainMenu, @"Profiles", profilesMenu);

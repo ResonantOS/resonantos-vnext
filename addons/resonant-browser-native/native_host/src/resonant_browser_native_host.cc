@@ -788,6 +788,10 @@ class ResonantBrowserClient final : public CefClient,
       browser->GetHost()->SetZoomLevel(browser->GetHost()->GetZoomLevel() - 0.5);
       return;
     }
+    if (command == "open_file") {
+      ExecuteChromeCommandByName(browser, "IDC_OPEN_FILE", CEF_WOD_CURRENT_TAB);
+      return;
+    }
     if (command == "save_page") {
       ExecuteChromeCommandByName(browser, "IDC_SAVE_PAGE", CEF_WOD_CURRENT_TAB);
       return;
@@ -810,6 +814,12 @@ class ResonantBrowserClient final : public CefClient,
     }
     if (command == "dev_tools") {
       ExecuteChromeCommandByName(browser, "IDC_DEV_TOOLS", CEF_WOD_CURRENT_TAB);
+      return;
+    }
+    if (command == "manage_extensions") {
+      if (!ExecuteChromeCommandByName(browser, "IDC_MANAGE_EXTENSIONS", CEF_WOD_CURRENT_TAB)) {
+        browser->GetMainFrame()->LoadURL(kChromeExtensionsUrl);
+      }
       return;
     }
     if (command == "show_settings") {
@@ -843,6 +853,12 @@ class ResonantBrowserClient final : public CefClient,
       }
       return;
     }
+    if (command == "clear_browsing_data") {
+      if (!ExecuteChromeCommandByName(browser, "IDC_CLEAR_BROWSING_DATA", CEF_WOD_CURRENT_TAB)) {
+        browser->GetMainFrame()->LoadURL("chrome://settings/clearBrowserData");
+      }
+      return;
+    }
     if (command == "bookmark_this_page") {
       ExecuteChromeCommandByName(browser, "IDC_BOOKMARK_THIS_TAB", CEF_WOD_CURRENT_TAB);
       return;
@@ -856,6 +872,12 @@ class ResonantBrowserClient final : public CefClient,
     if (command == "manage_profiles") {
       if (!ExecuteChromeCommandByName(browser, "IDC_MANAGE_CHROME_PROFILES", CEF_WOD_CURRENT_TAB)) {
         browser->GetMainFrame()->LoadURL("chrome://settings/manageProfile");
+      }
+      return;
+    }
+    if (command == "password_manager") {
+      if (!ExecuteChromeCommandByName(browser, "IDC_VIEW_PASSWORDS", CEF_WOD_CURRENT_TAB)) {
+        browser->GetMainFrame()->LoadURL("chrome://password-manager/passwords");
       }
       return;
     }
