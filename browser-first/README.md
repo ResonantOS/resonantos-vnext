@@ -20,6 +20,14 @@ On first open, a localhost seed node appears. If you have Ollama running locally
 
 Drop `addons/fleet-compute/` into `browser-first/addons/`.
 
+## Screenshots
+
+![Fleet Tab — 8 nodes monitored](docs/screenshots/fleet-fleet.png)
+
+![Cloud Tab — Infrastructure monitoring](docs/screenshots/fleet-cloud.png)
+
+![Compute Fabric — Node enrollment and policies](docs/screenshots/fleet-fabric.png)
+
 ## Files
 
 ```
@@ -208,7 +216,16 @@ Fleet & Compute is a mission control dashboard for infrastructure monitoring and
 
 **Boundary:** Host-mediated access to fleet APIs only. No direct network calls from the extension. All infrastructure credentials stay on the bridge server.
 
-![Fleet & Compute Screenshot](docs/screenshots/fleet-compute.png)
+### Screenshots
+
+![Fleet Tab](docs/screenshots/fleet-fleet.png)
+*Fleet monitoring — 8 nodes with online/offline status, model lists, and RAM totals*
+
+![Cloud Tab](docs/screenshots/fleet-cloud.png)
+*Cloud provider configuration — Hetzner, services, domains, and external cloud sections*
+
+![Compute Fabric Tab](docs/screenshots/fleet-fabric.png)
+*Compute Fabric — node enrollment, execution policy, secrets policy, and cleanroom boundary*
 
 ### Addon Structure
 
