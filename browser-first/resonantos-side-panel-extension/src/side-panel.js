@@ -8,6 +8,14 @@ import { createBrowserPageActions } from "./lib/browser-page-actions.js";
 import { createBridgeClient } from "./lib/bridge-client.js";
 import { createChatSessionStore } from "./lib/chat-session-store.js";
 import { createChatTurnController } from "./lib/chat-turn-controller.js";
+import {
+  contextUsageSnapshot,
+  createDictationController,
+  hydrateProviderModelOptions,
+  modelLabel,
+  supportsThinkingDepth,
+  updateContextMeterElement
+} from "./lib/composer-runtime.js";
 import { createComposerController } from "./lib/composer-controller.js";
 import {
   createControlPreflight,
@@ -125,16 +133,6 @@ const composerController = createComposerController({
   navigator
 });
 
-const MODEL_LABELS = {
-  "__auto__": "Auto route",
-  "MiniMax-M2.7": "MiniMax 2.7",
-  "MiniMax-M2.7-highspeed": "MiniMax 2.7 High Speed",
-  "gpt-5.5": "GPT 5.5",
-  "gpt-5.4-mini": "GPT 5.4 Mini",
-  "batiai/gemma4-e2b:q4": "Gemma 4 2B"
-};
-
-const supportsThinkingDepth = (model) => model.startsWith("gpt-5.");
 const chatSessionStore = createChatSessionStore({
   storage: chrome.storage?.local,
   storageKeys: STORAGE_KEYS,
@@ -224,7 +222,14 @@ const renderControlPreflightCard = () => {
 const setTurnBusy = (busy) => {
   turnBusy = busy;
   commandInput.disabled = busy;
-  commandForm.querySelector(".send-button").disabled = busy;
+  const sendButton = commandForm.querySelector(".send-button");
+  sendButton.disabled = false;
+  sendButton.classList.toggle("is-stop", busy);
+  sendButton.setAttribute("aria-label", busy ? "Stop response" : "Send message");
+  sendButton.title = busy ? "Stop response" : "Send message";
+  sendButton.innerHTML = busy
+    ? '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="8" height="8" rx="1.8"/></svg>'
+    : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>';
 };
 
 const runBusyUiAction = async (action) => {
@@ -245,7 +250,7 @@ const renderControlMonitor = () => {
 };
 
 const updateConnectionLine = () => {
-  const model = MODEL_LABELS[modelSelect.value] ?? modelSelect.value;
+  const model = modelLabel(modelSelect.value);
   thinkingDepthSelect.hidden = !supportsThinkingDepth(modelSelect.value);
   connectionLine.title = `Connected to ${model} · ${statusLabel}`;
   connectionLine.setAttribute("aria-label", connectionLine.title);
@@ -255,11 +260,12 @@ const updateConnectionLine = () => {
 };
 
 const setContextMeter = (snapshot) => {
-  const textLength = snapshot?.text?.length ?? 0;
-  const roughPercent = Math.min(99, Math.max(0, Math.round(textLength / 900)));
-  contextMeter.style.setProperty("--context-used", `${roughPercent}%`);
-  contextMeter.querySelector(".context-meter-label").textContent = `${roughPercent}%`;
-  contextMeter.setAttribute("aria-label", `Context usage ${roughPercent} percent`);
+  updateContextMeterElement(contextMeter, contextUsageSnapshot({
+    attachments: chatSessionStore.getAttachments(),
+    messages: chatSessionStore.getMessages(),
+    model: modelSelect.value,
+    pageSnapshot: snapshot ?? lastSnapshot
+  }));
 };
 
 const sitePermissionStore = createSitePermissionStore({
@@ -377,8 +383,19 @@ const addMessage = async (role, content, { persist = true, usage = null } = {}) 
   const message = await chatSessionStore.addMessage(role, content, { persist, usage });
   if (!message) return null;
   renderMessages();
+  setContextMeter(lastSnapshot);
   return message;
 };
+
+const dictationController = createDictationController({
+  addMessage,
+  button: dictateButton,
+  commandInput,
+  navigatorRef: navigator,
+  onTranscript: () => composerController.pushUndoSnapshot(),
+  setStatus,
+  windowRef: window
+});
 
 messageActions = createMessageActionController({
   addMessage,
@@ -1050,10 +1067,12 @@ const chatTurnController = createChatTurnController({
   getModel: () => modelSelect.value,
   getThinkingDepth: () => thinkingDepthSelect.value,
   setActivity,
-  setStatus
+  setStatus,
+  setTurnBusy
 });
 
 const runChatTurn = chatTurnController.runChatTurn;
+const stopChatTurn = chatTurnController.stopChatTurn;
 
 const {
   cancelBrowserJob,
@@ -1156,6 +1175,12 @@ chrome.runtime?.onMessage?.addListener?.((message, _sender, sendResponse) => {
 });
 
 const hydrateChatSettings = async () => {
+  await hydrateProviderModelOptions({
+    bridgeRequest,
+    getPreferredModel: () => modelSelect.value,
+    modelSelect,
+    setStatus
+  });
   await chatSessionStore.hydrate();
   const settings = await chrome.storage?.local?.get?.([STORAGE_KEYS.contextDockExpanded]).catch(() => ({}));
   contextDockExpanded = Boolean(settings?.[STORAGE_KEYS.contextDockExpanded]);
@@ -1164,6 +1189,7 @@ const hydrateChatSettings = async () => {
   renderMessages();
   renderAttachments();
   updateConnectionLine();
+  setContextMeter(lastSnapshot);
 };
 
 const consumePendingSidebarPrompt = async () => {
@@ -1206,7 +1232,29 @@ const toggleContextDock = () => {
   renderJobMonitor();
 };
 contextToggleButton.addEventListener("click", toggleContextDock);
-contextMeter.addEventListener("click", toggleContextDock);
+contextMeter.addEventListener("click", async () => {
+  const snapshot = contextUsageSnapshot({
+    attachments: chatSessionStore.getAttachments(),
+    messages: chatSessionStore.getMessages(),
+    model: modelSelect.value,
+    pageSnapshot: lastSnapshot
+  });
+  await addMessage(
+    "system",
+    [
+      "Context usage",
+      `- estimated: ${snapshot.percent}%`,
+      `- tokens: ${snapshot.usedTokens.toLocaleString()} / ${snapshot.contextWindow.toLocaleString()}`,
+      `- messages: ${snapshot.messageTokens.toLocaleString()} tokens`,
+      `- attachments: ${snapshot.attachmentTokens.toLocaleString()} tokens`,
+      `- page context: ${snapshot.pageTokens.toLocaleString()} tokens`,
+      "",
+      snapshot.percent >= 72
+        ? "Recommendation: compact or fork soon, or switch to a larger-context model."
+        : "Context is within the safe operating range."
+    ].join("\n")
+  );
+});
 approvalApproveButton.addEventListener("click", () => void runBusyUiAction(approvePendingControlStep));
 approvalTrustSiteButton.addEventListener("click", () => void runBusyUiAction(trustCurrentTaskForSafeActions));
 approvalDenyButton.addEventListener("click", () => void denyPendingControlStep());
@@ -1230,13 +1278,20 @@ sitePermissionMode.addEventListener("change", async () => {
   clearActivitySoon(1600);
 });
 tabContextController.bindBrowserListeners();
-modelSelect.addEventListener("change", () => void persistChatState().then(updateConnectionLine));
+modelSelect.addEventListener("change", () => void persistChatState().then(() => {
+  updateConnectionLine();
+  setContextMeter(lastSnapshot);
+}));
 thinkingDepthSelect.addEventListener("change", () => void persistChatState());
-dictateButton.addEventListener("click", () => {
-  void addMessage("system", "Audio dictate is not available in this browser runtime yet.");
-});
+dictateButton.addEventListener("click", () => dictationController.toggle());
 
 composerController.bind();
+
+commandForm.querySelector(".send-button").addEventListener("click", (event) => {
+  if (!turnBusy) return;
+  event.preventDefault();
+  stopChatTurn();
+});
 
 commandForm.addEventListener("submit", async (event) => {
   event.preventDefault();

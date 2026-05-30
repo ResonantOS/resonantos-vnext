@@ -34,12 +34,16 @@ export function createChatTurnController({
   getThinkingDepth,
   maxHistoryMessages = DEFAULT_MAX_HISTORY_MESSAGES,
   setActivity,
-  setStatus
+  setStatus,
+  setTurnBusy = () => undefined
 }) {
-  async function bridgeChat() {
+  let activeAbortController = null;
+
+  async function bridgeChat({ signal } = {}) {
     const attachments = chatSessionStore.getAttachments();
     return bridgeRequest("/augmentor/chat", {
       method: "POST",
+      signal,
       body: {
         model: getModel(),
         workload: "augmentor-chat",
@@ -52,25 +56,40 @@ export function createChatTurnController({
   }
 
   async function runChatTurn() {
+    if (activeAbortController) return;
+    activeAbortController = new AbortController();
+    setTurnBusy(true, { canStop: true });
     setStatus("Thinking");
     setActivity("thinking", "Thinking", "Calling the selected model route");
     try {
-      const result = await bridgeChat();
+      const result = await bridgeChat({ signal: activeAbortController.signal });
       setStatus("Writing");
       setActivity("writing", "Writing response", result.model || getModel());
       await addMessage("assistant", result.reply, { usage: result.usage ?? { providerId: result.providerId, model: result.model } });
       await clearAttachments();
       setStatus("Ready");
     } catch (error) {
+      if (error?.name === "AbortError") {
+        setStatus("Stopped");
+        await addMessage("system", "Response stopped by the human before a reply was returned.");
+        return;
+      }
       setStatus("Provider failed");
       await addMessage("system", error instanceof Error ? error.message : String(error));
     } finally {
+      activeAbortController = null;
+      setTurnBusy(false, { canStop: false });
       clearActivitySoon();
     }
   }
 
+  function stopChatTurn() {
+    activeAbortController?.abort();
+  }
+
   return {
     bridgeChat,
-    runChatTurn
+    runChatTurn,
+    stopChatTurn
   };
 }

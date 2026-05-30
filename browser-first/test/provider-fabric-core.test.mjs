@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  modelCatalogEntriesForProvider,
   providerConnectivityTarget,
   providerRouteForWorkload,
   resolveRoutingStrategies,
@@ -133,4 +134,19 @@ test("provider fabric exposes bounded connectivity targets without prompts", () 
   assert.equal(local.url, "http://127.0.0.1:11434/v1/models");
   assert.equal(local.sendsCredential, false);
   assert.equal(providerConnectivityTarget("unknown-provider"), null);
+});
+
+test("provider fabric can describe separate accounts for the same provider type", () => {
+  const entries = modelCatalogEntriesForProvider({
+    id: "minimax-routine-account",
+    label: "MiniMax Routine Account",
+    providerType: "minimax",
+    models: ["MiniMax-M2.7"],
+  });
+
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].providerId, "minimax-routine-account");
+  assert.equal(entries[0].providerLabel, "MiniMax Routine Account");
+  assert.equal(entries[0].providerType, "minimax");
+  assert.equal(entries[0].wireModel, "MiniMax-M2.7");
 });

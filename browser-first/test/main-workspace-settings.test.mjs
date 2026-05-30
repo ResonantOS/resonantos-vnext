@@ -173,8 +173,12 @@ test("settings workspace renders provider status without exposing credentials", 
     assert.match(container.textContent, /OpenAI/);
     assert.match(container.textContent, /Vault/);
     assert.match(container.textContent, /Created/);
+    const initialMiniMaxCard = [...container.querySelectorAll(".settings-provider-card")].find((card) => /MiniMax/.test(card.textContent));
+    initialMiniMaxCard.querySelector("[data-action='show-provider']").click();
     assert.match(container.textContent, /MiniMax 2\.7 · subscription · routine and fallback work/i);
     assert.match(container.textContent, /MiniMax 2\.7 High Speed · subscription · daily strategic work/i);
+    const initialOpenAiCard = [...container.querySelectorAll(".settings-provider-card")].find((card) => /OpenAI/.test(card.textContent));
+    initialOpenAiCard.querySelector("[data-action='show-provider']").click();
     assert.match(container.textContent, /GPT 5\.5 · paid per call · highest reasoning/i);
     assert.match(container.textContent, /Augmentor Chat/);
     assert.match(container.textContent, /Archive Ingest/);
@@ -190,6 +194,7 @@ test("settings workspace renders provider status without exposing credentials", 
     assert.doesNotMatch(container.textContent, /sk-|Bearer|api_key/i);
 
     const miniMaxCard = [...container.querySelectorAll(".settings-provider-card")].find((card) => /MiniMax/.test(card.textContent));
+    miniMaxCard.querySelector("[data-action='show-provider']").click();
     const highSpeed = [...miniMaxCard.querySelectorAll("input[name='allowedModel']")].find((input) => input.value === "MiniMax-M2.7-highspeed");
     highSpeed.checked = false;
     miniMaxCard.querySelector(".settings-provider-model-policy").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
@@ -202,7 +207,7 @@ test("settings workspace renders provider status without exposing credentials", 
       options.body.allowedModels[0] === "MiniMax-M2.7"
     ));
     const reloadedMiniMaxCard = [...container.querySelectorAll(".settings-provider-card")].find((card) => /MiniMax/.test(card.textContent));
-    reloadedMiniMaxCard.querySelector(".settings-provider-actions button").click();
+    [...reloadedMiniMaxCard.querySelectorAll(".settings-provider-actions button")].find((button) => button.textContent === "Check readiness").click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.match(container.textContent, /MiniMax is configured and available/i);
     [...reloadedMiniMaxCard.querySelectorAll(".settings-provider-actions button")].find((button) => button.textContent === "Test connection").click();
@@ -253,9 +258,11 @@ test("settings workspace saves provider credentials through the host bridge", as
     renderSettingsWorkspace({ container, bridgeRequest, initialSection: "providers" });
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    const input = container.querySelector("input[name='credential']");
+    const card = container.querySelector(".settings-provider-card");
+    card.querySelector("[data-action='edit-provider']").click();
+    const input = card.querySelector(".settings-provider-form input[name='credential']");
     input.value = "minimax-test-credential";
-    container.querySelector(".settings-provider-form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    card.querySelector(".settings-provider-form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     assert.ok(calls.some(([route, options]) =>
@@ -267,6 +274,184 @@ test("settings workspace saves provider credentials through the host bridge", as
     assert.equal(input.value, "");
     assert.match(container.textContent, /1\/1 provider profiles configured/);
   } finally {
+    cleanup();
+  }
+});
+
+test("settings provider profiles can add and edit separate accounts for the same provider type", async () => {
+  const { container, cleanup } = setupDom();
+  const calls = [];
+  const providers = [
+    {
+      id: "minimax-fast",
+      label: "MiniMax Fast",
+      providerType: "minimax",
+      authType: "api-key",
+      apiBaseUrl: "https://api.minimax.io/v1",
+      role: "Fast subscription account for Augmentor",
+      source: "user",
+      models: [{
+        model: "MiniMax-M2.7-highspeed",
+        label: "MiniMax 2.7 High Speed",
+        costTier: "subscription",
+        qualityTier: "daily strategic work",
+        allowed: true
+      }],
+      routeConsumers: [],
+      configured: true,
+      credentialPreview: "stored"
+    },
+    {
+      id: "minimax-routine",
+      label: "MiniMax Routine",
+      providerType: "minimax",
+      authType: "api-key",
+      apiBaseUrl: "https://api.minimax.io/v1",
+      role: "Slow subscription account for background work",
+      source: "user",
+      models: [{
+        model: "MiniMax-M2.7",
+        label: "MiniMax 2.7",
+        costTier: "subscription",
+        qualityTier: "routine and fallback work",
+        allowed: true
+      }],
+      routeConsumers: [],
+      configured: false,
+      credentialPreview: "missing"
+    }
+  ];
+  const bridgeRequest = async (route, options = {}) => {
+    calls.push([route, options]);
+    if (route === "/providers/status") {
+      return {
+        providers,
+        vault: { configured: true, location: "ResonantOS local provider vault" }
+      };
+    }
+    if (route === "/providers/diagnostics-history") return { entries: [] };
+    if (route === "/providers/accounts") {
+      if (options.body.mode === "update") {
+        const index = providers.findIndex((provider) => provider.id === options.body.id);
+        providers[index] = {
+          ...providers[index],
+          label: options.body.label,
+          role: options.body.role,
+          apiBaseUrl: options.body.apiBaseUrl,
+          models: options.body.models.map((model) => ({ model, label: model, costTier: "subscription", qualityTier: "custom" })),
+          configured: Boolean(options.body.credential) || providers[index].configured,
+          credentialPreview: Boolean(options.body.credential) || providers[index].configured ? "stored" : "missing"
+        };
+        return { provider: providers[index], configured: providers[index].configured };
+      }
+      providers.push({
+        id: "minimax-research",
+        label: options.body.label,
+        providerType: options.body.providerType,
+        authType: "api-key",
+        apiBaseUrl: options.body.apiBaseUrl,
+        role: options.body.role,
+        source: "user",
+        models: options.body.models.map((model) => ({ model, label: model, costTier: "subscription", qualityTier: "custom" })),
+        routeConsumers: [],
+        configured: true,
+        credentialPreview: "stored"
+      });
+      return { provider: providers.at(-1), configured: true };
+    }
+    throw new Error(`Unexpected route ${route}`);
+  };
+
+  try {
+    renderSettingsWorkspace({ container, bridgeRequest, initialSection: "providers" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.match(container.textContent, /MiniMax Fast/);
+    assert.match(container.textContent, /MiniMax Routine/);
+    assert.doesNotMatch(container.textContent, /Use one block per account/i);
+    const fastCard = [...container.querySelectorAll(".settings-provider-card")].find((card) => /MiniMax Fast/.test(card.textContent));
+    fastCard.querySelector("[data-action='show-provider']").click();
+    assert.match(container.textContent, /Provider type: MiniMax · Account ID: minimax-fast/i);
+
+    container.querySelector(".settings-provider-toolbar button").click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const modal = document.querySelector(".settings-provider-modal");
+    assert.ok(modal);
+    modal.querySelector("input[name='label']").value = "MiniMax Research";
+    modal.querySelector("select[name='templateId']").value = "minimax";
+    modal.querySelector("input[name='apiBaseUrl']").value = "https://api.minimax.io/v1";
+    modal.querySelector("input[name='role']").value = "Research subscription account";
+    modal.querySelector("textarea[name='models']").value = "MiniMax-M2.7";
+    modal.querySelector("input[name='credential']").value = "minimax-research-key";
+    modal.querySelector("form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.ok(calls.some(([route, options]) =>
+      route === "/providers/accounts" &&
+      options.capability === "provider-credential-write" &&
+      options.body.mode === "create" &&
+      options.body.templateId === "minimax" &&
+      options.body.label === "MiniMax Research" &&
+      options.body.providerType === "minimax" &&
+      options.body.credential === "minimax-research-key"
+    ));
+    assert.match(container.textContent, /MiniMax Research/);
+    assert.match(container.textContent, /2\/3 provider profiles configured/);
+
+    const routineCard = [...container.querySelectorAll(".settings-provider-card")]
+      .find((card) => /MiniMax Routine/.test(card.textContent));
+    routineCard.querySelector("[data-action='edit-provider']").click();
+    routineCard.querySelector("input[name='label']").value = "MiniMax Slow";
+    routineCard.querySelector("input[name='role']").value = "Background and cron account";
+    routineCard.querySelector("textarea[name='models']").value = "MiniMax-M2.7";
+    routineCard.querySelector(".settings-provider-account-form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.ok(calls.some(([route, options]) =>
+      route === "/providers/accounts" &&
+      options.body.mode === "update" &&
+      options.body.id === "minimax-routine" &&
+      options.body.label === "MiniMax Slow"
+    ));
+    assert.match(container.textContent, /MiniMax Slow/);
+  } finally {
+    document.querySelector(".settings-provider-modal")?.remove();
+    cleanup();
+  }
+});
+
+test("settings provider add modal exposes comprehensive cloud, gateway, local, and custom templates", async () => {
+  const { container, cleanup } = setupDom();
+  const bridgeRequest = async (route) => {
+    if (route === "/providers/status") {
+      return { providers: [], vault: { configured: false, location: "ResonantOS local provider vault" } };
+    }
+    if (route === "/providers/diagnostics-history") return { entries: [] };
+    throw new Error(`Unexpected route ${route}`);
+  };
+
+  try {
+    renderSettingsWorkspace({ container, bridgeRequest, initialSection: "providers" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    container.querySelector(".settings-provider-toolbar button").click();
+    const select = document.querySelector("select[name='templateId']");
+    const optionText = [...select.querySelectorAll("option")].map((option) => option.textContent);
+    const optionValues = [...select.querySelectorAll("option")].map((option) => option.value);
+
+    assert.ok(optionText.includes("Ollama"));
+    assert.ok(optionText.includes("LM Studio"));
+    assert.ok(optionText.includes("OpenRouter"));
+    assert.ok(optionText.includes("Groq"));
+    assert.ok(optionText.includes("Together AI"));
+    assert.ok(optionText.includes("DeepSeek"));
+    assert.ok(optionText.includes("Mistral AI"));
+    assert.ok(optionText.includes("OpenAI-Compatible API"));
+    assert.ok(optionValues.includes("asus-gx10"));
+
+    select.value = "ollama";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    assert.equal(document.querySelector("input[name='apiBaseUrl']").value, "http://127.0.0.1:11434");
+    assert.match(document.querySelector("textarea[name='models']").value, /batiai\/gemma4-e2b:q4/);
+  } finally {
+    document.querySelector(".settings-provider-modal")?.remove();
     cleanup();
   }
 });

@@ -33,6 +33,7 @@ namespace resonantos {
 
 constexpr const char* kDefaultUrl = "https://resonantos.com";
 constexpr const char* kChromeExtensionsUrl = "chrome://extensions";
+constexpr const char* kChromeNewTabFooterUrl = "chrome://newtab-footer";
 constexpr const char* kChromeWebStoreUrl = "https://chromewebstore.google.com/category/extensions";
 constexpr const char* kBrowserFirstCommand = "browser.first.start";
 constexpr const char* kProbeCommand = "browser.native.probe";
@@ -167,6 +168,18 @@ class OpenAugmentorSidePanelTask final : public CefTask {
   DISALLOW_COPY_AND_ASSIGN(OpenAugmentorSidePanelTask);
 };
 
+bool IsPrimaryBrowserShortcut(const CefKeyEvent& event) {
+  if (event.type != KEYEVENT_RAWKEYDOWN) {
+    return false;
+  }
+  const bool primary_modifier =
+      (event.modifiers & EVENTFLAG_COMMAND_DOWN) != 0 ||
+      (event.modifiers & EVENTFLAG_CONTROL_DOWN) != 0;
+  return primary_modifier &&
+         (event.modifiers & EVENTFLAG_ALT_DOWN) == 0 &&
+         (event.modifiers & EVENTFLAG_SHIFT_DOWN) == 0;
+}
+
 class ResonantBrowserClient final : public CefClient,
                                     public CefDisplayHandler,
                                     public CefKeyboardHandler,
@@ -195,18 +208,27 @@ class ResonantBrowserClient final : public CefClient,
                      CefEventHandle os_event,
                      bool* is_keyboard_shortcut) override {
     CEF_REQUIRE_UI_THREAD();
-    (void)browser;
     (void)os_event;
-    if (event.type == KEYEVENT_RAWKEYDOWN &&
-        (event.modifiers & EVENTFLAG_COMMAND_DOWN) != 0 &&
-        (event.modifiers & EVENTFLAG_ALT_DOWN) == 0 &&
-        (event.modifiers & EVENTFLAG_CONTROL_DOWN) == 0 &&
-        (event.modifiers & EVENTFLAG_SHIFT_DOWN) == 0 &&
-        (event.windows_key_code == 'Q' || event.windows_key_code == 'q')) {
-      if (is_keyboard_shortcut) {
-        *is_keyboard_shortcut = true;
+    if (!IsPrimaryBrowserShortcut(event)) {
+      return false;
+    }
+
+    const int key_code = event.windows_key_code;
+    if (key_code == 'T' || key_code == 't') {
+      MarkKeyboardShortcut(is_keyboard_shortcut);
+      OpenNewBrowserSurface();
+      return true;
+    }
+    if (key_code == 'W' || key_code == 'w') {
+      MarkKeyboardShortcut(is_keyboard_shortcut);
+      if (browser) {
+        browser->GetHost()->CloseBrowser(false);
       }
-      CefQuitMessageLoop();
+      return true;
+    }
+    if (key_code == 'Q' || key_code == 'q') {
+      MarkKeyboardShortcut(is_keyboard_shortcut);
+      CloseAllBrowserSurfaces();
       return true;
     }
     return false;
@@ -268,6 +290,15 @@ class ResonantBrowserClient final : public CefClient,
       const std::string loaded_url = frame->GetURL().ToString();
       std::cout << "{\"event\":\"browser.native.load_end\",\"status\":" << http_status_code
                 << ",\"url\":\"" << loaded_url << "\"}" << std::endl;
+      if (loaded_url.rfind(kChromeNewTabFooterUrl, 0) == 0) {
+        // Intent citation: docs/architecture/ADR-037-browser-first-chromium-resonantos.md
+        // Chromium injects a separate chrome://newtab-footer surface for
+        // extension-controlled new-tab experiences. ResonantOS moves those
+        // controls into Settings/About and closes the footer so the main
+        // workspace owns the full visible browser surface.
+        browser->GetHost()->CloseBrowser(true);
+        return;
+      }
       const bool loaded_web_page =
           loaded_url.rfind("http://", 0) == 0 || loaded_url.rfind("https://", 0) == 0;
       if (browser_first_auto_open_side_panel_ && !browser_first_side_panel_requested_ && loaded_web_page) {
@@ -348,11 +379,52 @@ class ResonantBrowserClient final : public CefClient,
   void SetLocalExtensionSmoke(bool value) { local_extension_smoke_ = value; }
   void SetPhantomExtensionSmoke(bool value) { phantom_extension_smoke_ = value; }
   void SetBrowserFirstAutoOpenSidePanel(bool value) { browser_first_auto_open_side_panel_ = value; }
+  void SetDefaultBrowserUrl(std::string url) { default_browser_url_ = std::move(url); }
 
  private:
+  void MarkKeyboardShortcut(bool* is_keyboard_shortcut) {
+    if (is_keyboard_shortcut) {
+      *is_keyboard_shortcut = true;
+    }
+  }
+
+  void OpenNewBrowserSurface() {
+    // Intent citation: docs/architecture/ADR-037-browser-first-chromium-resonantos.md
+    // Browser chrome shortcuts belong to the native CEF host. We only handle
+    // window lifecycle shortcuts here; page text/editing shortcuts stay native
+    // Chromium behavior inside the loaded website.
+    CefBrowserSettings browser_settings;
+    CefWindowInfo window_info;
+    window_info.runtime_style = CEF_RUNTIME_STYLE_CHROME;
+    if (!CefBrowserHost::CreateBrowser(
+            window_info,
+            this,
+            default_browser_url_.empty() ? kDefaultUrl : default_browser_url_,
+            browser_settings,
+            nullptr,
+            CefRequestContext::GetGlobalContext())) {
+      std::cerr << "Failed to create a new ResonantOS Browser window." << std::endl;
+    }
+  }
+
+  void CloseAllBrowserSurfaces() {
+    if (browsers_.empty()) {
+      CefQuitMessageLoop();
+      return;
+    }
+    auto browsers = browsers_;
+    for (const auto& browser : browsers) {
+      if (browser) {
+        browser->GetHost()->CloseBrowser(false);
+      }
+    }
+    CefPostDelayedTask(TID_UI, new QuitMessageLoopTask(), 250);
+  }
+
   std::vector<CefRefPtr<CefBrowser>> browsers_;
   std::vector<std::string> smoke_urls_;
   std::vector<std::string> loaded_urls_;
+  std::string default_browser_url_ = kDefaultUrl;
   bool quit_after_first_main_frame_load_ = false;
   bool quit_requested_ = false;
   bool extension_entrypoint_smoke_ = false;
@@ -419,6 +491,7 @@ class ResonantBrowserApp final : public CefApp, public CefBrowserProcessHandler 
     }
 
     CefRefPtr<ResonantBrowserClient> client(new ResonantBrowserClient());
+    client->SetDefaultBrowserUrl(url);
     if (extension_entrypoint_smoke) {
       client->SetExtensionEntryPointSmoke({kChromeWebStoreUrl});
     } else if (local_extension_smoke) {

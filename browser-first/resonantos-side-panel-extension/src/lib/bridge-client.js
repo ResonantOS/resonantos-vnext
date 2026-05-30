@@ -16,7 +16,8 @@ export function createBridgeClient(config = defaultBridgeConfig) {
     const response = await fetch(`${bridgeUrl}${route}`, {
       method: options.method ?? "GET",
       headers,
-      body: options.body ? JSON.stringify(options.body) : undefined
+      body: options.body ? JSON.stringify(options.body) : undefined,
+      signal: options.signal
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || !payload.ok) {

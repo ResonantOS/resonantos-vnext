@@ -2,6 +2,7 @@ export const providerProfiles = [
   {
     id: "shared-minimax",
     label: "MiniMax",
+    providerType: "minimax",
     authType: "api-key",
     models: ["MiniMax-M2.7", "MiniMax-M2.7-highspeed"],
     role: "Default Augmentor and agent-control provider",
@@ -9,6 +10,7 @@ export const providerProfiles = [
   {
     id: "shared-openai",
     label: "OpenAI",
+    providerType: "openai",
     authType: "api-key",
     models: ["gpt-5.5", "gpt-5.4-mini"],
     role: "High-reasoning fallback and archive-quality provider",
@@ -122,6 +124,36 @@ export function providerProfileById(providerId) {
 
 export function modelById(model) {
   return modelCatalog.find((entry) => entry.model === model) ?? null;
+}
+
+export function inferProviderType(providerId) {
+  if (providerId === "shared-openai" || String(providerId ?? "").includes("openai")) return "openai";
+  if (providerId === "desktop-local" || String(providerId ?? "").includes("local")) return "openai-compatible";
+  return "minimax";
+}
+
+export function modelCatalogEntriesForProvider(profile) {
+  const providerId = String(profile?.id ?? "").trim();
+  const providerLabel = String(profile?.label ?? providerId ?? "Provider");
+  const providerType = profile?.providerType ?? inferProviderType(providerId);
+  return (profile?.models ?? [])
+    .map((entry) => {
+      const model = typeof entry === "string" ? entry : entry?.model;
+      if (!model) return null;
+      const builtIn = modelCatalog.find((catalogEntry) => catalogEntry.model === model);
+      return {
+        model,
+        label: typeof entry === "string" ? (builtIn?.label ?? model) : (entry.label ?? builtIn?.label ?? model),
+        providerId,
+        providerLabel,
+        providerType,
+        runtime: typeof entry === "string" ? (builtIn?.runtime ?? "cloud") : (entry.runtime ?? builtIn?.runtime ?? "cloud"),
+        costTier: typeof entry === "string" ? (builtIn?.costTier ?? "custom") : (entry.costTier ?? builtIn?.costTier ?? "custom"),
+        qualityTier: typeof entry === "string" ? (builtIn?.qualityTier ?? "custom") : (entry.qualityTier ?? builtIn?.qualityTier ?? "custom"),
+        wireModel: typeof entry === "string" ? (builtIn?.wireModel ?? model) : (entry.wireModel ?? builtIn?.wireModel ?? model),
+      };
+    })
+    .filter(Boolean);
 }
 
 export function allowedModelsForProvider(providerId, preferences = {}) {

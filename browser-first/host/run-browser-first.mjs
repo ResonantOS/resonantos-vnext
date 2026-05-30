@@ -31,14 +31,12 @@ import {
 } from "./memory-source-versioning.mjs";
 import {
   defaultRoutingStrategies,
-  isModelAllowed,
-  modelById,
+  inferProviderType,
   modelCatalog,
-  modelRuntimeState as providerFabricModelRuntimeState,
+  modelCatalogEntriesForProvider,
   normalizeFallbackModels,
   normalizeRoutingStrategy,
   providerConnectivityTarget,
-  providerProfileById,
   providerProfiles,
   providerRouteForModel as providerFabricRouteForModel,
   providerRouteForWorkload as providerFabricRouteForWorkload,
@@ -157,6 +155,34 @@ async function seedPinnedExtensions(profileDir, extensionIds) {
   await writeFile(preferencesPath, `${JSON.stringify(preferences, null, 2)}\n`);
 }
 
+async function clearResonantNewTabOverride(profileDir, extensionId) {
+  const preferencesPath = path.join(profileDir, "Default", "Preferences");
+  if (!existsSync(preferencesPath)) {
+    return;
+  }
+  let preferences = {};
+  try {
+    preferences = JSON.parse(await readFile(preferencesPath, "utf8"));
+  } catch {
+    return;
+  }
+  const overrides = preferences.extensions?.chrome_url_overrides;
+  const entries = Array.isArray(overrides?.newtab) ? overrides.newtab : [];
+  const filtered = entries.filter((entry) => !String(entry?.entry ?? "").includes(extensionId));
+  if (filtered.length === entries.length) {
+    return;
+  }
+  if (filtered.length) {
+    overrides.newtab = filtered;
+  } else {
+    delete overrides.newtab;
+  }
+  if (overrides && Object.keys(overrides).length === 0) {
+    delete preferences.extensions.chrome_url_overrides;
+  }
+  await writeFile(preferencesPath, `${JSON.stringify(preferences, null, 2)}\n`);
+}
+
 async function removeCachedUnpackedExtension(profileDir, extensionId) {
   const defaultDir = path.join(profileDir, "Default");
   const cacheRoots = [
@@ -179,6 +205,10 @@ function providerRoutingPath() {
 
 function providerModelPreferencesPath() {
   return path.join(os.homedir(), "ResonantOS_User", "ProviderFabric", "model-preferences.json");
+}
+
+function providerAccountsPath() {
+  return path.join(os.homedir(), "ResonantOS_User", "ProviderFabric", "provider-accounts.json");
 }
 
 function providerDiagnosticsHistoryPath() {
@@ -382,6 +412,248 @@ async function readProviderSecrets() {
   return JSON.parse(await readFile(filePath, "utf8"));
 }
 
+function slugifyProviderId(value) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 56);
+}
+
+function providerPreset(rawProviderType, rawTemplateId = rawProviderType) {
+  const templateId = String(rawTemplateId ?? rawProviderType ?? "").trim().toLowerCase();
+  const type = String(rawProviderType ?? "").trim().toLowerCase();
+  if (templateId === "openai" || type === "openai") {
+    return {
+      providerType: "openai",
+      authType: "api-key",
+      apiBaseUrl: "https://api.openai.com/v1",
+      models: [
+        { model: "gpt-5.5", label: "GPT 5.5", runtime: "cloud", costTier: "paid-per-call", qualityTier: "highest reasoning" },
+        { model: "gpt-5.4-mini", label: "GPT 5.4 Mini", runtime: "cloud", costTier: "paid-per-call", qualityTier: "lightweight high-reasoning fallback" },
+      ],
+    };
+  }
+  const openAiCompatiblePresets = {
+    xai: { apiBaseUrl: "https://api.x.ai/v1", models: ["grok-4", "grok-3"] },
+    deepseek: { apiBaseUrl: "https://api.deepseek.com/v1", models: ["deepseek-chat", "deepseek-reasoner"] },
+    mistral: { apiBaseUrl: "https://api.mistral.ai/v1", models: ["mistral-large-latest", "mistral-small-latest", "open-mixtral"] },
+    qwen: { apiBaseUrl: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", models: ["qwen-max", "qwen-plus", "qwen-turbo"] },
+    "nvidia-nim": { apiBaseUrl: "https://integrate.api.nvidia.com/v1", models: ["nvidia/llama-3.1-nemotron-ultra-253b-v1", "nvidia/nemotron"] },
+    "microsoft-azure": { apiBaseUrl: "", models: ["azure-model-deployment"] },
+    openrouter: { apiBaseUrl: "https://openrouter.ai/api/v1", models: ["openai/gpt-5.5", "anthropic/claude-sonnet-4.5", "google/gemini-2.5-pro"] },
+    together: { apiBaseUrl: "https://api.together.xyz/v1", models: ["meta-llama/Llama-3.3-70B-Instruct-Turbo", "deepseek-ai/DeepSeek-R1"] },
+    huggingface: { apiBaseUrl: "", models: ["hf-model-id"] },
+    groq: { apiBaseUrl: "https://api.groq.com/openai/v1", models: ["llama-3.3-70b-versatile", "mixtral-8x7b-32768"] },
+    fireworks: { apiBaseUrl: "https://api.fireworks.ai/inference/v1", models: ["accounts/fireworks/models/llama-v3p1-70b-instruct"] },
+    hyperbolic: { apiBaseUrl: "https://api.hyperbolic.xyz/v1", models: ["meta-llama/Meta-Llama-3.1-70B-Instruct"] },
+    "cloudflare-ai-gateway": { apiBaseUrl: "", models: ["gateway-model-id"] },
+    litellm: { apiBaseUrl: "http://127.0.0.1:4000/v1", models: ["configured-model-alias"] },
+    bifrost: { apiBaseUrl: "", models: ["bifrost-model-alias"] },
+    localai: { apiBaseUrl: "http://127.0.0.1:8080/v1", models: ["local-model"] },
+    "llama-cpp": { apiBaseUrl: "http://127.0.0.1:8080/v1", models: ["local-model"] },
+    vllm: { apiBaseUrl: "http://127.0.0.1:8000/v1", models: ["local-model"] },
+    "text-generation-webui": { apiBaseUrl: "http://127.0.0.1:5000/v1", models: ["local-model"] },
+    "asus-gx10": { apiBaseUrl: "http://192.168.1.77:30004/v1", models: ["Qwen3.6-35B-A3B-Q4_K_M.gguf"] },
+    "openai-compatible": { apiBaseUrl: "", models: ["model-id"] },
+  };
+  if (openAiCompatiblePresets[templateId] || type === "openai-compatible") {
+    const preset = openAiCompatiblePresets[templateId] ?? openAiCompatiblePresets["openai-compatible"];
+    return {
+      providerType: "openai-compatible",
+      authType: "api-key",
+      apiBaseUrl: preset.apiBaseUrl,
+      models: preset.models.map((model) => ({ model, label: model, runtime: "cloud", costTier: "custom", qualityTier: "custom" })),
+    };
+  }
+  if (templateId === "anthropic" || type === "anthropic") {
+    return {
+      providerType: "anthropic",
+      authType: "api-key",
+      apiBaseUrl: "https://api.anthropic.com/v1",
+      models: [
+        { model: "claude-sonnet-4.5", label: "Claude Sonnet 4.5", runtime: "cloud", costTier: "paid-per-call", qualityTier: "high reasoning" },
+        { model: "claude-haiku-4.5", label: "Claude Haiku 4.5", runtime: "cloud", costTier: "paid-per-call", qualityTier: "fast lightweight" },
+      ],
+    };
+  }
+  if (templateId === "gemini" || templateId === "google" || type === "gemini" || type === "google") {
+    return {
+      providerType: "google",
+      authType: "api-key",
+      apiBaseUrl: "https://generativelanguage.googleapis.com/v1beta",
+      models: [
+        { model: "gemini-2.5-pro", label: "Gemini 2.5 Pro", runtime: "cloud", costTier: "paid-per-call", qualityTier: "high reasoning" },
+        { model: "gemini-2.5-flash", label: "Gemini 2.5 Flash", runtime: "cloud", costTier: "paid-per-call", qualityTier: "fast lightweight" },
+        { model: "gemma", label: "Gemma", runtime: "cloud", costTier: "custom", qualityTier: "open model family" },
+      ],
+    };
+  }
+  const localPresets = {
+    ollama: { apiBaseUrl: "http://127.0.0.1:11434", models: ["batiai/gemma4-e2b:q4"] },
+    "lm-studio": { apiBaseUrl: "http://127.0.0.1:1234/v1", models: ["local-model"] },
+    "dgx-spark": { apiBaseUrl: "http://dgx-spark.local:11434", models: ["local-model"] },
+  };
+  if (localPresets[templateId] || type === "local") {
+    const preset = localPresets[templateId] ?? localPresets.ollama;
+    return {
+      providerType: "local",
+      authType: "local-runtime",
+      apiBaseUrl: preset.apiBaseUrl,
+      models: preset.models.map((model) => ({ model, label: model, runtime: "local", costTier: "local-free", qualityTier: "local runtime" })),
+    };
+  }
+  const customPresets = {
+    cohere: { apiBaseUrl: "https://api.cohere.com", models: ["command-r-plus", "command-r"] },
+    ai21: { apiBaseUrl: "https://api.ai21.com/studio/v1", models: ["jamba-large", "jamba-mini"] },
+    replicate: { apiBaseUrl: "https://api.replicate.com", models: ["replicate-model-version"] },
+  };
+  if (customPresets[templateId] || type === "custom") {
+    const preset = customPresets[templateId] ?? { apiBaseUrl: "", models: ["model-id"] };
+    return {
+      providerType: "custom",
+      authType: "api-key",
+      apiBaseUrl: preset.apiBaseUrl,
+      models: preset.models.map((model) => ({ model, label: model, runtime: "cloud", costTier: "custom", qualityTier: "custom" })),
+    };
+  }
+  return {
+    providerType: "minimax",
+    authType: "api-key",
+    apiBaseUrl: "https://api.minimax.io/v1",
+    models: [
+      { model: "MiniMax-M2.7-highspeed", label: "MiniMax 2.7 High Speed", runtime: "cloud", costTier: "subscription", qualityTier: "daily strategic work", wireModel: "MiniMax-M2.7" },
+      { model: "MiniMax-M2.7", label: "MiniMax 2.7", runtime: "cloud", costTier: "subscription", qualityTier: "routine and fallback work" },
+    ],
+  };
+}
+
+function normalizeProviderModelEntry(entry, presetModels = []) {
+  const rawModel = typeof entry === "string" ? entry : entry?.model;
+  const model = String(rawModel ?? "").trim().slice(0, 120);
+  if (!model) return null;
+  const preset = presetModels.find((candidate) => candidate.model === model) ?? modelCatalog.find((candidate) => candidate.model === model) ?? {};
+  return {
+    model,
+    label: String((typeof entry === "string" ? preset.label : entry?.label) ?? preset.label ?? model).trim().slice(0, 120) || model,
+    runtime: String((typeof entry === "string" ? preset.runtime : entry?.runtime) ?? preset.runtime ?? "cloud").trim().slice(0, 40) || "cloud",
+    costTier: String((typeof entry === "string" ? preset.costTier : entry?.costTier) ?? preset.costTier ?? "custom").trim().slice(0, 60) || "custom",
+    qualityTier: String((typeof entry === "string" ? preset.qualityTier : entry?.qualityTier) ?? preset.qualityTier ?? "custom").trim().slice(0, 100) || "custom",
+    wireModel: String((typeof entry === "string" ? preset.wireModel : entry?.wireModel) ?? preset.wireModel ?? model).trim().slice(0, 120) || model,
+  };
+}
+
+function normalizeProviderAccount(raw, existingProfiles = []) {
+  const preset = providerPreset(raw?.providerType, raw?.templateId);
+  const label = String(raw?.label ?? raw?.name ?? "").trim().slice(0, 80);
+  if (!label) {
+    throw new Error("Provider account name is required.");
+  }
+  const suppliedId = slugifyProviderId(raw?.id);
+  const baseId = suppliedId || slugifyProviderId(`${preset.providerType}-${label}`) || `${preset.providerType}-account`;
+  const existingIds = new Set(existingProfiles.map((profile) => profile.id));
+  let id = baseId;
+  if (!suppliedId) {
+    let suffix = 2;
+    while (existingIds.has(id)) {
+      id = `${baseId}-${suffix++}`;
+    }
+  }
+  const modelSource = Array.isArray(raw?.models) && raw.models.length ? raw.models : preset.models;
+  const models = unique(modelSource
+    .map((entry) => normalizeProviderModelEntry(entry, preset.models))
+    .filter(Boolean)
+    .map((entry) => JSON.stringify(entry)))
+    .map((entry) => JSON.parse(entry));
+  if (!models.length) {
+    throw new Error("At least one model must be declared for a provider account.");
+  }
+  return {
+    id,
+    label,
+    providerType: preset.providerType,
+    templateId: String(raw?.templateId ?? preset.providerType).trim().slice(0, 80),
+    authType: String(raw?.authType ?? preset.authType).trim().slice(0, 40) || "api-key",
+    apiBaseUrl: String(raw?.apiBaseUrl ?? preset.apiBaseUrl).trim().slice(0, 240),
+    role: String(raw?.role ?? `${label} model account`).trim().slice(0, 160) || `${label} model account`,
+    models,
+    source: raw?.source === "built-in" ? "built-in" : "user",
+  };
+}
+
+async function readProviderAccounts() {
+  const filePath = providerAccountsPath();
+  if (!existsSync(filePath)) {
+    return [];
+  }
+  const parsed = JSON.parse(await readFile(filePath, "utf8"));
+  const accounts = Array.isArray(parsed.accounts) ? parsed.accounts : [];
+  return accounts.map((account) => normalizeProviderAccount(account, providerProfiles)).filter(Boolean);
+}
+
+async function writeProviderAccounts(accounts) {
+  const filePath = providerAccountsPath();
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, `${JSON.stringify({ accounts }, null, 2)}\n`, { mode: 0o600 });
+  await chmod(filePath, 0o600).catch(() => undefined);
+}
+
+async function allProviderProfiles() {
+  const customAccounts = await readProviderAccounts().catch(() => []);
+  const builtIns = providerProfiles.map((profile) => ({
+    ...profile,
+    providerType: profile.providerType ?? inferProviderType(profile.id),
+    apiBaseUrl: providerPreset(profile.providerType ?? inferProviderType(profile.id)).apiBaseUrl,
+    source: "built-in",
+  }));
+  const byId = new Map(builtIns.map((profile) => [profile.id, profile]));
+  for (const account of customAccounts) {
+    byId.set(account.id, { ...byId.get(account.id), ...account, source: account.source === "built-in" ? "built-in-customized" : "user" });
+  }
+  return [...byId.values()];
+}
+
+async function allModelCatalog() {
+  const profiles = await allProviderProfiles();
+  const dynamicEntries = profiles.flatMap((profile) => modelCatalogEntriesForProvider(profile));
+  const byProviderModel = new Map();
+  for (const entry of [...modelCatalog, ...dynamicEntries]) {
+    byProviderModel.set(`${entry.providerId}:${entry.model}`, entry);
+  }
+  return [...byProviderModel.values()];
+}
+
+async function providerProfileByIdDynamic(providerId) {
+  return (await allProviderProfiles()).find((profile) => profile.id === providerId) ?? null;
+}
+
+function isModelAllowedForProviderModel(providerId, model, preferences = {}, catalog = modelCatalog) {
+  const declaredModels = catalog
+    .filter((entry) => entry.providerId === providerId)
+    .map((entry) => entry.model);
+  if (!declaredModels.includes(model)) {
+    return false;
+  }
+  const configured = Array.isArray(preferences.allowedModels?.[providerId])
+    ? preferences.allowedModels[providerId].filter((entry) => declaredModels.includes(entry))
+    : declaredModels;
+  return new Set(configured.length ? configured : declaredModels).has(model);
+}
+
+function providerModelRuntimeState(entry, { secrets = {}, preferences = {}, localRuntimeUrl = "", catalog = modelCatalog } = {}) {
+  const allowed = isModelAllowedForProviderModel(entry.providerId, entry.model, preferences, catalog);
+  const configured = entry.providerId === "desktop-local"
+    ? Boolean(localRuntimeUrl)
+    : Boolean(secrets[entry.providerId]);
+  return {
+    ...entry,
+    allowed,
+    configured: allowed && configured,
+    state: !allowed ? "disabled" : configured ? "available" : "unavailable",
+  };
+}
+
 async function readRoutingOverrides() {
   const filePath = providerRoutingPath();
   if (!existsSync(filePath)) {
@@ -442,19 +714,21 @@ async function resolvedRoutingStrategies() {
 }
 
 async function executeProviderStatus() {
-  const [secrets, preferences, strategies] = await Promise.all([
+  const [secrets, preferences, strategies, profiles, catalog] = await Promise.all([
     readProviderSecrets(),
     readProviderModelPreferences().catch(() => ({})),
     resolvedRoutingStrategies(),
+    allProviderProfiles(),
+    allModelCatalog(),
   ]);
   return {
     vault: {
       configured: existsSync(providerSecretsPath()),
       location: "ResonantOS local provider vault",
     },
-    providers: providerProfiles.map((profile) => ({
+    providers: profiles.map((profile) => ({
       ...profile,
-      models: modelCatalog
+      models: catalog
         .filter((entry) => entry.providerId === profile.id)
         .map((entry) => ({
           model: entry.model,
@@ -462,7 +736,7 @@ async function executeProviderStatus() {
           runtime: entry.runtime,
           costTier: entry.costTier,
           qualityTier: entry.qualityTier,
-          allowed: isModelAllowed(entry.model, preferences),
+          allowed: isModelAllowedForProviderModel(profile.id, entry.model, preferences, catalog),
         })),
       routeConsumers: strategies
         .filter((strategy) =>
@@ -484,28 +758,30 @@ async function executeProviderStatus() {
 
 async function executeProviderHealthCheck(payload) {
   const providerId = String(payload.providerId ?? "").trim();
-  const profile = providerProfileById(providerId);
+  const profile = await providerProfileByIdDynamic(providerId);
   if (!profile) {
     throw new Error("Unknown provider profile.");
   }
-  const [secrets, preferences, strategies] = await Promise.all([
+  const [secrets, preferences, strategies, catalog] = await Promise.all([
     readProviderSecrets(),
     readProviderModelPreferences().catch(() => ({})),
     resolvedRoutingStrategies(),
+    allModelCatalog(),
   ]);
-  const models = modelCatalog.filter((entry) => entry.providerId === providerId);
+  const models = catalog.filter((entry) => entry.providerId === providerId);
   const configured = Boolean(secrets[providerId]);
   const routeConsumers = strategies.filter((strategy) =>
     [strategy.primary, ...(strategy.fallbackChain ?? [])]
       .some((entry) => entry?.providerId === providerId)
   );
   const blockedConsumers = routeConsumers.filter((strategy) => strategy.routeState !== "routable");
-  const availableModels = models.filter((entry) => providerFabricModelRuntimeState(entry.model, {
+  const availableModels = models.filter((entry) => providerModelRuntimeState(entry, {
     secrets,
     preferences,
+    catalog,
     localRuntimeUrl: process.env.RESONANTOS_LOCAL_RUNTIME_URL,
   })?.configured);
-  const allowedModels = models.filter((entry) => isModelAllowed(entry.model, preferences));
+  const allowedModels = models.filter((entry) => isModelAllowedForProviderModel(providerId, entry.model, preferences, catalog));
   const state = configured && availableModels.length
     ? (blockedConsumers.length ? "degraded" : "ready")
     : configured && !allowedModels.length
@@ -521,10 +797,11 @@ async function executeProviderHealthCheck(payload) {
       model: entry.model,
       label: entry.label,
       runtime: entry.runtime,
-      allowed: isModelAllowed(entry.model, preferences),
-      configured: Boolean(providerFabricModelRuntimeState(entry.model, {
+      allowed: isModelAllowedForProviderModel(providerId, entry.model, preferences, catalog),
+      configured: Boolean(providerModelRuntimeState(entry, {
         secrets,
         preferences,
+        catalog,
         localRuntimeUrl: process.env.RESONANTOS_LOCAL_RUNTIME_URL,
       })?.configured),
     })),
@@ -546,7 +823,7 @@ async function executeProviderHealthCheck(payload) {
 
 async function executeProviderConnectivityTest(payload) {
   const providerId = String(payload.providerId ?? "").trim();
-  const profile = providerProfileById(providerId);
+  const profile = await providerProfileByIdDynamic(providerId);
   if (!profile) {
     throw new Error("Unknown provider profile.");
   }
@@ -566,7 +843,12 @@ async function executeProviderConnectivityTest(payload) {
   }
   const target = providerConnectivityTarget(providerId, {
     localRuntimeUrl: process.env.RESONANTOS_LOCAL_RUNTIME_URL,
-  });
+  }) ?? (profile.apiBaseUrl ? {
+    providerId,
+    url: `${String(profile.apiBaseUrl).replace(/\/$/, "")}/models`,
+    label: profile.label,
+    sendsCredential: profile.authType !== "none",
+  } : null);
   if (!target) {
     throw new Error("No connectivity diagnostic target exists for this provider.");
   }
@@ -622,11 +904,12 @@ async function executeProviderDiagnosticsHistory() {
 
 async function executeProviderModelPreferencesSave(payload) {
   const providerId = String(payload.providerId ?? "").trim();
-  const profile = providerProfileById(providerId);
+  const profile = await providerProfileByIdDynamic(providerId);
   if (!profile) {
     throw new Error("Unknown provider profile.");
   }
-  const declaredModels = modelCatalog
+  const catalog = await allModelCatalog();
+  const declaredModels = catalog
     .filter((entry) => entry.providerId === providerId)
     .map((entry) => entry.model);
   const allowedModels = unique((Array.isArray(payload.allowedModels) ? payload.allowedModels : [])
@@ -690,7 +973,7 @@ async function executeProviderRoutingStrategySave(payload) {
 async function executeProviderCredentialSave(payload) {
   const providerId = String(payload.providerId ?? "").trim();
   const credential = String(payload.credential ?? "").trim();
-  const profile = providerProfileById(providerId);
+  const profile = await providerProfileByIdDynamic(providerId);
   if (!profile) {
     throw new Error("Unknown provider profile.");
   }
@@ -706,6 +989,39 @@ async function executeProviderCredentialSave(payload) {
     providerId,
     configured: true,
     savedAt: new Date().toISOString(),
+  };
+}
+
+async function executeProviderAccountSave(payload) {
+  const mode = String(payload.mode ?? (payload.id ? "update" : "create")).trim().toLowerCase();
+  const existingCustom = await readProviderAccounts().catch(() => []);
+  const profiles = await allProviderProfiles();
+  const existing = payload.id ? profiles.find((profile) => profile.id === String(payload.id).trim()) : null;
+  if (mode === "update" && !existing) {
+    throw new Error("Unknown provider account.");
+  }
+  const base = existing ? { ...existing, ...payload } : payload;
+  const normalized = normalizeProviderAccount(base, profiles.filter((profile) => profile.id !== String(payload.id ?? "")));
+  const nextCustom = [
+    ...existingCustom.filter((account) => account.id !== normalized.id),
+    normalized,
+  ].sort((left, right) => left.label.localeCompare(right.label));
+  await writeProviderAccounts(nextCustom);
+  const credential = String(payload.credential ?? "").trim();
+  if (credential) {
+    if (credential.length < 8) {
+      throw new Error("Credential is too short to save.");
+    }
+    const currentSecrets = await readProviderSecrets();
+    const filePath = providerSecretsPath();
+    await mkdir(path.dirname(filePath), { recursive: true });
+    await writeFile(filePath, `${JSON.stringify({ ...currentSecrets, [normalized.id]: credential }, null, 2)}\n`, { mode: 0o600 });
+    await chmod(filePath, 0o600).catch(() => undefined);
+  }
+  return {
+    provider: normalized,
+    savedAt: new Date().toISOString(),
+    configured: Boolean(credential || (await readProviderSecrets())[normalized.id]),
   };
 }
 
@@ -3668,6 +3984,12 @@ const bridgeRoutes = [
   },
   {
     method: "POST",
+    path: "/providers/accounts",
+    requiredCapability: "provider-credential-write",
+    handler: executeProviderAccountSave,
+  },
+  {
+    method: "POST",
     path: "/providers/routing-strategies",
     requiredCapability: "provider-routing-write",
     handler: executeProviderRoutingStrategySave,
@@ -3835,6 +4157,7 @@ if (!existsSync(path.join(resonantExtension, "manifest.json"))) {
 
 await mkdir(profileDir, { recursive: true });
 await removeCachedUnpackedExtension(profileDir, resonantExtensionId);
+await clearResonantNewTabOverride(profileDir, resonantExtensionId);
 const bridgeConfigPath = await writeBridgeConfig({
   extensionRoot: resonantExtension,
   bridgePort,

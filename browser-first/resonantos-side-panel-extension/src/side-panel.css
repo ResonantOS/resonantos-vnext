@@ -1266,8 +1266,84 @@ textarea::placeholder {
   background: var(--accent-strong);
 }
 
+.send-button.is-stop {
+  background: rgba(255, 112, 112, 0.92);
+  color: #180506;
+}
+
+.send-button.is-stop svg {
+  fill: currentColor;
+  stroke: none;
+}
+
+.icon-button.is-live {
+  color: var(--accent);
+  background: rgba(36, 209, 143, 0.12);
+  box-shadow: 0 0 0 1px rgba(36, 209, 143, 0.28), 0 0 18px rgba(36, 209, 143, 0.16);
+}
+
 @media (max-width: 480px) {
   .chat-shell {
     grid-template-columns: 1fr;
   }
+}
+
+/* Compact ResonantOS skin: sharper corners and quieter action controls. */
+:where(
+  .composer,
+  .empty-state,
+  .empty-prompts button,
+  .activity-panel,
+  .site-permission-panel,
+  .task-consent-panel,
+  .permission-manager,
+  .task-consent-row,
+  .permission-manager-row,
+  .job-monitor,
+  .job-row,
+  .chat-message,
+  .message-card,
+  .message-bubble,
+  .approval-card,
+  .control-status,
+  .attachment-chip,
+  .model-select,
+  .depth-select,
+  textarea,
+  input,
+  select
+) {
+  border-radius: 3px !important;
+}
+
+button:not(.icon-button):not(.send-button):not(.connection-line):not(.context-meter),
+:where(
+  .empty-prompts button,
+  .task-consent-list button,
+  .permission-manager-list button,
+  .job-monitor-header button,
+  .job-actions button,
+  .control-stop-button,
+  .approval-actions button,
+  .attachment-chip button,
+  .toolbar-button
+) {
+  border: 0 !important;
+  border-radius: 3px !important;
+  box-shadow: none !important;
+  padding: 5px 8px;
+}
+
+:where(
+  .empty-prompts button,
+  .task-consent-list button,
+  .permission-manager-list button,
+  .job-monitor-header button,
+  .job-actions button,
+  .control-stop-button,
+  .approval-actions button,
+  .toolbar-button
+) {
+  background: rgba(36, 209, 143, 0.06) !important;
+  color: rgba(238, 247, 240, 0.82) !important;
 }

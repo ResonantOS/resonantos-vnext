@@ -10,6 +10,14 @@ import { createBrowserPageActions } from "./lib/browser-page-actions.js";
 import { createBridgeClient } from "./lib/bridge-client.js";
 import { createChatSessionStore } from "./lib/chat-session-store.js";
 import { createComposerController } from "./lib/composer-controller.js";
+import {
+  contextUsageSnapshot,
+  createDictationController,
+  hydrateProviderModelOptions,
+  modelLabel,
+  supportsThinkingDepth,
+  updateContextMeterElement
+} from "./lib/composer-runtime.js";
 import { applyAppearancePreferences } from "./lib/settings/appearance-section.js";
 import { renderAddOnsWorkspace } from "./lib/main-workspace-addons.js";
 import { renderArtifactsWorkspace } from "./lib/main-workspace-artifacts.js";
@@ -47,16 +55,8 @@ const STORAGE_KEYS = {
   taskConsentAudit: "augmentorTaskConsentAudit",
   browserJobs: "augmentorBrowserJobs",
   activeBrowserJob: "augmentorActiveBrowserJob",
-  appearance: "augmentorAppearancePreferences"
-};
-
-const MODEL_LABELS = {
-  "__auto__": "Auto route",
-  "MiniMax-M2.7": "MiniMax 2.7",
-  "MiniMax-M2.7-highspeed": "MiniMax 2.7 High Speed",
-  "gpt-5.5": "GPT 5.5",
-  "gpt-5.4-mini": "GPT 5.4 Mini",
-  "batiai/gemma4-e2b:q4": "Gemma 4 2B"
+  appearance: "augmentorAppearancePreferences",
+  starterPromptsHidden: "augmentorStarterPromptsHidden"
 };
 
 const transcript = document.querySelector("#transcript");
@@ -84,16 +84,29 @@ const thinkingDepthSelect = document.querySelector("#thinking-depth");
 const dictateButton = document.querySelector("#dictate-button");
 const contextMeter = document.querySelector("#context-meter");
 const connectionLine = document.querySelector("#connection-line");
+const sendButton = commandForm.querySelector(".send-button");
 const bridgeRequest = createBridgeClient();
 let busy = false;
+let activeChatAbortController = null;
 let activeWorkspace = "answer";
 let pendingWorkspaceAction = null;
 let controlledTabId = null;
 let lastSnapshot = null;
 let railSearchQuery = "";
+let starterPromptsHidden = false;
 const allowedWorkspaces = new Set(["answer", "artifacts", "addons", "memory", "hermes", "opencode", "settings"]);
 
-const supportsThinkingDepth = (model) => model.startsWith("gpt-5.");
+function setComposerBusy(next) {
+  busy = Boolean(next);
+  commandInput.disabled = busy;
+  sendButton.classList.toggle("is-stop", busy);
+  sendButton.setAttribute("aria-label", busy ? "Stop response" : "Send");
+  sendButton.title = busy ? "Stop response" : "Send";
+  sendButton.innerHTML = busy
+    ? '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="8" height="8" rx="1.8"/></svg>'
+    : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>';
+}
+
 const composerController = createComposerController({
   commandForm,
   commandInput,
@@ -148,16 +161,7 @@ const browserPageActions = createBrowserPageActions({
   permissionForUrl: sitePermissionStore.permissionForUrl,
   renderSitePermissionPanel: async () => undefined,
   setActivity: setMainActivity,
-  setContextMeter: (snapshot) => {
-    if (snapshot) {
-      const roughPercent = Math.min(99, Math.max(0, Math.round(String(snapshot.text ?? "").length / 900)));
-      contextMeter.style.setProperty("--context-used", `${roughPercent}%`);
-      contextMeter.querySelector(".context-meter-label").textContent = `${roughPercent}%`;
-      contextMeter.setAttribute("aria-label", `Context usage ${roughPercent} percent`);
-    } else {
-      updateContextMeter();
-    }
-  },
+  setContextMeter: () => updateContextMeter(),
   setControlledTabId: (tabId) => {
     controlledTabId = tabId;
   },
@@ -208,7 +212,7 @@ const chatRenderers = createSidePanelRenderers({
 });
 
 function updateConnectionLine(status = "Ready") {
-  const model = MODEL_LABELS[modelSelect.value] ?? modelSelect.value;
+  const model = modelLabel(modelSelect.value);
   thinkingDepthSelect.hidden = !supportsThinkingDepth(modelSelect.value);
   connectionLine.title = `Connected to ${model} · ${status}`;
   connectionLine.setAttribute("aria-label", connectionLine.title);
@@ -218,12 +222,12 @@ function updateConnectionLine(status = "Ready") {
 }
 
 function updateContextMeter() {
-  const totalChars = chatSessionStore.getMessages()
-    .reduce((total, message) => total + String(message.content ?? "").length, 0);
-  const roughPercent = Math.min(99, Math.max(0, Math.round(totalChars / 900)));
-  contextMeter.style.setProperty("--context-used", `${roughPercent}%`);
-  contextMeter.querySelector(".context-meter-label").textContent = `${roughPercent}%`;
-  contextMeter.setAttribute("aria-label", `Context usage ${roughPercent} percent`);
+  updateContextMeterElement(contextMeter, contextUsageSnapshot({
+    attachments: chatSessionStore.getAttachments(),
+    messages: chatSessionStore.getMessages(),
+    model: modelSelect.value,
+    pageSnapshot: lastSnapshot
+  }));
 }
 
 function relativeTime(value) {
@@ -622,75 +626,100 @@ async function hydrateAppearancePreferences() {
   applyAppearancePreferences(settings?.[STORAGE_KEYS.appearance]);
 }
 
+async function hydrateStarterPromptPreference() {
+  const settings = await chrome.storage?.local?.get?.([STORAGE_KEYS.starterPromptsHidden]).catch(() => ({}));
+  starterPromptsHidden = Boolean(settings?.[STORAGE_KEYS.starterPromptsHidden]);
+}
+
+async function setStarterPromptPreference(hidden) {
+  starterPromptsHidden = Boolean(hidden);
+  await chrome.storage?.local?.set?.({
+    [STORAGE_KEYS.starterPromptsHidden]: starterPromptsHidden
+  }).catch(() => undefined);
+  renderMessages();
+}
+
 function renderAttachments() {
   chatRenderers.renderAttachments();
 }
+
+const starterPrompts = [
+  {
+    eyebrow: "Strategy",
+    title: "Plan the next move",
+    prompt: "Help me think through the best next step for this project."
+  },
+  {
+    eyebrow: "Web",
+    title: "Research current context",
+    prompt: "Search the web for the latest useful context about "
+  },
+  {
+    eyebrow: "Page",
+    title: "Read this page",
+    prompt: "Read the current page and summarize what matters."
+  },
+  {
+    eyebrow: "Risk",
+    title: "Find blind spots",
+    prompt: "Find the risks, blind spots, and next actions for this plan: "
+  },
+  {
+    eyebrow: "Memory",
+    title: "Search AI memory",
+    prompt: "/memory "
+  },
+  {
+    eyebrow: "Delegate",
+    title: "Send to Hermes",
+    prompt: "/hermes Research this and return sources, risks, and next actions: "
+  }
+];
 
 function emptyHero() {
   const hero = document.createElement("section");
   hero.className = "empty-hero";
   hero.innerHTML = `
-    <span class="hero-kicker">AI browser workspace</span>
-    <h1>Ask, browse, remember, delegate.</h1>
-    <p>Start in full-screen Augmentor. When a task needs the web, memory, Hermes, or OpenCode, ResonantOS routes it into the right workspace with the same governed boundaries.</p>
-    <div class="capability-grid" aria-label="ResonantOS quick starts">
-      <button type="button" data-workspace-command="answer" data-prompt="Help me think through the best next step for this project.">
-        <span>Answer</span>
-        <strong>Think with Augmentor</strong>
-        <small>Strategy, planning, synthesis, and direct conversation.</small>
-      </button>
-      <button type="button" data-workspace-command="browser" data-prompt="Go to resonantos.com and summarize the DAO page.">
-        <span>Browser Control</span>
-        <strong>Operate the web</strong>
-        <small>Open pages, read, click, type, and stop at approval gates.</small>
-      </button>
-      <button type="button" data-workspace-command="memory" data-prompt="/memory ResonantOS">
-        <span>Living Archive</span>
-        <strong>Search AI Memory</strong>
-        <small>Query the LLM Wiki and save notes to governed intake.</small>
-      </button>
-      <button type="button" data-workspace-command="artifacts" data-prompt="">
-        <span>Artifacts</span>
-        <strong>Review browser reports</strong>
-        <small>Open saved Agent Control reports and intake evidence.</small>
-      </button>
-      <button type="button" data-workspace-command="addons" data-prompt="">
-        <span>Add-ons</span>
-        <strong>Inspect replaceable tools</strong>
-        <small>See available add-ons, trust tier, and governed launch targets.</small>
-      </button>
-      <button type="button" data-workspace-command="hermes" data-prompt="/hermes">
-        <span>Hermes</span>
-        <strong>Open coordination workspace</strong>
-        <small>Delegate communication, routine research, and follow-up work.</small>
-      </button>
-      <button type="button" data-workspace-command="opencode" data-prompt="/opencode Inspect the browser-first workspace and return changed files, tests, and risks.">
-        <span>OpenCode</span>
-        <strong>Delegate coding work</strong>
-        <small>Create bounded coding handoffs with artifact return rules.</small>
-      </button>
-      <button type="button" data-workspace-command="settings" data-prompt="">
-        <span>Settings</span>
-        <strong>Provider profiles</strong>
-        <small>Add model credentials through the host vault boundary.</small>
-      </button>
+    <div class="empty-hero-copy">
+      <span class="hero-kicker">AI browser workspace</span>
+      <h1>Ask, browse, remember, delegate.</h1>
+      <p>Start in full-screen Augmentor. If a task needs the web, memory, Hermes, or OpenCode, ResonantOS routes it through the governed command layer.</p>
     </div>
   `;
-  hero.querySelectorAll("[data-workspace-command]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      if (["settings", "artifacts", "addons"].includes(button.dataset.workspaceCommand)) {
-        setActiveWorkspace(button.dataset.workspaceCommand, { persist: true });
-        renderAll();
-        return;
-      }
-      commandInput.value = button.dataset.prompt;
-      if (button.dataset.workspaceCommand === "answer") {
+
+  const controls = document.createElement("div");
+  controls.className = "starter-prompt-controls";
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.textContent = starterPromptsHidden ? "Show suggestions" : "Hide suggestions";
+  toggle.addEventListener("click", () => void setStarterPromptPreference(!starterPromptsHidden));
+  controls.append(toggle);
+  hero.append(controls);
+
+  if (!starterPromptsHidden) {
+    const grid = document.createElement("div");
+    grid.className = "starter-prompt-grid";
+    grid.setAttribute("aria-label", "Augmentor prompt suggestions");
+    for (const item of starterPrompts.slice(0, 6)) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.prompt = item.prompt;
+      button.innerHTML = `
+        <span></span>
+        <strong></strong>
+      `;
+      button.querySelector("span").textContent = item.eyebrow;
+      button.querySelector("strong").textContent = item.title;
+      button.addEventListener("click", () => {
+        commandInput.value = button.dataset.prompt;
+        composerController.resetUndoStack(commandInput.value);
         commandInput.focus();
-        return;
-      }
-      await commandForm.requestSubmit();
-    });
-  });
+        commandInput.setSelectionRange?.(commandInput.value.length, commandInput.value.length);
+      });
+      grid.append(button);
+    }
+    hero.append(grid);
+  }
   return hero;
 }
 
@@ -833,8 +862,7 @@ async function regenerateFromMessage(messageId) {
   if (busy) return;
   const userMessage = await chatSessionStore.trimToPreviousUserMessage(messageId);
   if (!userMessage) return;
-  busy = true;
-  commandInput.disabled = true;
+  setComposerBusy(true);
   renderAll();
   try {
     await runChatTurn(userMessage.content);
@@ -842,8 +870,7 @@ async function regenerateFromMessage(messageId) {
     await addMessage("system", `Regeneration failed: ${error instanceof Error ? error.message : String(error)}`);
     updateConnectionLine("Failed");
   } finally {
-    busy = false;
-    commandInput.disabled = false;
+    setComposerBusy(false);
   }
 }
 
@@ -993,8 +1020,19 @@ function renderHermesWorkspace() {
 async function addMessage(role, content, options = {}) {
   const message = await chatSessionStore.addMessage(role, content, options);
   if (message) renderAll();
+  updateContextMeter();
   return message;
 }
+
+const dictationController = createDictationController({
+  addMessage,
+  button: dictateButton,
+  commandInput,
+  navigatorRef: navigator,
+  onTranscript: () => composerController.pushUndoSnapshot(),
+  setStatus: updateConnectionLine,
+  windowRef: window
+});
 
 async function openSidebar() {
   await chrome.runtime.sendMessage({
@@ -1048,26 +1086,39 @@ async function handoffToBrowserControl(prompt) {
 }
 
 async function runChatTurn(prompt) {
+  activeChatAbortController = new AbortController();
   updateConnectionLine("Thinking");
-  const response = await bridgeRequest("/augmentor/chat", {
-    method: "POST",
-    body: {
-      model: modelSelect.value,
-      workload: "augmentor-chat",
-      thinkingDepth: thinkingDepthSelect.value,
-      messages: [
-        {
-          role: "system",
-          content: "Answer as Augmentor inside the full ResonantOS main workspace. If browser control is needed, say that the task is being handed to Agent Control Mode."
-        },
-        ...providerMessagesFromHistory(chatSessionStore.getMessages())
-      ]
+  try {
+    const response = await bridgeRequest("/augmentor/chat", {
+      method: "POST",
+      signal: activeChatAbortController.signal,
+      body: {
+        model: modelSelect.value,
+        workload: "augmentor-chat",
+        thinkingDepth: thinkingDepthSelect.value,
+        messages: [
+          {
+            role: "system",
+            content: "Answer as Augmentor inside the full ResonantOS main workspace. If browser control is needed, say that the task is being handed to Agent Control Mode."
+          },
+          ...providerMessagesFromHistory(chatSessionStore.getMessages())
+        ]
+      }
+    });
+    await addMessage("assistant", assistantTextFromResponse(response) || "No response was returned.", {
+      usage: response?.usage ?? null
+    });
+    updateConnectionLine("Ready");
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      updateConnectionLine("Stopped");
+      await addMessage("system", "Response stopped by the human before a reply was returned.");
+      return;
     }
-  });
-  await addMessage("assistant", assistantTextFromResponse(response) || "No response was returned.", {
-    usage: response?.usage ?? null
-  });
-  updateConnectionLine("Ready");
+    throw error;
+  } finally {
+    activeChatAbortController = null;
+  }
 }
 
 async function runHermesDelegation(prompt) {
@@ -1199,8 +1250,7 @@ commandForm.addEventListener("submit", async (event) => {
   if (busy) return;
   const prompt = commandInput.value.trim();
   if (!prompt) return;
-  busy = true;
-  commandInput.disabled = true;
+  setComposerBusy(true);
   try {
     await addMessage("user", prompt);
     commandInput.value = "";
@@ -1234,8 +1284,7 @@ commandForm.addEventListener("submit", async (event) => {
     await addMessage("system", `Main workspace request failed: ${error instanceof Error ? error.message : String(error)}`);
     updateConnectionLine("Failed");
   } finally {
-    busy = false;
-    commandInput.disabled = false;
+    setComposerBusy(false);
   }
 });
 
@@ -1293,7 +1342,29 @@ readPageButton?.addEventListener("click", () => void browserPageActions.readActi
 saveIntakeButton?.addEventListener("click", () => void browserPageActions.saveCurrentPageToArchive());
 saveSelectionButton?.addEventListener("click", () => void browserPageActions.saveSelectionToArchive());
 contextToggleButton?.addEventListener("click", () => void browserPageActions.summarizeSnapshot());
-contextMeter?.addEventListener("click", () => void browserPageActions.summarizeSnapshot());
+contextMeter?.addEventListener("click", async () => {
+  const snapshot = contextUsageSnapshot({
+    attachments: chatSessionStore.getAttachments(),
+    messages: chatSessionStore.getMessages(),
+    model: modelSelect.value,
+    pageSnapshot: lastSnapshot
+  });
+  await addMessage(
+    "system",
+    [
+      "Context usage",
+      `- estimated: ${snapshot.percent}%`,
+      `- tokens: ${snapshot.usedTokens.toLocaleString()} / ${snapshot.contextWindow.toLocaleString()}`,
+      `- messages: ${snapshot.messageTokens.toLocaleString()} tokens`,
+      `- attachments: ${snapshot.attachmentTokens.toLocaleString()} tokens`,
+      `- page context: ${snapshot.pageTokens.toLocaleString()} tokens`,
+      "",
+      snapshot.percent >= 72
+        ? "Recommendation: compact or fork soon, or switch to a larger-context model."
+        : "Context is within the safe operating range."
+    ].join("\n")
+  );
+});
 workspaceButtons.forEach((button) => {
   button.addEventListener("click", () => {
     setActiveWorkspace(button.dataset.workspace, { persist: true });
@@ -1328,15 +1399,30 @@ fileInput.addEventListener("change", async () => {
   renderAll();
   fileInput.value = "";
 });
-modelSelect.addEventListener("change", () => void chatSessionStore.persist().then(() => updateConnectionLine()));
+modelSelect.addEventListener("change", () => void chatSessionStore.persist().then(() => {
+  updateConnectionLine();
+  updateContextMeter();
+}));
 thinkingDepthSelect.addEventListener("change", () => void chatSessionStore.persist());
 dictateButton.addEventListener("click", () => {
-  void addMessage("system", "Audio dictate is not available in this browser runtime yet.");
+  dictationController.toggle();
+});
+sendButton.addEventListener("click", (event) => {
+  if (!busy) return;
+  event.preventDefault();
+  activeChatAbortController?.abort();
 });
 
+await hydrateProviderModelOptions({
+  bridgeRequest,
+  getPreferredModel: () => modelSelect.value,
+  modelSelect,
+  setStatus: updateConnectionLine
+});
 await Promise.all([
   chatSessionStore.hydrate(),
   hydrateAppearancePreferences(),
+  hydrateStarterPromptPreference(),
   hydrateActiveWorkspace()
 ]);
 await suppressSidebarChatForMainWorkspace();
