@@ -826,7 +826,6 @@ function renderPresent(payload) {
     surface.appendChild(wrap);
     return;
   }
-  }
 
   const wrap = document.createElement("div");
   wrap.id = "bb-present-wrap";
