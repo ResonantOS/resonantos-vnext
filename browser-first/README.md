@@ -1,3 +1,39 @@
+# Blackboard Addon
+
+**PR: Community Addon Submission**
+
+Visual display surface for ResonantOS with 5 modes.
+
+## What It Does
+
+- **Canvas** — Freehand drawing with mouse/touch
+- **Document** — Rich text editing (contenteditable)
+- **Table** — Editable data grid
+- **Web** — Embed external pages
+- **Present** — Slideshow mode
+
+Save and load your work via Chrome Storage. "Send to Augmentor" forwards content to the AI assistant via `chrome.runtime`.
+
+## Install
+
+Drop the `addons/blackboard/` folder into `browser-first/addons/`. The addon discovery engine finds it automatically.
+
+## Files
+
+```
+addons/blackboard/
+  addon.json        # Manifest
+  blackboard.html   # UI
+  blackboard.css    # Styles
+  blackboard.js     # Logic
+docs/screenshots/
+  blackboard.png    # Screenshot
+```
+
+*Credit: Michel — Atomic Design tokens, Inter + Poppins typography, WCAG accessibility*
+
+---
+
 # ResonantOS Browser-First Prototype
 
 Intent citation: `docs/architecture/ADR-037-browser-first-chromium-resonantos.md`
@@ -193,4 +229,3 @@ browser-first/addons/blackboard/
 browser-first/docs/screenshots/
   blackboard.png    # Screenshot
 ```
-
