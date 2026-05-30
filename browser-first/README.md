@@ -1,6 +1,5 @@
 # Platform Infrastructure
 
-![Living Archive](docs/screenshots/archive-tab.png)
 
 
 **PR: Core Platform Components**
