@@ -29,6 +29,17 @@ node --test browser-first/test/gradient-perf-tab.test.mjs
 # 14 tests, 0 failures
 ```
 
+## Screenshots
+
+![Training Tab — 3 active runs](docs/screenshots/gradient-training.png)
+*Training: Ternary 1.5B (42%), Ternary 7B (5%), LoRA Medical (100%). Loss sparklines, progress bars, ETAs.*
+
+![Benchmarks Tab — 5 models compared](docs/screenshots/gradient-benchmarks.png)
+*Benchmarks: Grok-4 (95), Fleet v3 Ours (93), GPT-4o (90), Claude 3.5 (87), Fleet v2 (75). Bar chart with "Ours" tags.*
+
+![Fleet Speed Tab — tokens/sec per node](docs/screenshots/gradient-fleet-speed.png)
+*Fleet Speed: token generation rates sorted by t/s with color-coded bars*
+
 ## Files
 
 ```
@@ -221,7 +232,16 @@ Training metrics and fleet performance dashboard for AI workloads:
 
 **Boundary:** Read-only performance metrics display. No external network access. Data sourced from host-mediated bridge.
 
-![Gradient Performance Screenshot](docs/screenshots/gradient-perf.png)
+### Screenshots
+
+![Training Tab](docs/screenshots/gradient-training.png)
+*Active training runs with loss curves and progress*
+
+![Benchmarks Tab](docs/screenshots/gradient-benchmarks.png)
+*Model comparison bar chart*
+
+![Fleet Speed Tab](docs/screenshots/gradient-fleet-speed.png)
+*Token generation speeds per fleet node*
 
 ### Addon Structure
 
