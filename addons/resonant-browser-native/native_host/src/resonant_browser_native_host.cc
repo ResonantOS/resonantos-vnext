@@ -476,6 +476,27 @@ class ResonantBrowserClient final : public CefClient,
 	        CefPostDelayedTask(TID_UI, new ContextMenuSmokeClickTask(browser, 48, 34), 500);
 	        return;
 	      }
+      if (menu_command_smoke_) {
+        if (!menu_command_requested_) {
+          menu_command_requested_ = true;
+          std::cout << "{\"event\":\"browser.native.menu_command.invoke\","
+                    << "\"command\":\"" << JsonEscape(menu_command_) << "\"}" << std::endl;
+          ExecuteNativeMenuCommand(menu_command_);
+          return;
+        }
+        if (!quit_requested_) {
+          quit_requested_ = true;
+          std::cout << "{\"event\":\"browser.native.menu_command.result\","
+                    << "\"command\":\"" << JsonEscape(menu_command_) << "\","
+                    << "\"url\":\"" << JsonEscape(loaded_url) << "\"}" << std::endl;
+          std::cout.flush();
+          // Menu command smoke runs are hidden, one-shot verification
+          // processes. Chrome Runtime may keep internal chrome:// surfaces
+          // alive after CloseBrowser(), so exit after the observable result.
+          std::exit(0);
+        }
+        return;
+      }
 	      if (quit_after_first_main_frame_load_ && !quit_requested_) {
         quit_requested_ = true;
         // Deterministic smoke runs must prove CEF loaded a real page and then
@@ -509,6 +530,10 @@ class ResonantBrowserClient final : public CefClient,
 	  }
 	  void SetPermissionSmoke(bool value) { permission_smoke_ = value; }
 	  void SetContextMenuSmoke(bool value) { context_menu_smoke_ = value; }
+  void SetMenuCommandSmoke(std::string command) {
+    menu_command_smoke_ = true;
+    menu_command_ = std::move(command);
+  }
 
 	  void OnBeforeContextMenu(CefRefPtr<CefBrowser> browser,
 	                           CefRefPtr<CefFrame> frame,
@@ -745,6 +770,12 @@ class ResonantBrowserClient final : public CefClient,
       }
       return;
     }
+    if (command == "new_incognito_window") {
+      if (!ExecuteChromeCommandByName(browser, "IDC_NEW_INCOGNITO_WINDOW", CEF_WOD_NEW_WINDOW)) {
+        OpenNewBrowserSurface();
+      }
+      return;
+    }
     if (command == "close_tab") {
       if (!ExecuteChromeCommandByName(browser, "IDC_CLOSE_TAB", CEF_WOD_CURRENT_TAB) && browser) {
         browser->GetHost()->CloseBrowser(false);
@@ -790,6 +821,10 @@ class ResonantBrowserClient final : public CefClient,
     }
     if (command == "open_file") {
       ExecuteChromeCommandByName(browser, "IDC_OPEN_FILE", CEF_WOD_CURRENT_TAB);
+      return;
+    }
+    if (command == "focus_address_bar") {
+      ExecuteChromeCommandByName(browser, "IDC_FOCUS_LOCATION", CEF_WOD_CURRENT_TAB);
       return;
     }
     if (command == "save_page") {
@@ -990,6 +1025,7 @@ class ResonantBrowserClient final : public CefClient,
   std::vector<std::string> loaded_urls_;
   std::string default_browser_url_ = kDefaultUrl;
   std::string download_url_;
+  std::string menu_command_;
   std::filesystem::path download_dir_;
   bool quit_after_first_main_frame_load_ = false;
   bool quit_requested_ = false;
@@ -998,6 +1034,8 @@ class ResonantBrowserClient final : public CefClient,
 	  bool permission_smoke_ = false;
 	  bool context_menu_smoke_ = false;
 	  bool context_menu_smoke_requested_ = false;
+  bool menu_command_smoke_ = false;
+  bool menu_command_requested_ = false;
 	  bool extension_entrypoint_smoke_ = false;
   bool local_extension_smoke_ = false;
   bool phantom_extension_smoke_ = false;
@@ -1076,9 +1114,10 @@ class ResonantBrowserApp final : public CefApp, public CefBrowserProcessHandler 
 	    const bool download_smoke = command_line->HasSwitch("resonantos-download-smoke");
 	    const bool permission_smoke = command_line->HasSwitch("resonantos-permission-smoke");
 	    const bool context_menu_smoke = command_line->HasSwitch("resonantos-context-menu-smoke");
+    const bool menu_command_smoke = command_line->HasSwitch("resonantos-menu-command-smoke");
 	    const bool browser_first = command_line->HasSwitch("resonantos-browser-first");
 	    if (!page_smoke && !extension_entrypoint_smoke && !local_extension_smoke && !phantom_extension_smoke &&
-	        !download_smoke && !permission_smoke && !context_menu_smoke && !browser_first) {
+	        !download_smoke && !permission_smoke && !context_menu_smoke && !menu_command_smoke && !browser_first) {
 	      return;
 	    }
 
@@ -1104,6 +1143,8 @@ class ResonantBrowserApp final : public CefApp, public CefBrowserProcessHandler 
 	      client->SetPermissionSmoke(true);
 	    } else if (context_menu_smoke) {
 	      client->SetContextMenuSmoke(true);
+    } else if (menu_command_smoke) {
+      client->SetMenuCommandSmoke(command_line->GetSwitchValue("resonantos-menu-command-smoke").ToString());
 	    } else if (!browser_first) {
 	      client->SetQuitAfterFirstMainFrameLoad(true);
     } else {
@@ -1136,6 +1177,7 @@ class ResonantBrowserApp final : public CefApp, public CefBrowserProcessHandler 
 	                  : download_smoke              ? "browser.native.download_smoke_started"
 	                  : permission_smoke            ? "browser.native.permission_smoke_started"
 	                  : context_menu_smoke          ? "browser.native.context_menu_smoke_started"
+                    : menu_command_smoke          ? "browser.native.menu_command_smoke_started"
 	                  : browser_first               ? "browser.first.started"
 	                                                : "browser.native.smoke_started")
               << "\",\"url\":\"" << url << "\"}" << std::endl;
@@ -1143,7 +1185,7 @@ class ResonantBrowserApp final : public CefApp, public CefBrowserProcessHandler 
       CefPostDelayedTask(
 	          TID_UI, new SmokeTimeoutTask(),
 	          extension_entrypoint_smoke || local_extension_smoke || phantom_extension_smoke || download_smoke ||
-	                  permission_smoke || context_menu_smoke
+	                  permission_smoke || context_menu_smoke || menu_command_smoke
 	              ? 20000
               : 10000);
     }

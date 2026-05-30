@@ -24,6 +24,7 @@ import { renderAddOnsWorkspace } from "./lib/main-workspace-addons.js";
 import { renderArtifactsWorkspace } from "./lib/main-workspace-artifacts.js";
 import { renderLivingArchiveWorkspace } from "./lib/main-workspace-memory.js";
 import { renderOpenCodeWorkspace } from "./lib/main-workspace-opencode.js";
+import { readPersonalizationSettings } from "./lib/personalization-settings.js";
 import { railSearchMatchesProject, railSearchMatchesSession } from "./lib/main-workspace-rail.js";
 import {
   parseDaoSlashCommand,
@@ -50,6 +51,7 @@ const STORAGE_KEYS = {
   projects: "augmentorBrowserProjects",
   pendingSidebarPrompt: "augmentorPendingSidebarPrompt",
   activeWorkspace: "augmentorMainWorkspace",
+  augmentorConfig: "augmentorConfig",
   sitePermissions: "augmentorSitePermissions",
   sitePermissionAudit: "augmentorSitePermissionAudit",
   taskConsents: "augmentorTaskConsents",
@@ -57,7 +59,8 @@ const STORAGE_KEYS = {
   browserJobs: "augmentorBrowserJobs",
   activeBrowserJob: "augmentorActiveBrowserJob",
   appearance: "augmentorAppearancePreferences",
-  starterPromptsHidden: "augmentorStarterPromptsHidden"
+  starterPromptsHidden: "augmentorStarterPromptsHidden",
+  userProfile: "augmentorUserProfile"
 };
 
 const transcript = document.querySelector("#transcript");
@@ -71,6 +74,9 @@ const railClearSearch = document.querySelector("#rail-clear-search");
 const railChatList = document.querySelector("#rail-chat-list");
 const railNewProjectButton = document.querySelector("#rail-new-project");
 const railProjectList = document.querySelector("#rail-project-list");
+const railAvatar = document.querySelector("#rail-avatar");
+const railUserName = document.querySelector("#rail-user-name");
+const railUserSubtitle = document.querySelector("#rail-user-subtitle");
 const commandForm = document.querySelector("#command-form");
 const commandInput = document.querySelector("#command-input");
 const attachFileButton = document.querySelector("#attach-file");
@@ -99,7 +105,23 @@ let railSearchQuery = "";
 let starterPromptsHidden = false;
 let contextPopoverOpen = false;
 let contextCompactNotice = "";
+let personalizationSettings = null;
+let initialSettingsSection = "overview";
 const allowedWorkspaces = new Set(["answer", "artifacts", "addons", "memory", "hermes", "opencode", "settings"]);
+
+function applyUserProfile(profile) {
+  if (!profile) return;
+  const name = profile.displayName || "ResonantOS User";
+  if (railAvatar) railAvatar.textContent = name.trim().charAt(0).toUpperCase() || "R";
+  if (railUserName) railUserName.textContent = name;
+  if (railUserSubtitle) railUserSubtitle.textContent = profile.subtitle || "Local sovereign profile";
+}
+
+async function hydratePersonalizationSettings() {
+  personalizationSettings = await readPersonalizationSettings(chrome.storage?.local, STORAGE_KEYS);
+  applyUserProfile(personalizationSettings.profile);
+  return personalizationSettings;
+}
 
 function setComposerBusy(next) {
   busy = Boolean(next);
@@ -822,12 +844,21 @@ function renderMessages() {
       onOpenSession: async (sessionId) => {
         await switchToSession(sessionId);
       },
+      onProfileUpdated: (next) => {
+        personalizationSettings = next;
+        applyUserProfile(next.profile);
+      },
+      onOpenWorkspace: async (workspaceId) => {
+        setActiveWorkspace(workspaceId, { persist: true });
+        renderAll();
+      },
       onRestore: renderAll,
       chromeApi: chrome,
       sitePermissionStore,
       storage: chrome.storage?.local,
       storageKeys: STORAGE_KEYS,
-      taskConsentStore
+      taskConsentStore,
+      initialSection: initialSettingsSection
     });
     return;
   }
@@ -1146,6 +1177,7 @@ async function runChatTurn(prompt) {
         model: modelSelect.value,
         workload: "augmentor-chat",
         thinkingDepth: thinkingDepthSelect.value,
+        systemPrompt: personalizationSettings?.augmentor?.systemPrompt ?? "",
         messages: [
           {
             role: "system",
@@ -1395,6 +1427,9 @@ contextToggleButton?.addEventListener("click", () => void browserPageActions.sum
 contextMeter?.addEventListener("click", toggleContextPopover);
 workspaceButtons.forEach((button) => {
   button.addEventListener("click", () => {
+    if (button.dataset.workspace === "settings") {
+      initialSettingsSection = button.dataset.settingsSection || "overview";
+    }
     setActiveWorkspace(button.dataset.workspace, { persist: true });
     renderAll();
     if (button.dataset.prompt) {
@@ -1448,6 +1483,7 @@ await hydrateProviderModelOptions({
   setStatus: updateConnectionLine
 });
 await Promise.all([
+  hydratePersonalizationSettings(),
   chatSessionStore.hydrate(),
   hydrateAppearancePreferences(),
   hydrateStarterPromptPreference(),

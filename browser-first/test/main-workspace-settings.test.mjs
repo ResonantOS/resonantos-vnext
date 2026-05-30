@@ -4,6 +4,25 @@ import { JSDOM } from "jsdom";
 
 import { renderSettingsWorkspace } from "../resonantos-side-panel-extension/src/lib/main-workspace-settings.js";
 
+function memoryStorage(initial = {}) {
+  const state = { ...initial };
+  return {
+    state,
+    async get(keys) {
+      if (Array.isArray(keys)) {
+        return Object.fromEntries(keys.map((key) => [key, state[key]]));
+      }
+      if (typeof keys === "string") {
+        return { [keys]: state[keys] };
+      }
+      return { ...state };
+    },
+    async set(next) {
+      Object.assign(state, next);
+    }
+  };
+}
+
 function setupDom() {
   const dom = new JSDOM("<!doctype html><main id=\"root\"></main>", { url: "https://resonantos.local/" });
   globalThis.document = dom.window.document;
@@ -1337,6 +1356,108 @@ test("settings workspace defaults to overview health and routes sections from su
     assert.match(container.textContent, /Provider Profiles/);
     assert.equal(container.querySelector('[data-section="providers"]').dataset.active, "true");
     assert.ok(calls.some(([route]) => route === "/status"));
+  } finally {
+    cleanup();
+  }
+});
+
+test("settings workspace edits user profile and Augmentor prompt", async () => {
+  const { container, cleanup } = setupDom();
+  const storage = memoryStorage({
+    augmentorUserProfile: {
+      displayName: "Existing User",
+      subtitle: "Existing profile",
+      email: "existing@example.com"
+    },
+    augmentorConfig: {
+      displayName: "Augmentor",
+      systemPrompt: "Existing prompt"
+    }
+  });
+  let updated = null;
+  let openedWorkspace = null;
+  const bridgeCalls = [];
+  const bridgeRequest = async (route, options = {}) => {
+    bridgeCalls.push([route, options]);
+    if (route === "/memory/settings") {
+      return {
+        settings: {
+          activeMemoryAddon: "living-archive",
+          autoSync: false,
+          syncMode: "manual-review",
+          sources: [{ id: "source-a", path: "/knowledge", kind: "folder" }]
+        },
+        status: {
+          wiki: { pages: 12 },
+          intake: { artifacts: 4 }
+        },
+        memoryAddons: [{ id: "addon.living-archive", name: "Living Archive", mode: "memory-system", available: true }]
+      };
+    }
+    if (route === "/addons/status") {
+      return {
+        addons: [
+          { id: "addon.living-archive", name: "Living Archive", available: true, mode: "memory-system", trust: "host-mediated memory provider", grantedCapabilities: ["archive-read", "archive-intake-write"] },
+          { id: "addon.hermes", name: "Hermes", available: true, mode: "delegation-addon", trust: "add-on agent", grantedCapabilities: ["agent-delegation"] }
+        ]
+      };
+    }
+    return {};
+  };
+
+  try {
+    renderSettingsWorkspace({
+      container,
+      bridgeRequest,
+      initialSection: "profile",
+      onOpenWorkspace: (workspaceId) => {
+        openedWorkspace = workspaceId;
+      },
+      onProfileUpdated: (next) => {
+        updated = next;
+      },
+      storage,
+      storageKeys: {
+        augmentorConfig: "augmentorConfig",
+        userProfile: "augmentorUserProfile"
+      }
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.match(container.textContent, /User & Augmentor/);
+    assert.match(container.textContent, /Memory System/);
+    assert.match(container.textContent, /Living Archive is the active AI memory system/);
+    assert.match(container.textContent, /Skills & Plugins/);
+    assert.match(container.textContent, /Browser control/);
+    assert.match(container.textContent, /Hermes/);
+    assert.equal(container.querySelector('[data-section="profile"]').dataset.active, "true");
+    assert.ok(bridgeCalls.some(([route]) => route === "/memory/settings"));
+    assert.ok(bridgeCalls.some(([route]) => route === "/addons/status"));
+
+    [...container.querySelectorAll("button")].find((button) => /Open Memory Workspace/.test(button.textContent)).click();
+    assert.equal(openedWorkspace, "memory");
+
+    [...container.querySelectorAll("button")].find((button) => /Open Memory Settings/.test(button.textContent)).click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(container.querySelector('[data-section="memory"]').dataset.active, "true");
+    assert.match(container.textContent, /Living Archive Settings/);
+
+    container.querySelector('[data-section="profile"]').click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const name = container.querySelector('[aria-label="User display name"]');
+    const subtitle = container.querySelector('[aria-label="User profile subtitle"]');
+    const prompt = container.querySelector('[aria-label="Augmentor system prompt"]');
+    name.value = "Manolo Remiddi";
+    subtitle.value = "ResonantOS builder";
+    prompt.value = "Answer as Augmentor with concise strategic reasoning.";
+    container.querySelector("form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.equal(storage.state.augmentorUserProfile.displayName, "Manolo Remiddi");
+    assert.equal(storage.state.augmentorUserProfile.subtitle, "ResonantOS builder");
+    assert.match(storage.state.augmentorConfig.systemPrompt, /concise strategic reasoning/);
+    assert.equal(updated.profile.displayName, "Manolo Remiddi");
+    assert.match(container.textContent, /Identity settings saved/);
   } finally {
     cleanup();
   }

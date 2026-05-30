@@ -32,7 +32,7 @@ test("chat turn controller filters provider messages to recent user/assistant tu
   ]);
 });
 
-function createHarness({ fail = false } = {}) {
+function createHarness({ fail = false, systemPrompt = "" } = {}) {
   const events = [];
   const attachments = [{ name: "notes.md", content: "notes" }];
   const messages = [
@@ -54,6 +54,7 @@ function createHarness({ fail = false } = {}) {
     clearAttachments: async () => events.push(["clearAttachments"]),
     getLastSnapshot: () => ({ title: "Page", url: "https://example.com/", text: "Visible" }),
     getModel: () => "MiniMax-M2.7",
+    getSystemPrompt: () => systemPrompt,
     getThinkingDepth: () => "high",
     setActivity: (...args) => events.push(["activity", ...args]),
     setStatus: (status) => events.push(["status", status])
@@ -70,6 +71,7 @@ test("chat turn controller calls provider and records assistant reply", async ()
   assert.ok(harness.events.some((event) => event[0] === "bridge" && event[1] === "/augmentor/chat"));
   const bridgeEvent = harness.events.find((event) => event[0] === "bridge");
   assert.equal(bridgeEvent[2].body.model, "MiniMax-M2.7");
+  assert.equal(bridgeEvent[2].body.systemPrompt, "");
   assert.equal(bridgeEvent[2].body.workload, "augmentor-chat");
   assert.equal(bridgeEvent[2].body.thinkingDepth, "high");
   assert.match(bridgeEvent[2].body.pageContext, /Visible text/);
@@ -77,6 +79,15 @@ test("chat turn controller calls provider and records assistant reply", async ()
   assert.ok(harness.events.some((event) => event[0] === "message" && event[1] === "assistant" && event[2] === "answer"));
   assert.ok(harness.events.some((event) => event[0] === "clearAttachments"));
   assert.deepEqual(harness.events.at(-1), ["clearActivitySoon"]);
+});
+
+test("chat turn controller forwards the user-configured Augmentor prompt", async () => {
+  const harness = createHarness({ systemPrompt: "Use the ResonantOS profile rules." });
+
+  await harness.controller.runChatTurn();
+
+  const bridgeEvent = harness.events.find((event) => event[0] === "bridge");
+  assert.equal(bridgeEvent[2].body.systemPrompt, "Use the ResonantOS profile rules.");
 });
 
 test("chat turn controller reports provider failure", async () => {

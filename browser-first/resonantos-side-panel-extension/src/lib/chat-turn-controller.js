@@ -31,6 +31,7 @@ export function createChatTurnController({
   clearAttachments,
   getLastSnapshot,
   getModel,
+  getSystemPrompt = () => "",
   getThinkingDepth,
   maxHistoryMessages = DEFAULT_MAX_HISTORY_MESSAGES,
   setActivity,
@@ -48,6 +49,7 @@ export function createChatTurnController({
         model: getModel(),
         workload: "augmentor-chat",
         thinkingDepth: getThinkingDepth(),
+        systemPrompt: getSystemPrompt(),
         pageContext: pageContextForSnapshot(getLastSnapshot()),
         runtimeContext: runtimeContextForAttachments(attachments),
         messages: providerMessagesFromHistory(chatSessionStore.getMessages(), maxHistoryMessages)

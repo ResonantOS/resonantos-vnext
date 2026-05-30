@@ -5,12 +5,19 @@ import { renderBrowserControlSection } from "./settings/browser-control-section.
 import { renderDiagnosticsSection } from "./settings/diagnostics-section.js";
 import { renderMemorySection } from "./settings/memory-section.js";
 import { renderOverviewSection } from "./settings/overview-section.js";
+import { renderPersonalizationSection } from "./settings/personalization-section.js";
 import { renderPrivacySection } from "./settings/privacy-section.js";
 import { renderProvidersSection } from "./settings/providers-section.js";
 import { renderRoutingSection } from "./settings/routing-section.js";
 import { renderWorkSection } from "./settings/work-section.js";
 
 const sections = [
+  {
+    id: "profile",
+    label: "Profile",
+    hint: "User and Augmentor",
+    render: renderPersonalizationSection
+  },
   {
     id: "overview",
     label: "Overview",
@@ -99,6 +106,8 @@ export function renderSettingsWorkspace({
   bridgeRequest,
   chatSessionStore = null,
   onOpenSession = null,
+  onOpenWorkspace = null,
+  onProfileUpdated = null,
   onRestore = null,
   chromeApi = null,
   sitePermissionStore = null,
@@ -126,6 +135,8 @@ export function renderSettingsWorkspace({
       renderActive();
     },
     onOpenSession,
+    onOpenWorkspace,
+    onProfileUpdated,
     onRestore,
     sitePermissionStore,
     storage,

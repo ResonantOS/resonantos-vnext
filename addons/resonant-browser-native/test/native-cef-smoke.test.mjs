@@ -299,6 +299,56 @@ test(
 );
 
 test(
+  "native CEF Chrome Runtime host executes standard browser menu commands",
+  { skip: !existsSync(hostBinary) && "Build the native host before running the CEF menu-command smoke test." },
+  async () => {
+    const commands = [
+      ["show_history", "chrome://history"],
+      ["show_downloads", "chrome://downloads"],
+      ["show_bookmarks", "chrome://bookmarks"],
+      ["manage_extensions", "chrome://extensions"],
+      ["password_manager", "chrome://password-manager"],
+    ];
+
+    for (const [command, expectedUrlPrefix] of commands) {
+      const profile = smokeProfileArgs(`cef-menu-${command}`);
+      try {
+        const { stdout } = await execFileAsync(
+          hostBinary,
+          [
+            `--resonantos-menu-command-smoke=${command}`,
+            "--url=https://example.com",
+            ...profile.args,
+          ],
+          {
+            cwd: addonRoot,
+            timeout: 30000,
+            maxBuffer: 1024 * 1024 * 2,
+          },
+        );
+
+        const events = parseJsonEvents(stdout);
+        assert.ok(
+          events.some((event) => event.event === "browser.native.menu_command_smoke_started"),
+          `${command} smoke must start explicitly.`,
+        );
+        assert.ok(
+          events.some((event) => event.event === "browser.native.menu_command.invoke" && event.command === command),
+          `${command} must be invoked through the native menu command path.`,
+        );
+        const result = events.find(
+          (event) => event.event === "browser.native.menu_command.result" && event.command === command,
+        );
+        assert.ok(result, `${command} must emit a deterministic menu-command result.`);
+        assert.match(result.url, new RegExp(`^${expectedUrlPrefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+      } finally {
+        profile.cleanup();
+      }
+    }
+  },
+);
+
+test(
   "native CEF Chrome Runtime host executes a local unpacked extension",
   { skip: !existsSync(hostBinary) && "Build the native host before running the CEF local extension smoke test." },
   async () => {

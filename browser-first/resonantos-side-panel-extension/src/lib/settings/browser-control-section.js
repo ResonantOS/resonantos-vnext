@@ -117,15 +117,31 @@ export function renderBrowserControlSection(container, {
   downloadsButton.type = "button";
   downloadsButton.textContent = "Open Downloads";
   downloadsButton.addEventListener("click", () => void openBrowserTab(chromeApi, "chrome://downloads"));
+  const historyButton = document.createElement("button");
+  historyButton.type = "button";
+  historyButton.textContent = "Open History";
+  historyButton.addEventListener("click", () => void openBrowserTab(chromeApi, "chrome://history"));
+  const bookmarksButton = document.createElement("button");
+  bookmarksButton.type = "button";
+  bookmarksButton.textContent = "Open Bookmarks";
+  bookmarksButton.addEventListener("click", () => void openBrowserTab(chromeApi, "chrome://bookmarks"));
   const extensionsButton = document.createElement("button");
   extensionsButton.type = "button";
   extensionsButton.textContent = "Manage Extensions";
   extensionsButton.addEventListener("click", () => void openBrowserTab(chromeApi, "chrome://extensions"));
+  const passwordsButton = document.createElement("button");
+  passwordsButton.type = "button";
+  passwordsButton.textContent = "Password Manager";
+  passwordsButton.addEventListener("click", () => void openBrowserTab(chromeApi, "chrome://password-manager/passwords"));
   const permissionsButton = document.createElement("button");
   permissionsButton.type = "button";
   permissionsButton.textContent = "Site Settings";
   permissionsButton.addEventListener("click", () => void openBrowserTab(chromeApi, "chrome://settings/content"));
-  nativeActions.append(downloadsButton, extensionsButton, permissionsButton);
+  const settingsButton = document.createElement("button");
+  settingsButton.type = "button";
+  settingsButton.textContent = "Browser Settings";
+  settingsButton.addEventListener("click", () => void openBrowserTab(chromeApi, "chrome://settings"));
+  nativeActions.append(downloadsButton, historyButton, bookmarksButton, extensionsButton, passwordsButton, permissionsButton, settingsButton);
 
   container.replaceChildren(
     settingsHeader({
@@ -142,7 +158,7 @@ export function renderBrowserControlSection(container, {
     permissionsList,
     noteCard({
       title: "Native browser surfaces",
-      body: "Open Chromium-native management pages for downloads, extensions, and browser site permissions. These are browser-level settings, separate from Augmentor's agent-control grants."
+      body: "Open Chromium-native management pages for downloads, history, bookmarks, extensions, passwords, site permissions, and browser settings. These are browser-level settings, separate from Augmentor's agent-control grants."
     }),
     nativeActions,
     noteCard({

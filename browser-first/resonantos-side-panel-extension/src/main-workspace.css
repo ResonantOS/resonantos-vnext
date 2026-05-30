@@ -2605,6 +2605,44 @@ textarea {
   border-color: rgba(255, 205, 120, 0.22);
 }
 
+.settings-personalization-panel {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  border: 1px solid rgba(36, 209, 143, 0.12);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 10% 0%, rgba(36, 209, 143, 0.08), transparent 34%),
+    rgba(11, 15, 13, 0.52);
+  padding: 18px;
+}
+
+.settings-personalization-panel .settings-section-header h1 {
+  font-size: clamp(1.35rem, 2vw, 2rem);
+  letter-spacing: -0.045em;
+  line-height: 1;
+}
+
+.settings-profile-memory-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.settings-status-pill {
+  border: 1px solid rgba(36, 209, 143, 0.22);
+  border-radius: 999px;
+  color: rgba(36, 209, 143, 0.9);
+  flex: 0 0 auto;
+  font-size: 0.62rem;
+  font-weight: 950;
+  padding: 4px 7px;
+  text-transform: uppercase;
+}
+
+.settings-status-pill[data-tone="warning"] {
+  border-color: rgba(255, 214, 138, 0.24);
+  color: rgba(255, 214, 138, 0.9);
+}
+
 .settings-note[data-tone="warning"],
 .settings-health-card[data-tone="warning"] {
   border-color: rgba(255, 205, 120, 0.22);

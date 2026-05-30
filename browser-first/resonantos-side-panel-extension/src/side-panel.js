@@ -33,6 +33,7 @@ import { createMessageActionController } from "./lib/message-action-controller.j
 import { createMonitorRenderers } from "./lib/monitor-renderers.js";
 import { createSidePanelCommandRouter } from "./lib/side-panel-command-router.js";
 import { createSidePanelRenderers } from "./lib/side-panel-renderers.js";
+import { readPersonalizationSettings } from "./lib/personalization-settings.js";
 import { createSitePermissionStore } from "./lib/site-permission-store.js";
 import { createTabContextController } from "./lib/tab-context-controller.js";
 import { createTaskConsentStore } from "./lib/task-consent-store.js";
@@ -102,6 +103,7 @@ const STORAGE_KEYS = {
   activeSessionId: "augmentorActiveBrowserSessionId",
   projects: "augmentorBrowserProjects",
   pendingSidebarPrompt: "augmentorPendingSidebarPrompt",
+  augmentorConfig: "augmentorConfig",
   model: "augmentorModel",
   thinkingDepth: "augmentorThinkingDepth",
   attachments: "augmentorBrowserAttachments",
@@ -113,7 +115,8 @@ const STORAGE_KEYS = {
   activeBrowserJob: "augmentorActiveBrowserJob",
   controlPreflight: "augmentorControlPreflight",
   jobMonitorCollapsed: "augmentorJobMonitorCollapsed",
-  contextDockExpanded: "augmentorContextDockExpanded"
+  contextDockExpanded: "augmentorContextDockExpanded",
+  userProfile: "augmentorUserProfile"
 };
 let lastSnapshot = null;
 let statusLabel = "Ready";
@@ -124,6 +127,7 @@ let pendingApproval = null;
 let pendingControlPreflight = null;
 let controlledTabId = null;
 let contextDockExpanded = false;
+let personalizationSettings = null;
 let contextPopoverOpen = false;
 let contextCompactNotice = "";
 let messageActions = null;
@@ -659,6 +663,7 @@ const controlPlanningService = createControlPlanningService({
   bridgeRequest,
   getLastSnapshot: () => lastSnapshot,
   getModel: () => modelSelect.value,
+  getSystemPrompt: () => personalizationSettings?.augmentor?.systemPrompt ?? "",
   getThinkingDepth: () => thinkingDepthSelect.value,
   readActivePage
 });
@@ -1232,6 +1237,7 @@ const hydrateChatSettings = async () => {
     setStatus
   });
   await chatSessionStore.hydrate();
+  personalizationSettings = await readPersonalizationSettings(chrome.storage?.local, STORAGE_KEYS);
   const settings = await chrome.storage?.local?.get?.([STORAGE_KEYS.contextDockExpanded]).catch(() => ({}));
   contextDockExpanded = Boolean(settings?.[STORAGE_KEYS.contextDockExpanded]);
   await hydrateControlPreflight();

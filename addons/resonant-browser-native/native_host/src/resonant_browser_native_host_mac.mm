@@ -46,6 +46,14 @@ extern "C" void resonant_browser_native_execute_menu_command(const char* command
   resonant_browser_native_execute_menu_command("new_window");
 }
 
+- (void)resonantNewIncognitoWindow:(id)sender {
+  resonant_browser_native_execute_menu_command("new_incognito_window");
+}
+
+- (void)resonantFocusAddressBar:(id)sender {
+  resonant_browser_native_execute_menu_command("focus_address_bar");
+}
+
 - (void)resonantCloseTab:(id)sender {
   resonant_browser_native_execute_menu_command("close_tab");
 }
@@ -223,7 +231,10 @@ static void ResonantInstallMainMenu() {
   [fileMenu setAutoenablesItems:NO];
   ResonantAddMenuItem(fileMenu, @"New Tab", @selector(resonantNewTab:), @"t");
   ResonantAddMenuItem(fileMenu, @"New Window", @selector(resonantNewWindow:), @"n");
+  NSMenuItem* incognitoWindow = ResonantAddMenuItem(fileMenu, @"New Incognito Window", @selector(resonantNewIncognitoWindow:), @"n");
+  [incognitoWindow setKeyEquivalentModifierMask:NSEventModifierFlagCommand | NSEventModifierFlagShift];
   [fileMenu addItem:[NSMenuItem separatorItem]];
+  ResonantAddMenuItem(fileMenu, @"Open Location...", @selector(resonantFocusAddressBar:), @"l");
   ResonantAddMenuItem(fileMenu, @"Open File...", @selector(resonantOpenFile:), @"o");
   [fileMenu addItem:[NSMenuItem separatorItem]];
   ResonantAddMenuItem(fileMenu, @"Close Tab", @selector(resonantCloseTab:), @"w");

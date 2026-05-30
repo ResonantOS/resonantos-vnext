@@ -86,6 +86,12 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(workspace, /OpenCode/);
   assert.match(workspace, /Settings/);
   assert.doesNotMatch(workspace, /System Settings/);
+  assert.doesNotMatch(workspace, /Manolo Remiddi/);
+  assert.match(workspace, /rail-user-name/);
+  assert.match(workspace, /data-settings-section="profile"/);
+  assert.match(workspaceSettings, /label: "Profile"/);
+  assert.match(workspaceSettings, /renderPersonalizationSection/);
+  assert.match(workspaceScript, /initialSettingsSection/);
   assert.match(workspace, /model-select/);
   assert.match(workspace, /thinking-depth/);
   assert.match(workspace, /read-page/);
@@ -201,6 +207,10 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(browserControlSettings, /label: "Open"/);
   assert.match(browserControlSettings, /label: "Reveal"/);
   assert.match(browserControlSettings, /chrome:\/\/downloads/);
+  assert.match(browserControlSettings, /chrome:\/\/history/);
+  assert.match(browserControlSettings, /chrome:\/\/bookmarks/);
+  assert.match(browserControlSettings, /chrome:\/\/password-manager\/passwords/);
+  assert.match(browserControlSettings, /chrome:\/\/settings"/);
   assert.match(browserControlSettings, /chrome:\/\/settings\/content/);
   assert.match(diagnosticsSettings, /diagnostics-report-export/);
   assert.match(workspaceScript, /document\.body\.dataset\.workspace/);
@@ -312,6 +322,7 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(launcher, /browserDownloadsRoot/);
   assert.match(launcher, /browser-download-action/);
   assert.match(launcher, /clear-history/);
+  assert.match(launcher, /dryRun/);
   assert.match(launcher, /openOrRevealDownload/);
   assert.match(launcher, /\/archive\/intake\/list/);
   assert.match(launcher, /\/memory\/settings/);
@@ -954,9 +965,14 @@ test("browser-first host is a runnable app path, not documentation-only scaffold
   assert.match(nativeHost, /browser\.native\.context_menu\.before/);
   assert.match(nativeHost, /browser\.native\.context_menu\.run/);
   assert.match(nativeHost, /resonantos-context-menu-smoke/);
+  assert.match(nativeHost, /resonantos-menu-command-smoke/);
+  assert.match(nativeHost, /browser\.native\.menu_command\.invoke/);
+  assert.match(nativeHost, /browser\.native\.menu_command\.result/);
   assert.match(nativeHost, /IDC_NEW_TAB/);
   assert.match(nativeHost, /IDC_NEW_WINDOW/);
+  assert.match(nativeHost, /IDC_NEW_INCOGNITO_WINDOW/);
   assert.match(nativeHost, /IDC_CLOSE_TAB/);
+  assert.match(nativeHost, /IDC_FOCUS_LOCATION/);
   assert.match(nativeHost, /IDC_OPEN_FILE/);
   assert.match(nativeHost, /IDC_SAVE_PAGE/);
   assert.match(nativeHost, /IDC_FIND/);
@@ -999,6 +1015,8 @@ test("browser-first host is a runnable app path, not documentation-only scaffold
   assert.match(nativeHostMac, /resonant_browser_native_execute_menu_command/);
   assert.match(nativeHostMac, /ResonantOS Browser/);
   assert.match(nativeHostMac, /File/);
+  assert.match(nativeHostMac, /New Incognito Window/);
+  assert.match(nativeHostMac, /Open Location/);
   assert.match(nativeHostMac, /Edit/);
   assert.match(nativeHostMac, /View/);
   assert.match(nativeHostMac, /Assistant/);

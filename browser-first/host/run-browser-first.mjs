@@ -1301,6 +1301,7 @@ async function executeBridgeChat(payload) {
     "Wallet signing, seed phrases, credential autofill, and public submissions require explicit human approval and must not be automated.",
     "Be direct, pragmatic, and concise. Answer the human outcome first; do not expose file paths, route names, JSON, provider metadata, or system status unless the user asks for diagnostics.",
     "If browser page context is provided, use it as context but do not claim to mutate memory or execute tools unless the host explicitly returned that result.",
+    payload.systemPrompt ? `Additional user-configured Augmentor system prompt:\n${String(payload.systemPrompt).slice(0, 8000)}` : "",
     payload.pageContext ? `Current browser page context:\n${String(payload.pageContext).slice(0, 8000)}` : "",
     payload.runtimeContext ? `Current ResonantOS runtime context:\n${String(payload.runtimeContext).slice(0, 6000)}` : "",
   ].filter(Boolean).join("\n\n");
@@ -4097,9 +4098,16 @@ async function executeBrowserDownloadAction(payload = {}) {
     throw new Error("Unsupported download action.");
   }
   const filePath = resolveDownloadFile(payload.name ?? payload.path);
-  await openOrRevealDownload(filePath, action);
+  const fileStat = await stat(filePath).catch(() => null);
+  if (!fileStat?.isFile?.()) {
+    throw new Error("Download file was not found.");
+  }
+  if (!payload.dryRun) {
+    await openOrRevealDownload(filePath, action);
+  }
   return {
     action,
+    dryRun: Boolean(payload.dryRun),
     name: path.basename(filePath),
     path: redactPathForDiagnostics(filePath),
   };
