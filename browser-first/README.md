@@ -1,3 +1,48 @@
+# Gradient Performance Addon
+
+**PR: Community Addon Submission**
+
+Training metrics and fleet performance dashboard.
+
+## What It Does
+
+Three tabs:
+
+- **Training** — Active and completed training runs with loss sparkline charts, progress bars, step counters, and ETA. Create new runs, update step counts, delete completed runs.
+- **Benchmarks** — Comparative bar chart of model scores. Add your own benchmark results. "Ours" entries highlighted.
+- **Fleet Speed** — Tokens per second for each fleet node via direct Ollama HTTP probe. Sorted by speed, color-coded (green ≥10 t/s, yellow 5-10, red <5).
+
+All data persists in Chrome Storage. Fleet speed probes use direct `fetch()` to Ollama endpoints.
+
+## First Use
+
+Opens with a seed training run ("Ternary Sunrise v1") and benchmark entries showing the comparison format.
+
+## Install
+
+Drop `addons/gradient-perf/` into `browser-first/addons/`.
+
+## Tests
+
+```bash
+node --test browser-first/test/gradient-perf-tab.test.mjs
+# 14 tests, 0 failures
+```
+
+## Files
+
+```
+addons/gradient-perf/
+  addon.json
+  gradient-perf.html / .css / .js
+docs/screenshots/
+  gradient-perf.png
+test/
+  gradient-perf-tab.test.mjs
+```
+
+---
+
 # ResonantOS Browser-First Prototype
 
 Intent citation: `docs/architecture/ADR-037-browser-first-chromium-resonantos.md`
@@ -189,4 +234,3 @@ browser-first/addons/gradient-perf/
 browser-first/docs/screenshots/
   gradient-perf.png   # Screenshot
 ```
-
