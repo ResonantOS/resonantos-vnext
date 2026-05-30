@@ -1,3 +1,47 @@
+# Open Items Addon
+
+**PR: Community Addon Submission**
+
+Track pending, blocked, and completed work items.
+
+## What It Does
+
+Three sections:
+- **Needs Attention** — Items requiring immediate action
+- **Pending** — Work in progress
+- **Recently Completed** — Finished items
+
+Each item shows priority badge (P0-P3), title, description, age, and source. Filter by priority level. Create new items, move between sections, delete. All changes persist to Chrome Storage.
+
+## First Use
+
+Opens with 2 seed items that connect to other addons in the suite.
+
+## Install
+
+Drop `addons/open-items/` into `browser-first/addons/`.
+
+## Tests
+
+```bash
+node --test browser-first/test/open-items-tab.test.mjs
+# 8 tests, 0 failures
+```
+
+## Files
+
+```
+addons/open-items/
+  addon.json
+  open-items.html / .css / .js
+docs/screenshots/
+  open-items.png
+test/
+  open-items-tab.test.mjs
+```
+
+---
+
 # ResonantOS Browser-First Prototype
 
 Intent citation: `docs/architecture/ADR-037-browser-first-chromium-resonantos.md`
@@ -190,4 +234,3 @@ browser-first/addons/open-items/
 browser-first/docs/screenshots/
   open-items.png    # Screenshot
 ```
-
