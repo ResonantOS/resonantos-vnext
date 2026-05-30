@@ -1,3 +1,37 @@
+# Fleet & Compute Addon
+
+**PR: Community Addon Submission**
+
+Monitor your fleet of machines running Ollama.
+
+## What It Does
+
+- **Fleet Tab** — Live status cards for each machine. Checks if Ollama is running via direct HTTP probe to `http://<ip>:11434/api/tags`. Shows online/offline badge, model list, and node details.
+- **Cloud Tab** — Cloud provider configuration (placeholder for bridge integration)
+- **Compute Fabric Tab** — Node enrollment and trust tier management
+
+Add and remove nodes through the UI. All data persists in Chrome Storage. Fleet probes use `fetch()` with 3-second `AbortController` timeout — no bridge server needed.
+
+## First Use
+
+On first open, a localhost seed node appears. If you have Ollama running locally, it shows as online with your loaded models.
+
+## Install
+
+Drop `addons/fleet-compute/` into `browser-first/addons/`.
+
+## Files
+
+```
+addons/fleet-compute/
+  addon.json
+  fleet-compute.html / .css / .js
+docs/screenshots/
+  fleet-compute.png
+```
+
+---
+
 # ResonantOS Browser-First Prototype
 
 Intent citation: `docs/architecture/ADR-037-browser-first-chromium-resonantos.md`
@@ -187,4 +221,3 @@ browser-first/addons/fleet-compute/
 browser-first/docs/screenshots/
   fleet-compute.png    # Screenshot
 ```
-
