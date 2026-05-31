@@ -29,8 +29,8 @@ function Write-Warn   { param($msg) Write-Host "[WARN] $msg" -ForegroundColor Ye
 function Write-Err    { param($msg) Write-Host "[ERROR] $msg" -ForegroundColor Red }
 
 # -- Constants ------------------------------------------------------------------
-$REPO_URL    = "https://github.com/tompennington/resonantos-vnext-Experimental.git"
-$BRANCH      = "tom/browser-first-merged"
+$REPO_URL    = "https://github.com/ResonantOS/resonantos-vnext.git"
+$BRANCH      = "main"
 $REPO_DIR    = Join-Path $env:USERPROFILE "resonantos-vnext"
 $USER_DIR    = Join-Path $env:USERPROFILE "ResonantOS_User"
 $BRIDGE_PORT = 47773

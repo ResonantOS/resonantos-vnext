@@ -23,8 +23,8 @@ warn() { echo -e "${YELLOW}⚠️  ${1}${RESET}"; }
 err()  { echo -e "${RED}❌ ${1}${RESET}" >&2; }
 step() { echo -e "\n${BOLD}${BLUE}▶ ${1}${RESET}"; }
 
-REPO_URL="https://github.com/tompennington/resonantos-vnext-Experimental.git"
-BRANCH="tom/browser-first-merged"
+REPO_URL="https://github.com/ResonantOS/resonantos-vnext.git"
+BRANCH="main"
 REPO_DIR="$HOME/resonantos-vnext"
 USER_DIR="$HOME/ResonantOS_User"
 BRIDGE_PORT=47773
