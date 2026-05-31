@@ -1,73 +1,165 @@
 # ResonantOS vNext
 
-New desktop-first ResonantOS foundation built as a Tauri + React shell.
+> Modular desktop shell and add-on SDK for human-AI collaboration.
 
-This app is intentionally separate from the legacy OpenClaw-centered Alpha dashboard. It implements the first executable layer of the vNext architecture:
+ResonantOS vNext is a **browser-first** platform where AI lives inside your browser chrome — not as a separate app, not as a dashboard, but as a native layer of your browsing experience.
 
-- modular desktop shell
-- Resonant Engineer kernel assistant
-- replaceable Augmentor Chat default add-on
-- replaceable Living Archive default add-on
-- add-on SDK manifest format
-- explicit capability grants
-- shared/private provider model
-- channel and workspace model
-- local memory/MCP bridge examples for external clients
+## Architecture
 
-## Run
-
-```bash
-cd resonantos-vnext
-npm install
-npm run tauri:dev
+```
+┌─────────────────────────────────────────────────┐
+│              Chromium Browser                    │
+│  ┌───────────────────────┐  ┌────────────────┐  │
+│  │   ResonantOS          │  │  Active Tab    │  │
+│  │   Side Panel          │  │  (any page)    │  │
+│  │                       │  │                │  │
+│  │  • Augmentor Chat     │  │  Content       │  │
+│  │  • Addon Tabs         │  │  Scripts:      │  │
+│  │  • Agent Control      │  │  • Context SDK │  │
+│  │  • Living Archive     │  │  • Resonator   │  │
+│  │                       │  │                │  │
+│  └───────────────────────┘  └────────────────┘  │
+└─────────────────────────────────────────────────┘
+          │                           │
+          └─────────┬─────────────────┘
+                    │
+          ┌─────────▼─────────┐
+          │   Bridge Server   │
+          │  • Provider Router│
+          │  • Living Archive │
+          │  • Audit Trail    │
+          └───────────────────┘
 ```
 
-For a browser-only preview:
+The target is a Chromium-family browser where ResonantOS lives inside browser chrome. It is **not** a Tauri dashboard, an Electron sidecar, or a screenshot browser.
+
+## What's Here
+
+### Core Platform
+
+| Component | Description |
+|-----------|-------------|
+| **Side Panel Extension** | Chrome extension with Augmentor chat, addon system, and agent controls |
+| **Addon Discovery Engine** | Auto-discovers and loads addons from `browser-first/addons/` at startup |
+| **Resonant Context SDK** | Viewport observer — tracks what the user sees on any webpage |
+| **Resonator** | Visual guide layer — highlights, arrows, spotlights, step badges |
+| **Shield** | Security audit trail with XSS protection |
+| **Wallet Adapter** | Read-only Phantom detection with approval-gated connect/sign |
+| **Browser Control v3** | AI-controlled browser actions with safety boundaries |
+| **Living Archive** | Save, search, and recall anything you've browsed |
+
+### Add-on Catalog
+
+Self-contained add-ons that plug into the side panel. Drop a folder, it works.
+
+| Add-on | What It Does |
+|--------|-------------|
+| **Blackboard** | 7-mode visual surface — Canvas, Document, Table, Web Embed, Image, Slideshow, Annotate |
+| **Fleet & Compute** | Monitor your fleet of machines running Ollama with live HTTP probes |
+| **Task Board** | Kanban board with drag-and-drop across Ready / In Progress / Blocked / Done |
+| **System Map** | Interactive topology graph of your fleet with zoom, pan, and minimap |
+| **Open Items** | Track work items across Needs Attention / Pending / Completed |
+| **Gradient Performance** | Training metrics, model benchmarks, and fleet speed dashboard |
+
+### Security
+
+- Addon manifest validation (path traversal, symlink escape, trust tiers, injection blocking)
+- Wallet operations gated through `requestApproval()` — no raw signing power
+- XSS protection via `escapeHtml()` on all untrusted fields
+- CI pipeline with SHA-pinned GitHub Actions and enforced `npm audit`
+- Content script privacy: password fields excluded, `data-rc-ignore` opt-out
+
+## Quick Start
+
+### Browser Extension (development)
 
 ```bash
-npm run dev
+cd browser-first
+# Load as unpacked extension in Chrome/Brave:
+# 1. Navigate to chrome://extensions
+# 2. Enable Developer Mode
+# 3. Load unpacked → select browser-first/resonantos-side-panel-extension/
 ```
+
+### Bridge Server
+
+```bash
+cd browser-first/host
+node bridge-server.mjs
+```
+
+### Run Tests
+
+```bash
+node --test browser-first/test/*.test.mjs
+```
+
+## Non-Negotiable Gates
+
+Before this becomes the default app:
+
+- Phantom must install/open in the same browser profile
+- Wallet connect/sign flows must require human approval
+- Augmentor controls the active tab only through typed mediated tools
+- No page, add-on, or assistant can get raw wallet/signing power
+
+## Building Add-ons
+
+See [`browser-first/addons/ADDON-SPEC.md`](browser-first/addons/ADDON-SPEC.md) for the complete developer guide.
+
+Quick start:
+```
+browser-first/addons/my-addon/
+  addon.json     # Manifest (required)
+  my-addon.html  # UI (optional)
+  my-addon.js    # Logic (optional)
+```
+
+## Contributing
+
+See [`browser-first/PR-PLAN.md`](browser-first/PR-PLAN.md) for the current contribution plan and merge order.
 
 ## Git Workflow
 
-- Active development happens on `dev`.
-- `main` is the stable preview/release branch.
-- Commit to `dev` by default.
-- Do not commit directly to `main` unless explicitly instructed.
-- Merge or PR `dev` into `main` only after deterministic validation.
-
-## Public Source Preview
-
-This repository is a public source preview of the new ResonantOS direction plus the SDK foundation for creating add-ons.
-
-It is not a finished consumer release and it is not the legacy Alpha dashboard. The current release scope is:
-
-- ResonantOS vNext shell and runtime foundation
-- Add-on manifest contracts, validation, registry helpers, and capability model
-- Default recommended catalog containing only Augmentor Chat and Living Archive
-- Example memory-provider and Living Archive MCP bridge services for SDK validation
-
-No new optional add-on is released in this checkpoint. Files outside `public/addons/index.json` may exist as SDK references, historical contracts, or development-only work; they are not installed, enabled, trusted, or advertised by default.
-
-Packaged installers are still alpha-grade and unsigned. See [docs/ALPHA_DISTRIBUTION.md](docs/ALPHA_DISTRIBUTION.md) for current artifact and platform notes.
-
-## Current Scope
-
-This is a working foundation, not the full product. The current implementation provides:
-
-- typed public contracts for vNext architecture
-- a persisted local shell state
-- add-on manifest sideloading
-- policy enforcement helpers for archive trust and provider fallback
-- a branded shell UI showing the target operating model
-- scoped Living Archive memory bridge examples for external tools
+- Active development happens on `browser-first-preview`
+- `dev` tracks the Tauri-era codebase (historical)
+- `main` is the stable preview/release branch
+- Community contributions via PR against `browser-first-preview`
 
 ## Structure
 
-- `src/core/contracts.ts`: public interfaces and types
-- `src/core/defaults.ts`: core services, providers, archive policy, and default state
-- `src/core/policies.ts`: archive write guards and provider selection logic
-- `src/sdk/addons`: add-on SDK validation and registry helpers
-- `public/addons/index.json`: default public add-on catalog
-- `examples`: SDK/reference local services and MCP bridge examples
-- `src-tauri/src/lib.rs`: desktop persistence, sideload commands, and IPC registration
+```
+resonantos-vnext/
+├── browser-first/                    # ← The product
+│   ├── resonantos-side-panel-extension/
+│   │   ├── manifest.json
+│   │   └── src/                      # Extension source
+│   ├── addons/                       # Drop-in add-ons
+│   │   ├── ADDON-SPEC.md             # Developer spec
+│   │   ├── blackboard/
+│   │   ├── fleet-compute/
+│   │   ├── task-board/
+│   │   ├── canvas/
+│   │   ├── open-items/
+│   │   └── gradient-perf/
+│   ├── host/                         # Bridge server modules
+│   │   ├── addon-discovery.mjs
+│   │   ├── provider-router.mjs
+│   │   ├── living-archive.mjs
+│   │   ├── audit-trail.mjs
+│   │   └── bridge-server.mjs
+│   ├── test/                         # 114 tests
+│   ├── docs/
+│   │   ├── screenshots/              # 27 addon screenshots
+│   │   └── architecture/
+│   └── PR-PLAN.md                    # Contribution guide
+├── src/                              # Legacy Tauri shell (historical)
+├── src-tauri/                        # Legacy Tauri backend (historical)
+└── docs/
+    └── architecture/
+        └── ADR-037-browser-first-chromium-resonantos.md
+```
+
+## License
+
+Public source preview. See repository for terms.
