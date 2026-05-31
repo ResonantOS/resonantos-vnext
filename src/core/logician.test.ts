@@ -99,6 +99,57 @@ const installationForManifest = (addonManifest: AddOnManifest): AddOnInstallatio
 const publicManifest = (file: string): AddOnManifest =>
   JSON.parse(readFileSync(resolve(process.cwd(), "public", "addons", file), "utf8")) as AddOnManifest;
 
+const paperclipDelegationFixture = (): AddOnManifest => ({
+  sdkVersion: "0.1.0",
+  id: "addon.paperclip",
+  name: "Paperclip",
+  version: "0.1.0",
+  author: "ResonantOS test fixture",
+  category: "orchestration",
+  description: "Portable Paperclip delegation contract fixture. The development manifest is intentionally ignored.",
+  runtimeType: "local-service",
+  requestedCapabilities: [],
+  surfaces: [],
+  providerRequirements: {
+    sharedProfiles: [],
+    supportsPrivateCredentials: false,
+  },
+  archiveIntegration: {
+    readScopes: [],
+    intakeWriteScopes: [],
+    canRequestIngest: false,
+    canWriteKnowledgePages: false,
+  },
+  health: {
+    strategy: "manual",
+  },
+  installHooks: {},
+  compatibility: {
+    shellVersion: ">=0.1.0",
+    platforms: ["darwin", "linux", "win32"],
+  },
+  delegation: {
+    acceptsTasks: true,
+    taskTypes: ["routine-work", "system-diagnosis"],
+    artifactReturnTypes: ["summary", "diagnostic-report", "verification-report"],
+    defaultTargetRuntime: "local-service",
+    requiresHumanApprovalBeforeExecution: true,
+  },
+  scripts: [
+    {
+      id: "paperclip-delegation-preflight",
+      name: "Paperclip delegation preflight",
+      description: "Validate Paperclip task handoff requirements.",
+      commandRef: "paperclip.status",
+      runPolicy: "preflight",
+      deterministic: true,
+      requiredCapabilities: [],
+      requiresHumanApproval: false,
+      producesArtifacts: ["diagnostic-report", "verification-report"],
+    },
+  ],
+});
+
 describe("Logician execution layer", () => {
   it("detects missing capability grants before execution", () => {
     expect(missingLogicianCapabilities(installation(false), ["filesystem", "archive-read"])).toEqual([
@@ -333,8 +384,13 @@ describe("Logician execution layer", () => {
   });
 
   it("requires Hermes, OpenCode, OpenClaw, and Paperclip delegation contracts to return verification reports", () => {
-    for (const file of ["hermes.json", "opencode.json", "openclaw.json", "paperclip.json"]) {
-      const addonManifest = publicManifest(file);
+    const manifests = [
+      { file: "hermes.json", addonManifest: publicManifest("hermes.json") },
+      { file: "opencode.json", addonManifest: publicManifest("opencode.json") },
+      { file: "openclaw.json", addonManifest: publicManifest("openclaw.json") },
+      { file: "paperclip.fixture", addonManifest: paperclipDelegationFixture() },
+    ];
+    for (const { file, addonManifest } of manifests) {
       expect(addonManifest.delegation?.artifactReturnTypes).toContain("verification-report");
       for (const script of addonManifest.scripts ?? []) {
         expect({ file, script: script.id, producesArtifacts: script.producesArtifacts }).toMatchObject({
