@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -32,6 +32,15 @@ function run(command, args) {
   if (result.status !== 0) {
     process.exit(result.status ?? 1);
   }
+}
+
+function adHocSignAppBundle(appPath) {
+  // Intent citation: docs/architecture/ADR-037-browser-first-chromium-resonantos.md
+  // Browser-first launches the native Chromium host as a macOS .app bundle so
+  // AppKit owns the real desktop menu bar. Launch Services rejects CEF bundles
+  // with stale copied signatures, so every local build gets a fresh ad-hoc
+  // signature after CMake/CEF framework staging completes.
+  run("codesign", ["--force", "--deep", "--sign", "-", appPath]);
 }
 
 function skip(message) {
@@ -84,6 +93,9 @@ if (!existsSync(bridgeDylib) || !existsSync(hostApp)) {
   console.error("Native Browser build completed but required artifacts are missing.");
   process.exit(1);
 }
+
+writeFileSync(path.join(hostApp, "Contents", "PkgInfo"), "APPL????");
+adHocSignAppBundle(hostApp);
 
 mkdirSync(stagedResourceDir, { recursive: true });
 copyFileSync(bridgeDylib, stagedBridgeDylib);

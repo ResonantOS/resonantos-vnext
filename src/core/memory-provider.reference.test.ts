@@ -1,5 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { once } from "node:events";
+import { createServer } from "node:net";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { AddOnManifest, ResonantShellState } from "./contracts";
@@ -72,19 +73,38 @@ const enableProvider = (state: ResonantShellState, manifest: AddOnManifest): Res
 const waitForServer = async (service: ChildProcessWithoutNullStreams): Promise<void> => {
   const deadline = Date.now() + 5_000;
   let output = "";
+  let errorOutput = "";
   service.stdout.on("data", (chunk) => {
     output += String(chunk);
   });
+  service.stderr.on("data", (chunk) => {
+    errorOutput += String(chunk);
+  });
   while (!output.includes("Reference Memory service listening")) {
     if (Date.now() > deadline) {
-      throw new Error(`Reference Memory service did not start. Output: ${output}`);
+      throw new Error(`Reference Memory service did not start. Output: ${output}${errorOutput}`);
     }
     if (service.exitCode !== null) {
-      throw new Error(`Reference Memory service exited before ready. Output: ${output}`);
+      throw new Error(`Reference Memory service exited before ready. Output: ${output}${errorOutput}`);
     }
     await new Promise((resolveReady) => setTimeout(resolveReady, 25));
   }
 };
+
+const canBindLocalhost = async (): Promise<boolean> =>
+  new Promise((resolveReady, rejectReady) => {
+    const probe = createServer();
+    probe.once("error", (error: NodeJS.ErrnoException) => {
+      if (error.code === "EPERM") {
+        resolveReady(false);
+        return;
+      }
+      rejectReady(error);
+    });
+    probe.listen(0, "127.0.0.1", () => {
+      probe.close(() => resolveReady(true));
+    });
+  });
 
 describe("reference memory provider", () => {
   let service: ChildProcessWithoutNullStreams | null = null;
@@ -100,6 +120,11 @@ describe("reference memory provider", () => {
   });
 
   it("proves a non-Living Archive memory provider can satisfy the broker contract", async () => {
+    if (!(await canBindLocalhost())) {
+      console.warn("Skipping reference memory provider integration check: localhost listen is denied in this sandbox.");
+      return;
+    }
+
     service = spawn(process.execPath, [resolve(process.cwd(), "examples", "reference-memory-service.mjs")], {
       env: { ...process.env, REFERENCE_MEMORY_PORT: String(port) },
     });

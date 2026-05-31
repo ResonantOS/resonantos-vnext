@@ -179,6 +179,7 @@ export function createAppCommandHandlers({
   setSitePermission,
   setStatus,
   siteKeyForUrl,
+  tickBrowserJobScheduler,
   updateBrowserJob
 }) {
   async function runGoalCommand(body) {
@@ -196,6 +197,52 @@ export function createAppCommandHandlers({
     await addMessage("system", `Goal workspace recorded: ${result.id}\n${result.mission}`);
   }
 
+  async function startDelegationIfPossible(result) {
+    if (!["hermes", "opencode"].includes(result?.target) || !result?.path) return "";
+    const label = delegationTargetLabel(result.target);
+    let started;
+    try {
+      started = await bridgeRequest(`/${result.target}/delegation/start`, {
+        method: "POST",
+        body: { path: result.path }
+      });
+    } catch (error) {
+      return [
+        "",
+        `${label} packet was created, but the execution handoff failed.`,
+        error instanceof Error ? error.message : String(error),
+        `Next action: open Add-ons > ${label} to inspect or retry the task.`
+      ].join("\n");
+    }
+    if (!started || typeof started !== "object") {
+      return [
+        "",
+        `${label} packet was created, but execution did not return a status.`,
+        `Next action: open Add-ons > ${label} to inspect the task lifecycle or retry when the runtime reports health.`
+      ].join("\n");
+    }
+    if (started.status === "completed") {
+      return [
+        "",
+        `${label} execution completed and returned a reviewable artifact.`,
+        started.resultArtifactPath ? `Artifact: ${started.resultArtifactPath}` : ""
+      ].filter(Boolean).join("\n");
+    }
+    if (started.status === "blocked") {
+      return [
+        "",
+        `${label} packet was created, but execution is blocked.`,
+        started.blockedReason || `${label} is not available from the current host configuration.`,
+        `Next action: configure ${label} or open Add-ons > ${label} to retry when the runtime is available.`
+      ].filter(Boolean).join("\n");
+    }
+    return [
+      "",
+      `${label} execution status: ${started.status || "queued"}.`,
+      `Open Add-ons > ${label} to inspect the task lifecycle and returned artifacts.`
+    ].join("\n");
+  }
+
   async function runDelegateCommand(body) {
     const match = /^(engineer|hermes|opencode|open code)\b\s*([\s\S]*)$/i.exec(String(body ?? "").trim());
     if (!match) {
@@ -209,7 +256,8 @@ export function createAppCommandHandlers({
       method: "POST",
       body: { target, mission }
     });
-    await addMessage("system", `Delegation queued for ${delegationTargetLabel(result.target)}: ${result.id}\n${result.path}`);
+    const lifecycle = await startDelegationIfPossible(result);
+    await addMessage("system", `Delegation queued for ${delegationTargetLabel(result.target)}: ${result.id}\n${result.path}${lifecycle}`);
   }
 
   async function runNaturalDelegationCommand(intent) {
@@ -230,12 +278,14 @@ export function createAppCommandHandlers({
       method: "POST",
       body: { target: intent.target, mission }
     });
+    const lifecycle = await startDelegationIfPossible(result);
     await addMessage(
       "system",
       [
         `Delegation queued for ${delegationTargetLabel(result.target)}: ${result.id}`,
         result.path,
-        "Boundary: the add-on receives a governed task packet. ResonantOS keeps provider secrets, wallet actions, and trusted memory writes mediated."
+        "Boundary: the add-on receives a governed task packet. ResonantOS keeps provider secrets, wallet actions, and trusted memory writes mediated.",
+        lifecycle
       ].join("\n")
     );
   }
@@ -435,6 +485,25 @@ export function createAppCommandHandlers({
 
   async function runJobsCommand(body = "") {
     const rawFilter = String(body ?? "").trim();
+    if (/^(?:run|start|tick|scheduler)\b/i.test(rawFilter)) {
+      if (typeof tickBrowserJobScheduler !== "function") {
+        await addMessage("system", "Browser job scheduler is not available in this runtime.");
+        return;
+      }
+      const result = await tickBrowserJobScheduler();
+      const started = result?.startedJobs ?? [];
+      const state = result?.schedulerState ?? null;
+      await addMessage(
+        "system",
+        [
+          started.length
+            ? `Started ${started.length} browser job${started.length === 1 ? "" : "s"}: ${started.map((job) => job.id).join(", ")}`
+            : "No runnable queued browser jobs were available.",
+          formatSchedulerState(state)
+        ].filter(Boolean).join("\n")
+      );
+      return;
+    }
     const focusMatch = /^(?:focus|active|select)\s+(.+)$/i.exec(rawFilter);
     if (focusMatch) {
       const job = browserJobStore.findJob(focusMatch[1]);

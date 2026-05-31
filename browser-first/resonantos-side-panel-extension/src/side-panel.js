@@ -3,6 +3,7 @@ import { controlStepLabel } from "./lib/agent-control-planner.js";
 import { createAgentControlRunner } from "./lib/agent-control-runner.js";
 import { createAppCommandHandlers } from "./lib/app-command-handlers.js";
 import { normalizeBrowserUrl, normalizeSearchQuery, parseQuotedText } from "./lib/browser-command-parser.js";
+import { createBrowserJobScheduler } from "./lib/browser-job-scheduler.js";
 import { createBrowserJobStore } from "./lib/browser-job-store.js";
 import { createBrowserPageActions } from "./lib/browser-page-actions.js";
 import { createBridgeClient } from "./lib/bridge-client.js";
@@ -133,8 +134,24 @@ let contextCompactNotice = "";
 let messageActions = null;
 let monitorRenderers = null;
 let nextControlPreflightDecision = null;
+let browserActionQueue = Promise.resolve();
+let browserJobScheduler = null;
 
 const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+const withBrowserActionLock = async (task) => {
+  const previous = browserActionQueue.catch(() => undefined);
+  let release;
+  browserActionQueue = new Promise((resolve) => {
+    release = resolve;
+  });
+  await previous;
+  try {
+    return await task();
+  } finally {
+    release();
+  }
+};
 const composerController = createComposerController({
   commandForm,
   commandInput,
@@ -369,12 +386,12 @@ const loadBrowserJobs = async () => {
   }
 };
 
-const createBrowserJob = async ({ existingJob = null, goal, planner = "observe-act-verify-loop", summary = "" }) => {
-  const pageLock = await prepareBrowserJobPageLock({ goal, existingJob });
+const createBrowserJob = async ({ existingJob = null, goal, planner = "observe-act-verify-loop", summary = "", status = "running" }) => {
+  const pageLock = await prepareBrowserJobPageLock({ goal, existingJob, status });
   if (existingJob?.id) {
     await browserJobStore.activateJob(existingJob.id);
     const updated = await browserJobStore.updateJob(existingJob.id, {
-      status: "running",
+      status,
       planner,
       summary,
       pageLock,
@@ -384,11 +401,13 @@ const createBrowserJob = async ({ existingJob = null, goal, planner = "observe-a
     return updated ?? existingJob;
   }
   const job = await browserJobStore.createJob({
+    activate: status !== "queued",
     goal,
     planner,
     summary,
     pageLock,
-    preflightDecision: consumeNextControlPreflightDecision()
+    preflightDecision: consumeNextControlPreflightDecision(),
+    status
   });
   renderJobMonitor();
   return job;
@@ -556,7 +575,7 @@ monitorRenderers = createMonitorRenderers({
   getContextDockExpanded: () => contextDockExpanded,
   getCurrentControlRun: () => currentControlRun,
   getJobMonitorCollapsed: () => browserJobStore.getMonitorCollapsed(),
-  getPendingApproval: () => pendingApproval,
+  getPendingApproval: () => pendingApproval ?? browserJobStore.currentJob()?.pendingApproval ?? null,
   getSitePermissionAudit: () => sitePermissionStore.sitePermissionAudit(),
   getSitePermissions: () => sitePermissions(),
   getTaskConsentAudit: () => taskConsentStore.taskConsentAudit(),
@@ -566,7 +585,22 @@ monitorRenderers = createMonitorRenderers({
     void continueBrowserJob(job.id);
   },
   onActivateBrowserJob: async (job) => {
-    await browserJobStore.activateJob(job.id);
+    const focusedJob = await browserJobStore.activateJob(job.id);
+    currentControlRun = focusedJob ? {
+      artifacts: Array.isArray(focusedJob.artifacts) ? focusedJob.artifacts : [],
+      completedAt: focusedJob.completedAt ?? null,
+      goal: focusedJob.goal,
+      id: focusedJob.id,
+      pageLock: focusedJob.pageLock ?? null,
+      planner: focusedJob.planner,
+      startedAt: focusedJob.timing?.startedAt ?? focusedJob.createdAt,
+      status: focusedJob.status,
+      steps: Array.isArray(focusedJob.steps) ? focusedJob.steps : [],
+      summary: focusedJob.summary,
+      timing: focusedJob.timing ?? {}
+    } : currentControlRun;
+    pendingApproval = focusedJob?.pendingApproval ?? null;
+    renderControlMonitor();
     renderJobMonitor();
     await addMessage("system", `Focused browser job ${job.id}: ${job.goal}`);
   },
@@ -699,7 +733,7 @@ const controlReportingService = createControlReportingService({
   controlStepLabel,
   getCurrentControlRun: () => currentControlRun,
   getLastSnapshot: () => lastSnapshot,
-  getPendingApproval: () => pendingApproval
+  getPendingApproval: () => pendingApproval ?? browserJobStore.currentJob()?.pendingApproval ?? null
 });
 const delegateControlIssue = controlReportingService.delegateControlIssue;
 const saveBrowserJobReportToArchive = controlReportingService.saveBrowserJobReportToArchive;
@@ -715,6 +749,7 @@ const controlRunState = createControlRunState({
   setPageControlOverlay,
   setPendingApproval: (approval) => {
     pendingApproval = approval;
+    void updateBrowserJob(browserJobStore.getActiveJobId(), { pendingApproval: approval });
   },
   updateBrowserJob
 });
@@ -755,6 +790,7 @@ const agentControlRunner = createAgentControlRunner({
   setPageControlOverlay,
   setPendingApproval: (approval) => {
     pendingApproval = approval;
+    void updateBrowserJob(browserJobStore.getActiveJobId(), { pendingApproval: approval });
   },
   setStatus,
   sleep,
@@ -773,6 +809,198 @@ const agentControlRunner = createAgentControlRunner({
 
 const continueControlLoop = agentControlRunner.continueControlLoop;
 const startControlCommand = agentControlRunner.runControlCommand;
+
+const activateJobTab = async (job) => {
+  const latestJob = browserJobStore.findJob(job?.id);
+  if (["paused", "cancelled"].includes(latestJob?.status)) {
+    throw new Error(`Browser job ${job.id} is ${latestJob.status}; scheduler stopped browser actions.`);
+  }
+  const tabId = job?.pageLock?.tabId;
+  if (Number.isInteger(tabId)) {
+    const tab = await chrome.tabs.get(tabId).catch(() => null);
+    if (!isReadableBrowserTab(tab)) {
+      throw new Error(`Browser job ${job.id} target tab is no longer readable.`);
+    }
+    controlledTabId = tab.id;
+    await chrome.tabs.update(tab.id, { active: true }).catch(() => undefined);
+    return tab;
+  }
+  return activeTab();
+};
+
+const observeQueuedJobPage = async (job) => withBrowserActionLock(async () => {
+  await activateJobTab(job);
+  setActivity("reading", "Observing job page", job.goal);
+  const response = await readActivePage({ announce: false }).catch(() => null);
+  const snapshot = response?.snapshot ?? lastSnapshot;
+  const tabs = await chrome.tabs.query({}).catch(() => []);
+  return snapshot ? {
+    ...snapshot,
+    tabs: tabs.filter(isReadableBrowserTab).slice(0, 30).map((tab) => ({
+      active: Boolean(tab.active),
+      controlled: tab.id === controlledTabId,
+      id: tab.id,
+      title: tab.title || "",
+      url: tab.url || ""
+    }))
+  } : null;
+});
+
+const executeQueuedJobStep = async (job, step) => withBrowserActionLock(async () => {
+  const latestJob = browserJobStore.findJob(job?.id);
+  if (["paused", "cancelled"].includes(latestJob?.status)) {
+    throw new Error(`Browser job ${job.id} is ${latestJob.status}; scheduler stopped browser actions.`);
+  }
+  await activateJobTab(job);
+  return executeControlStep(step);
+});
+
+const runScheduledBrowserJob = async (job) => {
+  const scopedNextActionOverride = typeof window.__resonantosNextActionOverride === "function"
+    ? window.__resonantosNextActionOverride
+    : null;
+  let localRun = {
+    id: job.id,
+    goal: job.goal,
+    planner: job.planner,
+    startedAt: new Date().toISOString(),
+    status: "running",
+    summary: job.summary,
+    artifacts: Array.isArray(job.artifacts) ? job.artifacts : [],
+    pageLock: job.pageLock,
+    steps: Array.isArray(job.steps) ? job.steps : []
+  };
+  let localApproval = null;
+  const syncFocusedLocalRun = () => {
+    if (browserJobStore.getActiveJobId() === job.id) {
+      currentControlRun = localRun;
+      pendingApproval = localApproval;
+      renderControlMonitor();
+    }
+    renderJobMonitor();
+  };
+  const persistLocalRun = async (patch = {}) => {
+    localRun = { ...localRun, ...patch };
+    await updateBrowserJob(job.id, {
+      artifacts: localRun.artifacts,
+      planner: localRun.planner,
+      status: localRun.status ?? "running",
+      steps: localRun.steps,
+      summary: localRun.summary
+    });
+  };
+  const localRunner = createAgentControlRunner({
+    addMessage,
+    appendControlStep: (step) => {
+      const record = {
+        ...step,
+        state: "pending",
+        updatedAt: new Date().toISOString()
+      };
+      localRun = { ...localRun, steps: [...localRun.steps, record] };
+      void persistLocalRun();
+      syncFocusedLocalRun();
+      return localRun.steps.length - 1;
+    },
+    approvalBoundaryForStep,
+    controlStepLabel,
+    createBrowserJob: async () => job,
+    executeControlStep: (step) => executeQueuedJobStep(job, step),
+    finishControlRun: (status, artifact = null) => {
+      localRun = {
+        ...localRun,
+        status,
+        completedAt: new Date().toISOString(),
+        artifacts: artifact ? [...localRun.artifacts, artifact] : localRun.artifacts
+      };
+      void persistLocalRun({
+        status,
+        artifacts: localRun.artifacts
+      });
+      if (browserJobStore.getActiveJobId() === job.id) {
+        void setPageControlOverlay(false, "", "returning");
+      }
+      syncFocusedLocalRun();
+    },
+    getActiveJobId: () => job.id,
+    getCurrentControlRun: () => localRun,
+    getLastSnapshot: () => lastSnapshot,
+    observeControlPage: () => observeQueuedJobPage(job),
+    renderControlMonitor: syncFocusedLocalRun,
+    requestNextControlAction: (request) => requestNextControlAction({
+      ...request,
+      override: scopedNextActionOverride
+    }),
+    saveControlReportToArchive: async (_results, status) => {
+      const latest = browserJobStore.findJob(job.id) ?? localRun;
+      return saveBrowserJobReportToArchive({ ...latest, status }) ?? null;
+    },
+    setActivity,
+    setPageControlOverlay: async (active, label, phase) => {
+      if (browserJobStore.getActiveJobId() === job.id) {
+        await setPageControlOverlay(active, label, phase);
+      }
+    },
+    setPendingApproval: (approval) => {
+      localApproval = approval;
+      void updateBrowserJob(job.id, { pendingApproval: approval, status: approval ? "approval" : localRun.status });
+      if (browserJobStore.getActiveJobId() === job.id) {
+        pendingApproval = approval;
+      }
+      syncFocusedLocalRun();
+    },
+    setStatus,
+    sleep,
+    startControlRun: ({ goal, plan }) => {
+      localRun = {
+        ...localRun,
+        goal,
+        planner: plan.source,
+        summary: plan.summary,
+        pageLock: plan.pageLock ?? localRun.pageLock,
+        artifacts: Array.isArray(plan.artifacts) ? plan.artifacts : localRun.artifacts,
+        steps: Array.isArray(plan.steps) ? plan.steps : localRun.steps
+      };
+      syncFocusedLocalRun();
+    },
+    taskConsentForStep: async ({ goal }) => taskConsentStore.consentFor({
+      siteKey: job.pageLock?.siteKey,
+      goal
+    }),
+    updateBrowserJob,
+    updateControlRunArtifacts: (artifacts) => {
+      localRun = { ...localRun, artifacts };
+      void persistLocalRun({ artifacts });
+      syncFocusedLocalRun();
+    },
+    updateControlStep: (index, state, note = "", details = {}) => {
+      const steps = [...localRun.steps];
+      if (!steps[index]) return;
+      steps[index] = {
+        ...steps[index],
+        details: { ...(steps[index].details ?? {}), ...details },
+        note,
+        state,
+        updatedAt: new Date().toISOString()
+      };
+      localRun = { ...localRun, steps };
+      void persistLocalRun({ steps });
+      syncFocusedLocalRun();
+    }
+  });
+  await addMessage("system", `Browser job ${job.id} started in the scheduler.\nGoal: ${job.goal}`);
+  const result = await localRunner.continueControlLoop({
+    goal: job.goal,
+    history: [],
+    results: [],
+    startIndex: 0,
+    maxSteps: 12
+  });
+  if (localApproval && browserJobStore.getActiveJobId() !== job.id) {
+    await addMessage("system", `Browser job ${job.id} needs approval. Focus the job in Browser Jobs to review the pending action.`);
+  }
+  return result;
+};
 
 const persistControlPreflight = async () => {
   await chrome.storage?.local?.set?.({
@@ -836,7 +1064,7 @@ const pageLockForTab = (tab, reason = "Agent Control run") => ({
 
 const TERMINAL_CONTROL_RUN_STATUSES = new Set(["completed", "blocked", "denied", "cancelled", "failed"]);
 
-const prepareBrowserJobPageLock = async ({ goal, existingJob = null } = {}) => {
+const prepareBrowserJobPageLock = async ({ goal, existingJob = null, status = "running" } = {}) => {
   const tab = await activeTab();
   const pageLock = pageLockForTab(tab, existingJob?.id
     ? `Resumed Agent Control job ${existingJob.id}`
@@ -856,6 +1084,9 @@ const prepareBrowserJobPageLock = async ({ goal, existingJob = null } = {}) => {
     conflict = browserJobStore.conflictingActiveJobForLock(pageLock, {
       excludingJobId: existingJob?.id ?? ""
     });
+  }
+  if (conflict && status === "queued") {
+    return pageLock;
   }
   if (conflict?.status === "approval") {
     if (currentControlRun?.id === conflict.id) {
@@ -946,7 +1177,28 @@ const runControlCommand = async (goal, options = {}) => {
   }
   await clearControlPreflight();
   try {
-    return await startControlCommand(goal, options);
+    const queuedJob = await createBrowserJob({
+      existingJob: options.resumedFromJob ?? null,
+      goal,
+      planner: "observe-act-verify-loop",
+      summary: `${options.resumedFromJob?.id ? `Continuation of ${options.resumedFromJob.id}. ` : ""}Queued browser-agent loop. The scheduler observes the page, asks for one safe next action, executes it, then verifies before continuing.`,
+      status: "queued"
+    });
+    contextDockExpanded = true;
+    await persistContextDockExpanded();
+    await browserJobStore.setMonitorCollapsed(false);
+    await addMessage(
+      "system",
+      [
+        options.resumedFromJob ? "Agent Control job queued for continuation." : "Agent Control job queued.",
+        `Job: ${queuedJob.id}`,
+        `Goal: ${goal}`,
+        "Scheduler: will run when capacity and page-lock rules allow it."
+      ].join("\n")
+    );
+    renderJobMonitor();
+    await browserJobScheduler.tick();
+    return queuedJob;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("Agent Control could not start.", error);
@@ -1129,6 +1381,15 @@ const chatTurnController = createChatTurnController({
 const runChatTurn = chatTurnController.runChatTurn;
 const stopChatTurn = chatTurnController.stopChatTurn;
 
+const tickBrowserJobScheduler = async () => {
+  if (!browserJobScheduler) {
+    return { activeJobIds: [], schedulerState: browserJobStore.getSchedulerState({ maxConcurrent: 2 }), startedJobs: [] };
+  }
+  const result = await browserJobScheduler.tick();
+  renderJobMonitor();
+  return result;
+};
+
 const {
   cancelBrowserJob,
   continueBrowserJob,
@@ -1162,8 +1423,30 @@ const {
   setSitePermission,
   setStatus,
   siteKeyForUrl,
+  tickBrowserJobScheduler,
   updateBrowserJob
 });
+
+browserJobScheduler = createBrowserJobScheduler({
+  browserJobStore,
+  maxConcurrent: 2,
+  onJobFailed: async (jobId, error) => {
+    renderJobMonitor();
+    await addMessage("system", `Browser job ${jobId} failed in scheduler: ${error instanceof Error ? error.message : String(error)}`);
+    setStatus("Control failed");
+  },
+  onJobFinished: async () => {
+    renderJobMonitor();
+    setStatus("Ready");
+  },
+  onJobStarted: async (job) => {
+    setActivity("browser-control", "Starting queued browser job", `${job.id} · ${job.goal}`);
+    renderJobMonitor();
+    setStatus(`Running ${job.id}`);
+  },
+  runJob: runScheduledBrowserJob
+});
+browserJobScheduler.start();
 
 const showBrowserJobsCommand = async (body) => {
   contextDockExpanded = true;

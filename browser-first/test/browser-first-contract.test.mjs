@@ -218,6 +218,7 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(workspaceScript, /\/hermes\/dashboard\/status/);
   assert.match(workspaceScript, /\/hermes\/dashboard\/start/);
   assert.match(workspaceScript, /\/hermes\/dashboard\/stop/);
+  assert.match(workspaceScript, /\/\$\{result\.target\}\/delegation\/start/);
   assert.match(workspaceScript, /\/addons\/delegate/);
   assert.match(commandRouter, /name === "email"/);
   assert.match(commandRouter, /name === "calendar"/);
@@ -297,6 +298,13 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(launcher, /\/hermes\/dashboard\/status/);
   assert.match(launcher, /\/hermes\/dashboard\/start/);
   assert.match(launcher, /\/hermes\/dashboard\/stop/);
+  assert.match(launcher, /\/hermes\/status/);
+  assert.match(launcher, /\/hermes\/delegation\/start/);
+  assert.match(launcher, /\/hermes\/delegation\/status/);
+  assert.match(launcher, /\/hermes\/delegation\/artifact/);
+  assert.match(launcher, /\/hermes\/delegation\/cancel/);
+  assert.match(launcher, /expectedArtifacts/);
+  assert.match(launcher, /forbiddenActions/);
   assert.match(launcher, /executeAddonDraftList/);
   assert.match(launcher, /executeAddonDraftTransition/);
   assert.match(launcher, /\/addons\/draft\/list/);
@@ -305,6 +313,10 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(launcher, /executeAddonDraftProviderHandoff/);
   assert.match(launcher, /buildProviderDraftHandoff/);
   assert.match(launcher, /\/opencode\/status/);
+  assert.match(launcher, /\/opencode\/delegation\/start/);
+  assert.match(launcher, /\/opencode\/delegation\/status/);
+  assert.match(launcher, /\/opencode\/delegation\/artifact/);
+  assert.match(launcher, /\/opencode\/delegation\/cancel/);
   assert.match(launcher, /\/providers\/status/);
   assert.match(launcher, /\/providers\/credentials/);
   assert.match(launcher, /\/providers\/accounts/);
@@ -315,6 +327,10 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(launcher, /\/diagnostics\/report/);
   assert.match(launcher, /diagnostics-report-export/);
   assert.match(launcher, /executeDiagnosticsReport/);
+  assert.match(launcher, /browser-launch-diagnostics\.mjs/);
+  assert.match(launcher, /\/browser\/launch-diagnostics/);
+  assert.match(launcher, /executeBrowserLaunchDiagnostics/);
+  assert.match(launcher, /browserLaunchLogPath/);
   assert.match(launcher, /\/browser\/downloads/);
   assert.match(launcher, /\/browser\/downloads\/action/);
   assert.match(launcher, /executeBrowserDownloads/);
@@ -333,6 +349,10 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(launcher, /memory-source-scan/);
   assert.match(launcher, /\/memory\/source\/action/);
   assert.match(launcher, /memory-source-manage/);
+  assert.match(launcher, /\/memory\/source\/move-preflight/);
+  assert.match(launcher, /\/memory\/source\/move-execute/);
+  assert.match(launcher, /\/memory\/source\/move-rollback/);
+  assert.match(launcher, /memory-source-move/);
   assert.match(launcher, /\/memory\/source\/review/);
   assert.match(launcher, /memory-source-review/);
   assert.match(launcher, /\/memory\/source\/intake/);
@@ -594,6 +614,9 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(bridgeClient, /X-ResonantOS-Bridge-Token/);
   assert.match(script, /browserJobStore\.getMonitorCollapsed/);
   assert.match(script, /browserJobStore\.getSchedulerState/);
+  assert.match(script, /createBrowserJobScheduler/);
+  assert.match(script, /tickBrowserJobScheduler/);
+  assert.match(script, /Starting queued browser job/);
   assert.match(chatTurnController, /\/augmentor\/chat/);
   assert.match(controlReportingService, /\/archive\/intake/);
   assert.match(appCommandHandlers, /\/memory\/search/);
@@ -707,6 +730,11 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(controlStepExecutor, /listReadableTabs/);
   assert.match(controlStepExecutor, /Unknown control step/);
   assert.match(agentControlRunner, /runControlCommand/);
+  assert.match(script, /createBrowserJobScheduler/);
+  assert.match(script, /runScheduledBrowserJob/);
+  assert.match(script, /withBrowserActionLock/);
+  assert.match(script, /status: "queued"/);
+  assert.match(script, /browserJobScheduler\.tick/);
   assert.match(script, /renderControlMonitor/);
   assert.match(agentControlRunner, /approvePendingControlStep/);
   assert.match(agentControlRunner, /denyPendingControlStep/);
@@ -868,6 +896,7 @@ test("browser-first host is a runnable app path, not documentation-only scaffold
   const launcher = await readText(path.join(browserFirstRoot, "host", "run-browser-first.mjs"));
   const bridgeServer = await readText(path.join(browserFirstRoot, "host", "bridge-server.mjs"));
   const installer = await readText(path.join(repoRoot, "scripts", "install-browser-first-app.mjs"));
+  const nativeBuilder = await readText(path.join(repoRoot, "scripts", "build-native-browser.mjs"));
   const nativeHost = await readText(
     path.join(repoRoot, "addons", "resonant-browser-native", "native_host", "src", "resonant_browser_native_host.cc"),
   );
@@ -883,8 +912,28 @@ test("browser-first host is a runnable app path, not documentation-only scaffold
 
   assert.match(packageJson.scripts["browser-first:dev"], /run-browser-first\.mjs/);
   assert.match(packageJson.scripts["browser-first:install"], /install-browser-first-app\.mjs/);
+  assert.match(nativeBuilder, /adHocSignAppBundle/);
+  assert.match(nativeBuilder, /PkgInfo/);
+  assert.match(nativeBuilder, /codesign/);
+  assert.match(nativeBuilder, /--deep/);
+  assert.match(installer, /codesign/);
+  assert.match(installer, /PkgInfo/);
+  assert.match(installer, /fork\(\)/);
+  assert.match(installer, /setsid\(\)/);
+  assert.match(installer, /run-browser-first\.mjs/);
   assert.match(installer, /ResonantOS Browser\.app/);
   assert.match(launcher, /--resonantos-browser-first/);
+  assert.match(launcher, /hostAppBundle/);
+  assert.match(launcher, /launchThroughMacAppBundle/);
+  assert.match(launcher, /browser\.first\.launch_mode/);
+  assert.match(launcher, /mac-app-bundle/);
+  assert.match(launcher, /direct-native-host/);
+  assert.match(launcher, /launchNativeHostThroughAppBundle/);
+  assert.match(launcher, /RESONANTOS_NATIVE_DISABLE_APPKIT_MENU/);
+  assert.match(launcher, /Launch Services failed/);
+  assert.match(launcher, /falling back to direct native host launch/);
+  assert.match(launcher, /spawn\("open", \["-W", "-n", hostAppBundle, "--args"/);
+  assert.match(launcher, /args\.get\("launch-mode"\) !== "direct"/);
   assert.match(launcher, /resonantos-side-panel-extension/);
   assert.match(launcher, /bfnaelmomeimhlpmgjnjophhpkkoljpa/);
   assert.match(launcher, /pinned_extensions/);
@@ -1013,6 +1062,11 @@ test("browser-first host is a runnable app path, not documentation-only scaffold
   assert.match(nativeHostMac, /ResonantInstallMainMenu/);
   assert.match(nativeHostMac, /setMainMenu/);
   assert.match(nativeHostMac, /resonant_browser_native_execute_menu_command/);
+  assert.match(nativeHostMac, /ResonantShouldDisableAppKitMenu/);
+  assert.match(nativeHostMac, /RESONANTOS_NATIVE_DISABLE_APPKIT_MENU/);
+  assert.match(nativeHostMac, /-smoke/);
+  assert.match(nativeHostMac, /browser\.native\.appkit_menu\.installed/);
+  assert.match(nativeHostMac, /browser\.native\.appkit_menu\.disabled/);
   assert.match(nativeHostMac, /ResonantOS Browser/);
   assert.match(nativeHostMac, /File/);
   assert.match(nativeHostMac, /New Incognito Window/);
@@ -1077,4 +1131,88 @@ test("browser-first bridge rejects unauthenticated localhost requests", () => {
   assert.equal(payload.unauthorizedStatus, 401);
   assert.equal(payload.wrongTokenStatus, 401);
   assert.equal(payload.authorizedStatus, 200);
+});
+
+test("browser-first bridge completes deterministic Hermes delegation lifecycle", () => {
+  const result = spawnSync(
+    "node",
+    [
+      path.join(browserFirstRoot, "host", "run-browser-first.mjs"),
+      "--hermes-delegation-self-test=true",
+      "--bridge-token=test-token",
+      "--bridge-port=0",
+    ],
+    {
+      cwd: repoRoot,
+      encoding: "utf8",
+      timeout: 15_000,
+    },
+  );
+
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.ok, true);
+  assert.match(payload.artifactPath, /BrowserFirst\/DelegationArtifacts\/hermes/);
+  assert.equal(payload.statusAfter, "completed");
+  assert.ok(payload.listed >= 1);
+});
+
+test("browser-first bridge completes deterministic OpenCode delegation lifecycle", () => {
+  const result = spawnSync(
+    "node",
+    [
+      path.join(browserFirstRoot, "host", "run-browser-first.mjs"),
+      "--opencode-delegation-self-test=true",
+      "--bridge-token=test-token",
+      "--bridge-port=0",
+    ],
+    {
+      cwd: repoRoot,
+      encoding: "utf8",
+      timeout: 15_000,
+    },
+  );
+
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.ok, true);
+  assert.match(payload.artifactPath, /BrowserFirst\/DelegationArtifacts\/opencode/);
+  assert.equal(payload.gatedStatus, "blocked");
+  assert.equal(payload.statusAfter, "completed");
+  assert.ok(payload.listed >= 1);
+});
+
+test("browser-first bridge executes move-on-import through scoped routes", () => {
+  const result = spawnSync(
+    "node",
+    [
+      path.join(browserFirstRoot, "host", "run-browser-first.mjs"),
+      "--memory-source-move-self-test=true",
+      "--bridge-token=test-token",
+      "--memory-source-move-token=move-token",
+      "--bridge-port=0",
+    ],
+    {
+      cwd: repoRoot,
+      encoding: "utf8",
+      timeout: 15_000,
+    },
+  );
+
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.ok, true);
+  assert.equal(payload.unauthorizedCapabilityStatus, 403);
+  assert.equal(payload.preflight.ok, true);
+  assert.equal(payload.preflight.okToMove, true);
+  assert.equal(payload.preflight.fileCount, 2);
+  assert.equal(payload.preflight.hiddenFiles, 1);
+  assert.equal(payload.execute.ok, true);
+  assert.equal(payload.execute.status, "moved");
+  assert.equal(payload.execute.movedCount, 2);
+  assert.equal(payload.execute.sourceRemoved, true);
+  assert.equal(payload.execute.movedNoteExists, true);
+  assert.equal(payload.rollback.ok, true);
+  assert.equal(payload.rollback.restoredCount, 2);
+  assert.equal(payload.rollback.restoredNoteExists, true);
 });

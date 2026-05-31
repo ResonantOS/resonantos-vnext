@@ -7,6 +7,17 @@ function serviceStatus(result) {
   return { value: "Ready", detail: "host-mediated status endpoint responded", tone: "success" };
 }
 
+function browserLaunchStatus(result) {
+  if (result.status === "rejected") {
+    return { value: "Error", detail: safeErrorMessage(result.reason), tone: "warning" };
+  }
+  const value = result.value ?? {};
+  if (value.status === "ready") {
+    return { value: "Ready", detail: "native Chromium host, menu, workspace, and extensions verified", tone: "success" };
+  }
+  return { value: "Check", detail: value.error || "latest launch log is incomplete or missing a required browser signal", tone: "warning" };
+}
+
 function diagnosticsRow({ label, value, detail = "" }) {
   const row = document.createElement("li");
   row.className = "settings-diagnostics-row";
@@ -85,21 +96,27 @@ export function renderDiagnosticsSection(container, { bridgeRequest }) {
       bridgeRequest("/addons/status", { method: "GET" }),
       bridgeRequest("/memory/status", { method: "GET" })
     ]);
+    const [browserLaunchResult] = await Promise.allSettled([
+      bridgeRequest("/browser/launch-diagnostics", { method: "GET" })
+    ]);
     const statusValue = serviceStatus(statusResult);
     const providerValue = serviceStatus(providerResult);
     const addonValue = serviceStatus(addonResult);
     const memoryValue = serviceStatus(memoryResult);
+    const browserValue = browserLaunchStatus(browserLaunchResult);
     grid.replaceChildren(
       metricCard({ label: "Bridge", ...statusValue }),
       metricCard({ label: "Providers", ...providerValue }),
       metricCard({ label: "Add-ons", ...addonValue }),
-      metricCard({ label: "Memory", ...memoryValue })
+      metricCard({ label: "Memory", ...memoryValue }),
+      metricCard({ label: "Chromium", ...browserValue })
     );
 
     const providers = providerResult.status === "fulfilled" ? providerResult.value.providers ?? [] : [];
     const addons = addonResult.status === "fulfilled" ? addonResult.value.addons ?? [] : [];
     const memory = memoryResult.status === "fulfilled" ? memoryResult.value : null;
     const system = statusResult.status === "fulfilled" ? statusResult.value : null;
+    const browserLaunch = browserLaunchResult.status === "fulfilled" ? browserLaunchResult.value : null;
     details.replaceChildren(
       diagnosticsRow({
         label: "Bridge",
@@ -120,9 +137,17 @@ export function renderDiagnosticsSection(container, { bridgeRequest }) {
         label: "Memory",
         value: `${memory?.wiki?.pages ?? 0} pages`,
         detail: `${memory?.intake?.artifacts ?? 0} intake artifacts`
+      }),
+      diagnosticsRow({
+        label: "Chromium host",
+        value: browserLaunch?.status ?? "Unavailable",
+        detail: browserLaunchResult.status === "fulfilled"
+          ? `launch=${browserLaunch.launchMode ?? "unknown"} · menu=${browserLaunch.appkitMenu ?? "unknown"} · Phantom=${browserLaunch.phantomLoaded ? "loaded" : "not verified"}`
+          : safeErrorMessage(browserLaunchResult.reason)
       })
     );
-    const failed = [statusResult, providerResult, addonResult, memoryResult].filter((result) => result.status === "rejected").length;
+    const failed = [statusResult, providerResult, addonResult, memoryResult, browserLaunchResult]
+      .filter((result) => result.status === "rejected").length;
     setStatus(statusNode, failed
       ? `Diagnostics loaded with ${failed} unavailable endpoint${failed === 1 ? "" : "s"}.`
       : "Diagnostics loaded from host-mediated status endpoints.",

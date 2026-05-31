@@ -12,8 +12,8 @@
     "test:living-archive-mcp": "node --test examples/living-archive-mcp.test.mjs",
     "test:living-archive-memory-service": "node --test examples/living-archive-memory-service.test.mjs",
     "test:browser-host": "node --test addons/resonant-browser-host/test/*.test.mjs",
-    "test:browser-first": "node --test browser-first/test/*.test.mjs",
-    "test:browser-first-live": "node browser-first/test/agent-control-live.mjs",
+    "test:browser-first": "node --test --test-concurrency=1 browser-first/test/*.test.mjs",
+    "test:browser-first-live": "node browser-first/test/agent-control-live.mjs && node browser-first/test/browser-job-scheduler-live.mjs",
     "browser-first:dev": "npm run browser-native:build:required && node browser-first/host/run-browser-first.mjs",
     "browser-first:install": "npm run browser-native:build:required && node scripts/install-browser-first-app.mjs",
     "test:electron-host": "node --test electron-host/test/*.test.mjs",
@@ -32,7 +32,8 @@
     "browser-native:build:required": "node scripts/build-native-browser.mjs --required",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "npm run browser-native:build && tauri build"
+    "tauri:build": "npm run browser-native:build && tauri build",
+    "browser-first:diagnostics": "node scripts/browser-launch-diagnostics.mjs"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.3",

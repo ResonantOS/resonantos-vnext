@@ -39,6 +39,14 @@ test("opencode workspace renders runtime status and creates governed delegation 
         status: "queued"
       };
     }
+    if (route === "/opencode/delegation/start") {
+      return {
+        id: "opencode-1",
+        path: options.body.path,
+        resultArtifactPath: "BrowserFirst/DelegationArtifacts/opencode/opencode-1-result.md",
+        status: "completed"
+      };
+    }
     throw new Error(`Unexpected route ${route}`);
   };
 
@@ -61,7 +69,12 @@ test("opencode workspace renders runtime status and creates governed delegation 
       options.body.target === "opencode" &&
       /browser-first workspace tests/.test(options.body.mission)
     ));
+    assert.ok(calls.some(([route, options]) =>
+      route === "/opencode/delegation/start" &&
+      options.body.path === "BrowserFirst/Delegations/opencode/opencode-1.md"
+    ));
     assert.match(container.textContent, /Delegation queued: opencode-1/);
+    assert.match(container.textContent, /Completed/);
   } finally {
     cleanup();
   }
@@ -77,6 +90,9 @@ test("opencode workspace can create an initial routed delegation", async () => {
     }
     if (route === "/addons/delegate") {
       return { id: "opencode-routed", path: "BrowserFirst/Delegations/opencode/opencode-routed.md" };
+    }
+    if (route === "/opencode/delegation/start") {
+      return { id: "opencode-routed", path: options.body.path, status: "blocked", blockedReason: "OpenCode runtime unavailable" };
     }
     throw new Error(`Unexpected route ${route}`);
   };

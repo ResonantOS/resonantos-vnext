@@ -1220,8 +1220,47 @@ async function runHermesDelegation(prompt) {
     method: "POST",
     body: { target: "hermes", mission }
   });
-  await addMessage("system", `Delegation queued for Hermes: ${result.id}\n${result.path}`);
+  const lifecycle = await startDelegationIfPossible(result);
+  await addMessage("system", `Delegation queued for Hermes: ${result.id}\n${result.path}${lifecycle}`);
   updateConnectionLine("Ready");
+}
+
+async function startDelegationIfPossible(result) {
+  if (!["hermes", "opencode"].includes(result?.target) || !result?.path) return "";
+  const label = delegationTargetLabel(result.target);
+  try {
+    const started = await bridgeRequest(`/${result.target}/delegation/start`, {
+      method: "POST",
+      body: { path: result.path }
+    });
+    if (started.status === "completed") {
+      return [
+        "",
+        `${label} execution completed and returned a reviewable artifact.`,
+        started.resultArtifactPath ? `Artifact: ${started.resultArtifactPath}` : ""
+      ].filter(Boolean).join("\n");
+    }
+    if (started.status === "blocked") {
+      return [
+        "",
+        `${label} packet was created, but execution is blocked.`,
+        started.blockedReason || `${label} is not available from the current host configuration.`,
+        `Next action: configure ${label} or open Add-ons > ${label} to retry when the runtime is available.`
+      ].filter(Boolean).join("\n");
+    }
+    return [
+      "",
+      `${label} execution status: ${started.status || "queued"}.`,
+      `Open Add-ons > ${label} to inspect the task lifecycle and returned artifacts.`
+    ].join("\n");
+  } catch (error) {
+    return [
+      "",
+      `${label} packet was created, but the execution handoff failed.`,
+      error instanceof Error ? error.message : String(error),
+      `Next action: open Add-ons > ${label} to inspect or retry the task.`
+    ].join("\n");
+  }
 }
 
 const delegationTargetLabel = (target) => {
@@ -1248,12 +1287,14 @@ async function runNaturalDelegation(intent) {
     method: "POST",
     body: { target: intent.target, mission: intent.mission }
   });
+  const lifecycle = await startDelegationIfPossible(result);
   await addMessage(
     "system",
     [
       `Delegation queued for ${delegationTargetLabel(result.target)}: ${result.id}`,
       result.path,
-      "Boundary: the add-on receives a governed task packet. ResonantOS keeps provider secrets, wallet actions, and trusted memory writes mediated."
+      "Boundary: the add-on receives a governed task packet. ResonantOS keeps provider secrets, wallet actions, and trusted memory writes mediated.",
+      lifecycle
     ].join("\n")
   );
   updateConnectionLine("Ready");

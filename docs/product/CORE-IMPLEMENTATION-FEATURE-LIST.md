@@ -235,6 +235,6 @@ Rust/Tauri checks apply only when the legacy Tauri app is changed.
 3. Strengthen main workspace chat/session/project persistence.
 4. Improve Agent Control Mode trace, status, stop controls, and deterministic fixtures.
 5. Expand Living Archive core wiki health/lint/versioning tests.
-6. Validate natural delegation end-to-end from main workspace and side-panel chat against real governed delegation packets.
+6. Validate real local CLI execution enablement UX for Hermes and OpenCode. Both add-ons now have governed packet lifecycle routes, deterministic start/read-result coverage, and explicit opt-in before real local CLI execution.
 7. Improve add-on capability review UI without implementing processor-specific add-ons.
 8. Run full deterministic verification and push only after green checks.

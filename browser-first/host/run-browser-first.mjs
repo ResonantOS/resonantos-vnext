@@ -1,5 +1,5 @@
 import { existsSync, readdirSync } from "node:fs";
-import { appendFile, chmod, copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { appendFile, chmod, copyFile, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -30,6 +30,12 @@ import {
   sourceContentHash,
 } from "./memory-source-versioning.mjs";
 import {
+  buildMoveImportPreflight,
+  executeMoveImport,
+  rollbackMoveImport,
+} from "./memory-source-move.mjs";
+import { summarizeBrowserLaunchLog } from "./browser-launch-diagnostics.mjs";
+import {
   defaultRoutingStrategies,
   inferProviderType,
   modelCatalog,
@@ -53,6 +59,13 @@ const hostBinary = path.join(
   "Contents",
   "MacOS",
   "ResonantBrowserNativeHost",
+);
+const hostAppBundle = path.join(
+  repoRoot,
+  "addons",
+  "resonant-browser-native",
+  "build",
+  "ResonantBrowserNativeHost.app",
 );
 const resonantExtension = path.join(repoRoot, "browser-first", "resonantos-side-panel-extension");
 const defaultProfile = path.join(os.homedir(), "ResonantOS_User", "BrowserFirst", "Profiles", "main");
@@ -216,7 +229,7 @@ function providerDiagnosticsHistoryPath() {
 }
 
 function userRoot() {
-  return path.join(os.homedir(), "ResonantOS_User");
+  return path.resolve(process.env.RESONANTOS_BROWSER_FIRST_USER_ROOT || path.join(os.homedir(), "ResonantOS_User"));
 }
 
 function memoryRoot() {
@@ -241,6 +254,10 @@ function browserFirstRoot() {
 
 function diagnosticsRoot() {
   return path.join(browserFirstRoot(), "Diagnostics");
+}
+
+function browserLaunchLogPath() {
+  return path.join(repoRoot, "logs", "browser-first-installed-app.log");
 }
 
 function browserDownloadsRoot() {
@@ -351,7 +368,7 @@ function hermesCommand(profileHome) {
     path.join(home, "venv", "bin", "hermes"),
     path.join(home, "bin", "hermes"),
   ];
-  return candidates.find((candidate) => existsSync(candidate)) ?? null;
+  return candidates.find((candidate) => existsSync(candidate)) ?? firstExistingExecutable("hermes");
 }
 
 function executableCandidates(commandName) {
@@ -1983,6 +2000,89 @@ async function executeMemorySourceAction(payload = {}) {
   };
 }
 
+async function executeMemorySourceMovePreflight(payload = {}) {
+  const sourcePath = expandUserPath(payload.path);
+  if (!sourcePath) {
+    throw new Error("Move import preflight requires a source folder path.");
+  }
+  return buildMoveImportPreflight({
+    sourcePath,
+    memoryRoot: memoryRoot(),
+    kind: ["folder", "obsidian-vault"].includes(payload.kind) ? payload.kind : "folder",
+    ownership: ["human-knowledge", "external-knowledge", "mixed-library"].includes(payload.ownership)
+      ? payload.ownership
+      : "mixed-library",
+  });
+}
+
+async function executeMemorySourceMoveExecute(payload = {}) {
+  const sourcePath = expandUserPath(payload.path);
+  if (!sourcePath) {
+    throw new Error("Move import execution requires a source folder path.");
+  }
+  const result = await executeMoveImport({
+    sourcePath,
+    memoryRoot: memoryRoot(),
+    kind: ["folder", "obsidian-vault"].includes(payload.kind) ? payload.kind : "folder",
+    ownership: ["human-knowledge", "external-knowledge", "mixed-library"].includes(payload.ownership)
+      ? payload.ownership
+      : "mixed-library",
+    confirmation: payload.confirmation,
+  });
+  const current = await readMemorySettings();
+  const normalized = normalizeMemorySource(result.source);
+  const nextSource = {
+    ...normalized,
+    originalPath: result.source.originalPath,
+    moveId: result.source.moveId,
+    manifestPath: result.source.manifestPath,
+    ledgerPath: result.source.ledgerPath,
+  };
+  const existing = current.sources.filter((source) =>
+    source.id !== nextSource.id &&
+    expandUserPath(source.path) !== nextSource.path &&
+    expandUserPath(source.originalPath ?? "") !== result.source.originalPath
+  );
+  const next = { ...current, sources: [...existing, nextSource] };
+  const filePath = memorySettingsPath();
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
+  await chmod(filePath, 0o600).catch(() => undefined);
+  await appendMemorySourceAudit("move_execute", nextSource, {
+    reason: `Moved source from ${redactPathForDiagnostics(result.source.originalPath)} to managed memory.`,
+  });
+  return {
+    ...result,
+    source: nextSource,
+    settings: resolveMemorySettings(next),
+  };
+}
+
+async function executeMemorySourceMoveRollback(payload = {}) {
+  const ledgerPath = expandUserPath(payload.ledgerPath);
+  if (!ledgerPath) {
+    throw new Error("Move import rollback requires a ledger path.");
+  }
+  const report = await rollbackMoveImport({
+    ledgerPath,
+    confirmation: payload.confirmation,
+  });
+  const current = await readMemorySettings();
+  const nextSources = current.sources.filter((source) => expandUserPath(source.ledgerPath ?? "") !== path.resolve(ledgerPath));
+  const next = { ...current, sources: nextSources };
+  const filePath = memorySettingsPath();
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
+  await chmod(filePath, 0o600).catch(() => undefined);
+  await appendMemorySourceAudit("move_rollback", { path: ledgerPath, kind: "folder", ownership: "unknown", importMode: "move-on-import" }, {
+    reason: `Rollback restored ${report.restoredCount} file(s); ${report.skippedCount} skipped.`,
+  });
+  return {
+    ...report,
+    settings: resolveMemorySettings(next),
+  };
+}
+
 async function executeMemorySourceBrowse(payload = {}) {
   const override = String(process.env.RESONANTOS_BROWSER_FIRST_PICK_FOLDER_RESULT ?? "").trim();
   let selectedPath = override;
@@ -3527,9 +3627,19 @@ async function executeDelegationRecord(payload) {
     ...(sourceControlRunId ? [`- sourceControlRunId: ${sourceControlRunId}`] : []),
     `- status: queued`,
     `- trust: add-on agent, not core trusted Strategist`,
+    "- allowedCapabilities: agent-delegation, archive-read-optional",
+    "- forbiddenActions: provider-secrets, wallet-actions, trusted-memory-write, external-send",
+    "- approvalRequiredBeforeExternalAction: true",
+    "- expectedArtifacts: final-summary, actions-taken, approval-needs, residual-risks, verification",
     "",
     "## Mission",
     mission,
+    "",
+    "## Success Criteria",
+    "- Return a concise final summary.",
+    "- List actions taken or explain why no action was taken.",
+    "- Identify any approval needed before external communication or public action.",
+    "- State residual risks and verification evidence.",
     "",
     ...(contextMarkdown
       ? [
@@ -3538,6 +3648,13 @@ async function executeDelegationRecord(payload) {
         ""
       ]
       : []),
+    "## Artifact Return Contract",
+    "- finalSummary: user-facing result",
+    "- actionsTaken: bounded list",
+    "- approvalNeeds: human review gates",
+    "- residualRisks: uncertainty and limitations",
+    "- verification: how the result was checked",
+    "",
     "## Boundary",
     "The add-on receives a task packet only. Provider secrets, wallet actions, and trusted memory writes remain host-mediated.",
     "",
@@ -3609,11 +3726,25 @@ function delegationRoot() {
   return path.join(browserFirstRoot(), "Delegations");
 }
 
+function delegationArtifactRoot() {
+  return path.join(browserFirstRoot(), "DelegationArtifacts");
+}
+
 function resolveDraftPath(relativePath) {
   const resolved = path.resolve(userRoot(), String(relativePath ?? ""));
   const root = path.resolve(draftRoot());
   if (!resolved.startsWith(`${root}${path.sep}`) || !resolved.endsWith(".md")) {
     throw new Error("Draft path must point to a draft packet inside BrowserFirst/AddOnDrafts.");
+  }
+  return resolved;
+}
+
+function resolveDelegationPath(relativePath, expectedTarget = "") {
+  const resolved = path.resolve(userRoot(), String(relativePath ?? ""));
+  const target = String(expectedTarget ?? "").trim().toLowerCase();
+  const root = path.resolve(target ? path.join(delegationRoot(), target) : delegationRoot());
+  if (!resolved.startsWith(`${root}${path.sep}`) || !resolved.endsWith(".md")) {
+    throw new Error("Delegation path must point to a task packet inside BrowserFirst/Delegations.");
   }
   return resolved;
 }
@@ -3643,12 +3774,15 @@ function draftSummaryFromMarkdown(filePath, content, details) {
 
 function delegationSummaryFromMarkdown(filePath, content, details) {
   const context = sectionFromMarkdown(content, "Context Packet");
+  const result = sectionFromMarkdown(content, "Result");
   return {
     contextExcerpt: context.replace(/\s+/g, " ").slice(0, 360),
     hasContextPacket: Boolean(context),
     id: fieldFromMarkdown(content, "id") || path.basename(filePath, ".md"),
     mission: sectionFromMarkdown(content, "Mission").slice(0, 360),
     path: path.relative(userRoot(), filePath),
+    resultArtifactPath: fieldFromMarkdown(content, "resultArtifactPath"),
+    resultExcerpt: result.replace(/\s+/g, " ").slice(0, 360),
     sourceControlRunId: fieldFromMarkdown(content, "sourceControlRunId"),
     sourceKind: fieldFromMarkdown(content, "sourceKind") || "resonantos-chat",
     status: fieldFromMarkdown(content, "status") || "queued",
@@ -3701,6 +3835,554 @@ async function executeDelegationList(payload) {
   }
   delegations.sort((left, right) => String(right.updatedAt).localeCompare(String(left.updatedAt)));
   return { root: path.relative(userRoot(), delegationRoot()), delegations: delegations.slice(0, limit) };
+}
+
+async function executeHermesStatus(payload = {}) {
+  const profileHome = hermesHome(payload.profileHome);
+  const command = hermesCommand(profileHome);
+  const dashboard = await executeHermesDashboardStatus({ profileHome, host: payload.host, port: payload.port });
+  const taskRoot = path.join(delegationRoot(), "hermes");
+  const tasks = await listFilesRecursive(taskRoot, (filePath) => filePath.endsWith(".md"), 200);
+  const statusCounts = {};
+  for (const filePath of tasks) {
+    const content = await readFile(filePath, "utf8").catch(() => "");
+    const status = fieldFromMarkdown(content, "status") || "queued";
+    statusCounts[status] = (statusCounts[status] ?? 0) + 1;
+  }
+  return {
+    available: Boolean(command),
+    command: command ? redactPathForDiagnostics(command) : "",
+    dashboard,
+    executionEnabled: hermesExecutionExplicitlyEnabled(payload),
+    mode: command
+      ? hermesExecutionExplicitlyEnabled(payload)
+        ? "local-hermes-cli"
+        : "local-hermes-cli-disabled"
+      : "packet-only",
+    profileHome: redactPathForDiagnostics(profileHome),
+    taskCounts: statusCounts,
+    boundary: "Hermes is an add-on agent. ResonantOS mediates task packets, artifacts, provider access, memory access, and external-send approval.",
+  };
+}
+
+async function writeDelegationStatus(filePath, status, extraFields = {}) {
+  const previous = await readFile(filePath, "utf8");
+  let next = previous.replace(/^- status:\s*.+$/mi, `- status: ${status}`);
+  for (const [field, value] of Object.entries(extraFields)) {
+    const line = `- ${field}: ${String(value).replace(/\n/g, " ").trim()}`;
+    const expression = new RegExp(`^- ${field}:\\s*.+$`, "mi");
+    next = expression.test(next) ? next.replace(expression, line) : next.replace(/(\n## Mission\n)/, `\n${line}$1`);
+  }
+  await writeFile(filePath, next);
+  return next;
+}
+
+function deterministicHermesResult(packet) {
+  const mission = sectionFromMarkdown(packet, "Mission");
+  const hasContext = Boolean(sectionFromMarkdown(packet, "Context Packet"));
+  return {
+    adapter: "deterministic",
+    actionsTaken: [
+      "Read the governed Hermes delegation packet.",
+      "Checked the task boundary and artifact return contract.",
+      hasContext ? "Reviewed the attached bounded context packet." : "No additional context packet was attached.",
+      "Prepared a reviewable result without external sends or trusted memory writes.",
+    ],
+    approvalNeeds: [
+      "Human approval is required before Hermes sends messages, schedules events, posts publicly, or changes external systems."
+    ],
+    finalSummary: `Hermes delegation is ready for review: ${mission}`,
+    residualRisks: [
+      "This deterministic adapter proves ResonantOS delegation lifecycle behavior; it does not claim the local Hermes model completed real-world research."
+    ],
+    verification: [
+      "Task packet was parsed.",
+      "Safety boundary was preserved.",
+      "Result artifact was written under BrowserFirst/DelegationArtifacts/hermes."
+    ],
+  };
+}
+
+function buildHermesExecutionPrompt(packet) {
+  const mission = sectionFromMarkdown(packet, "Mission");
+  const context = sectionFromMarkdown(packet, "Context Packet");
+  return [
+    "You are Hermes operating as a ResonantOS add-on agent.",
+    "",
+    "Mission:",
+    mission,
+    "",
+    context ? "Context packet:" : "",
+    context,
+    "",
+    "Rules:",
+    "- Return a reviewable artifact only.",
+    "- Do not send messages, schedule events, post publicly, submit forms, operate wallets, expose secrets, or write trusted memory.",
+    "- If external action is needed, list it under Approval Needs instead of performing it.",
+    "- Keep the output concise and structured with these headings exactly: Final Summary, Actions Taken, Approval Needs, Residual Risks, Verification.",
+  ].filter(Boolean).join("\n");
+}
+
+function hermesExecutionExplicitlyEnabled(payload = {}) {
+  if (payload.enableHermesExecution === true) return true;
+  return /^enabled|true|1$/i.test(String(process.env.RESONANTOS_HERMES_EXECUTION ?? ""));
+}
+
+function parseHermesCliResult(output) {
+  const text = String(output ?? "").trim();
+  return {
+    adapter: "hermes-cli",
+    actionsTaken: sectionFromMarkdown(`## Actions Taken\n${sectionFromMarkdown(text, "Actions Taken") || "Hermes returned a result through the local CLI adapter."}`, "Actions Taken").split("\n").filter(Boolean),
+    approvalNeeds: sectionFromMarkdown(text, "Approval Needs").split("\n").filter(Boolean).length
+      ? sectionFromMarkdown(text, "Approval Needs").split("\n").filter(Boolean)
+      : ["Human approval is required before any external send, submission, wallet action, or trusted memory write."],
+    finalSummary: sectionFromMarkdown(text, "Final Summary") || text.slice(0, 1600) || "Hermes completed without returning a summary.",
+    residualRisks: sectionFromMarkdown(text, "Residual Risks").split("\n").filter(Boolean).length
+      ? sectionFromMarkdown(text, "Residual Risks").split("\n").filter(Boolean)
+      : ["Hermes output was accepted as an add-on artifact and still requires normal human review."],
+    verification: sectionFromMarkdown(text, "Verification").split("\n").filter(Boolean).length
+      ? sectionFromMarkdown(text, "Verification").split("\n").filter(Boolean)
+      : ["Local Hermes CLI returned successfully."],
+  };
+}
+
+async function runHermesCliDelegation(command, packet, payload = {}) {
+  const prompt = buildHermesExecutionPrompt(packet);
+  const toolsets = String(payload.toolsets ?? process.env.RESONANTOS_HERMES_TOOLSETS ?? "memory").trim();
+  const args = ["chat", "-q", prompt, "-Q", "--source", "resonantos", "--max-turns", "8"];
+  if (toolsets) args.push("--toolsets", toolsets);
+  const output = await execFileStdout(command, args, {
+    cwd: browserFirstRoot(),
+    env: {
+      ...process.env,
+      HERMES_HOME: hermesHome(payload.profileHome),
+    },
+    timeout: Math.min(600_000, Math.max(30_000, Number(payload.timeoutMs ?? 180_000))),
+  });
+  return parseHermesCliResult(output);
+}
+
+async function writeHermesResultArtifact(taskPath, packet, result) {
+  const id = fieldFromMarkdown(packet, "id") || path.basename(taskPath, ".md");
+  const artifactDir = path.join(delegationArtifactRoot(), "hermes");
+  await mkdir(artifactDir, { recursive: true });
+  const artifactPath = path.join(artifactDir, `${id}-result.md`);
+  const lines = [
+    `# Hermes Result: ${id}`,
+    "",
+    `- id: ${id}`,
+    `- taskPath: ${path.relative(userRoot(), taskPath)}`,
+    `- createdAt: ${new Date().toISOString()}`,
+    `- adapter: ${result.adapter}`,
+    "- status: completed",
+    "- boundary: Reviewable artifact only. External sends and trusted memory writes remain blocked.",
+    "",
+    "## Final Summary",
+    result.finalSummary,
+    "",
+    "## Actions Taken",
+    ...result.actionsTaken.map((item) => `- ${item}`),
+    "",
+    "## Approval Needs",
+    ...result.approvalNeeds.map((item) => `- ${item}`),
+    "",
+    "## Residual Risks",
+    ...result.residualRisks.map((item) => `- ${item}`),
+    "",
+    "## Verification",
+    ...result.verification.map((item) => `- ${item}`),
+    "",
+  ];
+  await writeFile(artifactPath, lines.join("\n"));
+  return artifactPath;
+}
+
+async function executeHermesDelegationStart(payload = {}) {
+  const taskPath = resolveDelegationPath(payload.path, "hermes");
+  const packet = await readFile(taskPath, "utf8");
+  const currentStatus = fieldFromMarkdown(packet, "status") || "queued";
+  if (["completed", "cancelled"].includes(currentStatus)) {
+    throw new Error(`Hermes delegation is already ${currentStatus}.`);
+  }
+  const adapter = String(payload.adapter ?? process.env.RESONANTOS_HERMES_ADAPTER ?? "auto").trim().toLowerCase();
+  const profileHome = hermesHome(payload.profileHome);
+  const command = hermesCommand(profileHome);
+  await writeDelegationStatus(taskPath, "running", {
+    startedAt: new Date().toISOString(),
+    adapter: adapter || "auto",
+  });
+  if (adapter !== "deterministic" && !command) {
+    const blockedAt = new Date().toISOString();
+    const updated = await writeDelegationStatus(taskPath, "blocked", {
+      blockedAt,
+      blockedReason: "Hermes CLI unavailable",
+    });
+    return {
+      ...delegationSummaryFromMarkdown(taskPath, updated, await stat(taskPath)),
+      blockedReason: "Hermes CLI unavailable. Install or configure Hermes, or run the deterministic adapter in tests.",
+      status: "blocked",
+    };
+  }
+  if (adapter !== "deterministic" && !hermesExecutionExplicitlyEnabled(payload)) {
+    const blockedAt = new Date().toISOString();
+    const updated = await writeDelegationStatus(taskPath, "blocked", {
+      blockedAt,
+      blockedReason: "Hermes execution requires explicit enablement",
+    });
+    return {
+      ...delegationSummaryFromMarkdown(taskPath, updated, await stat(taskPath)),
+      blockedReason: "Hermes CLI was found, but execution is disabled. Set RESONANTOS_HERMES_EXECUTION=enabled or pass enableHermesExecution from a trusted Settings flow.",
+      status: "blocked",
+    };
+  }
+  let result;
+  try {
+    result = adapter === "deterministic"
+      ? deterministicHermesResult(packet)
+      : await runHermesCliDelegation(command, packet, payload);
+  } catch (error) {
+    const failedAt = new Date().toISOString();
+    const updated = await writeDelegationStatus(taskPath, "failed", {
+      failedAt,
+      failureReason: error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500),
+    });
+    return {
+      ...delegationSummaryFromMarkdown(taskPath, updated, await stat(taskPath)),
+      failureReason: error instanceof Error ? error.message : String(error),
+      status: "failed",
+    };
+  }
+  const artifactPath = await writeHermesResultArtifact(taskPath, packet, result);
+  let updated = await writeDelegationStatus(taskPath, "completed", {
+    completedAt: new Date().toISOString(),
+    resultArtifactPath: path.relative(userRoot(), artifactPath),
+  });
+  updated = `${updated.trimEnd()}\n\n## Result\n${result.finalSummary}\n\n## Result Artifact\n${path.relative(userRoot(), artifactPath)}\n`;
+  await writeFile(taskPath, updated);
+  return {
+    ...delegationSummaryFromMarkdown(taskPath, updated, await stat(taskPath)),
+    artifact: {
+      path: path.relative(userRoot(), artifactPath),
+      ...result,
+    },
+    status: "completed",
+  };
+}
+
+async function executeHermesDelegationStatus(payload = {}) {
+  const taskPath = resolveDelegationPath(payload.path, "hermes");
+  const [details, content] = await Promise.all([stat(taskPath), readFile(taskPath, "utf8")]);
+  return delegationSummaryFromMarkdown(taskPath, content, details);
+}
+
+async function executeHermesDelegationArtifact(payload = {}) {
+  const taskPath = resolveDelegationPath(payload.path, "hermes");
+  const content = await readFile(taskPath, "utf8");
+  const artifactRelative = fieldFromMarkdown(content, "resultArtifactPath");
+  if (!artifactRelative) {
+    throw new Error("Hermes delegation has no result artifact yet.");
+  }
+  const artifactPath = path.resolve(userRoot(), artifactRelative);
+  const artifactRoot = path.resolve(path.join(delegationArtifactRoot(), "hermes"));
+  if (!artifactPath.startsWith(`${artifactRoot}${path.sep}`) || !artifactPath.endsWith(".md")) {
+    throw new Error("Hermes result artifact path is outside the approved artifact root.");
+  }
+  const artifact = await readFile(artifactPath, "utf8");
+  return {
+    actionsTaken: sectionFromMarkdown(artifact, "Actions Taken"),
+    approvalNeeds: sectionFromMarkdown(artifact, "Approval Needs"),
+    content: artifact,
+    finalSummary: sectionFromMarkdown(artifact, "Final Summary"),
+    path: path.relative(userRoot(), artifactPath),
+    residualRisks: sectionFromMarkdown(artifact, "Residual Risks"),
+    verification: sectionFromMarkdown(artifact, "Verification"),
+  };
+}
+
+async function executeHermesDelegationCancel(payload = {}) {
+  const taskPath = resolveDelegationPath(payload.path, "hermes");
+  const content = await readFile(taskPath, "utf8");
+  const currentStatus = fieldFromMarkdown(content, "status") || "queued";
+  if (["completed", "cancelled"].includes(currentStatus)) {
+    return delegationSummaryFromMarkdown(taskPath, content, await stat(taskPath));
+  }
+  const updated = await writeDelegationStatus(taskPath, "cancelled", {
+    cancelledAt: new Date().toISOString(),
+    cancelReason: String(payload.reason ?? "Human cancelled Hermes delegation.").slice(0, 240),
+  });
+  return delegationSummaryFromMarkdown(taskPath, updated, await stat(taskPath));
+}
+
+async function executeOpenCodeStatus(payload = {}) {
+  const command = opencodeCommand();
+  const taskRoot = path.join(delegationRoot(), "opencode");
+  const tasks = await listFilesRecursive(taskRoot, (filePath) => filePath.endsWith(".md"), 200);
+  const statusCounts = {};
+  for (const filePath of tasks) {
+    const content = await readFile(filePath, "utf8").catch(() => "");
+    const status = fieldFromMarkdown(content, "status") || "queued";
+    statusCounts[status] = (statusCounts[status] ?? 0) + 1;
+  }
+  return {
+    installed: Boolean(command),
+    command: command ? redactPathForDiagnostics(command) : "",
+    mode: command && openCodeExecutionExplicitlyEnabled(payload) ? "local-opencode-cli" : command ? "local-opencode-cli-disabled" : "packet-only",
+    executionEnabled: openCodeExecutionExplicitlyEnabled(payload),
+    workspaceLaunch: "not-enabled-in-browser-first-v1",
+    detail: command
+      ? "OpenCode runtime was detected. ResonantOS can create governed coding packets and start execution only when explicit OpenCode execution is enabled."
+      : "OpenCode runtime was not detected. Install or configure OpenCode before enabling local coding execution.",
+    taskCounts: statusCounts,
+    delegationPackets: tasks.length,
+    requiredGrants: ["filesystem", "shell", "providers", "ui-embedding"],
+    boundary: "OpenCode is an add-on agent. Filesystem, shell, provider secrets, wallet actions, and trusted memory writes remain mediated by ResonantOS.",
+  };
+}
+
+function openCodeExecutionExplicitlyEnabled(payload = {}) {
+  if (payload.enableOpenCodeExecution === true) return true;
+  return /^enabled|true|1$/i.test(String(process.env.RESONANTOS_OPENCODE_EXECUTION ?? ""));
+}
+
+function resolveOpenCodeWorkspacePath(payload = {}) {
+  const workspacePath = payload.workspacePath
+    ? expandUserPath(payload.workspacePath)
+    : repoRoot;
+  const resolved = path.resolve(workspacePath);
+  const allowedRoot = path.resolve(repoRoot);
+  if (resolved !== allowedRoot && !resolved.startsWith(`${allowedRoot}${path.sep}`)) {
+    throw new Error("OpenCode workspace path must stay inside the ResonantOS repository for browser-first V1.");
+  }
+  return resolved;
+}
+
+function deterministicOpenCodeResult(packet, payload = {}) {
+  const mission = sectionFromMarkdown(packet, "Mission");
+  return {
+    adapter: "deterministic",
+    actionsTaken: [
+      "Read the governed OpenCode coding packet.",
+      "Checked the coding handoff boundary and required artifact contract.",
+      "Prepared a reviewable coding result without shell execution, file edits, provider-secret access, wallet actions, or trusted memory writes.",
+    ],
+    changedFiles: [],
+    commandsRun: [],
+    finalSummary: `OpenCode coding delegation is ready for review: ${mission}`,
+    residualRisks: [
+      "This deterministic adapter proves ResonantOS OpenCode delegation lifecycle behavior; it does not claim code was changed by a local OpenCode runtime."
+    ],
+    verification: [
+      "Task packet was parsed.",
+      "Workspace scope was checked.",
+      "Result artifact was written under BrowserFirst/DelegationArtifacts/opencode."
+    ],
+    workspacePath: path.relative(repoRoot, resolveOpenCodeWorkspacePath(payload)) || ".",
+  };
+}
+
+function buildOpenCodeExecutionPrompt(packet, workspacePath) {
+  const mission = sectionFromMarkdown(packet, "Mission");
+  const context = sectionFromMarkdown(packet, "Context Packet");
+  return [
+    "You are OpenCode operating as a ResonantOS add-on coding agent.",
+    "",
+    `Workspace: ${workspacePath}`,
+    "",
+    "Mission:",
+    mission,
+    "",
+    context ? "Context packet:" : "",
+    context,
+    "",
+    "Rules:",
+    "- Work only inside the approved workspace.",
+    "- Do not access provider secrets, wallets, trusted Living Archive writes, or external send/submission surfaces.",
+    "- Return a reviewable artifact.",
+    "- Keep the output structured with these headings exactly: Final Summary, Changed Files, Commands Run, Tests, Residual Risks, Verification.",
+  ].filter(Boolean).join("\n");
+}
+
+function parseOpenCodeCliResult(output, workspacePath) {
+  const text = String(output ?? "").trim();
+  return {
+    adapter: "opencode-cli",
+    actionsTaken: ["Local OpenCode CLI returned a coding result through the host adapter."],
+    changedFiles: sectionFromMarkdown(text, "Changed Files").split("\n").filter(Boolean),
+    commandsRun: sectionFromMarkdown(text, "Commands Run").split("\n").filter(Boolean),
+    finalSummary: sectionFromMarkdown(text, "Final Summary") || text.slice(0, 1600) || "OpenCode completed without returning a summary.",
+    residualRisks: sectionFromMarkdown(text, "Residual Risks").split("\n").filter(Boolean).length
+      ? sectionFromMarkdown(text, "Residual Risks").split("\n").filter(Boolean)
+      : ["OpenCode output is an add-on artifact and still requires normal human review."],
+    verification: sectionFromMarkdown(text, "Verification").split("\n").filter(Boolean).length
+      ? sectionFromMarkdown(text, "Verification").split("\n").filter(Boolean)
+      : sectionFromMarkdown(text, "Tests").split("\n").filter(Boolean).length
+        ? sectionFromMarkdown(text, "Tests").split("\n").filter(Boolean)
+        : ["Local OpenCode CLI returned successfully."],
+    workspacePath: path.relative(repoRoot, workspacePath) || ".",
+  };
+}
+
+async function runOpenCodeCliDelegation(command, packet, payload = {}) {
+  const workspacePath = resolveOpenCodeWorkspacePath(payload);
+  const prompt = buildOpenCodeExecutionPrompt(packet, workspacePath);
+  const args = ["run", prompt, "--dir", workspacePath];
+  const output = await execFileStdout(command, args, {
+    cwd: workspacePath,
+    timeout: Math.min(900_000, Math.max(30_000, Number(payload.timeoutMs ?? 300_000))),
+  });
+  return parseOpenCodeCliResult(output, workspacePath);
+}
+
+async function writeOpenCodeResultArtifact(taskPath, packet, result) {
+  const id = fieldFromMarkdown(packet, "id") || path.basename(taskPath, ".md");
+  const artifactDir = path.join(delegationArtifactRoot(), "opencode");
+  await mkdir(artifactDir, { recursive: true });
+  const artifactPath = path.join(artifactDir, `${id}-result.md`);
+  const lines = [
+    `# OpenCode Result: ${id}`,
+    "",
+    `- id: ${id}`,
+    `- taskPath: ${path.relative(userRoot(), taskPath)}`,
+    `- createdAt: ${new Date().toISOString()}`,
+    `- adapter: ${result.adapter}`,
+    "- status: completed",
+    `- workspacePath: ${result.workspacePath || "."}`,
+    "- boundary: Reviewable coding artifact only. Shell, filesystem, provider secrets, trusted memory writes, and external sends remain governed by ResonantOS.",
+    "",
+    "## Final Summary",
+    result.finalSummary,
+    "",
+    "## Actions Taken",
+    ...(result.actionsTaken ?? []).map((item) => `- ${item}`),
+    "",
+    "## Changed Files",
+    ...((result.changedFiles ?? []).length ? result.changedFiles : ["None reported."]).map((item) => `- ${item}`),
+    "",
+    "## Commands Run",
+    ...((result.commandsRun ?? []).length ? result.commandsRun : ["None reported."]).map((item) => `- ${item}`),
+    "",
+    "## Residual Risks",
+    ...(result.residualRisks ?? []).map((item) => `- ${item}`),
+    "",
+    "## Verification",
+    ...(result.verification ?? []).map((item) => `- ${item}`),
+    "",
+  ];
+  await writeFile(artifactPath, lines.join("\n"));
+  return artifactPath;
+}
+
+async function executeOpenCodeDelegationStart(payload = {}) {
+  const taskPath = resolveDelegationPath(payload.path, "opencode");
+  const packet = await readFile(taskPath, "utf8");
+  const currentStatus = fieldFromMarkdown(packet, "status") || "queued";
+  if (["completed", "cancelled"].includes(currentStatus)) {
+    throw new Error(`OpenCode delegation is already ${currentStatus}.`);
+  }
+  const adapter = String(payload.adapter ?? process.env.RESONANTOS_OPENCODE_ADAPTER ?? "auto").trim().toLowerCase();
+  const command = opencodeCommand();
+  await writeDelegationStatus(taskPath, "running", {
+    startedAt: new Date().toISOString(),
+    adapter: adapter || "auto",
+    workspacePath: path.relative(repoRoot, resolveOpenCodeWorkspacePath(payload)) || ".",
+  });
+  if (adapter !== "deterministic" && !command) {
+    const updated = await writeDelegationStatus(taskPath, "blocked", {
+      blockedAt: new Date().toISOString(),
+      blockedReason: "OpenCode CLI unavailable",
+    });
+    return {
+      ...delegationSummaryFromMarkdown(taskPath, updated, await stat(taskPath)),
+      blockedReason: "OpenCode CLI unavailable. Install or configure OpenCode, or run the deterministic adapter in tests.",
+      status: "blocked",
+    };
+  }
+  if (adapter !== "deterministic" && !openCodeExecutionExplicitlyEnabled(payload)) {
+    const updated = await writeDelegationStatus(taskPath, "blocked", {
+      blockedAt: new Date().toISOString(),
+      blockedReason: "OpenCode execution requires explicit enablement",
+    });
+    return {
+      ...delegationSummaryFromMarkdown(taskPath, updated, await stat(taskPath)),
+      blockedReason: "OpenCode CLI was found, but execution is disabled. Set RESONANTOS_OPENCODE_EXECUTION=enabled or pass enableOpenCodeExecution from a trusted Settings flow.",
+      status: "blocked",
+    };
+  }
+  let result;
+  try {
+    result = adapter === "deterministic"
+      ? deterministicOpenCodeResult(packet, payload)
+      : await runOpenCodeCliDelegation(command, packet, payload);
+  } catch (error) {
+    const updated = await writeDelegationStatus(taskPath, "failed", {
+      failedAt: new Date().toISOString(),
+      failureReason: error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500),
+    });
+    return {
+      ...delegationSummaryFromMarkdown(taskPath, updated, await stat(taskPath)),
+      failureReason: error instanceof Error ? error.message : String(error),
+      status: "failed",
+    };
+  }
+  const artifactPath = await writeOpenCodeResultArtifact(taskPath, packet, result);
+  let updated = await writeDelegationStatus(taskPath, "completed", {
+    completedAt: new Date().toISOString(),
+    resultArtifactPath: path.relative(userRoot(), artifactPath),
+  });
+  updated = `${updated.trimEnd()}\n\n## Result\n${result.finalSummary}\n\n## Result Artifact\n${path.relative(userRoot(), artifactPath)}\n`;
+  await writeFile(taskPath, updated);
+  return {
+    ...delegationSummaryFromMarkdown(taskPath, updated, await stat(taskPath)),
+    artifact: {
+      path: path.relative(userRoot(), artifactPath),
+      ...result,
+    },
+    status: "completed",
+  };
+}
+
+async function executeOpenCodeDelegationStatus(payload = {}) {
+  const taskPath = resolveDelegationPath(payload.path, "opencode");
+  const [details, content] = await Promise.all([stat(taskPath), readFile(taskPath, "utf8")]);
+  return delegationSummaryFromMarkdown(taskPath, content, details);
+}
+
+async function executeOpenCodeDelegationArtifact(payload = {}) {
+  const taskPath = resolveDelegationPath(payload.path, "opencode");
+  const content = await readFile(taskPath, "utf8");
+  const artifactRelative = fieldFromMarkdown(content, "resultArtifactPath");
+  if (!artifactRelative) {
+    throw new Error("OpenCode delegation has no result artifact yet.");
+  }
+  const artifactPath = path.resolve(userRoot(), artifactRelative);
+  const artifactRoot = path.resolve(path.join(delegationArtifactRoot(), "opencode"));
+  if (!artifactPath.startsWith(`${artifactRoot}${path.sep}`) || !artifactPath.endsWith(".md")) {
+    throw new Error("OpenCode result artifact path is outside the approved artifact root.");
+  }
+  const artifact = await readFile(artifactPath, "utf8");
+  return {
+    changedFiles: sectionFromMarkdown(artifact, "Changed Files"),
+    commandsRun: sectionFromMarkdown(artifact, "Commands Run"),
+    content: artifact,
+    finalSummary: sectionFromMarkdown(artifact, "Final Summary"),
+    path: path.relative(userRoot(), artifactPath),
+    residualRisks: sectionFromMarkdown(artifact, "Residual Risks"),
+    verification: sectionFromMarkdown(artifact, "Verification"),
+  };
+}
+
+async function executeOpenCodeDelegationCancel(payload = {}) {
+  const taskPath = resolveDelegationPath(payload.path, "opencode");
+  const content = await readFile(taskPath, "utf8");
+  const currentStatus = fieldFromMarkdown(content, "status") || "queued";
+  if (["completed", "cancelled"].includes(currentStatus)) {
+    return delegationSummaryFromMarkdown(taskPath, content, await stat(taskPath));
+  }
+  const updated = await writeDelegationStatus(taskPath, "cancelled", {
+    cancelledAt: new Date().toISOString(),
+    cancelReason: String(payload.reason ?? "Human cancelled OpenCode delegation.").slice(0, 240),
+  });
+  return delegationSummaryFromMarkdown(taskPath, updated, await stat(taskPath));
 }
 
 async function executeAddonDraftRead(payload) {
@@ -3817,23 +4499,6 @@ async function executeAddonsStatus() {
         boundary: "Draft packets only. Google Calendar handoff opens an event template for human review; ResonantOS does not schedule events.",
       },
     ],
-  };
-}
-
-async function executeOpenCodeStatus() {
-  const command = opencodeCommand();
-  const delegationRoot = path.join(browserFirstRoot(), "Delegations", "opencode");
-  return {
-    installed: Boolean(command),
-    command,
-    mode: "delegation-addon",
-    workspaceLaunch: "not-enabled-in-browser-first-v1",
-    detail: command
-      ? "OpenCode runtime was detected. Browser-first V1 can create governed delegation packets; embedded process launch remains host-boundary work."
-      : "OpenCode runtime was not detected. Install or configure OpenCode before enabling embedded coding sessions.",
-    delegationPackets: await countFiles(delegationRoot, (filePath) => filePath.endsWith(".md")),
-    requiredGrants: ["filesystem", "shell", "providers", "ui-embedding"],
-    boundary: "OpenCode is an add-on agent. Provider secrets, wallet actions, and trusted memory writes remain mediated by ResonantOS.",
   };
 }
 
@@ -3963,13 +4628,37 @@ async function readExtensionVersion() {
   }
 }
 
+async function executeBrowserLaunchDiagnostics() {
+  const logPath = browserLaunchLogPath();
+  let logContent = "";
+  let logStat = null;
+  try {
+    [logContent, logStat] = await Promise.all([
+      readFile(logPath, "utf8"),
+      stat(logPath),
+    ]);
+  } catch (error) {
+    return {
+      status: "missing-log",
+      logPath: redactPathForDiagnostics(logPath),
+      error: redactDiagnosticText(error instanceof Error ? error.message : error),
+    };
+  }
+  return {
+    ...summarizeBrowserLaunchLog(logContent),
+    logPath: redactPathForDiagnostics(logPath),
+    updatedAt: logStat?.mtime?.toISOString?.() ?? "",
+  };
+}
+
 async function executeDiagnosticsReport() {
   const generatedAt = new Date().toISOString();
-  const [statusResult, providerResult, addonResult, memoryResult] = await Promise.allSettled([
+  const [statusResult, providerResult, addonResult, memoryResult, browserLaunchResult] = await Promise.allSettled([
     executeSystemStatus(),
     executeProviderStatus(),
     executeAddonsStatus(),
     executeMemoryStatus(),
+    executeBrowserLaunchDiagnostics(),
   ]);
   const settledValue = (result) => result.status === "fulfilled"
     ? result.value
@@ -4022,6 +4711,7 @@ async function executeDiagnosticsReport() {
       reviewRequests: memory?.review?.requests ?? 0,
       reviewArtifacts: memory?.review?.artifacts ?? 0,
     },
+    browserLaunch: settledValue(browserLaunchResult),
     redaction: "Provider credentials, bridge tokens, wallet secrets, private keys, and full home paths are excluded or redacted.",
   };
   const serialized = redactDiagnosticText(JSON.stringify(report, null, 2));
@@ -4035,6 +4725,7 @@ async function executeDiagnosticsReport() {
       providers: report.providers,
       addons: report.addons,
       memory: report.memory,
+      browserLaunch: report.browserLaunch,
     },
   };
 }
@@ -4176,6 +4867,24 @@ const bridgeRoutes = [
   },
   {
     method: "POST",
+    path: "/memory/source/move-preflight",
+    requiredCapability: "memory-source-move",
+    handler: executeMemorySourceMovePreflight,
+  },
+  {
+    method: "POST",
+    path: "/memory/source/move-execute",
+    requiredCapability: "memory-source-move",
+    handler: executeMemorySourceMoveExecute,
+  },
+  {
+    method: "POST",
+    path: "/memory/source/move-rollback",
+    requiredCapability: "memory-source-move",
+    handler: executeMemorySourceMoveRollback,
+  },
+  {
+    method: "POST",
     path: "/memory/source/review",
     requiredCapability: "memory-source-review",
     handler: executeMemorySourceReview,
@@ -4218,6 +4927,7 @@ const bridgeRoutes = [
   { method: "GET", path: "/addons/status", handler: executeAddonsStatus },
   { method: "GET", path: "/opencode/status", handler: executeOpenCodeStatus },
   { method: "GET", path: "/browser/downloads", handler: executeBrowserDownloads },
+  { method: "GET", path: "/browser/launch-diagnostics", handler: executeBrowserLaunchDiagnostics },
   {
     method: "POST",
     path: "/browser/downloads/action",
@@ -4233,6 +4943,15 @@ const bridgeRoutes = [
   { method: "POST", path: "/hermes/dashboard/status", handler: executeHermesDashboardStatus },
   { method: "POST", path: "/hermes/dashboard/start", handler: executeHermesDashboardStart },
   { method: "POST", path: "/hermes/dashboard/stop", handler: executeHermesDashboardStop },
+  { method: "POST", path: "/hermes/status", handler: executeHermesStatus },
+  { method: "POST", path: "/hermes/delegation/start", handler: executeHermesDelegationStart },
+  { method: "POST", path: "/hermes/delegation/status", handler: executeHermesDelegationStatus },
+  { method: "POST", path: "/hermes/delegation/artifact", handler: executeHermesDelegationArtifact },
+  { method: "POST", path: "/hermes/delegation/cancel", handler: executeHermesDelegationCancel },
+  { method: "POST", path: "/opencode/delegation/start", handler: executeOpenCodeDelegationStart },
+  { method: "POST", path: "/opencode/delegation/status", handler: executeOpenCodeDelegationStatus },
+  { method: "POST", path: "/opencode/delegation/artifact", handler: executeOpenCodeDelegationArtifact },
+  { method: "POST", path: "/opencode/delegation/cancel", handler: executeOpenCodeDelegationCancel },
   { method: "POST", path: "/web/news", handler: executeNewsSearch },
   { method: "POST", path: "/addons/draft", handler: executeAddonDraftRecord },
   { method: "POST", path: "/addons/draft/list", handler: executeAddonDraftList },
@@ -4265,6 +4984,9 @@ const bridgeCapabilityTokens = {
   "memory-source-manage": args.get("memory-source-manage-token") ??
     process.env.RESONANTOS_BROWSER_FIRST_MEMORY_SOURCE_MANAGE_TOKEN ??
     createBridgeToken(),
+  "memory-source-move": args.get("memory-source-move-token") ??
+    process.env.RESONANTOS_BROWSER_FIRST_MEMORY_SOURCE_MOVE_TOKEN ??
+    createBridgeToken(),
   "memory-source-review": args.get("memory-source-review-token") ??
     process.env.RESONANTOS_BROWSER_FIRST_MEMORY_SOURCE_REVIEW_TOKEN ??
     createBridgeToken(),
@@ -4290,6 +5012,300 @@ if (args.get("bridge-auth-self-test") === "true") {
   });
   console.log(JSON.stringify(result, null, 2));
   process.exit(result.ok ? 0 : 1);
+}
+
+if (args.get("hermes-delegation-self-test") === "true") {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "resonantos-hermes-bridge-"));
+  const previousUserRoot = process.env.RESONANTOS_BROWSER_FIRST_USER_ROOT;
+  const previousHermesCommand = process.env.HERMES_COMMAND;
+  process.env.RESONANTOS_BROWSER_FIRST_USER_ROOT = path.join(tempRoot, "ResonantOS_User");
+  let server = null;
+  let exitCode = 1;
+  try {
+    const fakeHermes = path.join(tempRoot, "bin", process.platform === "win32" ? "hermes.cmd" : "hermes");
+    await mkdir(path.dirname(fakeHermes), { recursive: true });
+    await writeFile(fakeHermes, process.platform === "win32" ? "@echo off\r\necho fake hermes\r\n" : "#!/bin/sh\necho fake hermes\n");
+    await chmod(fakeHermes, 0o755).catch(() => undefined);
+    process.env.HERMES_COMMAND = fakeHermes;
+    server = await startBridgeServer({
+      port: Number(args.get("bridge-port") ?? 0),
+      bridgeToken,
+      bridgeCapabilityTokens,
+      extensionOrigin: resonantExtensionOrigin,
+      routes: bridgeRoutes,
+    });
+    const address = server.address();
+    const actualPort = typeof address === "object" && address ? address.port : Number(args.get("bridge-port") ?? 0);
+    const request = async (route, body = {}) => {
+      const response = await fetch(`http://127.0.0.1:${actualPort}${route}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Origin": resonantExtensionOrigin,
+          "X-ResonantOS-Bridge-Token": bridgeToken,
+        },
+        body: JSON.stringify(body),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(`${route} failed: ${payload.error || response.status}`);
+      }
+      return payload;
+    };
+    const created = await request("/addons/delegate", {
+      target: "hermes",
+      mission: "Prepare a routine coordination summary for deterministic Hermes lifecycle testing.",
+      contextMarkdown: "Visible page and task context are bounded test evidence.",
+    });
+    const gated = await request("/addons/delegate", {
+      target: "hermes",
+      mission: "Check that real Hermes execution is gated unless explicitly enabled.",
+    });
+    const gatedStart = await request("/hermes/delegation/start", { path: gated.path });
+    const statusBefore = await request("/hermes/delegation/status", { path: created.path });
+    const started = await request("/hermes/delegation/start", { path: created.path, adapter: "deterministic" });
+    const artifact = await request("/hermes/delegation/artifact", { path: created.path });
+    const listed = await request("/addons/delegate/list", { target: "hermes", limit: 5 });
+    const statusAfter = await request("/hermes/delegation/status", { path: created.path });
+    const hermesStatus = await request("/hermes/status", {});
+    const ok = (
+      created.status === "queued" &&
+      gatedStart.status === "blocked" &&
+      /execution is disabled/i.test(gatedStart.blockedReason || "") &&
+      statusBefore.status === "queued" &&
+      started.status === "completed" &&
+      /Hermes delegation is ready for review/.test(artifact.finalSummary) &&
+      listed.delegations.some((delegation) => delegation.id === created.id && delegation.status === "completed") &&
+      statusAfter.resultArtifactPath &&
+      hermesStatus.boundary?.includes("Hermes is an add-on agent")
+    );
+    console.log(JSON.stringify({
+      ok,
+      artifactPath: artifact.path,
+      created: created.id,
+      gatedStatus: gatedStart.status,
+      hermesMode: hermesStatus.mode,
+      listed: listed.delegations.length,
+      statusAfter: statusAfter.status,
+    }, null, 2));
+    exitCode = ok ? 0 : 1;
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+  } finally {
+    if (server) {
+      await new Promise((resolve) => server.close(resolve));
+    }
+    if (previousUserRoot === undefined) {
+      delete process.env.RESONANTOS_BROWSER_FIRST_USER_ROOT;
+    } else {
+      process.env.RESONANTOS_BROWSER_FIRST_USER_ROOT = previousUserRoot;
+    }
+    if (previousHermesCommand === undefined) {
+      delete process.env.HERMES_COMMAND;
+    } else {
+      process.env.HERMES_COMMAND = previousHermesCommand;
+    }
+    await rm(tempRoot, { recursive: true, force: true }).catch(() => undefined);
+  }
+  process.exit(exitCode);
+}
+
+if (args.get("opencode-delegation-self-test") === "true") {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "resonantos-opencode-bridge-"));
+  const previousUserRoot = process.env.RESONANTOS_BROWSER_FIRST_USER_ROOT;
+  const previousOpenCodeCommand = process.env.OPENCODE_COMMAND;
+  process.env.RESONANTOS_BROWSER_FIRST_USER_ROOT = path.join(tempRoot, "ResonantOS_User");
+  let server = null;
+  let exitCode = 1;
+  try {
+    const fakeOpenCode = path.join(tempRoot, "bin", process.platform === "win32" ? "opencode.cmd" : "opencode");
+    await mkdir(path.dirname(fakeOpenCode), { recursive: true });
+    await writeFile(fakeOpenCode, process.platform === "win32" ? "@echo off\r\necho fake opencode\r\n" : "#!/bin/sh\necho fake opencode\n");
+    await chmod(fakeOpenCode, 0o755).catch(() => undefined);
+    process.env.OPENCODE_COMMAND = fakeOpenCode;
+    server = await startBridgeServer({
+      port: Number(args.get("bridge-port") ?? 0),
+      bridgeToken,
+      bridgeCapabilityTokens,
+      extensionOrigin: resonantExtensionOrigin,
+      routes: bridgeRoutes,
+    });
+    const address = server.address();
+    const actualPort = typeof address === "object" && address ? address.port : Number(args.get("bridge-port") ?? 0);
+    const request = async (route, body = {}) => {
+      const response = await fetch(`http://127.0.0.1:${actualPort}${route}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Origin": resonantExtensionOrigin,
+          "X-ResonantOS-Bridge-Token": bridgeToken,
+        },
+        body: JSON.stringify(body),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(`${route} failed: ${payload.error || response.status}`);
+      }
+      return payload;
+    };
+    const created = await request("/addons/delegate", {
+      target: "opencode",
+      mission: "Inspect the deterministic OpenCode lifecycle test and return verification evidence.",
+      contextMarkdown: "This is a bounded coding-task fixture; no real files should be edited.",
+    });
+    const gated = await request("/addons/delegate", {
+      target: "opencode",
+      mission: "Check that real OpenCode execution is gated unless explicitly enabled.",
+    });
+    const gatedStart = await request("/opencode/delegation/start", { path: gated.path });
+    const statusBefore = await request("/opencode/delegation/status", { path: created.path });
+    const started = await request("/opencode/delegation/start", { path: created.path, adapter: "deterministic" });
+    const artifact = await request("/opencode/delegation/artifact", { path: created.path });
+    const listed = await request("/addons/delegate/list", { target: "opencode", limit: 5 });
+    const statusAfter = await request("/opencode/delegation/status", { path: created.path });
+    const ok = (
+      created.status === "queued" &&
+      gatedStart.status === "blocked" &&
+      /execution is disabled/i.test(gatedStart.blockedReason || "") &&
+      statusBefore.status === "queued" &&
+      started.status === "completed" &&
+      /OpenCode coding delegation is ready for review/.test(artifact.finalSummary) &&
+      listed.delegations.some((delegation) => delegation.id === created.id && delegation.status === "completed") &&
+      Boolean(statusAfter.resultArtifactPath)
+    );
+    console.log(JSON.stringify({
+      ok,
+      artifactPath: artifact.path,
+      created: created.id,
+      gatedStatus: gatedStart.status,
+      listed: listed.delegations.length,
+      statusAfter: statusAfter.status,
+    }, null, 2));
+    exitCode = ok ? 0 : 1;
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+  } finally {
+    if (server) {
+      await new Promise((resolve) => server.close(resolve));
+    }
+    if (previousUserRoot === undefined) {
+      delete process.env.RESONANTOS_BROWSER_FIRST_USER_ROOT;
+    } else {
+      process.env.RESONANTOS_BROWSER_FIRST_USER_ROOT = previousUserRoot;
+    }
+    if (previousOpenCodeCommand === undefined) {
+      delete process.env.OPENCODE_COMMAND;
+    } else {
+      process.env.OPENCODE_COMMAND = previousOpenCodeCommand;
+    }
+    await rm(tempRoot, { recursive: true, force: true }).catch(() => undefined);
+  }
+  process.exit(exitCode);
+}
+
+if (args.get("memory-source-move-self-test") === "true") {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "resonantos-move-bridge-"));
+  const previousUserRoot = process.env.RESONANTOS_BROWSER_FIRST_USER_ROOT;
+  process.env.RESONANTOS_BROWSER_FIRST_USER_ROOT = path.join(tempRoot, "ResonantOS_User");
+  const source = path.join(tempRoot, "Human Vault");
+  const bridgeCapabilityToken = bridgeCapabilityTokens["memory-source-move"];
+  let server = null;
+  let exitCode = 1;
+  try {
+    await mkdir(path.join(source, ".obsidian"), { recursive: true });
+    await writeFile(path.join(source, "note.md"), "# Human note\n");
+    await writeFile(path.join(source, ".obsidian", "app.json"), "{}\n");
+    server = await startBridgeServer({
+      port: Number(args.get("bridge-port") ?? 0),
+      bridgeToken,
+      bridgeCapabilityTokens,
+      extensionOrigin: resonantExtensionOrigin,
+      routes: bridgeRoutes,
+    });
+    const address = server.address();
+    const actualPort = typeof address === "object" && address ? address.port : Number(args.get("bridge-port") ?? 0);
+    const urlFor = (route) => `http://127.0.0.1:${actualPort}${route}`;
+    const post = (route, body, capabilityToken = bridgeCapabilityToken) => fetch(urlFor(route), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-ResonantOS-Bridge-Token": bridgeToken,
+        ...(capabilityToken ? { "X-ResonantOS-Bridge-Capability-Token": capabilityToken } : {}),
+      },
+      body: JSON.stringify(body),
+    });
+
+    const unauthorizedCapability = await post("/memory/source/move-preflight", { path: source }, "");
+    const preflightResponse = await post("/memory/source/move-preflight", {
+      path: source,
+      kind: "obsidian-vault",
+      ownership: "human-knowledge",
+    });
+    const preflight = await preflightResponse.json();
+    const executeResponse = await post("/memory/source/move-execute", {
+      path: source,
+      kind: "obsidian-vault",
+      ownership: "human-knowledge",
+      confirmation: preflight.confirmationPhrase,
+    });
+    const executed = await executeResponse.json();
+    const movedNoteExists = existsSync(path.join(executed.destinationRoot ?? "", "note.md"));
+    const sourceRemoved = !existsSync(source);
+    const rollbackResponse = await post("/memory/source/move-rollback", {
+      ledgerPath: executed.ledgerPath,
+      confirmation: "ROLLBACK MOVE",
+    });
+    const rollback = await rollbackResponse.json();
+    const restoredNoteExists = existsSync(path.join(source, "note.md"));
+    const settings = JSON.parse(await readFile(memorySettingsPath(), "utf8").catch(() => "{\"sources\":[]}"));
+    const ok = unauthorizedCapability.status === 403 &&
+      preflightResponse.ok &&
+      preflight.ok &&
+      preflight.okToMove === true &&
+      preflight.hiddenFiles === 1 &&
+      executeResponse.ok &&
+      executed.ok &&
+      executed.status === "moved" &&
+      movedNoteExists &&
+      sourceRemoved &&
+      rollbackResponse.ok &&
+      rollback.ok &&
+      rollback.restoredCount === 2 &&
+      restoredNoteExists &&
+      !settings.sources?.some((sourceEntry) => path.resolve(sourceEntry.ledgerPath ?? "") === path.resolve(executed.ledgerPath));
+    console.log(JSON.stringify({
+      ok,
+      unauthorizedCapabilityStatus: unauthorizedCapability.status,
+      preflight: {
+        ok: preflight.ok,
+        okToMove: preflight.okToMove,
+        fileCount: preflight.fileCount,
+        hiddenFiles: preflight.hiddenFiles,
+      },
+      execute: {
+        ok: executed.ok,
+        status: executed.status,
+        movedCount: executed.movedCount,
+        sourceRemoved,
+        movedNoteExists,
+      },
+      rollback: {
+        ok: rollback.ok,
+        restoredCount: rollback.restoredCount,
+        restoredNoteExists,
+      },
+    }, null, 2));
+    exitCode = ok ? 0 : 1;
+  } finally {
+    await new Promise((resolve) => server?.close?.(resolve) ?? resolve());
+    if (previousUserRoot === undefined) {
+      delete process.env.RESONANTOS_BROWSER_FIRST_USER_ROOT;
+    } else {
+      process.env.RESONANTOS_BROWSER_FIRST_USER_ROOT = previousUserRoot;
+    }
+    await rm(tempRoot, { recursive: true, force: true }).catch(() => undefined);
+  }
+  process.exit(exitCode);
 }
 
 const url = args.get("url") ?? defaultMainWorkspaceUrl;
@@ -4326,14 +5342,6 @@ if (phantomExtension) {
 }
 
 await seedPinnedExtensions(profileDir, [resonantExtensionId, phantomExtension ? phantomExtensionId : null]);
-const bridgeServer = await startBridgeServer({
-  port: bridgePort,
-  bridgeToken,
-  bridgeCapabilityTokens,
-  extensionOrigin: resonantExtensionOrigin,
-  routes: bridgeRoutes,
-});
-
 const hostArgs = [
   "--resonantos-browser-first",
   `--url=${url}`,
@@ -4342,13 +5350,48 @@ const hostArgs = [
   ...(remoteDebuggingPort ? [`--resonantos-remote-debugging-port=${remoteDebuggingPort}`] : []),
 ];
 
-console.log("Launching ResonantOS Browser-First host");
-console.log(JSON.stringify({ hostBinary, url, profileDir, extensionDirs, phantomLoaded: Boolean(phantomExtension), pinnedExtensions: [resonantExtensionId, phantomExtension ? phantomExtensionId : null].filter(Boolean), bridgeUrl: `http://127.0.0.1:${bridgePort}`, bridgeConfigPath, remoteDebuggingPort: remoteDebuggingPort ?? "ephemeral" }, null, 2));
+const launchThroughMacAppBundle = process.platform === "darwin" && args.get("launch-mode") !== "direct";
+console.log(JSON.stringify({
+  event: "browser.first.launch_mode",
+  mode: launchThroughMacAppBundle ? "mac-app-bundle" : "direct-native-host",
+  appBundle: launchThroughMacAppBundle ? hostAppBundle : null,
+  directHost: launchThroughMacAppBundle ? null : hostBinary,
+}));
 
-const child = spawn(hostBinary, hostArgs, {
-  cwd: repoRoot,
-  stdio: "inherit",
+const bridgeServer = await startBridgeServer({
+  port: bridgePort,
+  bridgeToken,
+  bridgeCapabilityTokens,
+  extensionOrigin: resonantExtensionOrigin,
+  routes: bridgeRoutes,
 });
+
+console.log("Launching ResonantOS Browser-First host");
+console.log(JSON.stringify({ hostBinary, hostAppBundle, url, profileDir, extensionDirs, phantomLoaded: Boolean(phantomExtension), pinnedExtensions: [resonantExtensionId, phantomExtension ? phantomExtensionId : null].filter(Boolean), bridgeUrl: `http://127.0.0.1:${bridgePort}`, bridgeConfigPath, remoteDebuggingPort: remoteDebuggingPort ?? "ephemeral" }, null, 2));
+
+function launchNativeHostDirect() {
+  return spawn(hostBinary, hostArgs, {
+    cwd: repoRoot,
+    env: {
+      ...process.env,
+      RESONANTOS_NATIVE_DISABLE_APPKIT_MENU: "1",
+    },
+    stdio: "inherit",
+  });
+}
+
+function launchNativeHostThroughAppBundle() {
+  // Launch Services is required for the native AppKit menu bar to belong to
+  // the browser app. Direct executable launch remains a fallback for restricted
+  // shells where `open` is unavailable or blocked.
+  return spawn("open", ["-W", "-n", hostAppBundle, "--args", ...hostArgs], {
+    cwd: repoRoot,
+    stdio: "inherit",
+  });
+}
+
+let usedLaunchServicesFallback = false;
+let child = launchThroughMacAppBundle ? launchNativeHostThroughAppBundle() : launchNativeHostDirect();
 
 if (autoOpenSidePanel && process.platform === "darwin") {
   setTimeout(() => {
@@ -4368,11 +5411,25 @@ if (autoOpenSidePanel && process.platform === "darwin") {
   }, 6500);
 }
 
-child.on("exit", (code, signal) => {
-  bridgeServer.close();
-  if (signal) {
-    process.kill(process.pid, signal);
-    return;
-  }
-  process.exit(code ?? 0);
-});
+function attachHostExitHandler(hostProcess) {
+  hostProcess.on("exit", (code, signal) => {
+    if (launchThroughMacAppBundle && !usedLaunchServicesFallback && code !== 0 && !signal) {
+      usedLaunchServicesFallback = true;
+      console.warn(
+        `Launch Services failed for ResonantOS Browser.app with code ${code}; falling back to direct native host launch.`,
+      );
+      child = launchNativeHostDirect();
+      attachHostExitHandler(child);
+      return;
+    }
+
+    bridgeServer.close();
+    if (signal) {
+      process.kill(process.pid, signal);
+      return;
+    }
+    process.exit(code ?? 0);
+  });
+}
+
+attachHostExitHandler(child);

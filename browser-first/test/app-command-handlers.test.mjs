@@ -28,7 +28,21 @@ function createHarness(overrides = {}) {
   };
   const bridgeResponses = {
     "/goals": { id: "goal-a", mission: "Build" },
-    "/addons/delegate": { id: "delegation-a", target: "opencode", path: "/tmp/task" },
+    "/addons/delegate": (body) => ({
+      id: `${body?.target ?? "opencode"}-delegation-a`,
+      target: body?.target ?? "opencode",
+      path: `/tmp/${body?.target ?? "opencode"}-task.md`
+    }),
+    "/hermes/delegation/start": {
+      id: "hermes-delegation-a",
+      resultArtifactPath: "BrowserFirst/DelegationArtifacts/hermes/hermes-delegation-a-result.md",
+      status: "completed"
+    },
+    "/opencode/delegation/start": {
+      id: "opencode-delegation-a",
+      resultArtifactPath: "BrowserFirst/DelegationArtifacts/opencode/opencode-delegation-a-result.md",
+      status: "completed"
+    },
     "/addons/draft": { id: "email-draft-a", target: "email", path: "AddOnDrafts/email/email-draft-a.md", status: "draft-created", approvalRequired: true },
     "/status": {
       providers: { "shared-minimax": true, "shared-openai": false },
@@ -46,7 +60,8 @@ function createHarness(overrides = {}) {
     addMessage: async (role, content) => calls.push(["message", role, content]),
     bridgeRequest: async (path, options = {}) => {
       calls.push(["bridge", path, options.body ?? null]);
-      return bridgeResponses[path];
+      const response = bridgeResponses[path];
+      return typeof response === "function" ? response(options.body ?? {}) : response;
     },
     browserJobStore,
     chrome: {
@@ -86,6 +101,7 @@ function createHarness(overrides = {}) {
     setSitePermission: async (_url, mode, audit) => ({ audit, key: "example.com", mode }),
     setStatus: (status) => calls.push(["status", status]),
     siteKeyForUrl: () => "example.com",
+    tickBrowserJobScheduler: overrides.tickBrowserJobScheduler,
     updateBrowserJob: async (id, patch) => {
       const job = jobs.find((item) => item.id === id);
       if (job) Object.assign(job, patch);
@@ -170,7 +186,12 @@ test("app command handlers parse natural delegation intents", () => {
 test("app command handlers create governed natural delegations", async () => {
   const harness = createHarness({
     bridgeResponses: {
-      "/addons/delegate": { id: "hermes-a", target: "hermes", path: "/tmp/hermes-task.md" }
+      "/addons/delegate": { id: "hermes-a", target: "hermes", path: "/tmp/hermes-task.md" },
+      "/hermes/delegation/start": {
+        id: "hermes-a",
+        resultArtifactPath: "BrowserFirst/DelegationArtifacts/hermes/hermes-a-result.md",
+        status: "completed"
+      }
     }
   });
 
@@ -188,6 +209,8 @@ test("app command handlers create governed natural delegations", async () => {
   ));
   assert.ok(harness.calls.some((call) => call[0] === "message" && /Delegation queued for Hermes/.test(call[2])));
   assert.ok(harness.calls.some((call) => call[0] === "message" && /governed task packet/.test(call[2])));
+  assert.ok(harness.calls.some((call) => call[0] === "bridge" && call[1] === "/hermes/delegation/start"));
+  assert.ok(harness.calls.some((call) => call[0] === "message" && /Hermes execution completed/.test(call[2])));
 });
 
 test("app command handlers ask for target when natural delegation is underspecified", async () => {
@@ -224,6 +247,7 @@ test("app command handlers create goals and delegations", async () => {
   assert.ok(harness.calls.some((call) => call[0] === "bridge" && call[1] === "/goals" && call[2].mission === "Build"));
   assert.ok(harness.calls.some((call) => call[0] === "bridge" && call[1] === "/addons/delegate" && call[2].target === "opencode"));
   assert.ok(harness.calls.some((call) => call[0] === "bridge" && call[1] === "/addons/delegate" && call[2].target === "hermes"));
+  assert.ok(harness.calls.some((call) => call[0] === "bridge" && call[1] === "/opencode/delegation/start"));
   assert.ok(harness.calls.some((call) => call[0] === "message" && /Goal workspace recorded/.test(call[2])));
 });
 
@@ -330,6 +354,29 @@ test("app command handlers manage browser jobs", async () => {
   assert.ok(harness.calls.some((call) => call[0] === "saveReport" && call[1] === "job-a"));
   assert.ok(harness.calls.some((call) => call[0] === "message" && /Saved browser job report/.test(call[2])));
   assert.ok(harness.calls.some((call) => call[0] === "updateJob" && call[2].status === "cancelled"));
+});
+
+test("app command handlers can start runnable queued browser jobs through the scheduler", async () => {
+  const harness = createHarness({
+    tickBrowserJobScheduler: async () => ({
+      schedulerState: {
+        activeSlots: 1,
+        capacityBlockedQueued: [],
+        lockBlockedQueued: [],
+        maxConcurrent: 2,
+        runnableQueued: []
+      },
+      startedJobs: [{ id: "job-queued", goal: "Read docs" }]
+    })
+  });
+
+  await harness.handlers.runJobsCommand("run");
+
+  assert.ok(harness.calls.some((call) =>
+    call[0] === "message" &&
+    /Started 1 browser job: job-queued/.test(call[2]) &&
+    /Scheduler: 1\/2 active/.test(call[2])
+  ));
 });
 
 test("app command handlers continue a previous browser job through restart boundary", async () => {

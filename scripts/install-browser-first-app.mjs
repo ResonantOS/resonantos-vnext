@@ -11,8 +11,9 @@ const macosDir = path.join(contentsDir, "MacOS");
 const resourcesDir = path.join(contentsDir, "Resources");
 const executableName = "ResonantOSBrowserLauncher";
 const executablePath = path.join(macosDir, executableName);
-const launcherSourcePath = path.join(macosDir, `${executableName}.c`);
+const launcherSourcePath = path.join(resourcesDir, `${executableName}.c`);
 const logPath = path.join(repoRoot, "logs", "browser-first-installed-app.log");
+const launchScriptPath = path.join(repoRoot, "browser-first", "host", "run-browser-first.mjs");
 
 const plist = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -53,20 +54,22 @@ int main(void) {
     return 70;
   }
   system("mkdir -p logs");
-  system("pkill -9 -x ResonantBrowserNativeHost >/dev/null 2>&1 || true");
-  system("pkill -9 -x 'ResonantBrowserNativeHost Helper' >/dev/null 2>&1 || true");
-  system("pkill -9 -x 'ResonantBrowserNativeHost Helper (Renderer)' >/dev/null 2>&1 || true");
-  system("pkill -9 -x 'ResonantBrowserNativeHost Helper (GPU)' >/dev/null 2>&1 || true");
-  system("pkill -9 -x 'ResonantBrowserNativeHost Helper (Alerts)' >/dev/null 2>&1 || true");
-  system("pkill -9 -x 'ResonantBrowserNativeHost Helper (Plugin)' >/dev/null 2>&1 || true");
   int log_fd = open(${cString(logPath)}, O_CREAT | O_WRONLY | O_APPEND, 0644);
   if (log_fd >= 0) {
     dup2(log_fd, STDOUT_FILENO);
     dup2(log_fd, STDERR_FILENO);
     close(log_fd);
   }
-  execlp("node", "node", "browser-first/host/run-browser-first.mjs", (char*)0);
-  return 71;
+  pid_t pid = fork();
+  if (pid < 0) {
+    return 72;
+  }
+  if (pid == 0) {
+    setsid();
+    execlp("node", "node", ${cString(launchScriptPath)}, (char*)0);
+    _exit(71);
+  }
+  return 0;
 }
 `;
 
@@ -74,11 +77,16 @@ await rm(targetApp, { recursive: true, force: true });
 await mkdir(macosDir, { recursive: true });
 await mkdir(resourcesDir, { recursive: true });
 await writeFile(path.join(contentsDir, "Info.plist"), plist);
+await writeFile(path.join(contentsDir, "PkgInfo"), "APPL????");
 await writeFile(launcherSourcePath, launcherSource);
 const compile = spawnSync("clang", [launcherSourcePath, "-o", executablePath], { stdio: "pipe" });
 if (compile.status !== 0) {
   throw new Error(`Failed to compile app launcher: ${compile.stderr?.toString() || compile.stdout?.toString()}`);
 }
 await chmod(executablePath, 0o755);
+const sign = spawnSync("codesign", ["--force", "--deep", "--sign", "-", targetApp], { stdio: "pipe" });
+if (sign.status !== 0) {
+  throw new Error(`Failed to sign app launcher: ${sign.stderr?.toString() || sign.stdout?.toString()}`);
+}
 
 console.log(JSON.stringify({ ok: true, targetApp, executablePath, repoRoot, logPath }, null, 2));

@@ -210,10 +210,14 @@ Last updated: 2026-05-29
   - imported libraries now write a JSONL source-version ledger next to the import manifest
   - archive host now exposes imported-library registry reads from persisted manifests
 - Hardened Mixed Library safety on 2026-04-26:
-  - disabled host-side `move` import mode until explicit confirmation, audit, and rollback execution exist
   - removed duplicate frontend-only classification approval in favor of the host-owned classification review panel
   - restricted classification-review reads to artifacts linked from imported-library manifests
   - marked reorganisation plans as preview-only and not eligible for execution
+- Added guarded browser-first `move-on-import` execution on 2026-05-31:
+  - added host-mediated move preflight, explicit confirmation phrase, audited move execution, managed destination registration, and ledger-backed rollback
+  - move execution revalidates the source before mutation and supports cross-volume copy-and-delete fallback for external-drive imports
+  - Memory Settings now routes `move-on-import` through preflight and confirmation instead of saving it as an ordinary preference
+  - deterministic temp-folder tests verify move execution, hidden Obsidian structure preservation, safety rejection, and rollback
 - Added portable state architecture policy on 2026-04-28:
   - `ADR-022` defines the Portable User State Root as the single user-owned private data package
   - Living Archive managed memory must migrate into `ResonantOS_User/Memory`

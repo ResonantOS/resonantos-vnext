@@ -12,6 +12,10 @@ test("add-ons workspace renders registry status and governed open actions", asyn
   const providerHandoffs = [];
   const calls = [];
   let draftStatus = "draft-only";
+  let hermesStatus = "queued";
+  let hermesResultArtifactPath = "";
+  let openCodeStatus = "queued";
+  let openCodeResultArtifactPath = "";
   const bridgeRequest = async (route, options = {}) => {
     calls.push([route, options.body ?? null]);
     if (route === "/addons/status") {
@@ -39,19 +43,95 @@ test("add-ons workspace renders registry status and governed open actions", asyn
     }
     if (route === "/addons/delegate/list") {
       return {
-        delegations: [{
-          id: "engineer-1",
-          contextExcerpt: "Goal find a booking slot. Blocked step Submit. Public submit requires approval.",
-          hasContextPacket: true,
-          mission: "Investigate blocked browser-control task.",
-          path: "BrowserFirst/Delegations/engineer/engineer-1.md",
-          sourceControlRunId: "job-1",
-          sourceKind: "browser-control-blocker",
-          status: "queued",
-          target: "engineer",
-          updatedAt: "2026-05-29T10:00:00.000Z"
-        }]
+        delegations: [
+          {
+            id: "hermes-1",
+            contextExcerpt: "Goal coordinate task across add-on agents.",
+            hasContextPacket: true,
+            mission: "Coordinate a bounded Hermes delegation.",
+            path: "BrowserFirst/Delegations/hermes/hermes-1.md",
+            resultArtifactPath: hermesResultArtifactPath,
+            resultExcerpt: hermesResultArtifactPath ? "Hermes completed deterministic result." : "",
+            sourceControlRunId: "",
+            sourceKind: "resonantos-chat",
+            status: hermesStatus,
+            target: "hermes",
+            updatedAt: "2026-05-29T10:01:00.000Z"
+          },
+          {
+            id: "opencode-1",
+            contextExcerpt: "Coding scope browser-first tests.",
+            hasContextPacket: true,
+            mission: "Inspect browser-first tests and return verification evidence.",
+            path: "BrowserFirst/Delegations/opencode/opencode-1.md",
+            resultArtifactPath: openCodeResultArtifactPath,
+            resultExcerpt: openCodeResultArtifactPath ? "OpenCode completed deterministic result." : "",
+            sourceControlRunId: "",
+            sourceKind: "resonantos-chat",
+            status: openCodeStatus,
+            target: "opencode",
+            updatedAt: "2026-05-29T10:00:30.000Z"
+          },
+          {
+            id: "engineer-1",
+            contextExcerpt: "Goal find a booking slot. Blocked step Submit. Public submit requires approval.",
+            hasContextPacket: true,
+            mission: "Investigate blocked browser-control task.",
+            path: "BrowserFirst/Delegations/engineer/engineer-1.md",
+            sourceControlRunId: "job-1",
+            sourceKind: "browser-control-blocker",
+            status: "queued",
+            target: "engineer",
+            updatedAt: "2026-05-29T10:00:00.000Z"
+          }
+        ]
       };
+    }
+    if (route === "/hermes/delegation/start") {
+      assert.equal(options.body.path, "BrowserFirst/Delegations/hermes/hermes-1.md");
+      hermesStatus = "completed";
+      hermesResultArtifactPath = "BrowserFirst/DelegationArtifacts/hermes/hermes-1-result.md";
+      return {
+        id: "hermes-1",
+        path: options.body.path,
+        resultArtifactPath: hermesResultArtifactPath,
+        status: hermesStatus
+      };
+    }
+    if (route === "/hermes/delegation/artifact") {
+      assert.equal(options.body.path, "BrowserFirst/Delegations/hermes/hermes-1.md");
+      return {
+        content: "# Hermes Result\n\n## Final Summary\nHermes completed deterministic result.",
+        finalSummary: "Hermes completed deterministic result.",
+        path: hermesResultArtifactPath
+      };
+    }
+    if (route === "/hermes/delegation/cancel") {
+      hermesStatus = "cancelled";
+      return { id: "hermes-1", path: options.body.path, status: hermesStatus };
+    }
+    if (route === "/opencode/delegation/start") {
+      assert.equal(options.body.path, "BrowserFirst/Delegations/opencode/opencode-1.md");
+      openCodeStatus = "completed";
+      openCodeResultArtifactPath = "BrowserFirst/DelegationArtifacts/opencode/opencode-1-result.md";
+      return {
+        id: "opencode-1",
+        path: options.body.path,
+        resultArtifactPath: openCodeResultArtifactPath,
+        status: openCodeStatus
+      };
+    }
+    if (route === "/opencode/delegation/artifact") {
+      assert.equal(options.body.path, "BrowserFirst/Delegations/opencode/opencode-1.md");
+      return {
+        content: "# OpenCode Result\n\n## Final Summary\nOpenCode completed deterministic result.",
+        finalSummary: "OpenCode completed deterministic result.",
+        path: openCodeResultArtifactPath
+      };
+    }
+    if (route === "/opencode/delegation/cancel") {
+      openCodeStatus = "cancelled";
+      return { id: "opencode-1", path: options.body.path, status: openCodeStatus };
     }
     if (route === "/addons/draft/transition") {
       draftStatus = options.body.status;
@@ -98,7 +178,11 @@ test("add-ons workspace renders registry status and governed open actions", asyn
   assert.match(container.textContent, /engineer-1/);
   assert.match(container.textContent, /browser-control-blocker · control run job-1/);
   assert.match(container.textContent, /Context packet: Goal find a booking slot/);
-  assert.match(container.textContent, /1 delegation packet recorded/);
+  assert.match(container.textContent, /3 delegation packets recorded/);
+  assert.match(container.textContent, /Hermes · hermes-1/);
+  assert.match(container.textContent, /Coordinate a bounded Hermes delegation/);
+  assert.match(container.textContent, /OpenCode · opencode-1/);
+  assert.match(container.textContent, /Inspect browser-first tests/);
   assert.match(container.textContent, /Project update/);
   assert.match(container.textContent, /provider draft surfaces for human review only/);
   const buttons = [...container.querySelectorAll(".addon-card > .addon-card-actions button")];
@@ -107,6 +191,39 @@ test("add-ons workspace renders registry status and governed open actions", asyn
   buttons.find((button) => /Hermes/.test(button.textContent)).click();
   buttons.find((button) => /Living Archive/.test(button.textContent)).click();
   assert.deepEqual(opened, ["hermes", "memory"]);
+
+  const startHermes = [...container.querySelectorAll(".addon-delegation-card button")]
+    .find((button) => /Start Hermes/.test(button.textContent));
+  assert.equal(startHermes.disabled, false);
+  startHermes.click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.ok(calls.some((call) => call[0] === "/hermes/delegation/start"));
+  assert.match(container.textContent, /Hermes completed deterministic result/);
+
+  const readHermes = [...container.querySelectorAll(".addon-delegation-card button")]
+    .find((button) => /Read Result/.test(button.textContent));
+  assert.equal(readHermes.disabled, false);
+  readHermes.click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.ok(calls.some((call) => call[0] === "/hermes/delegation/artifact"));
+  assert.match(container.textContent, /Hermes result · hermes-1/);
+
+  const startOpenCode = [...container.querySelectorAll(".addon-delegation-card button")]
+    .find((button) => /Start OpenCode/.test(button.textContent));
+  assert.equal(startOpenCode.disabled, false);
+  startOpenCode.click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.ok(calls.some((call) => call[0] === "/opencode/delegation/start"));
+  assert.match(container.textContent, /OpenCode completed deterministic result/);
+
+  const readOpenCode = [...container.querySelectorAll(".addon-delegation-card button")]
+    .filter((button) => /Read Result/.test(button.textContent))
+    .at(-1);
+  assert.equal(readOpenCode.disabled, false);
+  readOpenCode.click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.ok(calls.some((call) => call[0] === "/opencode/delegation/artifact"));
+  assert.match(container.textContent, /OpenCode result · opencode-1/);
 
   container.querySelector(".addon-draft-card button").click();
   await new Promise((resolve) => setTimeout(resolve, 0));

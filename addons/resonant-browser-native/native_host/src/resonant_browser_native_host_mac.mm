@@ -11,6 +11,10 @@
 #include "include/wrapper/cef_helpers.h"
 #include "include/wrapper/cef_library_loader.h"
 
+#include <cstdlib>
+#include <iostream>
+#include <string>
+
 int resonant_browser_native_cef_main(int argc, char* argv[]);
 extern "C" void resonant_browser_native_execute_menu_command(const char* command);
 
@@ -328,6 +332,26 @@ static void ResonantInstallMainMenu() {
   [NSApp setHelpMenu:helpMenu];
 
   [NSApp setMainMenu:mainMenu];
+  std::cout << "{\"event\":\"browser.native.appkit_menu.installed\","
+            << "\"menus\":[\"ResonantOS Browser\",\"File\",\"Edit\",\"View\",\"Assistant\","
+               "\"History\",\"Bookmarks\",\"Profiles\",\"Tab\",\"Window\",\"Help\"]}"
+            << std::endl;
+}
+
+static bool ResonantShouldDisableAppKitMenu(int argc, char* argv[]) {
+  const char* explicit_disable = std::getenv("RESONANTOS_NATIVE_DISABLE_APPKIT_MENU");
+  if (explicit_disable != nullptr && std::string(explicit_disable) == "1") {
+    return true;
+  }
+
+  for (int index = 1; index < argc; ++index) {
+    const std::string arg(argv[index] == nullptr ? "" : argv[index]);
+    if (arg.find("--resonantos-") == 0 && arg.find("-smoke") != std::string::npos) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 int main(int argc, char* argv[]) {
@@ -337,6 +361,13 @@ int main(int argc, char* argv[]) {
   }
 
   @autoreleasepool {
+    if (ResonantShouldDisableAppKitMenu(argc, argv)) {
+      std::cout << "{\"event\":\"browser.native.appkit_menu.disabled\","
+                << "\"reason\":\"direct-or-smoke-launch\"}"
+                << std::endl;
+      return resonant_browser_native_cef_main(argc, argv);
+    }
+
     [ResonantBrowserApplication sharedApplication];
     CHECK([NSApp isKindOfClass:[ResonantBrowserApplication class]]);
     ResonantInstallMainMenu();

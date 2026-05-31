@@ -131,6 +131,33 @@ test("control planning service converts unsafe next-action override failures int
   assert.equal(harness.calls.length, 0);
 });
 
+test("control planning service can use a scoped next-action override for a single job", async () => {
+  const harness = createHarness({
+    globalScope: {
+      __resonantosNextActionOverride: async () => ({
+        status: "continue",
+        thought: "global",
+        action: { type: "read" }
+      })
+    }
+  });
+
+  const decision = await harness.service.requestNextControlAction({
+    goal: "scoped job",
+    snapshot: null,
+    history: [],
+    override: async () => ({
+      status: "done",
+      thought: "scoped",
+      doneSummary: "Scoped override finished the job."
+    })
+  });
+
+  assert.equal(decision.status, "done");
+  assert.equal(decision.thought, "scoped");
+  assert.equal(harness.calls.length, 0);
+});
+
 test("control planning service creates deterministic plan fallback when planning fails", async () => {
   const harness = createHarness({ bridgeError: "planner offline", readError: "page unavailable" });
 

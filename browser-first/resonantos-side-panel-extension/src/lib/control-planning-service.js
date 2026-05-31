@@ -38,11 +38,12 @@ export function createControlPlanningService({
     }, { dedupeControlSteps });
   };
 
-  const requestNextControlAction = async ({ goal, snapshot, history }) => {
-    if (typeof globalScope.__resonantosNextActionOverride === "function") {
+  const requestNextControlAction = async ({ goal, snapshot, history, override = null }) => {
+    const scopedOverride = typeof override === "function" ? override : globalScope.__resonantosNextActionOverride;
+    if (typeof scopedOverride === "function") {
       try {
         return sanitizeNextActionDecision(
-          await globalScope.__resonantosNextActionOverride({ goal, snapshot, history })
+          await scopedOverride({ goal, snapshot, history })
         );
       } catch (error) {
         return {

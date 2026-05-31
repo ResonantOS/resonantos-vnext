@@ -32,6 +32,8 @@ Intent: keep the browser-first ResonantOS work aligned with the AI-browser capab
 - Main workspace page/context toolbar v1: read current page, save current page to Living Archive intake, save selected page text, and summarize visible context now run directly from the main workspace chat surface instead of opening the side panel for those non-control actions.
 - Chat composer parity hardening: both main and side-panel chat inputs support select-all, copy, cut, paste, undo, Enter-to-send, and Shift+Enter newline through the shared composer controller. Native browser editing is preserved first; an explicit clipboard fallback remains available for restricted extension runtimes.
 - Augmentor delegation hardening: natural chat phrases such as “spawn Hermes,” “dispatch this to OpenCode,” and “use the ResonantOS agent control layer” are routed before provider chat, and the provider prompt is barred from claiming delegation is outside Augmentor's ResonantOS capabilities.
+- Hermes production delegation v1: `/hermes` and natural Hermes delegation now create governed task packets and immediately attempt a host-mediated Hermes lifecycle start. Result artifacts are readable from the Add-ons workspace, deterministic test execution is supported, and real Hermes CLI execution is explicit opt-in so provider secrets, wallet actions, external sends, and trusted memory writes stay mediated.
+- OpenCode production delegation v1: `/opencode` workspace handoffs and natural OpenCode delegation now create governed coding packets, attempt host-mediated start/status/artifact/cancel lifecycle actions, and return reviewable coding artifacts. Deterministic execution covers the lifecycle, while real local OpenCode CLI execution remains explicit opt-in and scoped to the ResonantOS repository boundary.
 - Email/Calendar Add-ons v1: `/email` and `/calendar` create host-mediated draft-only packets from both chat surfaces. Sending email and scheduling events remain human-approval gated and are not automated from chat.
 - Email/Calendar Approval v1: the Add-ons workspace lists draft packets and can mark them approved for manual action or rejected with an audit entry; provider sending/scheduling remains blocked until connector-specific approval flows exist.
 - Email/Calendar Provider Connectors v1.1: approved draft packets can open Gmail compose or Google Calendar event-template handoff URLs for human review. ResonantOS records an audit event and still does not send email, schedule events, expose credentials, or bypass the provider UI.
@@ -40,6 +42,7 @@ Intent: keep the browser-first ResonantOS work aligned with the AI-browser capab
 - Parallel Browser Jobs v1: the monitor can show multiple durable jobs at once, mark the focused browser job, switch focus with `/jobs focus <job>`, and keep per-job Continue/Report controls without merging their traces.
 - Parallel Browser Jobs v1.1: running/queued/approval jobs hold explicit tab/site page locks, conflicting Agent Control starts/resumes are blocked before action, paused/terminal jobs release locks, unresolved approval-paused jobs are cancelled when the user starts a new explicit control task on the same page, and the job monitor shows the locked site/tab.
 - Parallel Browser Jobs scheduler state v1: the durable job store now computes scheduler capacity, runnable queued jobs, page-lock-blocked queued jobs, and capacity-waiting queued jobs. `/jobs` and the monitor surface this state so the user can see why a queued job can or cannot run before true simultaneous control loops are enabled.
+- Parallel Browser Jobs execution scheduler v1: Agent Control requests are now created as queued durable jobs, a bounded scheduler starts multiple non-conflicting jobs, capacity-waiting work auto-drains as jobs finish, same-page conflicts remain queued instead of being rejected, paused/cancelled jobs stop browser actions, and hard human-only boundaries do not leave approval jobs holding page locks.
 - Browser page summaries can be generated into Living Archive intake with source provenance, review queueing, and a deterministic fallback when the provider is unavailable.
 - Multi-tab browser research trails can be captured into one Living Archive intake bundle with per-page provenance and review queueing.
 - Living Archive wiki index maintenance v1: trusted promotion upserts the promoted page in `AI_MEMORY/wiki/index.md` as a deduplicated content catalog while preserving `log.md` as the append-only chronology.
@@ -69,8 +72,8 @@ Intent: keep the browser-first ResonantOS work aligned with the AI-browser capab
 ## Remaining Capability Work
 
 1. Parallel / Durable Browser Jobs
-   - True simultaneous background control loops still require an execution scheduler that can start and supervise more than one non-conflicting page-locked job at the same time.
-   - Current scheduler state can identify runnable, locked, and capacity-waiting jobs, but the side panel still has one active control runner.
+   - Implement per-job approval cards so safe public-submit approval can be reviewed for a background job without stealing focus from the current chat.
+   - The execution scheduler is now present; next work is stronger live-test coverage for simultaneous multi-tab jobs after the browser host target-selection flake is fixed.
 
 2. Email / Calendar Provider Connectors
    - Current connectors are manual provider handoffs only.

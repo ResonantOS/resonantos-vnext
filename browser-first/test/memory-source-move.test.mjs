@@ -1,0 +1,137 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { existsSync } from "node:fs";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+
+import {
+  assertSafeMoveSource,
+  buildMoveImportPreflight,
+  executeMoveImport,
+  rollbackMoveImport,
+} from "../host/memory-source-move.mjs";
+
+async function fixtureRoot(name) {
+  return mkdtemp(path.join(os.tmpdir(), `resonantos-${name}-`));
+}
+
+test("move import preflight rejects broad user root and existing memory root", async () => {
+  const root = await fixtureRoot("move-safety");
+  const memoryRoot = path.join(root, "ResonantOS_User", "Memory");
+  await mkdir(memoryRoot, { recursive: true });
+  try {
+    assert.throws(() => assertSafeMoveSource(os.homedir(), memoryRoot), /home folder/);
+    assert.throws(() => assertSafeMoveSource(memoryRoot, memoryRoot), /already inside ResonantOS Memory/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("move import preflight preserves hidden Obsidian structure in counts", async () => {
+  const root = await fixtureRoot("move-preflight");
+  const source = path.join(root, "Knowledge Vault");
+  const memoryRoot = path.join(root, "ResonantOS_User", "Memory");
+  await mkdir(path.join(source, ".obsidian"), { recursive: true });
+  await mkdir(memoryRoot, { recursive: true });
+  await writeFile(path.join(source, "note.md"), "# Note\n");
+  await writeFile(path.join(source, ".obsidian", "app.json"), "{}\n");
+  try {
+    const preflight = await buildMoveImportPreflight({
+      sourcePath: source,
+      memoryRoot,
+      kind: "obsidian-vault",
+      ownership: "human-knowledge",
+    });
+    assert.equal(preflight.okToMove, true);
+    assert.equal(preflight.fileCount, 2);
+    assert.equal(preflight.hiddenFiles, 1);
+    assert.match(preflight.destinationRoot, /HUMAN_KNOWLEDGE/);
+    assert.equal(preflight.confirmationPhrase, "MOVE Knowledge Vault");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("move import preflight blocks symlinked content", async (t) => {
+  const root = await fixtureRoot("move-symlink");
+  const source = path.join(root, "Vault");
+  const memoryRoot = path.join(root, "ResonantOS_User", "Memory");
+  await mkdir(source, { recursive: true });
+  await mkdir(memoryRoot, { recursive: true });
+  await writeFile(path.join(root, "outside.txt"), "outside\n");
+  try {
+    try {
+      await symlink(path.join(root, "outside.txt"), path.join(source, "linked.txt"));
+    } catch (error) {
+      t.skip(`symlink unavailable in this environment: ${error.message}`);
+      return;
+    }
+    const preflight = await buildMoveImportPreflight({
+      sourcePath: source,
+      memoryRoot,
+      ownership: "human-knowledge",
+    });
+    assert.equal(preflight.okToMove, false);
+    assert.deepEqual(preflight.blocked, [{ path: "linked.txt", reason: "symlink-blocked" }]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("move import executes into managed memory and rollback restores originals", async () => {
+  const root = await fixtureRoot("move-execute");
+  const source = path.join(root, "Research");
+  const nested = path.join(source, "nested");
+  const memoryRoot = path.join(root, "ResonantOS_User", "Memory");
+  await mkdir(nested, { recursive: true });
+  await mkdir(memoryRoot, { recursive: true });
+  await writeFile(path.join(source, "index.md"), "# Research\n");
+  await writeFile(path.join(nested, "paper.txt"), "paper notes\n");
+
+  try {
+    const result = await executeMoveImport({
+      sourcePath: source,
+      memoryRoot,
+      ownership: "external-knowledge",
+      confirmation: "MOVE Research",
+    });
+    assert.equal(result.status, "moved");
+    assert.equal(result.movedCount, 2);
+    assert.equal(existsSync(source), false);
+    assert.equal(existsSync(path.join(result.destinationRoot, "index.md")), true);
+    assert.equal(existsSync(path.join(result.destinationRoot, "nested", "paper.txt")), true);
+    const ledger = await readFile(result.ledgerPath, "utf8");
+    assert.match(ledger, /"status":"moved"/);
+    assert.match(result.destinationRoot, /EXTERNAL_KNOWLEDGE/);
+
+    const rollback = await rollbackMoveImport({
+      ledgerPath: result.ledgerPath,
+      confirmation: "ROLLBACK MOVE",
+    });
+    assert.equal(rollback.restoredCount, 2);
+    assert.equal(existsSync(path.join(source, "index.md")), true);
+    assert.equal(existsSync(path.join(source, "nested", "paper.txt")), true);
+    assert.equal(existsSync(path.join(result.destinationRoot, "index.md")), false);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("move import requires exact human confirmation phrase", async () => {
+  const root = await fixtureRoot("move-confirmation");
+  const source = path.join(root, "UnsafeMove");
+  const memoryRoot = path.join(root, "ResonantOS_User", "Memory");
+  await mkdir(source, { recursive: true });
+  await mkdir(memoryRoot, { recursive: true });
+  await writeFile(path.join(source, "note.md"), "note\n");
+  try {
+    await assert.rejects(
+      () => executeMoveImport({ sourcePath: source, memoryRoot, confirmation: "yes" }),
+      /requires confirmation phrase/
+    );
+    assert.equal(existsSync(path.join(source, "note.md")), true);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

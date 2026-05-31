@@ -182,7 +182,7 @@ The command:
 - writes an import manifest containing canonicality, metadata standard, Obsidian detection, and source hashes
 - returns host-owned classification proposals for Mixed Library imports
 
-`move` import mode is intentionally rejected in the host service until ResonantOS ships a separate execution path with explicit human confirmation, audit logging, and rollback support. The UI may show the future mode as disabled, but the Rust service remains the binding safety boundary.
+`move` import mode is intentionally separate from ordinary settings saves. In the browser-first host it is available only through the guarded `/memory/source/move-preflight`, `/memory/source/move-execute`, and `/memory/source/move-rollback` path. The host must preflight the source, reject broad/system/memory-root paths, preserve folder structure including Obsidian dotfolders, require the exact human confirmation phrase, write an append-only JSONL move ledger, register the managed destination as the canonical source, and support rollback from the ledger. Move execution must re-check the source immediately before file mutation and may fall back to copy-and-delete for cross-volume moves such as external drives. The UI is not allowed to execute a move by merely saving `importMode = move-on-import`.
 
 For `mixed-library`, the command also writes a `library-classification-review` artifact under the library metadata root. This artifact is the authority for first-pass ownership proposals. It explicitly sets `structuralChangesAllowed = false`; any future file move/reorganisation command must require separate human approval, audit logging, and rollback planning.
 

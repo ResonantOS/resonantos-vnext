@@ -48,6 +48,37 @@ function normalizeTiming(timing) {
   return normalized;
 }
 
+function boundedJsonClone(value, { maxChars = 20_000 } = {}) {
+  if (value === null || value === undefined) return value;
+  try {
+    const json = JSON.stringify(value);
+    if (json.length > maxChars) return null;
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
+export function normalizePendingApproval(approval) {
+  if (!approval || typeof approval !== "object") return null;
+  const stepIndex = Number(approval.stepIndex);
+  const step = approval.step && typeof approval.step === "object"
+    ? boundedJsonClone(approval.step, { maxChars: 4_000 })
+    : null;
+  if (!step) return null;
+  return {
+    history: Array.isArray(approval.history)
+      ? boundedJsonClone(approval.history.slice(-20), { maxChars: 12_000 }) ?? []
+      : [],
+    reason: String(approval.reason ?? "This browser action requires human approval.").slice(0, 700),
+    results: Array.isArray(approval.results)
+      ? boundedJsonClone(approval.results.slice(-20), { maxChars: 12_000 }) ?? []
+      : [],
+    step,
+    stepIndex: Number.isInteger(stepIndex) && stepIndex >= 0 ? stepIndex : 0
+  };
+}
+
 export function normalizePreflightDecision(decision) {
   if (!decision || typeof decision !== "object") return null;
   return {
@@ -104,6 +135,7 @@ export function normalizeBrowserJob(job, { now = defaultNow } = {}) {
     summary: String(job?.summary ?? "").slice(0, 700),
     artifacts: Array.isArray(job?.artifacts) ? job.artifacts.slice(0, 20) : [],
     lastError: job?.lastError ? String(job.lastError).slice(0, 700) : null,
+    pendingApproval: status === "approval" ? normalizePendingApproval(job?.pendingApproval) : null,
     preflightDecision: normalizePreflightDecision(job?.preflightDecision),
     pageLock: LOCK_HOLDING_JOB_STATUSES.includes(status) ? normalizePageLock(job?.pageLock, { now }) : null,
     timing: normalizeTiming(job?.timing),
@@ -367,10 +399,11 @@ export function createBrowserJobStore({
     ) ?? null;
   }
 
-  async function createJob({ goal, planner = "observe-act-verify-loop", summary = "", preflightDecision = null, pageLock = null }) {
+  async function createJob({ goal, planner = "observe-act-verify-loop", summary = "", preflightDecision = null, pageLock = null, status = "running", activate = true }) {
     const normalizedLock = normalizePageLock(pageLock, { now });
     const conflict = conflictingActiveJobForLock(normalizedLock);
-    if (conflict) {
+    const initialStatus = VALID_JOB_STATUSES.includes(status) ? status : "running";
+    if (conflict && initialStatus !== "queued") {
       throw new Error(`Browser target is already controlled by ${conflict.id}: ${conflict.goal}`);
     }
     const job = normalizeBrowserJob({
@@ -380,12 +413,14 @@ export function createBrowserJobStore({
       summary,
       preflightDecision,
       pageLock: normalizedLock,
-      status: "running",
+      status: initialStatus,
       createdAt: now(),
       updatedAt: now()
     }, { now });
     jobs = compact([job, ...jobs.filter((item) => item.id !== job.id)]);
-    activeJobId = job.id;
+    if (activate) {
+      activeJobId = job.id;
+    }
     await persist();
     return job;
   }

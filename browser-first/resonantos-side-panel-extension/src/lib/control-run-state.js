@@ -196,6 +196,7 @@ export function createControlRunState({
       status,
       artifacts: completedRun.artifacts,
       pageLock: completedRun.pageLock,
+      pendingApproval: null,
       summary: completedRun.summary,
       planner: completedRun.planner,
       steps: completedRun.steps,

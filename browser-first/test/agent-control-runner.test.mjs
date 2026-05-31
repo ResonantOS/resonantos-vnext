@@ -278,6 +278,21 @@ test("agent control runner does not use task consent for public-submit approval"
   assert.equal(harness.getControlRun().status, "approval");
 });
 
+test("agent control runner blocks hard human-only boundaries without pending approval", async () => {
+  const harness = createHarness({
+    approvalBoundaryForStep: () => "hard",
+    decisions: [{ status: "continue", thought: "fill card", action: { type: "type", field: "Card number", text: "4111111111111111" } }],
+    stepResults: [{ ok: false, approvalRequired: true, error: "Payment and wallet fields are human-only." }]
+  });
+
+  const result = await harness.runner.continueControlLoop({ goal: "fill payment field" });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.approvalRequired, true);
+  assert.equal(harness.getControlRun().status, "blocked");
+  assert.equal(harness.getPendingApproval(), null);
+});
+
 test("agent control runner can approve or deny a pending step through injected state", async () => {
   const approvalHarness = createHarness({
     decisions: [{ status: "done", thought: "done", doneSummary: "Done after approval." }],

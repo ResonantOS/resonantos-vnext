@@ -219,13 +219,14 @@ These are the features currently implemented in the browser-first version.
 - Job monitor can collapse/expand.
 - Completed, blocked, approval, paused, cancelled, and running states are represented.
 - Running, queued, and approval browser jobs hold explicit tab/site page locks.
-- Agent Control start/resume is blocked when another active job already owns the same page target.
+- Agent Control start/resume is queued when another active job already owns the same page target; the scheduler keeps it lock-blocked until the page lock is released.
 - Paused and terminal browser jobs release their page locks.
 - A new explicit Agent Control request on the same page cancels an unresolved approval-paused job before starting, so the user is not trapped behind an old approval card.
 - Expanded job monitor rows show the locked site/tab so the human can see why a conflicting control request is blocked.
 - The durable job scheduler now computes capacity, runnable queued jobs, page-lock-blocked queued jobs, and capacity-waiting queued jobs.
 - `/jobs` reports scheduler state so the human can see whether queued work is runnable, locked by another browser job, or waiting for execution capacity.
 - Expanded job monitor rows show per-job scheduler state for queued jobs, including the blocking job id when a page lock prevents execution.
+- The execution scheduler starts queued non-conflicting jobs, auto-drains capacity-waiting jobs after completions, preserves paused/cancelled jobs when a runner notices stop state, and prevents hard human-only boundaries from leaving approval jobs that hold locks.
 - Expanded job monitor rows show aggregate progress and the latest recommended next human action when blocked/failed job evidence contains blocker guidance.
 
 ### Agent Control Visual Feedback
@@ -310,7 +311,7 @@ These are the next capability areas planned for the browser-first app.
 - Refine the control monitor with richer aggregate progress semantics and clearer multi-step task phases. Initial aggregate phase/progress evidence is now implemented; next work is to propagate the same clarity into non-control workspace blockers.
 - Add visible blockers with recommended next human action in more workspace surfaces beyond Agent Control. Initial job-monitor and Artifacts workspace blocker guidance is implemented; next work is to extend this to delegation workspaces.
 - Add better progress semantics for multi-step tasks. Initial monitor/report progress semantics are implemented; next work is richer phase-specific copy and recovery actions.
-- Add a true parallel job scheduler for non-conflicting page-locked jobs; current page-locking prevents same-page races but the side panel still runs one active control loop at a time.
+- Add per-job approval-card routing for background jobs; the true scheduler exists, but safe approval review still needs a focused background-job UX instead of one global approval card.
 - Improve replayable run reports with richer aggregate progress and confidence evidence. Initial aggregate progress and confidence evidence is now present in saved reports.
 - Add clearer distinction between reading, deciding, acting, verifying, blocked, and waiting.
 
@@ -617,7 +618,7 @@ These features exist in the desktop vNext codebase and remain important. Some wi
 - Browser-first is now the product direction, but not all desktop vNext modules have been ported into it.
 - Living Archive is complete for desktop V1 architecture, but browser-first memory UX is not complete.
 - Add-on registry exists in desktop vNext; browser-first add-on management is not yet fully surfaced.
-- Hermes/OpenCode delegation is not yet browser-first production behavior.
+- Hermes and OpenCode delegation now have browser-first production lifecycle foundations: governed task packets, host-mediated start/status/artifact/cancel routes, deterministic execution coverage, Add-ons workspace result reading, and explicit opt-in before real local CLI execution. OpenCode execution is additionally scoped to the ResonantOS repository boundary for browser-first V1.
 - Wallet actions intentionally stop at human approval boundaries; automated signing is not a goal.
 - Browser-first provider credentials depend on the local bridge and provider secrets path.
 - Browser-first validation is strong locally on this Mac, but cross-platform browser-first packaging needs its own CI path.

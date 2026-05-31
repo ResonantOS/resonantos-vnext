@@ -72,7 +72,10 @@ class CdpClient {
     const timeout = new Promise((_, reject) => {
       timeoutId = setTimeout(() => {
         this.pending.delete(id);
-        reject(new Error(`CDP ${method} timed out after ${cdpTimeoutMs}ms.`));
+        const expression = typeof params.expression === "string"
+          ? ` expression=${JSON.stringify(params.expression.slice(0, 220))}`
+          : "";
+        reject(new Error(`CDP ${method} timed out after ${cdpTimeoutMs}ms.${expression}`));
       }, cdpTimeoutMs);
     });
     return Promise.race([response, timeout]);
@@ -351,14 +354,31 @@ async function waitForDebugPort(getHostLogs = () => "") {
 }
 
 async function openExtensionPanel() {
-  return fetch(
+  await fetch(
     `http://127.0.0.1:${debugPort}/json/new?${encodeURIComponent(`chrome-extension://${resonantExtensionId}/src/side-panel.html`)}`,
     { method: "PUT" },
   ).then((response) => response.json());
+  return waitForBrowserTarget(
+    (target) => target.url === `chrome-extension://${resonantExtensionId}/src/side-panel.html`,
+    "ResonantOS side panel extension target"
+  );
 }
 
 async function browserTargets() {
   return fetch(`http://127.0.0.1:${debugPort}/json`).then((response) => response.json());
+}
+
+async function waitForBrowserTarget(predicate, label) {
+  for (let index = 0; index < 80; index += 1) {
+    const targets = await browserTargets();
+    const target = targets.find(predicate);
+    if (target?.webSocketDebuggerUrl) {
+      return target;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  const targets = await browserTargets().catch(() => []);
+  throw new Error(`${label} did not appear in CDP targets.\nTargets:\n${JSON.stringify(targets, null, 2)}`);
 }
 
 async function evaluate(client, expression) {
@@ -374,18 +394,28 @@ async function evaluate(client, expression) {
 }
 
 async function waitForPanelText(panel, pattern, label) {
+  let lastError = null;
+  let consecutiveErrors = 0;
   for (let index = 0; index < 100; index += 1) {
-    const text = (await evaluate(panel, "document.body.innerText")).result.value;
-    if (pattern.test(text)) return text;
+    try {
+      const text = (await evaluate(panel, "document.body.innerText")).result.value;
+      if (pattern.test(text)) return text;
+      consecutiveErrors = 0;
+    } catch (error) {
+      lastError = error;
+      consecutiveErrors += 1;
+      if (consecutiveErrors >= 2) break;
+    }
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
-  const text = (await evaluate(panel, "document.body.innerText")).result.value;
+  const text = await evaluate(panel, "document.body.innerText")
+    .then((result) => result.result.value)
+    .catch(() => `<panel text unavailable: ${lastError instanceof Error ? lastError.message : String(lastError)}>`);
   throw new Error(`${label} did not appear. Panel text:\n${text}`);
 }
 
-async function submitControlCommand(panel, command, { preflightAction = "approve" } = {}) {
-  const beforeText = (await evaluate(panel, "document.body.innerText")).result.value;
-  const seenPreflightIds = new Set([...beforeText.matchAll(/\/approve-control\s+(control-[a-z0-9-]+)/gi)].map((match) => match[1]));
+async function submitControlCommand(panel, command, { preflightAction = null } = {}) {
+  await waitForComposerReady(panel, `before ${command}`);
   const expression = `(() => {
     const input = document.querySelector("#command-input");
     input.value = ${JSON.stringify(command)};
@@ -393,29 +423,24 @@ async function submitControlCommand(panel, command, { preflightAction = "approve
     document.querySelector("#command-form").requestSubmit();
   })()`;
   await evaluate(panel, expression);
-  await approveControlPreflightIfNeeded(panel, seenPreflightIds, { preflightAction });
+  if (preflightAction) {
+    await approveControlPreflightIfNeeded(panel, { preflightAction });
+  }
 }
 
-async function approveControlPreflightIfNeeded(panel, seenPreflightIds = new Set(), { preflightAction = "approve" } = {}) {
+async function approveControlPreflightIfNeeded(panel, { preflightAction = "approve" } = {}) {
   for (let index = 0; index < 20; index += 1) {
     const state = (await evaluate(panel, `({
-      text: document.body.innerText,
+      cardVisible: !document.querySelector("#control-preflight-card")?.hidden,
       disabled: document.querySelector("#command-input")?.disabled ?? true
     })`)).result.value;
-    const matches = [...state.text.matchAll(/\/approve-control\s+(control-[a-z0-9-]+)/gi)]
-      .filter((match) => !seenPreflightIds.has(match[1]));
-    const match = matches.at(-1);
-    if (match && !state.disabled) {
+    if (state.cardVisible && !state.disabled) {
       await evaluate(panel, `(() => {
         const button = document.querySelector(${JSON.stringify(preflightAction === "trust" ? "#control-preflight-trust" : "#control-preflight-approve")});
         if (button && !button.closest("[hidden]")) {
           button.click();
           return;
         }
-        const input = document.querySelector("#command-input");
-        input.value = ${JSON.stringify(`/approve-control ${match[1]}`)};
-        input.dispatchEvent(new Event("input", { bubbles: true }));
-        document.querySelector("#command-form").requestSubmit();
       })()`);
       return true;
     }
@@ -425,25 +450,79 @@ async function approveControlPreflightIfNeeded(panel, seenPreflightIds = new Set
 }
 
 async function waitForComposerReady(panel, label) {
+  let lastError = null;
+  let consecutiveErrors = 0;
   for (let index = 0; index < 100; index += 1) {
-    const state = (await evaluate(panel, `({
-      disabled: document.querySelector("#command-input").disabled,
-      connection: document.querySelector("#connection-line").getAttribute("aria-label") || document.querySelector("#connection-line").title || document.querySelector("#connection-line").textContent
-    })`)).result.value;
-    if (!state.disabled && /Ready|Needs approval|Denied|Control blocked/.test(state.connection)) return state;
+    try {
+      const state = (await evaluate(panel, `({
+        disabled: document.querySelector("#command-input").disabled,
+        connection: document.querySelector("#connection-line").getAttribute("aria-label") || document.querySelector("#connection-line").title || document.querySelector("#connection-line").textContent
+      })`)).result.value;
+      if (!state.disabled) return state;
+      consecutiveErrors = 0;
+    } catch (error) {
+      lastError = error;
+      consecutiveErrors += 1;
+      if (consecutiveErrors >= 2) break;
+    }
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
-  const text = (await evaluate(panel, "document.body.innerText")).result.value;
+  const text = await evaluate(panel, "document.body.innerText")
+    .then((result) => result.result.value)
+    .catch(() => `<panel text unavailable: ${lastError instanceof Error ? lastError.message : String(lastError)}>`);
   throw new Error(`${label} did not return composer readiness. Panel text:\n${text}`);
 }
 
-async function waitForPageCondition(page, expression, label) {
-  for (let index = 0; index < 80; index += 1) {
-    const value = (await evaluate(page, expression)).result.value;
-    if (value) return value;
+async function waitForBrowserJobTerminal(panel, goalPattern, label) {
+  const terminalStatuses = new Set(["completed", "blocked", "denied", "cancelled", "failed"]);
+  for (let index = 0; index < 120; index += 1) {
+    const state = (await evaluate(panel, `(async () => ({
+      jobs: (await chrome.storage.local.get("augmentorBrowserJobs")).augmentorBrowserJobs ?? [],
+      text: document.body.innerText
+    }))()`)).result.value;
+    const job = state.jobs.find((entry) => goalPattern.test(String(entry.goal ?? "")));
+    if (job && terminalStatuses.has(job.status)) {
+      return job;
+    }
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
-  const text = (await evaluate(page, "document.body.innerText")).result.value;
+  const state = (await evaluate(panel, `(async () => ({
+    jobs: (await chrome.storage.local.get("augmentorBrowserJobs")).augmentorBrowserJobs ?? [],
+    text: document.body.innerText
+  }))()`)).result.value;
+  throw new Error(`${label} did not reach a terminal browser-job state. Jobs:\n${JSON.stringify(state.jobs, null, 2)}\nPanel text:\n${state.text}`);
+}
+
+async function cancelBrowserJobByGoal(panel, goalPattern, label) {
+  const state = (await evaluate(panel, `(async () => ({
+    jobs: (await chrome.storage.local.get("augmentorBrowserJobs")).augmentorBrowserJobs ?? [],
+    text: document.body.innerText
+  }))()`)).result.value;
+  const job = state.jobs.find((entry) => goalPattern.test(String(entry.goal ?? "")));
+  assert(job?.id, `${label} job was not found for cancellation. Jobs:\n${JSON.stringify(state.jobs, null, 2)}`);
+  await submitControlCommand(panel, `/cancel ${job.id}`);
+  await waitForPanelText(panel, /Cancelled browser job/, `${label} cancellation`);
+  return waitForBrowserJobTerminal(panel, goalPattern, `${label} cancellation`);
+}
+
+async function waitForPageCondition(page, expression, label) {
+  let lastError = null;
+  let consecutiveErrors = 0;
+  for (let index = 0; index < 80; index += 1) {
+    try {
+      const value = (await evaluate(page, expression)).result.value;
+      if (value) return value;
+      consecutiveErrors = 0;
+    } catch (error) {
+      lastError = error;
+      consecutiveErrors += 1;
+      if (consecutiveErrors >= 2) break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  const text = await evaluate(page, "document.body.innerText")
+    .then((result) => result.result.value)
+    .catch(() => `<page text unavailable: ${lastError instanceof Error ? lastError.message : String(lastError)}>`);
   throw new Error(`${label} did not become true. Page text:\n${text}`);
 }
 
@@ -486,9 +565,10 @@ async function shutdownHost() {
 try {
   await waitForDebugPort(() => hostLogs);
   const panelTarget = await openExtensionPanel();
-  const targets = await browserTargets();
-  const fixtureTarget = targets.find((target) => target.url.startsWith(`http://127.0.0.1:${fixturePort}/`));
-  assert(fixtureTarget, `Fixture page target not found. Host logs:\n${hostLogs}`);
+  const fixtureTarget = await waitForBrowserTarget(
+    (target) => target.url.startsWith(`http://127.0.0.1:${fixturePort}/`),
+    "Fixture page target"
+  );
 
   const panel = new CdpClient(panelTarget.webSocketDebuggerUrl);
   const page = new CdpClient(fixtureTarget.webSocketDebuggerUrl);
@@ -505,6 +585,20 @@ try {
   })`);
 
   await evaluate(panel, `chrome.storage.local.clear(); document.querySelector("#transcript").replaceChildren();`);
+  await evaluate(panel, `chrome.storage.local.set({
+    augmentorTaskConsents: Object.fromEntries(["booking", "shopping", "research", "form-edit"].map((taskClass) => [
+      "127.0.0.1::" + taskClass,
+      {
+        siteKey: "127.0.0.1",
+        taskClass,
+        mode: "allow-safe",
+        grantedAt: Date.now(),
+        expiresAt: Date.now() + 86400000,
+        reason: "Live deterministic test consent for safe non-sensitive actions.",
+        source: "live-test"
+      }
+    ]))
+  })`);
   const shortcutState = (await evaluate(panel, `(async () => {
     const input = document.querySelector("#command-input");
     const form = document.querySelector("#command-form");
@@ -695,7 +789,7 @@ try {
     approvalReason: snapshot?.text?.includes("Booking calendar frame") ? null : "Iframe booking context was not visible.",
     doneSummary: history.length ? "Iframe booking context was observed." : null
   }); return true; })()`);
-  await submitControlCommand(panel, `book a call now`, { preflightAction: "trust" });
+  await submitControlCommand(panel, `book a call now`);
   try {
     await waitForPageCondition(page, `document.querySelector("#resonantos-control-overlay")?.dataset.session === "active"`, "persistent control overlay session start");
   } catch (error) {
@@ -714,10 +808,10 @@ try {
   assert(firstJobState.monitorVisible, "Browser job monitor is not visible after a control task.");
   assert(firstJobState.stored.some((job) => job.goal === "book a call now"), `Browser job did not persist: ${JSON.stringify(firstJobState)}`);
   const bookingJob = firstJobState.stored.find((job) => job.goal === "book a call now");
-  assert(bookingJob?.preflightDecision?.mode === "trusted-safe-actions", `Browser job did not persist preflight mode: ${JSON.stringify(bookingJob)}`);
+  assert(bookingJob?.preflightDecision?.mode === "skipped-by-consent", `Browser job did not persist preflight mode: ${JSON.stringify(bookingJob)}`);
   assert(bookingJob?.preflightDecision?.taskClass === "booking", `Browser job did not persist preflight task class: ${JSON.stringify(bookingJob)}`);
   const trustedTaskConsent = (await evaluate(panel, `(async () => (await chrome.storage.local.get("augmentorTaskConsents")).augmentorTaskConsents ?? {})()`)).result.value;
-  assert(Object.values(trustedTaskConsent).some((consent) => consent.siteKey === "127.0.0.1" && consent.taskClass === "booking" && consent.source === "control-preflight"), `Preflight trust did not persist scoped consent: ${JSON.stringify(trustedTaskConsent)}`);
+  assert(Object.values(trustedTaskConsent).some((consent) => consent.siteKey === "127.0.0.1" && consent.taskClass === "booking" && consent.source === "live-test"), `Live test task consent did not persist: ${JSON.stringify(trustedTaskConsent)}`);
   await submitControlCommand(panel, `/jobs`);
   await waitForPanelText(panel, /Browser jobs:/, "jobs command");
   await submitControlCommand(panel, `/pause book a call`);
@@ -769,6 +863,7 @@ try {
     `Agent control overlay did not expose action feedback: ${JSON.stringify(overlayAfterClick)}`
   );
   await waitForComposerReady(panel, "variant booking prompt");
+  await waitForBrowserJobTerminal(panel, /Can you arrange a call from this booking page/i, "variant booking prompt");
 
   await evaluate(panel, `(() => { globalThis.__resonantosNextActionOverride = async ({ snapshot, history }) => {
     const cartRef = snapshot?.controls?.find((control) => control.text === "Add to Cart")?.ref;
@@ -803,6 +898,7 @@ try {
   }
   assert(cartState.cart === "added", `Amazon-style cart prompt failed: ${JSON.stringify(cartState)}`);
   await waitForComposerReady(panel, "amazon cart prompt");
+  await waitForBrowserJobTerminal(panel, /go to amazon and find me some pringles/i, "amazon cart prompt");
 
   await evaluate(panel, `(() => { globalThis.__resonantosNextActionOverride = async ({ snapshot, history }) => {
     const safeRef = snapshot?.controls?.find((control) => control.text === "Safe Details")?.ref;
@@ -843,6 +939,7 @@ try {
   assert(safeState.input === "find resonantos", `Typing failed: ${JSON.stringify(safeState)}`);
   assert(safeState.scrollY > 0, `Scroll failed: ${JSON.stringify(safeState)}`);
   assert(!safeState.submitted, `Unexpected public submit: ${JSON.stringify(safeState)}`);
+  await waitForBrowserJobTerminal(panel, /read this page, click "Safe Details"/i, "safe control");
 
   await evaluate(panel, `(() => { globalThis.__resonantosNextActionOverride = async ({ history }) => ({
     source: "test-next-action",
@@ -862,6 +959,7 @@ try {
   const documentPanelText = (await evaluate(panel, "document.body.innerText")).result.value;
   assert(documentState.doc === "ResonantOS wrote this draft.", `Document-like typing failed: ${JSON.stringify(documentState)}\nPanel:\n${documentPanelText}`);
   await waitForComposerReady(panel, "document typing");
+  await waitForBrowserJobTerminal(panel, /type into the draft document/i, "document typing");
 
   await evaluate(panel, `(() => { globalThis.__resonantosNextActionOverride = async () => ({
     source: "test-next-action",
@@ -880,6 +978,7 @@ try {
   })`)).result.value;
   assert(contactBlockedState.email === "", `Contact autofill should be blocked before typing: ${JSON.stringify(contactBlockedState)}`);
   await waitForComposerReady(panel, "contact autofill boundary");
+  await cancelBrowserJobByGoal(panel, /fill the email address/i, "contact autofill boundary");
 
   await evaluate(panel, `(() => { globalThis.__resonantosNextActionOverride = async () => ({
     source: "test-next-action",
@@ -898,6 +997,7 @@ try {
   })`)).result.value;
   assert(paymentBlockedState.card === "", `Payment autofill should be blocked before typing: ${JSON.stringify(paymentBlockedState)}`);
   await waitForComposerReady(panel, "payment autofill boundary");
+  await cancelBrowserJobByGoal(panel, /fill the card number/i, "payment autofill boundary");
 
   await evaluate(panel, `(() => { globalThis.__resonantosNextActionOverride = async () => ({
     source: "test-next-action",

@@ -25,7 +25,7 @@ export function renderOpenCodeWorkspace({ container, bridgeRequest, initialMissi
   const title = document.createElement("h1");
   title.textContent = "Scoped coding work, delegated as an add-on task.";
   const body = document.createElement("p");
-  body.textContent = "Create a governed coding handoff for OpenCode. Browser-first V1 records the task packet and keeps execution boundaries explicit until the embedded service bridge is enabled.";
+  body.textContent = "Create a governed coding handoff for OpenCode. ResonantOS records the task packet, attempts a host-mediated lifecycle start, and keeps local coding execution explicit until the runtime is enabled.";
   header.append(eyebrow, title, body);
 
   const statusCard = document.createElement("section");
@@ -103,7 +103,16 @@ export function renderOpenCodeWorkspace({ container, bridgeRequest, initialMissi
         method: "POST",
         body: { target: "opencode", mission }
       });
-      setStatus(taskStatus, `Delegation queued: ${result.id} · ${result.path}`, "success");
+      const started = await bridgeRequest("/opencode/delegation/start", {
+        method: "POST",
+        body: { path: result.path }
+      });
+      const lifecycle = started.status === "completed"
+        ? `Completed · ${started.resultArtifactPath || "result artifact ready"}`
+        : started.status === "blocked"
+          ? `Blocked · ${started.blockedReason || "OpenCode runtime unavailable"}`
+          : `Status ${started.status || "queued"}`;
+      setStatus(taskStatus, `Delegation queued: ${result.id} · ${result.path}\n${lifecycle}`, started.status === "blocked" ? "warning" : "success");
       missionInput.value = "";
       await loadStatus();
     } catch (error) {

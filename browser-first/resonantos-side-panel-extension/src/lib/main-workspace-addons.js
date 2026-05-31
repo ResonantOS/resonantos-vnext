@@ -127,7 +127,7 @@ function targetLabel(target) {
   return target || "Unknown target";
 }
 
-function createDelegationCard(delegation) {
+function createDelegationCard(delegation, actions = {}) {
   const card = document.createElement("article");
   card.className = "addon-delegation-card";
   card.dataset.status = delegation.status || "queued";
@@ -156,7 +156,35 @@ function createDelegationCard(delegation) {
     ? `Context packet: ${delegation.contextExcerpt || "bounded task evidence attached."}`
     : "No context packet was attached. This delegation only contains the mission text.";
 
-  card.append(header, mission, meta, context);
+  const result = document.createElement("small");
+  result.className = "addon-delegation-context";
+  result.hidden = !delegation.resultExcerpt;
+  result.textContent = delegation.resultExcerpt ? `Result: ${delegation.resultExcerpt}` : "";
+
+  const controls = document.createElement("div");
+  controls.className = "addon-card-actions";
+  if (delegation.target === "hermes" || delegation.target === "opencode") {
+    const label = delegation.target === "hermes" ? "Hermes" : "OpenCode";
+    const actionPrefix = delegation.target === "hermes" ? "Hermes" : "OpenCode";
+    const start = document.createElement("button");
+    start.type = "button";
+    start.textContent = delegation.status === "blocked" ? `Retry ${label}` : `Start ${label}`;
+    start.disabled = !["queued", "blocked", "failed"].includes(delegation.status || "queued");
+    start.addEventListener("click", () => actions[`onStart${actionPrefix}`]?.(delegation));
+    const read = document.createElement("button");
+    read.type = "button";
+    read.textContent = "Read Result";
+    read.disabled = !delegation.resultArtifactPath;
+    read.addEventListener("click", () => actions[`onRead${actionPrefix}`]?.(delegation));
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.textContent = "Cancel";
+    cancel.disabled = ["completed", "cancelled"].includes(delegation.status || "queued");
+    cancel.addEventListener("click", () => actions[`onCancel${actionPrefix}`]?.(delegation));
+    controls.append(start, read, cancel);
+  }
+
+  card.append(header, mission, meta, context, result, controls);
   return card;
 }
 
@@ -265,7 +293,84 @@ export function renderAddOnsWorkspace({ container, bridgeRequest, onOpenProvider
       const result = await bridgeRequest("/addons/delegate/list", { method: "POST", body: { limit: 8 } });
       const delegations = Array.isArray(result.delegations) ? result.delegations : [];
       delegationList.replaceChildren();
-      delegations.forEach((delegation) => delegationList.append(createDelegationCard(delegation)));
+      delegations.forEach((delegation) => delegationList.append(createDelegationCard(delegation, {
+        onStartHermes: async (selected) => {
+          delegationStatus.textContent = `Starting Hermes task ${selected.id}...`;
+          delegationStatus.dataset.tone = "";
+          await bridgeRequest("/hermes/delegation/start", {
+            method: "POST",
+            body: { path: selected.path }
+          });
+          await loadDelegations();
+        },
+        onReadHermes: async (selected) => {
+          delegationStatus.textContent = `Reading Hermes result ${selected.id}...`;
+          delegationStatus.dataset.tone = "";
+          const result = await bridgeRequest("/hermes/delegation/artifact", {
+            method: "POST",
+            body: { path: selected.path }
+          });
+          const preview = document.createElement("article");
+          preview.className = "addon-draft-card addon-delegation-result-card";
+          const title = document.createElement("strong");
+          title.textContent = `Hermes result · ${selected.id}`;
+          const body = document.createElement("p");
+          body.textContent = result.finalSummary || result.content?.slice(0, 420) || "No result summary available.";
+          const meta = document.createElement("small");
+          meta.textContent = result.path || selected.resultArtifactPath || "";
+          preview.append(title, body, meta);
+          delegationList.prepend(preview);
+          delegationStatus.textContent = "Hermes result loaded.";
+          delegationStatus.dataset.tone = "success";
+        },
+        onCancelHermes: async (selected) => {
+          delegationStatus.textContent = `Cancelling Hermes task ${selected.id}...`;
+          delegationStatus.dataset.tone = "";
+          await bridgeRequest("/hermes/delegation/cancel", {
+            method: "POST",
+            body: { path: selected.path, reason: "Human cancelled from Add-ons workspace." }
+          });
+          await loadDelegations();
+        },
+        onStartOpenCode: async (selected) => {
+          delegationStatus.textContent = `Starting OpenCode task ${selected.id}...`;
+          delegationStatus.dataset.tone = "";
+          await bridgeRequest("/opencode/delegation/start", {
+            method: "POST",
+            body: { path: selected.path }
+          });
+          await loadDelegations();
+        },
+        onReadOpenCode: async (selected) => {
+          delegationStatus.textContent = `Reading OpenCode result ${selected.id}...`;
+          delegationStatus.dataset.tone = "";
+          const result = await bridgeRequest("/opencode/delegation/artifact", {
+            method: "POST",
+            body: { path: selected.path }
+          });
+          const preview = document.createElement("article");
+          preview.className = "addon-draft-card addon-delegation-result-card";
+          const title = document.createElement("strong");
+          title.textContent = `OpenCode result · ${selected.id}`;
+          const body = document.createElement("p");
+          body.textContent = result.finalSummary || result.content?.slice(0, 420) || "No result summary available.";
+          const meta = document.createElement("small");
+          meta.textContent = result.path || selected.resultArtifactPath || "";
+          preview.append(title, body, meta);
+          delegationList.prepend(preview);
+          delegationStatus.textContent = "OpenCode result loaded.";
+          delegationStatus.dataset.tone = "success";
+        },
+        onCancelOpenCode: async (selected) => {
+          delegationStatus.textContent = `Cancelling OpenCode task ${selected.id}...`;
+          delegationStatus.dataset.tone = "";
+          await bridgeRequest("/opencode/delegation/cancel", {
+            method: "POST",
+            body: { path: selected.path, reason: "Human cancelled from Add-ons workspace." }
+          });
+          await loadDelegations();
+        }
+      })));
       delegationStatus.textContent = delegations.length
         ? `${delegations.length} delegation packet${delegations.length === 1 ? "" : "s"} recorded. Context packets can be audited before an add-on acts.`
         : "No delegation packets yet. Ask Augmentor to delegate to Hermes, OpenCode, or Resonant Engineer.";

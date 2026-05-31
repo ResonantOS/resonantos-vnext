@@ -25,12 +25,16 @@ function memoryStorage(initial = {}) {
 
 function setupDom() {
   const dom = new JSDOM("<!doctype html><main id=\"root\"></main>", { url: "https://resonantos.local/" });
+  dom.window.confirm = () => true;
+  dom.window.prompt = () => "";
+  globalThis.window = dom.window;
   globalThis.document = dom.window.document;
   globalThis.HTMLElement = dom.window.HTMLElement;
   globalThis.Event = dom.window.Event;
   return {
     container: dom.window.document.querySelector("#root"),
     cleanup: () => {
+      delete globalThis.window;
       delete globalThis.document;
       delete globalThis.HTMLElement;
       delete globalThis.Event;
@@ -943,6 +947,142 @@ test("settings memory section saves source and sync policy through scoped capabi
   }
 });
 
+test("settings memory section gates move-on-import behind preflight and confirmation", async () => {
+  const { container, cleanup } = setupDom();
+  const calls = [];
+  let sources = [];
+  const bridgeRequest = async (route, options = {}) => {
+    calls.push([route, options]);
+    if (route === "/memory/settings") {
+      return {
+        settings: {
+          activeMemoryAddon: "living-archive",
+          autoSync: false,
+          syncMode: "manual-review",
+          sources
+        },
+        status: { wiki: { pages: 0 }, intake: { artifacts: 0 } },
+        memoryAddons: []
+      };
+    }
+    if (route === "/memory/source/move-preflight") {
+      return {
+        okToMove: true,
+        sourcePath: options.body.path,
+        sourceName: "MoveMe",
+        destinationRoot: "/Users/test/ResonantOS_User/Memory/HUMAN_KNOWLEDGE/sources/moveme",
+        fileCount: 2,
+        directoryCount: 1,
+        hiddenFiles: 0,
+        totalBytes: 2048,
+        blocked: [],
+        confirmationPhrase: "MOVE MoveMe"
+      };
+    }
+    if (route === "/memory/source/move-execute") {
+      sources = [{
+        id: "source-moved",
+        path: "/Users/test/ResonantOS_User/Memory/HUMAN_KNOWLEDGE/sources/moveme",
+        kind: options.body.kind,
+        ownership: options.body.ownership,
+        importMode: "move-on-import",
+        ledgerPath: "/Users/test/ResonantOS_User/Memory/CONFIG/move-imports/move-a/move-ledger.jsonl",
+        exists: true
+      }];
+      return {
+        movedCount: 2,
+        ledgerPath: sources[0].ledgerPath,
+        settings: { sources }
+      };
+    }
+    throw new Error(`Unexpected route ${route}`);
+  };
+
+  try {
+    renderSettingsWorkspace({ container, bridgeRequest, initialSection: "memory" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const form = container.querySelector(".settings-routing-form");
+    form.querySelector("input[name='path']").value = "/Users/test/MoveMe";
+    form.querySelector("select[name='ownership']").value = "human-knowledge";
+    form.querySelector("select[name='importMode']").value = "move-on-import";
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.ok(calls.some(([route, options]) =>
+      route === "/memory/source/move-preflight" &&
+      options.capability === "memory-source-move" &&
+      options.body.path === "/Users/test/MoveMe"
+    ));
+    assert.match(container.textContent, /Move preflight ready/);
+    assert.match(container.textContent, /MOVE MoveMe/);
+    assert.equal(calls.some(([route, options]) => route === "/memory/settings" && options.method === "POST"), false);
+
+    container.querySelector('[aria-label="Move import confirmation phrase"]').value = "MOVE MoveMe";
+    [...container.querySelectorAll("button")].find((button) => button.textContent === "Execute Move Import").click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.ok(calls.some(([route, options]) =>
+      route === "/memory/source/move-execute" &&
+      options.capability === "memory-source-move" &&
+      options.body.confirmation === "MOVE MoveMe"
+    ));
+    assert.match(container.textContent, /Move import completed and source registered/);
+    assert.match(container.textContent, /move on import/);
+    assert.match(container.textContent, /Rollback/);
+  } finally {
+    cleanup();
+  }
+});
+
+test("settings memory section rolls back moved sources through scoped capability", async () => {
+  const { container, cleanup } = setupDom();
+  const calls = [];
+  window.prompt = () => "ROLLBACK MOVE";
+  let sources = [{
+    id: "source-moved",
+    path: "/Users/test/ResonantOS_User/Memory/HUMAN_KNOWLEDGE/sources/moveme",
+    kind: "folder",
+    ownership: "human-knowledge",
+    importMode: "move-on-import",
+    ledgerPath: "/Users/test/ResonantOS_User/Memory/CONFIG/move-imports/move-a/move-ledger.jsonl",
+    exists: true
+  }];
+  const bridgeRequest = async (route, options = {}) => {
+    calls.push([route, options]);
+    if (route === "/memory/settings") {
+      return {
+        settings: { activeMemoryAddon: "living-archive", autoSync: false, syncMode: "manual-review", sources },
+        status: { wiki: { pages: 0 }, intake: { artifacts: 0 } },
+        memoryAddons: []
+      };
+    }
+    if (route === "/memory/source/move-rollback") {
+      sources = [];
+      return { restoredCount: 2, skippedCount: 0, settings: { sources } };
+    }
+    throw new Error(`Unexpected route ${route}`);
+  };
+
+  try {
+    renderSettingsWorkspace({ container, bridgeRequest, initialSection: "memory" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    [...container.querySelectorAll("button")].find((button) => button.textContent === "Rollback").click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.ok(calls.some(([route, options]) =>
+      route === "/memory/source/move-rollback" &&
+      options.capability === "memory-source-move" &&
+      options.body.confirmation === "ROLLBACK MOVE" &&
+      /move-ledger/.test(options.body.ledgerPath)
+    ));
+    assert.match(container.textContent, /Move rollback restored 2 file/);
+  } finally {
+    cleanup();
+  }
+});
+
 test("settings memory section browses for a source folder through scoped capability", async () => {
   const { container, cleanup } = setupDom();
   const calls = [];
@@ -1299,6 +1439,14 @@ test("settings workspace defaults to overview health and routes sections from su
         intake: { artifacts: 4 }
       };
     }
+    if (route === "/browser/launch-diagnostics") {
+      return {
+        status: "ready",
+        launchMode: "mac-app-bundle",
+        appkitMenu: "installed",
+        phantomLoaded: true
+      };
+    }
     if (route === "/diagnostics/report") {
       return {
         path: "~/ResonantOS_User/BrowserFirst/Diagnostics/overview-diagnostics.json"
@@ -1468,6 +1616,8 @@ test("settings workspace renders add-on status and capability boundaries", async
   const bridgeRequest = async (route) => {
     if (route === "/providers/status") return { providers: [] };
     if (route === "/status") return { addons: [], memory: null };
+    if (route === "/memory/status") return { wiki: { pages: 0 }, intake: { artifacts: 0 } };
+    if (route === "/browser/launch-diagnostics") return { status: "attention", launchMode: "unknown", appkitMenu: "unknown", phantomLoaded: false };
     if (route === "/addons/status") {
       return {
         addons: [
@@ -1631,6 +1781,14 @@ test("settings diagnostics section summarizes host status and exports redacted r
         intake: { artifacts: 2 }
       };
     }
+    if (route === "/browser/launch-diagnostics") {
+      return {
+        status: "ready",
+        launchMode: "mac-app-bundle",
+        appkitMenu: "installed",
+        phantomLoaded: true
+      };
+    }
     if (route === "/diagnostics/report") {
       return {
         path: "~/ResonantOS_User/BrowserFirst/Diagnostics/diagnostics.json",
@@ -1648,6 +1806,8 @@ test("settings diagnostics section summarizes host status and exports redacted r
     assert.match(container.textContent, /resonantos-browser-first/);
     assert.match(container.textContent, /1\/2/);
     assert.match(container.textContent, /3 pages/);
+    assert.match(container.textContent, /Chromium/);
+    assert.match(container.textContent, /launch=mac-app-bundle · menu=installed · Phantom=loaded/);
     assert.match(container.textContent, /Diagnostics loaded from host-mediated status endpoints/);
 
     container.querySelector(".settings-primary-action").click();
@@ -1671,6 +1831,7 @@ test("settings diagnostics section redacts failed endpoint and report export err
     if (route === "/providers/status") return { providers: [] };
     if (route === "/addons/status") return { addons: [] };
     if (route === "/memory/status") return { wiki: { pages: 0 }, intake: { artifacts: 0 } };
+    if (route === "/browser/launch-diagnostics") return { status: "attention", launchMode: "unknown", appkitMenu: "unknown", phantomLoaded: false };
     if (route === "/diagnostics/report") throw new Error("export failed bearer abc.secret api_key=raw");
     throw new Error(`Unexpected route ${route}`);
   };

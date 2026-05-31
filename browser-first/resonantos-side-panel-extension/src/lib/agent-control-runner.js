@@ -322,7 +322,8 @@ export function createAgentControlRunner(deps) {
           }
         });
         if (!finalResult?.ok) {
-          const status = finalResult?.approvalRequired ? "approval" : "blocked";
+          const canRequestHumanApproval = finalResult?.approvalRequired && boundary === "public-submit";
+          const status = canRequestHumanApproval ? "approval" : "blocked";
           const reason = finalResult?.approvalRequired
             ? "Stopped because this step requires human approval."
             : `Stopped because this step failed: ${finalResult?.error ?? "unknown error"}`;
@@ -344,10 +345,10 @@ export function createAgentControlRunner(deps) {
             })
           });
           finishControlRun(status);
-          setStatus(finalResult?.approvalRequired ? "Needs approval" : "Control blocked");
+          setStatus(canRequestHumanApproval ? "Needs approval" : "Control blocked");
           setActivity("failed", "Control mode blocked", controlStepLabel(step));
           await addMessage("system", `Agent Control Mode blocked at action ${stepIndex + 1}: ${controlStepLabel(step)}\n${reason}`);
-          if (finalResult?.approvalRequired) {
+          if (canRequestHumanApproval) {
             setPendingApproval({
               step: { ...step },
               stepIndex,
@@ -357,7 +358,7 @@ export function createAgentControlRunner(deps) {
             });
             renderControlMonitor();
           }
-          const archiveResult = await saveControlReportToArchive(results, finalResult?.approvalRequired ? "approval-required" : "blocked");
+          const archiveResult = await saveControlReportToArchive(results, canRequestHumanApproval ? "approval-required" : "blocked");
           if (archiveResult?.path) {
             const artifacts = [...(getCurrentControlRun()?.artifacts ?? []), { type: "archive-intake", path: archiveResult.path }];
             updateControlRunArtifacts(artifacts);

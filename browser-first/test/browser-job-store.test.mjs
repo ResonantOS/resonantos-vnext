@@ -9,6 +9,7 @@ import {
   isTerminalBrowserJobStatus,
   normalizeBrowserJob,
   normalizePageLock,
+  normalizePendingApproval,
   normalizePreflightDecision,
   staleBrowserJobEvidence
 } from "../resonantos-side-panel-extension/src/lib/browser-job-store.js";
@@ -166,6 +167,37 @@ test("browser job store normalizes job shape and status classes", () => {
   assert.equal(isTerminalBrowserJobStatus("paused"), false);
 });
 
+test("browser job store persists bounded pending approval only for approval jobs", () => {
+  const approval = normalizePendingApproval({
+    history: Array.from({ length: 30 }, (_, index) => ({ index })),
+    reason: "Submit needs review.",
+    results: Array.from({ length: 30 }, (_, index) => ({ index })),
+    step: { type: "click", text: "Submit public form" },
+    stepIndex: 2
+  });
+
+  assert.equal(approval.history.length, 20);
+  assert.equal(approval.results.length, 20);
+  assert.equal(approval.step.text, "Submit public form");
+  assert.equal(approval.stepIndex, 2);
+
+  const waiting = normalizeBrowserJob({
+    id: "approval-job",
+    goal: "Submit form",
+    status: "approval",
+    pendingApproval: approval
+  });
+  const completed = normalizeBrowserJob({
+    id: "done-job",
+    goal: "Submit form",
+    status: "completed",
+    pendingApproval: approval
+  });
+
+  assert.equal(waiting.pendingApproval.step.text, "Submit public form");
+  assert.equal(completed.pendingApproval, null);
+});
+
 test("browser job store normalizes page locks conservatively", () => {
   assert.equal(normalizePageLock(null), null);
   assert.equal(normalizePageLock({}), null);
@@ -273,6 +305,56 @@ test("browser job store creates active jobs and finds by active, id, or goal", a
   assert.equal(harness.writes.at(-1).jobs[0].preflightDecision.mode, "approved-once");
   assert.equal(harness.writes.at(-1).jobs[0].preflightDecision.taskClass, "booking");
   assert.equal(harness.writes.at(-1).active, "job-1");
+});
+
+test("browser job store can create queued jobs for scheduler-owned execution", async () => {
+  const harness = createHarness();
+
+  const job = await harness.store.createJob({
+    goal: "Read an unrelated page",
+    pageLock: {
+      tabId: 9,
+      url: "https://docs.example/",
+      siteKey: "docs.example",
+      reason: "queued scheduler task"
+    },
+    status: "queued"
+  });
+
+  assert.equal(job.status, "queued");
+  assert.equal(job.pageLock.siteKey, "docs.example");
+  assert.equal(harness.store.getActiveJobId(), job.id);
+  assert.deepEqual(harness.store.getSchedulerState({ maxConcurrent: 2 }).runnableQueued.map((item) => item.id), [job.id]);
+});
+
+test("browser job store accepts queued page-lock conflicts without stealing active focus", async () => {
+  const harness = createHarness();
+
+  const running = await harness.store.createJob({
+    goal: "Use site",
+    pageLock: {
+      tabId: 7,
+      url: "https://same.example/",
+      siteKey: "same.example",
+      reason: "active task"
+    },
+    status: "running"
+  });
+  const queued = await harness.store.createJob({
+    activate: false,
+    goal: "Wait for site",
+    pageLock: {
+      tabId: 7,
+      url: "https://same.example/next",
+      siteKey: "same.example",
+      reason: "queued task"
+    },
+    status: "queued"
+  });
+
+  assert.equal(harness.store.getActiveJobId(), running.id);
+  assert.equal(queued.status, "queued");
+  assert.deepEqual(harness.store.getSchedulerState({ maxConcurrent: 2 }).lockBlockedQueued.map((item) => item.id), [queued.id]);
 });
 
 test("browser job store blocks conflicting active page locks and releases them when paused or terminal", async () => {
