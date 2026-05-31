@@ -374,6 +374,55 @@ test("monitor renderers expose scheduler state for queued browser jobs", () => {
   assert.match(harness.dom.window.document.querySelector("#jobs-list").textContent, /Scheduler: locked by job-a · A task/);
 });
 
+test("monitor renderers expose job-specific approval focus", () => {
+  const browserJobs = [
+    {
+      id: "job-a",
+      goal: "Running task",
+      status: "running",
+      updatedAt: "2026-05-26T10:00:00.000Z",
+      planner: "loop"
+    },
+    {
+      id: "job-approval",
+      goal: "Submit reviewed form",
+      status: "approval",
+      updatedAt: "2026-05-26T10:01:00.000Z",
+      planner: "loop",
+      pendingApproval: {
+        reason: "Public-submit boundary.",
+        results: [],
+        history: [],
+        stepIndex: 1,
+        step: { type: "click", text: "Submit public form" }
+      },
+      steps: [
+        { state: "completed", label: "Read form", type: "read" },
+        {
+          state: "blocked",
+          label: "Submit public form",
+          type: "click",
+          details: { nextHumanAction: "Focus this browser job, review the page, then approve once or deny." }
+        }
+      ]
+    }
+  ];
+  const harness = createHarness({
+    activeJobId: "job-a",
+    browserJobs,
+    jobMonitorCollapsed: false
+  });
+
+  harness.renderers.renderJobMonitor();
+
+  assert.match(harness.dom.window.document.querySelector("#jobs-list").textContent, /approval/);
+  assert.match(harness.dom.window.document.querySelector("#jobs-list").textContent, /Focus this browser job/);
+  [...harness.dom.window.document.querySelectorAll(".job-actions button")]
+    .find((button) => button.textContent === "Focus")
+    .click();
+  assert.deepEqual(harness.state.focused, ["job-approval"]);
+});
+
 test("monitor renderers show and hide site permission panel", async () => {
   const harness = createHarness({ permission: "read-only" });
 
