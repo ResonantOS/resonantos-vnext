@@ -1,8 +1,6 @@
 # ResonantOS vNext
 
-> Modular desktop shell and add-on SDK for human-AI collaboration.
-
-ResonantOS vNext is a **browser-first** platform where AI lives inside your browser chrome — not as a separate app, not as a dashboard, but as a native layer of your browsing experience.
+> AI that lives inside your browser — not a separate app, not a dashboard. A native layer of your browsing experience.
 
 ## Architecture
 
@@ -12,12 +10,11 @@ ResonantOS vNext is a **browser-first** platform where AI lives inside your brow
 │  ┌───────────────────────┐  ┌────────────────┐  │
 │  │   ResonantOS          │  │  Active Tab    │  │
 │  │   Side Panel          │  │  (any page)    │  │
-│  │                       │  │                │  │
-│  │  • Augmentor Chat     │  │  Content       │  │
-│  │  • Addon Tabs         │  │  Scripts:      │  │
-│  │  • Agent Control      │  │  • Context SDK │  │
-│  │  • Living Archive     │  │  • Resonator   │  │
-│  │                       │  │                │  │
+│  │                       │  │  Content       │  │
+│  │  • Augmentor Chat     │  │  Scripts:      │  │
+│  │  • Addon Tabs         │  │  • Context SDK │  │
+│  │  • Agent Control      │  │  • Resonator   │  │
+│  │  • Living Archive     │  │                │  │
 │  └───────────────────────┘  └────────────────┘  │
 └─────────────────────────────────────────────────┘
           │                           │
@@ -31,9 +28,86 @@ ResonantOS vNext is a **browser-first** platform where AI lives inside your brow
           └───────────────────┘
 ```
 
-The target is a Chromium-family browser where ResonantOS lives inside browser chrome. It is **not** a Tauri dashboard, an Electron sidecar, or a screenshot browser.
+---
 
-## What's Here
+## Get Started
+
+### One-Line Install
+
+**macOS / Linux:**
+```bash
+curl -fsSL https://resonantos.com/install.sh | bash
+```
+
+**Windows:** Download and double-click [`install.bat`](browser-first/install.bat), or run:
+```powershell
+powershell -ExecutionPolicy Bypass -File browser-first/install.ps1
+```
+
+That's it. The installer handles Node.js, cloning, the bridge server, browser detection, and extension loading.
+
+### Manual Install
+
+<details>
+<summary>Click to expand manual steps</summary>
+
+**Prerequisites:**
+
+| Requirement | Version | Check |
+|-------------|---------|-------|
+| Node.js | 22 or higher | `node --version` |
+| npm | Included with Node | `npm --version` |
+| Chrome, Brave, or Edge | Latest | Any Chromium-based browser |
+
+**Steps:**
+
+1. Clone the repository
+```bash
+git clone https://github.com/ResonantOS/resonantos-vnext.git
+cd resonantos-vnext
+npm ci
+```
+
+2. Start the bridge server
+```bash
+node browser-first/host/run-browser-first.mjs
+```
+
+3. Load the extension
+   - Go to `chrome://extensions`
+   - Enable **Developer Mode** (toggle top-right)
+   - Click **Load unpacked** → select `browser-first/resonantos-side-panel-extension/`
+
+4. Add an AI provider key
+   - Click the extension icon → open Settings
+   - Enter at least one API key (Groq is free)
+
+</details>
+
+---
+
+## Configure AI Providers
+
+| Provider | Model | Key Format | Free Tier |
+|----------|-------|-----------|-----------|
+| **Groq** | Llama 3.3 70B | `gsk_...` | ✅ Yes (rate limited) |
+| OpenAI | GPT-5.5, GPT-4o | `sk-proj-...` | No |
+| Anthropic | Claude Sonnet 4, Opus 4 | `sk-ant-...` | No |
+| xAI | Grok 4 | `xai-...` | No |
+| DeepSeek | DeepSeek V3, R1 | `sk-...` | ✅ Yes |
+| Google | Gemini 2.5 Pro/Flash | `AIza...` | ✅ Yes (rate limited) |
+
+---
+
+## Verify Installation
+
+- ✅ Bridge server logs: `ResonantOS browser-first bridge listening on http://127.0.0.1:47773`
+- ✅ Extension icon appears in the browser toolbar
+- ✅ Click icon → side panel opens → type "hello" → AI responds
+
+---
+
+## What's Inside
 
 ### Core Platform
 
@@ -48,12 +122,12 @@ The target is a Chromium-family browser where ResonantOS lives inside browser ch
 | **Browser Control v3** | AI-controlled browser actions with safety boundaries |
 | **Living Archive** | Save, search, and recall anything you've browsed |
 
-### Add-on Catalog
+### Addon Catalog
 
-Self-contained add-ons that plug into the side panel. Drop a folder, it works.
+Drop a folder into `browser-first/addons/` — it works automatically.
 
-| Add-on | What It Does |
-|--------|-------------|
+| Addon | What It Does |
+|-------|-------------|
 | **Blackboard** | 7-mode visual surface — Canvas, Document, Table, Web Embed, Image, Slideshow, Annotate |
 | **Fleet & Compute** | Monitor your fleet of machines running Ollama with live HTTP probes |
 | **Task Board** | Kanban board with drag-and-drop across Ready / In Progress / Blocked / Done |
@@ -61,70 +135,44 @@ Self-contained add-ons that plug into the side panel. Drop a folder, it works.
 | **Open Items** | Track work items across Needs Attention / Pending / Completed |
 | **Gradient Performance** | Training metrics, model benchmarks, and fleet speed dashboard |
 
-### Security
+---
 
-- Addon manifest validation (path traversal, symlink escape, trust tiers, injection blocking)
+## Building Addons
+
+See [`browser-first/addons/ADDON-SPEC.md`](https://github.com/ResonantOS/resonantos-vnext/blob/main/browser-first/addons/ADDON-SPEC.md) for the full developer guide.
+
+Minimum structure:
+```
+browser-first/addons/my-addon/
+  addon.json       # Manifest (required)
+  my-addon.html    # UI (optional)
+  my-addon.js      # Logic (optional)
+```
+
+---
+
+## Security
+
+- Addon manifest validation — path traversal, symlink escape, trust tiers, injection blocking
 - Wallet operations gated through `requestApproval()` — no raw signing power
 - XSS protection via `escapeHtml()` on all untrusted fields
 - CI pipeline with SHA-pinned GitHub Actions and enforced `npm audit`
 - Content script privacy: password fields excluded, `data-rc-ignore` opt-out
 
-## Quick Start
-
-### Browser Extension (development)
-
-```bash
-cd browser-first
-# Load as unpacked extension in Chrome/Brave:
-# 1. Navigate to chrome://extensions
-# 2. Enable Developer Mode
-# 3. Load unpacked → select browser-first/resonantos-side-panel-extension/
-```
-
-### Bridge Server
-
-```bash
-cd browser-first/host
-node bridge-server.mjs
-```
-
-### Run Tests
-
-```bash
-node --test browser-first/test/*.test.mjs
-```
-
-## Non-Negotiable Gates
-
-Before this becomes the default app:
+### Non-Negotiable Gates
 
 - Phantom must install/open in the same browser profile
 - Wallet connect/sign flows must require human approval
 - Augmentor controls the active tab only through typed mediated tools
-- No page, add-on, or assistant can get raw wallet/signing power
+- No page, addon, or assistant can get raw wallet/signing power
 
-## Building Add-ons
-
-See [`browser-first/addons/ADDON-SPEC.md`](browser-first/addons/ADDON-SPEC.md) for the complete developer guide.
-
-Quick start:
-```
-browser-first/addons/my-addon/
-  addon.json     # Manifest (required)
-  my-addon.html  # UI (optional)
-  my-addon.js    # Logic (optional)
-```
+---
 
 ## Contributing
 
-See [`browser-first/PR-PLAN.md`](browser-first/PR-PLAN.md) for the current contribution plan and merge order.
+See [`browser-first/PR-PLAN.md`](https://github.com/ResonantOS/resonantos-vnext/blob/main/browser-first/PR-PLAN.md) for the contribution plan and merge order. PRs go against `main`.
 
-## Git Workflow
-
-- Active development happens on `browser-first-preview`
-- `dev` tracks the Tauri-era codebase (historical)
-- `main` is the stable preview/release branch
-- Community contributions via PR against `browser-first-preview`
+---
 
 ## Structure
 
@@ -149,16 +197,29 @@ resonantos-vnext/
 │   │   ├── audit-trail.mjs
 │   │   └── bridge-server.mjs
 │   ├── test/                         # 114 tests
-│   ├── docs/
-│   │   ├── screenshots/              # 27 addon screenshots
-│   │   └── architecture/
+│   ├── install.sh                    # macOS/Linux installer
+│   ├── install.ps1                   # Windows installer
 │   └── PR-PLAN.md                    # Contribution guide
-├── src/                              # Legacy Tauri shell (historical)
-├── src-tauri/                        # Legacy Tauri backend (historical)
 └── docs/
     └── architecture/
         └── ADR-037-browser-first-chromium-resonantos.md
 ```
+
+---
+
+## Uninstall
+
+```bash
+# macOS — remove native messaging host
+rm ~/Library/Application\ Support/Google/Chrome/NativeMessagingHosts/com.resonantos.bridge.json
+
+# Windows
+powershell -ExecutionPolicy Bypass -File browser-first/uninstall.ps1
+```
+
+Then remove the extension from `chrome://extensions`.
+
+---
 
 ## License
 
