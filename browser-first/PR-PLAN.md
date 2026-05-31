@@ -257,22 +257,22 @@ Everything we add is new files in new directories.
 
 ## Where To Find Everything
 
-All branches are on the private repo:
+All branches are on this repo:
 
-**[tompennington/resonantos-vnext-Experimental](https://github.com/tompennington/resonantos-vnext-Experimental)**
+**[ResonantOS/resonantos-vnext](https://github.com/ResonantOS/resonantos-vnext)**
 
 | Package | Branch (click to view) |
 |---------|------------------------|
-| A. Addon Engine | [tom/core-addon-infrastructure](https://github.com/tompennington/resonantos-vnext-Experimental/tree/tom/core-addon-infrastructure) |
-| B. Context SDK | [tom/core-resonant-context](https://github.com/tompennington/resonantos-vnext-Experimental/tree/tom/core-resonant-context) |
-| C. Security | [tom/core-security-hardening](https://github.com/tompennington/resonantos-vnext-Experimental/tree/tom/core-security-hardening) |
-| D. Platform | [tom/core-platform-infra](https://github.com/tompennington/resonantos-vnext-Experimental/tree/tom/core-platform-infra) |
-| E. Blackboard | [tom/addon-blackboard](https://github.com/tompennington/resonantos-vnext-Experimental/tree/tom/addon-blackboard) |
-| F. Fleet Monitor | [tom/addon-fleet-compute](https://github.com/tompennington/resonantos-vnext-Experimental/tree/tom/addon-fleet-compute) |
-| G. Task Board | [tom/addon-task-board](https://github.com/tompennington/resonantos-vnext-Experimental/tree/tom/addon-task-board) |
-| H. System Map | [tom/addon-canvas](https://github.com/tompennington/resonantos-vnext-Experimental/tree/tom/addon-canvas) |
-| I. Open Items | [tom/addon-open-items](https://github.com/tompennington/resonantos-vnext-Experimental/tree/tom/addon-open-items) |
-| J. Gradient Perf | [tom/addon-gradient-perf](https://github.com/tompennington/resonantos-vnext-Experimental/tree/tom/addon-gradient-perf) |
+| A. Addon Engine | [tom/core-addon-infrastructure](https://github.com/ResonantOS/resonantos-vnext/tree/tom/core-addon-infrastructure) |
+| B. Context SDK | [tom/core-resonant-context](https://github.com/ResonantOS/resonantos-vnext/tree/tom/core-resonant-context) |
+| C. Security | [tom/core-security-hardening](https://github.com/ResonantOS/resonantos-vnext/tree/tom/core-security-hardening) |
+| D. Platform | [tom/core-platform-infra](https://github.com/ResonantOS/resonantos-vnext/tree/tom/core-platform-infra) |
+| E. Blackboard | [tom/addon-blackboard](https://github.com/ResonantOS/resonantos-vnext/tree/tom/addon-blackboard) |
+| F. Fleet Monitor | [tom/addon-fleet-compute](https://github.com/ResonantOS/resonantos-vnext/tree/tom/addon-fleet-compute) |
+| G. Task Board | [tom/addon-task-board](https://github.com/ResonantOS/resonantos-vnext/tree/tom/addon-task-board) |
+| H. System Map | [tom/addon-canvas](https://github.com/ResonantOS/resonantos-vnext/tree/tom/addon-canvas) |
+| I. Open Items | [tom/addon-open-items](https://github.com/ResonantOS/resonantos-vnext/tree/tom/addon-open-items) |
+| J. Gradient Perf | [tom/addon-gradient-perf](https://github.com/ResonantOS/resonantos-vnext/tree/tom/addon-gradient-perf) |
 
 ---
 
