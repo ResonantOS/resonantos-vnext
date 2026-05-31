@@ -388,6 +388,8 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(launcher, /\/memory\/source\/file-intake/);
   assert.match(launcher, /\/memory\/wiki\/health/);
   assert.match(launcher, /computeWikiHealth/);
+  assert.match(launcher, /\/memory\/wiki\/lint/);
+  assert.match(launcher, /runWikiLint/);
   assert.match(launcher, /sourceContentHash/);
   assert.match(launcher, /sourceVersion/);
   assert.match(launcher, /\/memory\/source\/versions/);

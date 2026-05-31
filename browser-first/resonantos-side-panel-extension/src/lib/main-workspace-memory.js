@@ -29,7 +29,7 @@ function resultCard(match) {
   return card;
 }
 
-function wikiHealthCard(health, onRefresh) {
+function wikiHealthCard(health, onRefresh, onRunLint) {
   const card = document.createElement("section");
   card.className = "memory-card memory-wiki-health";
   const top = document.createElement("div");
@@ -40,7 +40,11 @@ function wikiHealthCard(health, onRefresh) {
   refresh.type = "button";
   refresh.textContent = "Refresh";
   refresh.addEventListener("click", onRefresh);
-  top.append(label, refresh);
+  const lint = document.createElement("button");
+  lint.type = "button";
+  lint.textContent = "Run Lint";
+  lint.addEventListener("click", onRunLint);
+  top.append(label, refresh, lint);
 
   const score = document.createElement("p");
   score.className = "memory-status";
@@ -662,6 +666,21 @@ export function renderLivingArchiveWorkspace({ container, bridgeRequest, initial
         wikiHealthPanel.replaceChildren();
         wikiHealthPanel.textContent = "Refreshing wiki health…";
         void loadWikiHealth();
+      }, async () => {
+        wikiHealthPanel.replaceChildren();
+        wikiHealthPanel.textContent = "Running wiki lint and writing review artifact…";
+        try {
+          const result = await bridgeRequest("/memory/wiki/lint", {
+            method: "POST",
+            capability: "memory-source-review",
+            body: { reason: "Manual Living Archive workspace lint" }
+          });
+          wikiHealthPanel.textContent = `Wiki lint saved: ${result.relativeArtifactPath || result.artifactPath || "review artifact"}`;
+          await loadWikiHealth();
+        } catch (error) {
+          wikiHealthPanel.textContent = `Wiki lint failed: ${error instanceof Error ? error.message : String(error)}`;
+          wikiHealthPanel.dataset.tone = "error";
+        }
       });
       wikiHealthPanel.dataset.tone = card.querySelector(".memory-status")?.dataset.tone ?? "neutral";
       wikiHealthPanel.replaceChildren(...card.childNodes);

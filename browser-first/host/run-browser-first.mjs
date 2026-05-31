@@ -20,6 +20,7 @@ import {
   parseDraftPacketMarkdown,
 } from "./addon-draft-connectors.mjs";
 import { computeWikiHealth } from "./memory-wiki-health.mjs";
+import { runWikiLint } from "./memory-wiki-lint.mjs";
 import { searchMemoryWiki } from "./memory-search.mjs";
 import { ensureLivingArchiveSchema } from "./memory-schema.mjs";
 import { buildDeterministicWikiDraft } from "./memory-ingest-draft.mjs";
@@ -2537,6 +2538,14 @@ async function executeMemoryWikiHealth() {
   });
 }
 
+async function executeMemoryWikiLint(payload = {}) {
+  return runWikiLint({
+    memoryRoot: memoryRoot(),
+    actor: "resonantos-browser-first",
+    reason: String(payload.reason ?? "manual wiki lint").trim() || "manual wiki lint",
+  });
+}
+
 async function executeMemorySourceVersions(payload = {}) {
   return listSourceFileVersions({
     manifestPath: memorySourceFileManifestPath(),
@@ -5009,6 +5018,12 @@ const bridgeRoutes = [
   },
   { method: "POST", path: "/memory/search", handler: executeMemorySearch },
   { method: "GET", path: "/memory/wiki/health", handler: executeMemoryWikiHealth },
+  {
+    method: "POST",
+    path: "/memory/wiki/lint",
+    requiredCapability: "memory-source-review",
+    handler: executeMemoryWikiLint,
+  },
   { method: "POST", path: "/memory/source/versions", handler: executeMemorySourceVersions },
   {
     method: "POST",

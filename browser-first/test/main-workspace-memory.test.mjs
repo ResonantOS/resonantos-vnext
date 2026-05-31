@@ -56,6 +56,13 @@ test("living archive workspace renders status, search, and intake through bridge
         log: { exists: true, modifiedAt: "2026-05-29T08:00:00.000Z" }
       };
     }
+    if (route === "/memory/wiki/lint") {
+      return {
+        ok: true,
+        relativeArtifactPath: "REVIEW/lint/wiki-lint-test.md",
+        health: { exists: true, score: 80, pages: 12, issues: [] }
+      };
+    }
     if (route === "/memory/settings") {
       return {
         settings: {
@@ -312,6 +319,15 @@ test("living archive workspace renders status, search, and intake through bridge
     assert.match(container.textContent, /Wiki Health/);
     assert.match(container.textContent, /Health 80\/100/);
     assert.match(container.textContent, /missing-index-entries/);
+    Array.from(container.querySelectorAll(".memory-wiki-health button"))
+      .find((button) => button.textContent === "Run Lint")
+      .click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.ok(calls.some(([route, options]) =>
+      route === "/memory/wiki/lint" &&
+      options.capability === "memory-source-review" &&
+      options.body.reason === "Manual Living Archive workspace lint"
+    ));
     assert.match(container.textContent, /\/Users\/test\/KnowledgeVault/);
     assert.match(container.textContent, /\/Users\/test\/DisabledVault/);
     assert.match(container.textContent, /\/Users\/test\/MissingVault/);
