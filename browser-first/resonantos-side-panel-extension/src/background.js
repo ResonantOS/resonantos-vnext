@@ -1,3 +1,6 @@
+import "./bridge-config.generated.js";
+import { createBridgeClient } from "./lib/bridge-client.js";
+
 const APPROVAL_REQUIRED_ACTIONS = new Set([
   "wallet_connect",
   "wallet_sign",
@@ -8,6 +11,7 @@ const APPROVAL_REQUIRED_ACTIONS = new Set([
 ]);
 
 const MAIN_WORKSPACE_PATH = "/src/main-workspace.html";
+const bridgeRequest = createBridgeClient();
 
 const isMainWorkspaceUrl = (url = "") => {
   try {
@@ -108,6 +112,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       url: sender.tab?.url ?? "",
       receivedAt: new Date().toISOString()
     });
+    return true;
+  }
+
+  if (message.type === "inline_assistant_request") {
+    void bridgeRequest("/augmentor/inline", {
+      method: "POST",
+      body: message.body ?? {}
+    })
+      .then((payload) => sendResponse({ ok: true, reply: payload.reply ?? "" }))
+      .catch((error) => sendResponse({
+        ok: false,
+        error: error instanceof Error ? error.message : String(error)
+      }));
     return true;
   }
 

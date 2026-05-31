@@ -6,6 +6,7 @@ import { summarizeBrowserLaunchLog } from "../host/browser-launch-diagnostics.mj
 test("browser launch diagnostics proves native Chromium app readiness from launch log", () => {
   const summary = summarizeBrowserLaunchLog(`
 {"event":"browser.first.launch_mode","mode":"mac-app-bundle","appBundle":"/private/home/ResonantBrowserNativeHost.app"}
+{"event":"browser.first.bridge_started","requestedPort":47773,"attemptedPort":47773,"actualPort":47773,"recovered":false}
 {
   "phantomLoaded": true,
   "pinnedExtensions": [
@@ -26,6 +27,13 @@ test("browser launch diagnostics proves native Chromium app readiness from launc
   assert.equal(summary.nativeHostStarted, true);
   assert.equal(summary.mainWorkspaceLoaded, true);
   assert.equal(summary.phantomLoaded, true);
+  assert.deepEqual(summary.bridge, {
+    status: "started",
+    requestedPort: 47773,
+    attemptedPort: 47773,
+    actualPort: 47773,
+    recovered: false,
+  });
   assert.equal(summary.pinnedExtensions.resonantOS, true);
   assert.equal(summary.pinnedExtensions.phantom, true);
   assert.deepEqual(summary.menuNames, [
@@ -46,6 +54,7 @@ test("browser launch diagnostics proves native Chromium app readiness from launc
 test("browser launch diagnostics flags direct fallback or missing menu as attention", () => {
   const summary = summarizeBrowserLaunchLog(`
 {"event":"browser.first.launch_mode","mode":"direct-native-host","directHost":"/tmp/host"}
+{"event":"browser.first.bridge_failed","requestedPort":47773,"code":"EPERM","message":"listen EPERM"}
 {"event":"browser.native.appkit_menu.disabled","reason":"direct-or-smoke-launch"}
 {"event":"browser.native.cef_initialize_ok"}
 {"hostId":"resonant-browser-native","engineCandidate":"cef-chrome-runtime"}
@@ -56,4 +65,6 @@ test("browser launch diagnostics flags direct fallback or missing menu as attent
   assert.equal(summary.launchMode, "direct-native-host");
   assert.equal(summary.appkitMenu, "disabled");
   assert.equal(summary.phantomLoaded, false);
+  assert.equal(summary.bridge.status, "failed");
+  assert.equal(summary.bridge.code, "EPERM");
 });

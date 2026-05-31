@@ -219,6 +219,10 @@ export function createMonitorRenderers({
   isReadableBrowserTab,
   onContinueBrowserJob,
   onActivateBrowserJob,
+  onApproveBrowserJob,
+  onCancelBrowserJob,
+  onDenyBrowserJob,
+  onPauseBrowserJob,
   onResetSitePermission,
   onSaveBrowserJobReport,
   onRevokeTaskConsent,
@@ -640,30 +644,35 @@ export function createMonitorRenderers({
       state.textContent = job.status;
       const actions = document.createElement("div");
       actions.className = "job-actions";
+      const addJobButton = (label, title, handler, { primary = false } = {}) => {
+        if (typeof handler !== "function") return;
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = label;
+        button.title = title;
+        if (primary) button.dataset.primary = "true";
+        button.addEventListener("click", () => handler(job));
+        actions.append(button);
+      };
       if (job.id !== activeJobId && typeof onActivateBrowserJob === "function") {
-        const focusButton = document.createElement("button");
-        focusButton.type = "button";
-        focusButton.textContent = "Focus";
-        focusButton.title = `Focus ${job.goal}`;
-        focusButton.addEventListener("click", () => onActivateBrowserJob(job));
-        actions.append(focusButton);
+        addJobButton("Focus", `Focus ${job.goal}`, onActivateBrowserJob);
+      }
+      if (job.status === "approval" && job.pendingApproval) {
+        addJobButton("Approve once", `Approve the pending action for ${job.goal}`, onApproveBrowserJob, { primary: true });
+        addJobButton("Deny", `Deny the pending action for ${job.goal}`, onDenyBrowserJob);
+      }
+      if (["queued", "running", "approval"].includes(job.status)) {
+        addJobButton("Pause", `Pause ${job.goal}`, onPauseBrowserJob);
+      }
+      if (["queued", "running", "paused", "approval"].includes(job.status)) {
+        addJobButton("Cancel", `Cancel ${job.goal}`, onCancelBrowserJob);
       }
       const canContinue = ["queued", "paused", "completed", "blocked", "failed", "cancelled", "denied"].includes(job.status);
       if (canContinue && typeof onContinueBrowserJob === "function") {
-        const continueButton = document.createElement("button");
-        continueButton.type = "button";
-        continueButton.textContent = "Continue";
-        continueButton.title = `Continue ${job.goal}`;
-        continueButton.addEventListener("click", () => onContinueBrowserJob(job));
-        actions.append(continueButton);
+        addJobButton("Continue", `Continue ${job.goal}`, onContinueBrowserJob);
       }
       if (typeof onSaveBrowserJobReport === "function") {
-        const reportButton = document.createElement("button");
-        reportButton.type = "button";
-        reportButton.textContent = "Report";
-        reportButton.title = `Save report for ${job.goal}`;
-        reportButton.addEventListener("click", () => onSaveBrowserJobReport(job));
-        actions.append(reportButton);
+        addJobButton("Report", `Save report for ${job.goal}`, onSaveBrowserJobReport);
       }
       actions.append(state);
       item.append(details, actions);

@@ -121,10 +121,63 @@ export async function startBridgeServer({ port, bridgeToken, bridgeCapabilityTok
     }
   });
   await new Promise((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(port, "127.0.0.1", resolve);
+    const onError = (error) => {
+      server.off("listening", onListening);
+      reject(error);
+    };
+    const onListening = () => {
+      server.off("error", onError);
+      resolve();
+    };
+    server.once("error", onError);
+    server.once("listening", onListening);
+    server.listen(port, "127.0.0.1");
   });
   return server;
+}
+
+export function bridgeServerPort(server, fallbackPort = 0) {
+  const address = server.address();
+  return typeof address === "object" && address ? address.port : fallbackPort;
+}
+
+export async function startBridgeServerWithFallback({
+  port,
+  bridgeToken,
+  bridgeCapabilityTokens = {},
+  extensionOrigin,
+  routes,
+  fallbackPorts = [0],
+}) {
+  const attempts = [port, ...fallbackPorts].filter((candidate, index, list) =>
+    Number.isInteger(Number(candidate)) && list.indexOf(candidate) === index
+  );
+  let lastError = null;
+  for (const candidate of attempts) {
+    try {
+      const server = await startBridgeServer({
+        port: Number(candidate),
+        bridgeToken,
+        bridgeCapabilityTokens,
+        extensionOrigin,
+        routes,
+      });
+      const actualPort = bridgeServerPort(server, Number(candidate));
+      return {
+        server,
+        requestedPort: Number(port),
+        attemptedPort: Number(candidate),
+        actualPort,
+        recovered: Number(candidate) !== Number(port),
+      };
+    } catch (error) {
+      lastError = error;
+      if (error?.code !== "EADDRINUSE") {
+        throw error;
+      }
+    }
+  }
+  throw lastError ?? new Error("Failed to start browser-first bridge.");
 }
 
 export async function runBridgeAuthSelfTest({ port, bridgeToken, extensionOrigin }) {
@@ -134,8 +187,7 @@ export async function runBridgeAuthSelfTest({ port, bridgeToken, extensionOrigin
     extensionOrigin,
     routes: [{ method: "GET", path: "/status", handler: async () => ({ bridge: "self-test" }) }],
   });
-  const address = server.address();
-  const actualPort = typeof address === "object" && address ? address.port : port;
+  const actualPort = bridgeServerPort(server, port);
   const unauthorized = await fetch(`http://127.0.0.1:${actualPort}/status`);
   const wrongToken = await fetch(`http://127.0.0.1:${actualPort}/status`, {
     headers: { [bridgeTokenHeaderName]: "wrong-token" },

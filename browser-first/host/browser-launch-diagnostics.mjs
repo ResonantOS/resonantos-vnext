@@ -34,6 +34,8 @@ export function summarizeBrowserLaunchLog(logContent = "") {
   const content = String(logContent);
   const events = parseJsonLines(content);
   const launchModeEvent = lastMatching(events, (event) => event.event === "browser.first.launch_mode");
+  const bridgeStartedEvent = lastMatching(events, (event) => event.event === "browser.first.bridge_started");
+  const bridgeFailedEvent = lastMatching(events, (event) => event.event === "browser.first.bridge_failed");
   const menuInstalledEvent = lastMatching(events, (event) => event.event === "browser.native.appkit_menu.installed");
   const menuDisabledEvent = lastMatching(events, (event) => event.event === "browser.native.appkit_menu.disabled");
   const loadEndEvent = lastMatching(events, (event) => event.event === "browser.native.load_end");
@@ -74,6 +76,22 @@ export function summarizeBrowserLaunchLog(logContent = "") {
     cefInitialized,
     mainWorkspaceLoaded,
     phantomLoaded,
+    bridge: bridgeStartedEvent
+      ? {
+          status: "started",
+          requestedPort: bridgeStartedEvent.requestedPort,
+          attemptedPort: bridgeStartedEvent.attemptedPort,
+          actualPort: bridgeStartedEvent.actualPort,
+          recovered: Boolean(bridgeStartedEvent.recovered),
+        }
+      : bridgeFailedEvent
+        ? {
+            status: "failed",
+            requestedPort: bridgeFailedEvent.requestedPort,
+            code: bridgeFailedEvent.code,
+            message: bridgeFailedEvent.message,
+          }
+        : { status: "unknown" },
     pinnedExtensions: {
       resonantOS: resonantPinned,
       phantom: phantomPinned,

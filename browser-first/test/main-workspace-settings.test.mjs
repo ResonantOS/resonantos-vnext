@@ -1613,7 +1613,10 @@ test("settings workspace edits user profile and Augmentor prompt", async () => {
 
 test("settings workspace renders add-on status and capability boundaries", async () => {
   const { container, cleanup } = setupDom();
-  const bridgeRequest = async (route) => {
+  const bridgeCalls = [];
+  let hermesExecutionEnabled = false;
+  const bridgeRequest = async (route, options = {}) => {
+    bridgeCalls.push([route, options]);
     if (route === "/providers/status") return { providers: [] };
     if (route === "/status") return { addons: [], memory: null };
     if (route === "/memory/status") return { wiki: { pages: 0 }, intake: { artifacts: 0 } };
@@ -1629,7 +1632,8 @@ test("settings workspace renders add-on status and capability boundaries", async
             trust: "add-on agent",
             requestedCapabilities: ["agent-delegation", "network", "notifications"],
             grantedCapabilities: ["agent-delegation", "notifications"],
-            deniedCapabilities: ["network"]
+            deniedCapabilities: ["network"],
+            execution: { localCliExecution: hermesExecutionEnabled }
           },
           {
             id: "addon.living-archive",
@@ -1646,9 +1650,18 @@ test("settings workspace renders add-on status and capability boundaries", async
             name: "OpenCode",
             available: false,
             mode: "coding-addon",
-            trust: "add-on agent"
+            trust: "add-on agent",
+            execution: { localCliExecution: false }
           }
         ]
+      };
+    }
+    if (route === "/addons/execution-settings") {
+      hermesExecutionEnabled = Boolean(options.body.localCliExecution);
+      return {
+        addon: options.body.addon,
+        settings: { hermes: { localCliExecution: hermesExecutionEnabled }, opencode: { localCliExecution: false } },
+        status: hermesExecutionEnabled ? "enabled" : "disabled"
       };
     }
     throw new Error(`Unexpected route ${route}`);
@@ -1676,6 +1689,17 @@ test("settings workspace renders add-on status and capability boundaries", async
     assert.match(container.textContent, /Capability state/);
     assert.match(container.textContent, /Direct trusted wiki writes remain blocked/);
     assert.match(container.textContent, /Coding add-ons receive bounded delegation packets/);
+    assert.match(container.textContent, /Local CLI execution disabled/);
+    const enableHermes = [...container.querySelectorAll("button")].find((button) => /Enable local execution/.test(button.textContent));
+    enableHermes.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.ok(bridgeCalls.some(([route, options]) =>
+      route === "/addons/execution-settings" &&
+      options.capability === "addon-execution-settings-write" &&
+      options.body.addon === "hermes" &&
+      options.body.localCliExecution === true
+    ));
+    assert.match(container.textContent, /Local CLI execution enabled/);
 
     container.querySelector('[data-section="diagnostics"]').click();
     assert.match(container.textContent, /Diagnostics/);

@@ -60,9 +60,13 @@ function createHarness(overrides = {}) {
   const state = {
     browserJobs: overrides.browserJobs ?? [],
     activeJobId: overrides.activeJobId ?? "job-a",
+    approved: [],
     contextDockExpanded: overrides.contextDockExpanded ?? true,
+    cancelled: [],
     currentControlRun: overrides.currentControlRun ?? null,
+    denied: [],
     jobMonitorCollapsed: overrides.jobMonitorCollapsed ?? true,
+    paused: [],
     schedulerState: overrides.schedulerState ?? null,
     pendingApproval: overrides.pendingApproval ?? null,
     tab: overrides.tab ?? { url: "https://example.com/page" },
@@ -121,6 +125,10 @@ function createHarness(overrides = {}) {
       state.activeJobId = job.id;
       state.focused = [...(state.focused ?? []), job.id];
     },
+    onApproveBrowserJob: (job) => state.approved.push(job.id),
+    onCancelBrowserJob: (job) => state.cancelled.push(job.id),
+    onDenyBrowserJob: (job) => state.denied.push(job.id),
+    onPauseBrowserJob: (job) => state.paused.push(job.id),
     onSaveBrowserJobReport: (job) => state.reported.push(job.id),
     onResetSitePermission: (siteKey) => state.resetSites.push(siteKey),
     onRevokeTaskConsent: (consent) => state.revoked.push(consent.taskClass),
@@ -340,12 +348,26 @@ test("monitor renderers render collapsed and expanded browser jobs", () => {
   assert.match(harness.dom.window.document.querySelector("#jobs-list").textContent, /Next human action: Review the submit button before continuing/);
   assert.equal(harness.dom.window.document.querySelector(".job-blocker-guidance").textContent, "Next human action: Review the submit button before continuing.");
   assert.match(harness.dom.window.document.querySelector("#jobs-list").textContent, /done · Read page/);
-  harness.dom.window.document.querySelectorAll(".job-actions button")[1].click();
+  [...harness.dom.window.document.querySelectorAll("#jobs-list > li:nth-child(2) .job-actions button")]
+    .find((button) => button.textContent === "Focus")
+    .click();
   assert.deepEqual(harness.state.focused, ["job-b"]);
-  harness.dom.window.document.querySelectorAll(".job-actions button")[2].click();
+  [...harness.dom.window.document.querySelectorAll("#jobs-list > li:nth-child(2) .job-actions button")]
+    .find((button) => button.textContent === "Continue")
+    .click();
   assert.deepEqual(harness.state.continued, ["job-b"]);
-  harness.dom.window.document.querySelectorAll(".job-actions button")[3].click();
+  [...harness.dom.window.document.querySelectorAll("#jobs-list > li:nth-child(2) .job-actions button")]
+    .find((button) => button.textContent === "Report")
+    .click();
   assert.deepEqual(harness.state.reported, ["job-b"]);
+  [...harness.dom.window.document.querySelectorAll("#jobs-list > li:first-child .job-actions button")]
+    .find((button) => button.textContent === "Pause")
+    .click();
+  assert.deepEqual(harness.state.paused, ["job-a"]);
+  [...harness.dom.window.document.querySelectorAll("#jobs-list > li:first-child .job-actions button")]
+    .find((button) => button.textContent === "Cancel")
+    .click();
+  assert.deepEqual(harness.state.cancelled, ["job-a"]);
 });
 
 test("monitor renderers expose scheduler state for queued browser jobs", () => {
@@ -421,6 +443,14 @@ test("monitor renderers expose job-specific approval focus", () => {
     .find((button) => button.textContent === "Focus")
     .click();
   assert.deepEqual(harness.state.focused, ["job-approval"]);
+  [...harness.dom.window.document.querySelectorAll(".job-actions button")]
+    .find((button) => button.textContent === "Approve once")
+    .click();
+  assert.deepEqual(harness.state.approved, ["job-approval"]);
+  [...harness.dom.window.document.querySelectorAll(".job-actions button")]
+    .find((button) => button.textContent === "Deny")
+    .click();
+  assert.deepEqual(harness.state.denied, ["job-approval"]);
 });
 
 test("monitor renderers show and hide site permission panel", async () => {

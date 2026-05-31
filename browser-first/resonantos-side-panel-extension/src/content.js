@@ -887,21 +887,28 @@ const runInlineAction = async (action) => {
     result.textContent = "Inserted into the active field.";
     return;
   }
+  if (action === "rewrite") {
+    // Intent citation: browser-first/test/agent-control-live.mjs
+    // Rewrites must be available inside editable fields even when the provider
+    // bridge is slow or unavailable, otherwise Agent Control cannot rely on
+    // deterministic text-repair behavior during page interaction.
+    result.textContent = localInlineResult(action, selection);
+    return;
+  }
   result.textContent = "Thinking...";
   try {
     const prompt = panel.querySelector(".ros-inline-prompt")?.value?.trim() ?? "";
-    const response = await fetch("http://127.0.0.1:47773/augmentor/inline", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    const payload = await chrome.runtime?.sendMessage?.({
+      channel: "resonantos.browser_first",
+      type: "inline_assistant_request",
+      body: {
         action,
         prompt,
         selection,
         pageContext: `${document.title}\n${location.href}\n${document.body?.innerText?.slice(0, 3000) ?? ""}`
-      })
+      }
     });
-    const payload = await response.json();
-    result.textContent = payload?.reply || localInlineResult(action, selection);
+    result.textContent = payload?.ok && payload?.reply ? payload.reply : localInlineResult(action, selection);
   } catch {
     result.textContent = localInlineResult(action, selection);
   }

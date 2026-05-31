@@ -72,7 +72,7 @@ function capabilityReview(addon) {
   return wrapper;
 }
 
-function addonCard(addon) {
+function addonCard(addon, actions = {}) {
   const card = document.createElement("article");
   card.className = "settings-addon-card";
   card.dataset.tone = addonTone(addon);
@@ -92,7 +92,23 @@ function addonCard(addon) {
   const boundary = document.createElement("p");
   boundary.textContent = addonBoundary(addon);
 
+  const executionPanel = document.createElement("div");
+  executionPanel.className = "settings-addon-execution";
+  const executionState = Boolean(addon.execution?.localCliExecution);
+  if (["addon.hermes", "addon.opencode"].includes(addon.id)) {
+    const text = document.createElement("small");
+    text.textContent = executionState
+      ? "Local CLI execution enabled. Tasks still run through governed packets and reviewable artifacts."
+      : "Local CLI execution disabled. Delegations create packets and deterministic/lifecycle artifacts only.";
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.textContent = executionState ? "Disable local execution" : "Enable local execution";
+    toggle.addEventListener("click", () => actions.onToggleExecution?.(addon, !executionState));
+    executionPanel.append(text, toggle);
+  }
+
   card.append(header, boundary, capabilityReview(addon));
+  if (executionPanel.childNodes.length) card.append(executionPanel);
   return card;
 }
 
@@ -120,7 +136,18 @@ export function renderAddonsSection(container, { bridgeRequest }) {
   const load = async () => {
     const result = await bridgeRequest("/addons/status", { method: "GET" });
     const addons = Array.isArray(result.addons) ? result.addons : [];
-    grid.replaceChildren(...addons.map(addonCard));
+    grid.replaceChildren(...addons.map((addon) => addonCard(addon, {
+      onToggleExecution: async (selected, enabled) => {
+        const addon = selected.id === "addon.hermes" ? "hermes" : "opencode";
+        setStatus(statusNode, `${enabled ? "Enabling" : "Disabling"} ${selected.name} local execution...`);
+        await bridgeRequest("/addons/execution-settings", {
+          method: "POST",
+          capability: "addon-execution-settings-write",
+          body: { addon, localCliExecution: enabled }
+        });
+        await load();
+      }
+    })));
     setStatus(statusNode, addons.length
       ? `${addons.filter((addon) => addon.available || addon.enabled).length}/${addons.length} add-ons available. Missing add-ons stay disabled until installed or configured.`
       : "No add-ons are visible to this browser-first host yet.",

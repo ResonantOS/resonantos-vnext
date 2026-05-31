@@ -612,6 +612,10 @@ test("browser layer exposes Augmentor chat as the side-panel surface without ste
   assert.match(bridgeClient, /bridgeUrl = config\.bridgeUrl \?\? "http:\/\/127\.0\.0\.1:47773"/);
   assert.match(bridgeClient, /__RESONANTOS_BRIDGE_CONFIG__/);
   assert.match(bridgeClient, /X-ResonantOS-Bridge-Token/);
+  assert.match(background, /bridge-config\.generated\.js/);
+  assert.match(background, /createBridgeClient/);
+  assert.match(background, /inline_assistant_request/);
+  assert.match(background, /\/augmentor\/inline/);
   assert.match(script, /browserJobStore\.getMonitorCollapsed/);
   assert.match(script, /browserJobStore\.getSchedulerState/);
   assert.match(script, /createBrowserJobScheduler/);
@@ -854,6 +858,8 @@ test("browser layer can read active tab context without raw privileged access", 
   assert.match(content, /data-resonantos-control-ref/);
   assert.match(content, /resonantos-inline-assistant/);
   assert.match(content, /ros-inline-prompt/);
+  assert.match(content, /inline_assistant_request/);
+  assert.doesNotMatch(content, /127\.0\.0\.1:47773/);
   assert.match(content, /inlineActionList/);
   assert.match(content, /inlineActionByShortcut/);
   assert.match(content, /editableSelectionDetails/);
@@ -945,7 +951,11 @@ test("browser-first host is a runnable app path, not documentation-only scaffold
   assert.match(launcher, /createBridgeToken/);
   assert.match(launcher, /writeBridgeConfig/);
   assert.match(launcher, /startBridgeServer/);
+  assert.match(launcher, /startBridgeServerWithFallback/);
+  assert.match(launcher, /browser\.first\.bridge_started/);
+  assert.match(launcher, /browser\.first\.bridge_failed/);
   assert.match(bridgeServer, /bridge-config\.generated\.js/);
+  assert.match(bridgeServer, /startBridgeServerWithFallback/);
   assert.match(bridgeServer, /X-ResonantOS-Bridge-Token/);
   assert.match(bridgeServer, /X-ResonantOS-Bridge-Capability-Token/);
   assert.match(bridgeServer, /requiredCapability/);
@@ -1180,6 +1190,33 @@ test("browser-first bridge completes deterministic OpenCode delegation lifecycle
   assert.equal(payload.gatedStatus, "blocked");
   assert.equal(payload.statusAfter, "completed");
   assert.ok(payload.listed >= 1);
+});
+
+test("browser-first bridge persists add-on execution settings behind scoped capability", () => {
+  const result = spawnSync(
+    "node",
+    [
+      path.join(browserFirstRoot, "host", "run-browser-first.mjs"),
+      "--addon-execution-settings-self-test=true",
+      "--bridge-token=test-token",
+      "--addon-execution-settings-token=execution-token",
+      "--bridge-port=0",
+    ],
+    {
+      cwd: repoRoot,
+      encoding: "utf8",
+      timeout: 15_000,
+    },
+  );
+
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.ok, true);
+  assert.equal(payload.deniedStatus, 403);
+  assert.equal(payload.hermesMode, "local-hermes-cli");
+  assert.equal(payload.opencodeMode, "local-opencode-cli");
+  assert.equal(payload.settings.hermes.localCliExecution, true);
+  assert.equal(payload.settings.opencode.localCliExecution, true);
 });
 
 test("browser-first bridge executes move-on-import through scoped routes", () => {

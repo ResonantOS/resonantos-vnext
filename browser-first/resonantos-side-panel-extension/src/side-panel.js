@@ -419,6 +419,27 @@ const updateBrowserJob = async (jobId, patch) => {
   return updated;
 };
 
+const focusBrowserJobRun = async (jobId) => {
+  const focusedJob = await browserJobStore.activateJob(jobId);
+  currentControlRun = focusedJob ? {
+    artifacts: Array.isArray(focusedJob.artifacts) ? focusedJob.artifacts : [],
+    completedAt: focusedJob.completedAt ?? null,
+    goal: focusedJob.goal,
+    id: focusedJob.id,
+    pageLock: focusedJob.pageLock ?? null,
+    planner: focusedJob.planner,
+    startedAt: focusedJob.timing?.startedAt ?? focusedJob.createdAt,
+    status: focusedJob.status,
+    steps: Array.isArray(focusedJob.steps) ? focusedJob.steps : [],
+    summary: focusedJob.summary,
+    timing: focusedJob.timing ?? {}
+  } : currentControlRun;
+  pendingApproval = focusedJob?.pendingApproval ?? null;
+  renderControlMonitor();
+  renderJobMonitor();
+  return focusedJob;
+};
+
 const persistChatState = () => chatSessionStore.persist();
 
 const {
@@ -583,6 +604,58 @@ monitorRenderers = createMonitorRenderers({
   isReadableBrowserTab,
   onContinueBrowserJob: (job) => {
     void continueBrowserJob(job.id);
+  },
+  onApproveBrowserJob: (job) => {
+    void runBusyUiAction(async () => {
+      await browserJobStore.activateJob(job.id);
+      const latestJob = browserJobStore.findJob(job.id);
+      currentControlRun = latestJob ? {
+        artifacts: Array.isArray(latestJob.artifacts) ? latestJob.artifacts : [],
+        completedAt: latestJob.completedAt ?? null,
+        goal: latestJob.goal,
+        id: latestJob.id,
+        pageLock: latestJob.pageLock ?? null,
+        planner: latestJob.planner,
+        startedAt: latestJob.timing?.startedAt ?? latestJob.createdAt,
+        status: latestJob.status,
+        steps: Array.isArray(latestJob.steps) ? latestJob.steps : [],
+        summary: latestJob.summary,
+        timing: latestJob.timing ?? {}
+      } : currentControlRun;
+      pendingApproval = latestJob?.pendingApproval ?? null;
+      renderControlMonitor();
+      renderJobMonitor();
+      await approvePendingControlStep();
+    });
+  },
+  onCancelBrowserJob: (job) => {
+    void runBusyUiAction(() => cancelBrowserJob(job.id));
+  },
+  onDenyBrowserJob: (job) => {
+    void runBusyUiAction(async () => {
+      await browserJobStore.activateJob(job.id);
+      const latestJob = browserJobStore.findJob(job.id);
+      currentControlRun = latestJob ? {
+        artifacts: Array.isArray(latestJob.artifacts) ? latestJob.artifacts : [],
+        completedAt: latestJob.completedAt ?? null,
+        goal: latestJob.goal,
+        id: latestJob.id,
+        pageLock: latestJob.pageLock ?? null,
+        planner: latestJob.planner,
+        startedAt: latestJob.timing?.startedAt ?? latestJob.createdAt,
+        status: latestJob.status,
+        steps: Array.isArray(latestJob.steps) ? latestJob.steps : [],
+        summary: latestJob.summary,
+        timing: latestJob.timing ?? {}
+      } : currentControlRun;
+      pendingApproval = latestJob?.pendingApproval ?? null;
+      renderControlMonitor();
+      renderJobMonitor();
+      await denyPendingControlStep();
+    });
+  },
+  onPauseBrowserJob: (job) => {
+    void runBusyUiAction(() => pauseBrowserJob(job.id));
   },
   onActivateBrowserJob: async (job) => {
     const focusedJob = await browserJobStore.activateJob(job.id);

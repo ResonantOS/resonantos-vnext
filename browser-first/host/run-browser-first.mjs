@@ -8,7 +8,9 @@ import { execFile, spawn } from "node:child_process";
 import {
   createBridgeToken,
   runBridgeAuthSelfTest,
+  bridgeServerPort,
   startBridgeServer,
+  startBridgeServerWithFallback,
   writeBridgeConfig,
 } from "./bridge-server.mjs";
 import { mergePromotedMarkdownBody, summarizePromotedPageForIndex, upsertWikiIndexCatalogEntry } from "./archive-merge.mjs";
@@ -3730,6 +3732,52 @@ function delegationArtifactRoot() {
   return path.join(browserFirstRoot(), "DelegationArtifacts");
 }
 
+function addonExecutionSettingsPath() {
+  return path.join(browserFirstRoot(), "Settings", "addon-execution.json");
+}
+
+function defaultAddonExecutionSettings() {
+  return {
+    hermes: { localCliExecution: false },
+    opencode: { localCliExecution: false },
+  };
+}
+
+function normalizeAddonExecutionSettings(value = {}) {
+  const defaults = defaultAddonExecutionSettings();
+  return {
+    hermes: { localCliExecution: Boolean(value?.hermes?.localCliExecution ?? defaults.hermes.localCliExecution) },
+    opencode: { localCliExecution: Boolean(value?.opencode?.localCliExecution ?? defaults.opencode.localCliExecution) },
+  };
+}
+
+async function readAddonExecutionSettings() {
+  const raw = await readFile(addonExecutionSettingsPath(), "utf8").catch(() => "");
+  if (!raw) return defaultAddonExecutionSettings();
+  try {
+    return normalizeAddonExecutionSettings(JSON.parse(raw));
+  } catch {
+    return defaultAddonExecutionSettings();
+  }
+}
+
+async function writeAddonExecutionSettings(next) {
+  const normalized = normalizeAddonExecutionSettings(next);
+  const filePath = addonExecutionSettingsPath();
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, `${JSON.stringify(normalized, null, 2)}\n`, { mode: 0o600 });
+  await chmod(filePath, 0o600).catch(() => undefined);
+  return normalized;
+}
+
+function addonLocalCliExecutionEnabled(addon, payload = {}, settings = defaultAddonExecutionSettings()) {
+  if (addon === "hermes" && payload.enableHermesExecution === true) return true;
+  if (addon === "opencode" && payload.enableOpenCodeExecution === true) return true;
+  if (addon === "hermes" && /^enabled|true|1$/i.test(String(process.env.RESONANTOS_HERMES_EXECUTION ?? ""))) return true;
+  if (addon === "opencode" && /^enabled|true|1$/i.test(String(process.env.RESONANTOS_OPENCODE_EXECUTION ?? ""))) return true;
+  return Boolean(settings?.[addon]?.localCliExecution);
+}
+
 function resolveDraftPath(relativePath) {
   const resolved = path.resolve(userRoot(), String(relativePath ?? ""));
   const root = path.resolve(draftRoot());
@@ -3838,6 +3886,7 @@ async function executeDelegationList(payload) {
 }
 
 async function executeHermesStatus(payload = {}) {
+  const executionSettings = await readAddonExecutionSettings();
   const profileHome = hermesHome(payload.profileHome);
   const command = hermesCommand(profileHome);
   const dashboard = await executeHermesDashboardStatus({ profileHome, host: payload.host, port: payload.port });
@@ -3853,9 +3902,9 @@ async function executeHermesStatus(payload = {}) {
     available: Boolean(command),
     command: command ? redactPathForDiagnostics(command) : "",
     dashboard,
-    executionEnabled: hermesExecutionExplicitlyEnabled(payload),
+    executionEnabled: addonLocalCliExecutionEnabled("hermes", payload, executionSettings),
     mode: command
-      ? hermesExecutionExplicitlyEnabled(payload)
+      ? addonLocalCliExecutionEnabled("hermes", payload, executionSettings)
         ? "local-hermes-cli"
         : "local-hermes-cli-disabled"
       : "packet-only",
@@ -3921,11 +3970,6 @@ function buildHermesExecutionPrompt(packet) {
     "- If external action is needed, list it under Approval Needs instead of performing it.",
     "- Keep the output concise and structured with these headings exactly: Final Summary, Actions Taken, Approval Needs, Residual Risks, Verification.",
   ].filter(Boolean).join("\n");
-}
-
-function hermesExecutionExplicitlyEnabled(payload = {}) {
-  if (payload.enableHermesExecution === true) return true;
-  return /^enabled|true|1$/i.test(String(process.env.RESONANTOS_HERMES_EXECUTION ?? ""));
 }
 
 function parseHermesCliResult(output) {
@@ -4007,6 +4051,7 @@ async function executeHermesDelegationStart(payload = {}) {
   const adapter = String(payload.adapter ?? process.env.RESONANTOS_HERMES_ADAPTER ?? "auto").trim().toLowerCase();
   const profileHome = hermesHome(payload.profileHome);
   const command = hermesCommand(profileHome);
+  const executionSettings = await readAddonExecutionSettings();
   await writeDelegationStatus(taskPath, "running", {
     startedAt: new Date().toISOString(),
     adapter: adapter || "auto",
@@ -4023,7 +4068,7 @@ async function executeHermesDelegationStart(payload = {}) {
       status: "blocked",
     };
   }
-  if (adapter !== "deterministic" && !hermesExecutionExplicitlyEnabled(payload)) {
+  if (adapter !== "deterministic" && !addonLocalCliExecutionEnabled("hermes", payload, executionSettings)) {
     const blockedAt = new Date().toISOString();
     const updated = await writeDelegationStatus(taskPath, "blocked", {
       blockedAt,
@@ -4114,6 +4159,7 @@ async function executeHermesDelegationCancel(payload = {}) {
 }
 
 async function executeOpenCodeStatus(payload = {}) {
+  const executionSettings = await readAddonExecutionSettings();
   const command = opencodeCommand();
   const taskRoot = path.join(delegationRoot(), "opencode");
   const tasks = await listFilesRecursive(taskRoot, (filePath) => filePath.endsWith(".md"), 200);
@@ -4126,8 +4172,8 @@ async function executeOpenCodeStatus(payload = {}) {
   return {
     installed: Boolean(command),
     command: command ? redactPathForDiagnostics(command) : "",
-    mode: command && openCodeExecutionExplicitlyEnabled(payload) ? "local-opencode-cli" : command ? "local-opencode-cli-disabled" : "packet-only",
-    executionEnabled: openCodeExecutionExplicitlyEnabled(payload),
+    mode: command && addonLocalCliExecutionEnabled("opencode", payload, executionSettings) ? "local-opencode-cli" : command ? "local-opencode-cli-disabled" : "packet-only",
+    executionEnabled: addonLocalCliExecutionEnabled("opencode", payload, executionSettings),
     workspaceLaunch: "not-enabled-in-browser-first-v1",
     detail: command
       ? "OpenCode runtime was detected. ResonantOS can create governed coding packets and start execution only when explicit OpenCode execution is enabled."
@@ -4137,11 +4183,6 @@ async function executeOpenCodeStatus(payload = {}) {
     requiredGrants: ["filesystem", "shell", "providers", "ui-embedding"],
     boundary: "OpenCode is an add-on agent. Filesystem, shell, provider secrets, wallet actions, and trusted memory writes remain mediated by ResonantOS.",
   };
-}
-
-function openCodeExecutionExplicitlyEnabled(payload = {}) {
-  if (payload.enableOpenCodeExecution === true) return true;
-  return /^enabled|true|1$/i.test(String(process.env.RESONANTOS_OPENCODE_EXECUTION ?? ""));
 }
 
 function resolveOpenCodeWorkspacePath(payload = {}) {
@@ -4281,6 +4322,7 @@ async function executeOpenCodeDelegationStart(payload = {}) {
   }
   const adapter = String(payload.adapter ?? process.env.RESONANTOS_OPENCODE_ADAPTER ?? "auto").trim().toLowerCase();
   const command = opencodeCommand();
+  const executionSettings = await readAddonExecutionSettings();
   await writeDelegationStatus(taskPath, "running", {
     startedAt: new Date().toISOString(),
     adapter: adapter || "auto",
@@ -4297,7 +4339,7 @@ async function executeOpenCodeDelegationStart(payload = {}) {
       status: "blocked",
     };
   }
-  if (adapter !== "deterministic" && !openCodeExecutionExplicitlyEnabled(payload)) {
+  if (adapter !== "deterministic" && !addonLocalCliExecutionEnabled("opencode", payload, executionSettings)) {
     const updated = await writeDelegationStatus(taskPath, "blocked", {
       blockedAt: new Date().toISOString(),
       blockedReason: "OpenCode execution requires explicit enablement",
@@ -4443,6 +4485,7 @@ async function executeAddonDraftProviderHandoff(payload) {
 }
 
 async function executeAddonsStatus() {
+  const executionSettings = await readAddonExecutionSettings();
   return {
     addons: [
       {
@@ -4453,6 +4496,10 @@ async function executeAddonsStatus() {
         trust: "add-on agent",
         requestedCapabilities: ["agent-delegation", "network", "notifications"],
         grantedCapabilities: ["agent-delegation"],
+        execution: {
+          localCliExecution: Boolean(executionSettings.hermes.localCliExecution),
+          mode: hermesCommand() ? "local-cli-detected" : "packet-only",
+        },
       },
       {
         id: "addon.opencode",
@@ -4462,7 +4509,11 @@ async function executeAddonsStatus() {
         trust: "add-on agent",
         requestedCapabilities: ["agent-delegation", "filesystem-scoped", "shell", "providers"],
         grantedCapabilities: ["agent-delegation"],
-        deniedCapabilities: ["shell"],
+        deniedCapabilities: executionSettings.opencode.localCliExecution ? [] : ["shell"],
+        execution: {
+          localCliExecution: Boolean(executionSettings.opencode.localCliExecution),
+          mode: opencodeCommand() ? "local-cli-detected" : "packet-only",
+        },
       },
       {
         id: "addon.living-archive",
@@ -4499,6 +4550,33 @@ async function executeAddonsStatus() {
         boundary: "Draft packets only. Google Calendar handoff opens an event template for human review; ResonantOS does not schedule events.",
       },
     ],
+  };
+}
+
+async function executeAddonExecutionSettingsGet() {
+  const settings = await readAddonExecutionSettings();
+  return {
+    settings,
+    boundary: "Local CLI execution is disabled by default. Enabling it lets a configured add-on runtime execute through host-mediated adapters while preserving scoped task packets and artifact review.",
+  };
+}
+
+async function executeAddonExecutionSettingsUpdate(payload = {}) {
+  const current = await readAddonExecutionSettings();
+  const addon = String(payload.addon ?? "").trim().toLowerCase();
+  if (!["hermes", "opencode"].includes(addon)) {
+    throw new Error("Execution settings can only be updated for Hermes or OpenCode.");
+  }
+  const next = normalizeAddonExecutionSettings(current);
+  next[addon] = {
+    ...next[addon],
+    localCliExecution: Boolean(payload.localCliExecution),
+  };
+  const settings = await writeAddonExecutionSettings(next);
+  return {
+    addon,
+    settings,
+    status: settings[addon].localCliExecution ? "enabled" : "disabled",
   };
 }
 
@@ -4925,6 +5003,13 @@ const bridgeRoutes = [
   { method: "POST", path: "/archive/review/promotions/list", handler: executeArchivePromotionList },
   { method: "POST", path: "/archive/review/promotions/restore", handler: executeArchivePromotionRestore },
   { method: "GET", path: "/addons/status", handler: executeAddonsStatus },
+  { method: "GET", path: "/addons/execution-settings", handler: executeAddonExecutionSettingsGet },
+  {
+    method: "POST",
+    path: "/addons/execution-settings",
+    requiredCapability: "addon-execution-settings-write",
+    handler: executeAddonExecutionSettingsUpdate,
+  },
   { method: "GET", path: "/opencode/status", handler: executeOpenCodeStatus },
   { method: "GET", path: "/browser/downloads", handler: executeBrowserDownloads },
   { method: "GET", path: "/browser/launch-diagnostics", handler: executeBrowserLaunchDiagnostics },
@@ -5002,6 +5087,9 @@ const bridgeCapabilityTokens = {
   "browser-download-action": args.get("browser-download-action-token") ??
     process.env.RESONANTOS_BROWSER_FIRST_BROWSER_DOWNLOAD_ACTION_TOKEN ??
     createBridgeToken(),
+  "addon-execution-settings-write": args.get("addon-execution-settings-token") ??
+    process.env.RESONANTOS_BROWSER_FIRST_ADDON_EXECUTION_SETTINGS_TOKEN ??
+    createBridgeToken(),
 };
 
 if (args.get("bridge-auth-self-test") === "true") {
@@ -5034,8 +5122,7 @@ if (args.get("hermes-delegation-self-test") === "true") {
       extensionOrigin: resonantExtensionOrigin,
       routes: bridgeRoutes,
     });
-    const address = server.address();
-    const actualPort = typeof address === "object" && address ? address.port : Number(args.get("bridge-port") ?? 0);
+    const actualPort = bridgeServerPort(server, Number(args.get("bridge-port") ?? 0));
     const request = async (route, body = {}) => {
       const response = await fetch(`http://127.0.0.1:${actualPort}${route}`, {
         method: "POST",
@@ -5130,8 +5217,7 @@ if (args.get("opencode-delegation-self-test") === "true") {
       extensionOrigin: resonantExtensionOrigin,
       routes: bridgeRoutes,
     });
-    const address = server.address();
-    const actualPort = typeof address === "object" && address ? address.port : Number(args.get("bridge-port") ?? 0);
+    const actualPort = bridgeServerPort(server, Number(args.get("bridge-port") ?? 0));
     const request = async (route, body = {}) => {
       const response = await fetch(`http://127.0.0.1:${actualPort}${route}`, {
         method: "POST",
@@ -5203,6 +5289,117 @@ if (args.get("opencode-delegation-self-test") === "true") {
   process.exit(exitCode);
 }
 
+if (args.get("addon-execution-settings-self-test") === "true") {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "resonantos-addon-execution-bridge-"));
+  const previousUserRoot = process.env.RESONANTOS_BROWSER_FIRST_USER_ROOT;
+  const previousHermesCommand = process.env.HERMES_COMMAND;
+  const previousOpenCodeCommand = process.env.OPENCODE_COMMAND;
+  process.env.RESONANTOS_BROWSER_FIRST_USER_ROOT = path.join(tempRoot, "ResonantOS_User");
+  let server = null;
+  let exitCode = 1;
+  try {
+    const binRoot = path.join(tempRoot, "bin");
+    const fakeHermes = path.join(binRoot, process.platform === "win32" ? "hermes.cmd" : "hermes");
+    const fakeOpenCode = path.join(binRoot, process.platform === "win32" ? "opencode.cmd" : "opencode");
+    await mkdir(binRoot, { recursive: true });
+    await writeFile(fakeHermes, process.platform === "win32" ? "@echo off\r\necho fake hermes\r\n" : "#!/bin/sh\necho fake hermes\n");
+    await writeFile(fakeOpenCode, process.platform === "win32" ? "@echo off\r\necho fake opencode\r\n" : "#!/bin/sh\necho fake opencode\n");
+    await chmod(fakeHermes, 0o755).catch(() => undefined);
+    await chmod(fakeOpenCode, 0o755).catch(() => undefined);
+    process.env.HERMES_COMMAND = fakeHermes;
+    process.env.OPENCODE_COMMAND = fakeOpenCode;
+    server = await startBridgeServer({
+      port: Number(args.get("bridge-port") ?? 0),
+      bridgeToken,
+      bridgeCapabilityTokens,
+      extensionOrigin: resonantExtensionOrigin,
+      routes: bridgeRoutes,
+    });
+    const actualPort = bridgeServerPort(server, Number(args.get("bridge-port") ?? 0));
+    const request = async (route, { method = "GET", body, capabilityToken } = {}) => {
+      const response = await fetch(`http://127.0.0.1:${actualPort}${route}`, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          "Origin": resonantExtensionOrigin,
+          "X-ResonantOS-Bridge-Token": bridgeToken,
+          ...(capabilityToken ? { "X-ResonantOS-Bridge-Capability-Token": capabilityToken } : {}),
+        },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      });
+      const payload = await response.json();
+      return { ok: response.ok, payload, status: response.status };
+    };
+    const initial = await request("/addons/execution-settings");
+    const denied = await request("/addons/execution-settings", {
+      method: "POST",
+      body: { addon: "hermes", localCliExecution: true },
+    });
+    const hermesEnabled = await request("/addons/execution-settings", {
+      method: "POST",
+      capabilityToken: bridgeCapabilityTokens["addon-execution-settings-write"],
+      body: { addon: "hermes", localCliExecution: true },
+    });
+    const opencodeEnabled = await request("/addons/execution-settings", {
+      method: "POST",
+      capabilityToken: bridgeCapabilityTokens["addon-execution-settings-write"],
+      body: { addon: "opencode", localCliExecution: true },
+    });
+    const after = await request("/addons/execution-settings");
+    const hermesStatus = await request("/hermes/status", { method: "POST", body: {} });
+    const opencodeStatus = await request("/opencode/status");
+    const addons = await request("/addons/status");
+    const ok = (
+      initial.ok &&
+      initial.payload.settings.hermes.localCliExecution === false &&
+      initial.payload.settings.opencode.localCliExecution === false &&
+      denied.status === 403 &&
+      hermesEnabled.payload.status === "enabled" &&
+      opencodeEnabled.payload.status === "enabled" &&
+      after.payload.settings.hermes.localCliExecution === true &&
+      after.payload.settings.opencode.localCliExecution === true &&
+      hermesStatus.payload.executionEnabled === true &&
+      hermesStatus.payload.mode === "local-hermes-cli" &&
+      opencodeStatus.payload.executionEnabled === true &&
+      opencodeStatus.payload.mode === "local-opencode-cli" &&
+      addons.payload.addons.some((addon) => addon.id === "addon.hermes" && addon.execution?.localCliExecution === true) &&
+      addons.payload.addons.some((addon) => addon.id === "addon.opencode" && addon.execution?.localCliExecution === true)
+    );
+    console.log(JSON.stringify({
+      ok,
+      deniedStatus: denied.status,
+      enabled: after.payload.settings.hermes.localCliExecution === true && after.payload.settings.opencode.localCliExecution === true,
+      hermesMode: hermesStatus.payload.mode,
+      opencodeMode: opencodeStatus.payload.mode,
+      settings: after.payload.settings,
+    }, null, 2));
+    exitCode = ok ? 0 : 1;
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+  } finally {
+    if (server) {
+      await new Promise((resolve) => server.close(resolve));
+    }
+    if (previousUserRoot === undefined) {
+      delete process.env.RESONANTOS_BROWSER_FIRST_USER_ROOT;
+    } else {
+      process.env.RESONANTOS_BROWSER_FIRST_USER_ROOT = previousUserRoot;
+    }
+    if (previousHermesCommand === undefined) {
+      delete process.env.HERMES_COMMAND;
+    } else {
+      process.env.HERMES_COMMAND = previousHermesCommand;
+    }
+    if (previousOpenCodeCommand === undefined) {
+      delete process.env.OPENCODE_COMMAND;
+    } else {
+      process.env.OPENCODE_COMMAND = previousOpenCodeCommand;
+    }
+    await rm(tempRoot, { recursive: true, force: true }).catch(() => undefined);
+  }
+  process.exit(exitCode);
+}
+
 if (args.get("memory-source-move-self-test") === "true") {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), "resonantos-move-bridge-"));
   const previousUserRoot = process.env.RESONANTOS_BROWSER_FIRST_USER_ROOT;
@@ -5222,8 +5419,7 @@ if (args.get("memory-source-move-self-test") === "true") {
       extensionOrigin: resonantExtensionOrigin,
       routes: bridgeRoutes,
     });
-    const address = server.address();
-    const actualPort = typeof address === "object" && address ? address.port : Number(args.get("bridge-port") ?? 0);
+    const actualPort = bridgeServerPort(server, Number(args.get("bridge-port") ?? 0));
     const urlFor = (route) => `http://127.0.0.1:${actualPort}${route}`;
     const post = (route, body, capabilityToken = bridgeCapabilityToken) => fetch(urlFor(route), {
       method: "POST",
@@ -5325,22 +5521,15 @@ if (!existsSync(path.join(resonantExtension, "manifest.json"))) {
   process.exit(1);
 }
 
-await mkdir(profileDir, { recursive: true });
-await removeCachedUnpackedExtension(profileDir, resonantExtensionId);
-await clearResonantNewTabOverride(profileDir, resonantExtensionId);
-const bridgeConfigPath = await writeBridgeConfig({
-  extensionRoot: resonantExtension,
-  bridgePort,
-  bridgeToken,
-  bridgeCapabilityTokens,
-});
-
 const extensionDirs = [resonantExtension];
 const phantomExtension = findPhantomExtension();
 if (phantomExtension) {
   extensionDirs.push(phantomExtension);
 }
 
+await mkdir(profileDir, { recursive: true });
+await removeCachedUnpackedExtension(profileDir, resonantExtensionId);
+await clearResonantNewTabOverride(profileDir, resonantExtensionId);
 await seedPinnedExtensions(profileDir, [resonantExtensionId, phantomExtension ? phantomExtensionId : null]);
 const hostArgs = [
   "--resonantos-browser-first",
@@ -5358,16 +5547,42 @@ console.log(JSON.stringify({
   directHost: launchThroughMacAppBundle ? null : hostBinary,
 }));
 
-const bridgeServer = await startBridgeServer({
-  port: bridgePort,
+let bridgeInfo;
+try {
+  bridgeInfo = await startBridgeServerWithFallback({
+    port: bridgePort,
+    bridgeToken,
+    bridgeCapabilityTokens,
+    extensionOrigin: resonantExtensionOrigin,
+    routes: bridgeRoutes,
+  });
+} catch (error) {
+  console.error(JSON.stringify({
+    event: "browser.first.bridge_failed",
+    requestedPort: bridgePort,
+    code: error?.code ?? "unknown",
+    message: error instanceof Error ? error.message : String(error),
+  }));
+  throw error;
+}
+const bridgeServer = bridgeInfo.server;
+const activeBridgePort = bridgeInfo.actualPort;
+const bridgeConfigPath = await writeBridgeConfig({
+  extensionRoot: resonantExtension,
+  bridgePort: activeBridgePort,
   bridgeToken,
   bridgeCapabilityTokens,
-  extensionOrigin: resonantExtensionOrigin,
-  routes: bridgeRoutes,
 });
+console.log(JSON.stringify({
+  event: "browser.first.bridge_started",
+  requestedPort: bridgeInfo.requestedPort,
+  attemptedPort: bridgeInfo.attemptedPort,
+  actualPort: activeBridgePort,
+  recovered: bridgeInfo.recovered,
+}));
 
 console.log("Launching ResonantOS Browser-First host");
-console.log(JSON.stringify({ hostBinary, hostAppBundle, url, profileDir, extensionDirs, phantomLoaded: Boolean(phantomExtension), pinnedExtensions: [resonantExtensionId, phantomExtension ? phantomExtensionId : null].filter(Boolean), bridgeUrl: `http://127.0.0.1:${bridgePort}`, bridgeConfigPath, remoteDebuggingPort: remoteDebuggingPort ?? "ephemeral" }, null, 2));
+console.log(JSON.stringify({ hostBinary, hostAppBundle, url, profileDir, extensionDirs, phantomLoaded: Boolean(phantomExtension), pinnedExtensions: [resonantExtensionId, phantomExtension ? phantomExtensionId : null].filter(Boolean), bridgeUrl: `http://127.0.0.1:${activeBridgePort}`, bridgeConfigPath, remoteDebuggingPort: remoteDebuggingPort ?? "ephemeral" }, null, 2));
 
 function launchNativeHostDirect() {
   return spawn(hostBinary, hostArgs, {
