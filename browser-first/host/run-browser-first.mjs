@@ -3808,6 +3808,13 @@ function sectionFromMarkdown(content, heading) {
   return match ? match[1].trim() : "";
 }
 
+function sectionListFromMarkdown(content, heading) {
+  return sectionFromMarkdown(content, heading)
+    .split("\n")
+    .map((line) => line.replace(/^\s*[-*]\s*/, "").trim())
+    .filter(Boolean);
+}
+
 function draftSummaryFromMarkdown(filePath, content, details) {
   return {
     id: fieldFromMarkdown(content, "id") || path.basename(filePath, ".md"),
@@ -3974,18 +3981,24 @@ function buildHermesExecutionPrompt(packet) {
 
 function parseHermesCliResult(output) {
   const text = String(output ?? "").trim();
+  const actionsTaken = sectionListFromMarkdown(text, "Actions Taken");
+  const approvalNeeds = sectionListFromMarkdown(text, "Approval Needs");
+  const residualRisks = sectionListFromMarkdown(text, "Residual Risks");
+  const verification = sectionListFromMarkdown(text, "Verification");
   return {
     adapter: "hermes-cli",
-    actionsTaken: sectionFromMarkdown(`## Actions Taken\n${sectionFromMarkdown(text, "Actions Taken") || "Hermes returned a result through the local CLI adapter."}`, "Actions Taken").split("\n").filter(Boolean),
-    approvalNeeds: sectionFromMarkdown(text, "Approval Needs").split("\n").filter(Boolean).length
-      ? sectionFromMarkdown(text, "Approval Needs").split("\n").filter(Boolean)
+    actionsTaken: actionsTaken.length
+      ? actionsTaken
+      : ["Hermes returned a result through the local CLI adapter."],
+    approvalNeeds: approvalNeeds.length
+      ? approvalNeeds
       : ["Human approval is required before any external send, submission, wallet action, or trusted memory write."],
     finalSummary: sectionFromMarkdown(text, "Final Summary") || text.slice(0, 1600) || "Hermes completed without returning a summary.",
-    residualRisks: sectionFromMarkdown(text, "Residual Risks").split("\n").filter(Boolean).length
-      ? sectionFromMarkdown(text, "Residual Risks").split("\n").filter(Boolean)
+    residualRisks: residualRisks.length
+      ? residualRisks
       : ["Hermes output was accepted as an add-on artifact and still requires normal human review."],
-    verification: sectionFromMarkdown(text, "Verification").split("\n").filter(Boolean).length
-      ? sectionFromMarkdown(text, "Verification").split("\n").filter(Boolean)
+    verification: verification.length
+      ? verification
       : ["Local Hermes CLI returned successfully."],
   };
 }
@@ -4106,6 +4119,7 @@ async function executeHermesDelegationStart(payload = {}) {
   await writeFile(taskPath, updated);
   return {
     ...delegationSummaryFromMarkdown(taskPath, updated, await stat(taskPath)),
+    adapter: result.adapter,
     artifact: {
       path: path.relative(userRoot(), artifactPath),
       ...result,
@@ -4134,13 +4148,13 @@ async function executeHermesDelegationArtifact(payload = {}) {
   }
   const artifact = await readFile(artifactPath, "utf8");
   return {
-    actionsTaken: sectionFromMarkdown(artifact, "Actions Taken"),
-    approvalNeeds: sectionFromMarkdown(artifact, "Approval Needs"),
+    actionsTaken: sectionListFromMarkdown(artifact, "Actions Taken"),
+    approvalNeeds: sectionListFromMarkdown(artifact, "Approval Needs"),
     content: artifact,
     finalSummary: sectionFromMarkdown(artifact, "Final Summary"),
     path: path.relative(userRoot(), artifactPath),
-    residualRisks: sectionFromMarkdown(artifact, "Residual Risks"),
-    verification: sectionFromMarkdown(artifact, "Verification"),
+    residualRisks: sectionListFromMarkdown(artifact, "Residual Risks"),
+    verification: sectionListFromMarkdown(artifact, "Verification"),
   };
 }
 
@@ -5174,6 +5188,118 @@ if (args.get("hermes-delegation-self-test") === "true") {
       hermesMode: hermesStatus.mode,
       listed: listed.delegations.length,
       statusAfter: statusAfter.status,
+    }, null, 2));
+    exitCode = ok ? 0 : 1;
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+  } finally {
+    if (server) {
+      await new Promise((resolve) => server.close(resolve));
+    }
+    if (previousUserRoot === undefined) {
+      delete process.env.RESONANTOS_BROWSER_FIRST_USER_ROOT;
+    } else {
+      process.env.RESONANTOS_BROWSER_FIRST_USER_ROOT = previousUserRoot;
+    }
+    if (previousHermesCommand === undefined) {
+      delete process.env.HERMES_COMMAND;
+    } else {
+      process.env.HERMES_COMMAND = previousHermesCommand;
+    }
+    await rm(tempRoot, { recursive: true, force: true }).catch(() => undefined);
+  }
+  process.exit(exitCode);
+}
+
+if (args.get("hermes-cli-execution-self-test") === "true") {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "resonantos-hermes-cli-bridge-"));
+  const previousUserRoot = process.env.RESONANTOS_BROWSER_FIRST_USER_ROOT;
+  const previousHermesCommand = process.env.HERMES_COMMAND;
+  process.env.RESONANTOS_BROWSER_FIRST_USER_ROOT = path.join(tempRoot, "ResonantOS_User");
+  let server = null;
+  let exitCode = 1;
+  try {
+    const fakeHermes = path.join(tempRoot, "bin", process.platform === "win32" ? "hermes.cmd" : "hermes");
+    const fakeOutput = [
+      "## Final Summary",
+      "Hermes CLI adapter completed the requested production execution test.",
+      "",
+      "## Actions Taken",
+      "- Parsed the ResonantOS task packet.",
+      "- Returned a reviewable artifact instead of taking external action.",
+      "",
+      "## Approval Needs",
+      "- Human approval remains required for any external send, submit, wallet action, or trusted memory write.",
+      "",
+      "## Residual Risks",
+      "- This is a fake Hermes executable used only for deterministic adapter validation.",
+      "",
+      "## Verification",
+      "- Local Hermes CLI process was invoked through the host boundary.",
+    ].join("\n");
+    await mkdir(path.dirname(fakeHermes), { recursive: true });
+    await writeFile(fakeHermes, process.platform === "win32"
+      ? `@echo off\r\necho ${fakeOutput.replaceAll("\n", "\r\necho ")}\r\n`
+      : `#!/bin/sh\ncat <<'EOF'\n${fakeOutput}\nEOF\n`);
+    await chmod(fakeHermes, 0o755).catch(() => undefined);
+    process.env.HERMES_COMMAND = fakeHermes;
+    server = await startBridgeServer({
+      port: Number(args.get("bridge-port") ?? 0),
+      bridgeToken,
+      bridgeCapabilityTokens,
+      extensionOrigin: resonantExtensionOrigin,
+      routes: bridgeRoutes,
+    });
+    const actualPort = bridgeServerPort(server, Number(args.get("bridge-port") ?? 0));
+    const request = async (route, { method = "POST", body = {}, capabilityToken = "" } = {}) => {
+      const response = await fetch(`http://127.0.0.1:${actualPort}${route}`, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          "Origin": resonantExtensionOrigin,
+          "X-ResonantOS-Bridge-Token": bridgeToken,
+          ...(capabilityToken ? { "X-ResonantOS-Bridge-Capability-Token": capabilityToken } : {}),
+        },
+        ...(method === "GET" ? {} : { body: JSON.stringify(body) }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(`${route} failed: ${payload.error || response.status}`);
+      }
+      return payload;
+    };
+    await request("/addons/execution-settings", {
+      body: { addon: "hermes", localCliExecution: true },
+      capabilityToken: bridgeCapabilityTokens["addon-execution-settings-write"],
+    });
+    const created = await request("/addons/delegate", {
+      body: {
+        target: "hermes",
+        mission: "Validate that enabled Hermes CLI execution produces a governed artifact.",
+        contextMarkdown: "This is deterministic test context only.",
+      },
+    });
+    const started = await request("/hermes/delegation/start", { body: { path: created.path } });
+    const artifact = await request("/hermes/delegation/artifact", { body: { path: created.path } });
+    const statusAfter = await request("/hermes/delegation/status", { body: { path: created.path } });
+    const hermesStatus = await request("/hermes/status", { body: {} });
+    const ok = (
+      started.status === "completed" &&
+      /adapter:\s*hermes-cli/i.test(artifact.content) &&
+      statusAfter.status === "completed" &&
+      statusAfter.resultArtifactPath &&
+      hermesStatus.executionEnabled === true &&
+      hermesStatus.mode === "local-hermes-cli" &&
+      /Hermes CLI adapter completed/.test(artifact.finalSummary) &&
+      /Parsed the ResonantOS task packet/.test(artifact.actionsTaken)
+    );
+    console.log(JSON.stringify({
+      ok,
+      adapter: /adapter:\s*hermes-cli/i.test(artifact.content) ? "hermes-cli" : "",
+      artifactPath: artifact.path,
+      hermesMode: hermesStatus.mode,
+      statusAfter: statusAfter.status,
+      summary: artifact.finalSummary,
     }, null, 2));
     exitCode = ok ? 0 : 1;
   } catch (error) {
