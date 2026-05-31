@@ -127,7 +127,8 @@ Current status:
 - Connected Source Review marks compatible files as new, changed, unchanged, or tracked against the source version manifest.
 - Changed/tracked compatible files can open a bounded diff preview against the last governed intake artifact.
 - Connected Source Review can create governed intake from all new/changed compatible files in one action while skipping unchanged files.
-- Needs scheduled wiki lint operations and richer source-change approval UX.
+- Wiki lint can now run through a host-mediated Living Archive action, write a durable `REVIEW/lint` artifact, and append a `lint` event to `AI_MEMORY/wiki/log.md` without modifying trusted AI Memory pages.
+- Needs richer source-change approval UX.
 
 ### 5. Settings
 

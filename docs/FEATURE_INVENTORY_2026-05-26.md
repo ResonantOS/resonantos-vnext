@@ -506,6 +506,7 @@ These features exist in the desktop vNext codebase and remain important. Some wi
 - Guarded document reads.
 - Intake artifact writes.
 - Collision-safe intake filenames.
+- Host-mediated wiki lint run that writes `Memory/REVIEW/lint` artifacts and appends `lint` events to `AI_MEMORY/wiki/log.md`.
 - Review queue.
 - Review artifacts.
 - Promotion state.
