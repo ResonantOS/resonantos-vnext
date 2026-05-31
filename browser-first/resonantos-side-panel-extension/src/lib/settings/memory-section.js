@@ -95,7 +95,7 @@ function movePreflightCard(preflight, onExecute) {
     return card;
   }
   const warning = document.createElement("p");
-  warning.textContent = `To execute this destructive move, type exactly: ${preflight.confirmationPhrase}`;
+  warning.textContent = `This moves the folder into ResonantOS Memory and makes that managed copy canonical. The engine verifies file hashes and writes a rollback ledger before registration. To execute, type exactly: ${preflight.confirmationPhrase}`;
   const confirm = document.createElement("input");
   confirm.type = "text";
   confirm.placeholder = preflight.confirmationPhrase;
@@ -193,7 +193,7 @@ export function renderMemorySection(container, { bridgeRequest }) {
     metrics,
     noteCard({
       title: "Source boundary",
-      body: "Copy-on-import makes the ResonantOS memory copy the active knowledge base. Linked sources stay read-only. Move-on-import should be used carefully because the original location stops being the canonical source."
+      body: "Copy-on-import makes the ResonantOS memory copy the active knowledge base. Linked sources stay read-only. Move-on-import relocates the selected folder into ResonantOS Memory, verifies moved bytes, and keeps a rollback ledger; use it only when you want ResonantOS Memory to become the source location."
     }),
     sourceList,
     noteCard({

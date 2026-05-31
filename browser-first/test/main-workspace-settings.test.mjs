@@ -1016,6 +1016,8 @@ test("settings memory section gates move-on-import behind preflight and confirma
     ));
     assert.match(container.textContent, /Move preflight ready/);
     assert.match(container.textContent, /MOVE MoveMe/);
+    assert.match(container.textContent, /managed copy canonical/);
+    assert.match(container.textContent, /verifies file hashes/);
     assert.equal(calls.some(([route, options]) => route === "/memory/settings" && options.method === "POST"), false);
 
     container.querySelector('[aria-label="Move import confirmation phrase"]').value = "MOVE MoveMe";

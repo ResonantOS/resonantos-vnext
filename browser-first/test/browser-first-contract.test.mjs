@@ -377,6 +377,10 @@ test("browser-first main workspace owns new-tab AI chat and hands browser tasks 
   assert.match(launcher, /\/memory\/source\/move-execute/);
   assert.match(launcher, /\/memory\/source\/move-rollback/);
   assert.match(launcher, /memory-source-move/);
+  assert.match(launcher, /result\.status !== "moved"/);
+  assert.match(launcher, /automatic rollback restored/);
+  assert.match(launcher, /Memory\/CONFIG\/move-imports/);
+  assert.match(launcher, /outsideLedgerStatus/);
   assert.match(launcher, /\/memory\/source\/review/);
   assert.match(launcher, /memory-source-review/);
   assert.match(launcher, /\/memory\/source\/intake/);

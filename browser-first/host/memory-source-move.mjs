@@ -118,17 +118,72 @@ async function listMoveEntries(sourcePath, limit = MAX_MOVE_FILES) {
   return { files, directories, blocked };
 }
 
-async function moveFileAcrossVolumes(sourcePath, destinationPath) {
+async function verifiedFileHash(filePath, expectedHash, message) {
+  const actualHash = contentHash(await readFile(filePath));
+  if (actualHash !== expectedHash) {
+    throw new Error(`${message}: expected ${expectedHash}, got ${actualHash}`);
+  }
+  return actualHash;
+}
+
+async function moveFileAcrossVolumes(sourcePath, destinationPath, expectedHash) {
   try {
     await rename(sourcePath, destinationPath);
+    await verifiedFileHash(destinationPath, expectedHash, "Move import destination hash mismatch after rename");
     return "rename";
   } catch (error) {
     if (error?.code !== "EXDEV") {
       throw error;
     }
     await copyFile(sourcePath, destinationPath);
+    await verifiedFileHash(destinationPath, expectedHash, "Move import destination hash mismatch after cross-volume copy");
     await rm(sourcePath, { force: true });
     return "copy-unlink";
+  }
+}
+
+async function rollbackMovedEntries(moved) {
+  const restored = [];
+  const skipped = [];
+  for (const entry of [...moved].reverse()) {
+    const result = await restoreMovedEntry(entry);
+    if (result.restored) {
+      restored.push(result.restored);
+    } else {
+      skipped.push(result.skipped);
+    }
+  }
+  await cleanupEmptyDestinationDirs(moved);
+  return { restored, skipped };
+}
+
+async function restoreMovedEntry(entry) {
+  if (!existsSync(entry.destinationPath)) {
+    return { skipped: { relativePath: entry.relativePath, reason: "destination-missing" } };
+  }
+  if (existsSync(entry.sourcePath)) {
+    return { skipped: { relativePath: entry.relativePath, reason: "source-path-already-exists" } };
+  }
+  try {
+    await verifiedFileHash(entry.destinationPath, entry.beforeHash, "Move import rollback source hash mismatch");
+  } catch (error) {
+    return { skipped: { relativePath: entry.relativePath, reason: "destination-hash-mismatch", error: error.message } };
+  }
+  await mkdir(path.dirname(entry.sourcePath), { recursive: true });
+  await rename(entry.destinationPath, entry.sourcePath);
+  try {
+    await verifiedFileHash(entry.sourcePath, entry.beforeHash, "Move import rollback restored hash mismatch");
+  } catch (error) {
+    return { skipped: { relativePath: entry.relativePath, reason: "restored-hash-mismatch", error: error.message } };
+  }
+  return { restored: { relativePath: entry.relativePath, sourcePath: entry.sourcePath } };
+}
+
+async function cleanupEmptyDestinationDirs(entries) {
+  const directories = [...new Set(entries.map((entry) => path.dirname(entry.destinationPath)))]
+    .sort((a, b) => b.length - a.length);
+  for (const directory of directories) {
+    await rm(directory, { recursive: false, force: true }).catch(() => undefined);
   }
 }
 
@@ -188,6 +243,7 @@ export async function executeMoveImport({
   ownership = "mixed-library",
   confirmation,
   actor = "resonantos-browser-first",
+  moveFile = moveFileAcrossVolumes,
 }) {
   const preflight = await buildMoveImportPreflight({ sourcePath, memoryRoot, kind, ownership });
   if (!preflight.okToMove) {
@@ -244,22 +300,31 @@ export async function executeMoveImport({
       status: "pending",
     };
     try {
-      ledgerEntry.moveMethod = await moveFileAcrossVolumes(file.absolutePath, destination);
+      ledgerEntry.moveMethod = await moveFile(file.absolutePath, destination, beforeHash);
+      ledgerEntry.afterHash = await verifiedFileHash(destination, beforeHash, "Move import destination hash mismatch");
       ledgerEntry.status = "moved";
       moved.push(ledgerEntry);
     } catch (error) {
       ledgerEntry.status = "failed";
       ledgerEntry.error = error.message;
       failed.push(ledgerEntry);
+      if (existsSync(destination) && existsSync(file.absolutePath)) {
+        await rm(destination, { force: true }).catch(() => undefined);
+      }
     }
     await appendFile(ledgerPath, `${JSON.stringify(ledgerEntry)}\n`, { mode: 0o600 });
     if (failed.length) break;
   }
 
-  for (const directory of directories.sort((a, b) => b.length - a.length)) {
-    await rm(directory, { recursive: false, force: true }).catch(() => undefined);
+  let automaticRollback = { restored: [], skipped: [] };
+  if (failed.length) {
+    automaticRollback = await rollbackMovedEntries(moved);
+  } else {
+    for (const directory of directories.sort((a, b) => b.length - a.length)) {
+      await rm(directory, { recursive: false, force: true }).catch(() => undefined);
+    }
+    await rm(preflight.sourcePath, { recursive: true, force: true }).catch(() => undefined);
   }
-  await rm(preflight.sourcePath, { recursive: true, force: true }).catch(() => undefined);
 
   const finishedAt = new Date().toISOString();
   const finalManifest = {
@@ -267,7 +332,9 @@ export async function executeMoveImport({
     finishedAt,
     movedCount: moved.length,
     failedCount: failed.length,
-    status: failed.length ? "partial-failure" : "moved",
+    rollbackRestoredCount: automaticRollback.restored.length,
+    rollbackSkippedCount: automaticRollback.skipped.length,
+    status: failed.length ? "partial-failure-rolled-back" : "moved",
   };
   await writeFile(manifestPath, `${JSON.stringify(finalManifest, null, 2)}\n`, { mode: 0o600 });
   return {
@@ -285,6 +352,7 @@ export async function executeMoveImport({
       ledgerPath,
     },
     failures: failed.map((entry) => ({ relativePath: entry.relativePath, error: entry.error })),
+    automaticRollback,
   };
 }
 
@@ -301,18 +369,14 @@ export async function rollbackMoveImport({ ledgerPath, confirmation }) {
   const restored = [];
   const skipped = [];
   for (const entry of moved) {
-    if (!existsSync(entry.destinationPath)) {
-      skipped.push({ relativePath: entry.relativePath, reason: "destination-missing" });
-      continue;
+    const result = await restoreMovedEntry(entry);
+    if (result.restored) {
+      restored.push(result.restored);
+    } else {
+      skipped.push(result.skipped);
     }
-    if (existsSync(entry.sourcePath)) {
-      skipped.push({ relativePath: entry.relativePath, reason: "source-path-already-exists" });
-      continue;
-    }
-    await mkdir(path.dirname(entry.sourcePath), { recursive: true });
-    await rename(entry.destinationPath, entry.sourcePath);
-    restored.push({ relativePath: entry.relativePath, sourcePath: entry.sourcePath });
   }
+  await cleanupEmptyDestinationDirs(moved);
   const report = {
     rolledBackAt: new Date().toISOString(),
     ledgerPath: resolvedLedger,

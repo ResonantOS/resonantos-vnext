@@ -250,6 +250,11 @@ function memorySourceFileManifestPath() {
   return path.join(memoryRoot(), "CONFIG", "source-file-versions.json");
 }
 
+function isInsidePath(candidate, root) {
+  const relative = path.relative(path.resolve(root), path.resolve(candidate));
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
 function browserFirstRoot() {
   return path.join(userRoot(), "BrowserFirst");
 }
@@ -2031,6 +2036,11 @@ async function executeMemorySourceMoveExecute(payload = {}) {
       : "mixed-library",
     confirmation: payload.confirmation,
   });
+  if (result.status !== "moved") {
+    throw new Error(
+      `Move import failed and automatic rollback restored ${result.rollbackRestoredCount ?? 0} file(s); ${result.rollbackSkippedCount ?? 0} skipped.`
+    );
+  }
   const current = await readMemorySettings();
   const normalized = normalizeMemorySource(result.source);
   const nextSource = {
@@ -2064,6 +2074,10 @@ async function executeMemorySourceMoveRollback(payload = {}) {
   const ledgerPath = expandUserPath(payload.ledgerPath);
   if (!ledgerPath) {
     throw new Error("Move import rollback requires a ledger path.");
+  }
+  const moveLedgerRoot = path.join(memoryRoot(), "CONFIG", "move-imports");
+  if (!isInsidePath(ledgerPath, moveLedgerRoot)) {
+    throw new Error("Move import rollback ledger must stay inside Memory/CONFIG/move-imports.");
   }
   const report = await rollbackMoveImport({
     ledgerPath,
@@ -5578,6 +5592,12 @@ if (args.get("memory-source-move-self-test") === "true") {
       confirmation: "ROLLBACK MOVE",
     });
     const rollback = await rollbackResponse.json();
+    const outsideLedger = path.join(tempRoot, "outside-ledger.jsonl");
+    await writeFile(outsideLedger, "");
+    const outsideRollbackResponse = await post("/memory/source/move-rollback", {
+      ledgerPath: outsideLedger,
+      confirmation: "ROLLBACK MOVE",
+    });
     const restoredNoteExists = existsSync(path.join(source, "note.md"));
     const settings = JSON.parse(await readFile(memorySettingsPath(), "utf8").catch(() => "{\"sources\":[]}"));
     const ok = unauthorizedCapability.status === 403 &&
@@ -5593,6 +5613,7 @@ if (args.get("memory-source-move-self-test") === "true") {
       rollbackResponse.ok &&
       rollback.ok &&
       rollback.restoredCount === 2 &&
+      outsideRollbackResponse.status === 500 &&
       restoredNoteExists &&
       !settings.sources?.some((sourceEntry) => path.resolve(sourceEntry.ledgerPath ?? "") === path.resolve(executed.ledgerPath));
     console.log(JSON.stringify({
@@ -5615,6 +5636,7 @@ if (args.get("memory-source-move-self-test") === "true") {
         ok: rollback.ok,
         restoredCount: rollback.restoredCount,
         restoredNoteExists,
+        outsideLedgerStatus: outsideRollbackResponse.status,
       },
     }, null, 2));
     exitCode = ok ? 0 : 1;
